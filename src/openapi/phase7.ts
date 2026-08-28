@@ -1,0 +1,278 @@
+/**
+ * OpenAPI fragments for Phase 7 (Animal lifecycle publications: Lost / Adoption /
+ * Mating). Merged into the base document by `buildOpenApiDocument`.
+ *
+ * Animal identity/profile, ownership + transfer + history (Phase 4) and the
+ * clinic↔animal relationship (Phase 5) are documented by those phases and are
+ * unchanged here. Phase 7 adds only the publication lifecycle:
+ *
+ *   owner → POST /animals/{animalId}/publications        (PENDING)
+ *   ADMIN / ANIMAL system supervisor → approve | reject
+ *   any authenticated user → GET /animal-publications    (APPROVED only)
+ */
+
+type Obj = Record<string, unknown>;
+
+const bearer = [{ bearerAuth: [] }];
+const jsonError = {
+  'application/json': { schema: { $ref: '#/components/schemas/ErrorEnvelope' } },
+};
+
+function errs(...codes: number[]): Obj {
+  const map: Record<number, string> = {
+    400: 'Malformed request',
+    401: 'Missing or invalid access token',
+    403: 'Not permitted (not the animal owner / lacks animal.approve|animal.reject)',
+    404: 'Not found, or not visible to the caller (non-owned animal, non-APPROVED publication)',
+    409: 'Conflict (animal deactivated, publication already reviewed, open publication exists)',
+    422: 'Request failed validation',
+  };
+  const out: Obj = {};
+  for (const c of codes) out[String(c)] = { description: map[c] ?? 'Error', content: jsonError };
+  return out;
+}
+
+function ok(description: string, schema?: Obj): Obj {
+  return schema ? { description, content: { 'application/json': { schema } } } : { description };
+}
+function dataOf(schema: Obj): Obj {
+  return { type: 'object', properties: { data: schema } };
+}
+function listOf(ref: string): Obj {
+  return {
+    type: 'object',
+    properties: { data: { type: 'array', items: { $ref: ref } }, meta: { type: 'object' } },
+  };
+}
+
+const uuid = { type: 'string', format: 'uuid' };
+const animalIdParam = { name: 'animalId', in: 'path', required: true, schema: uuid };
+const publicationIdParam = { name: 'publicationId', in: 'path', required: true, schema: uuid };
+const pageParams = [
+  { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
+  { name: 'pageSize', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100 } },
+];
+const kindEnum = ['LOST', 'ADOPTION', 'MATING'];
+const statusEnum = ['PENDING', 'APPROVED', 'REJECTED'];
+
+const animalSummary = {
+  type: 'object',
+  properties: {
+    id: uuid,
+    name: { type: 'string' },
+    species: { type: 'string' },
+    breed: { type: 'string', nullable: true },
+  },
+};
+
+const schemas: Obj = {
+  AnimalPublication: {
+    type: 'object',
+    description: 'Full owner / moderation view of a Lost / Adoption / Mating publication.',
+    properties: {
+      id: uuid,
+      animalId: uuid,
+      kind: { type: 'string', enum: kindEnum },
+      status: { type: 'string', enum: statusEnum },
+      note: { type: 'string', nullable: true },
+      createdByUserId: uuid,
+      reviewedByUserId: { type: 'string', format: 'uuid', nullable: true },
+      reviewedAt: { type: 'string', format: 'date-time', nullable: true },
+      rejectionReason: { type: 'string', nullable: true },
+      createdAt: { type: 'string', format: 'date-time' },
+      updatedAt: { type: 'string', format: 'date-time' },
+    },
+  },
+  PublicAnimalPublication: {
+    type: 'object',
+    description:
+      'Public-browse projection — APPROVED only. No publisher identity, no moderation metadata.',
+    properties: {
+      id: uuid,
+      kind: { type: 'string', enum: kindEnum },
+      note: { type: 'string', nullable: true },
+      publishedAt: { type: 'string', format: 'date-time' },
+      animal: animalSummary,
+    },
+  },
+  CreateAnimalPublicationRequest: {
+    type: 'object',
+    required: ['kind'],
+    description: 'Owner-only. `status`, `reviewedBy`, `reviewedAt` etc. are server-controlled.',
+    properties: {
+      kind: { type: 'string', enum: kindEnum },
+      note: { type: 'string', minLength: 1, maxLength: 2000, nullable: true },
+    },
+  },
+  RejectAnimalPublicationRequest: {
+    type: 'object',
+    required: ['reason'],
+    properties: { reason: { type: 'string', minLength: 1, maxLength: 1000 } },
+  },
+};
+
+const paths: Obj = {
+  '/animals/{animalId}/publications': {
+    post: {
+      tags: ['Animals · Publications'],
+      summary: 'Publish an animal as Lost / for Adoption / for Mating (owner only)',
+      description:
+        'The caller must be the animal’s CURRENT owner (server-derived) and the animal must be ' +
+        'ACTIVE. The publication starts PENDING and is not publicly visible until approved. ' +
+        'Only one PENDING publication of a kind may exist per animal.',
+      security: bearer,
+      parameters: [animalIdParam],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: { $ref: '#/components/schemas/CreateAnimalPublicationRequest' },
+          },
+        },
+      },
+      responses: {
+        '201': ok('Created (PENDING)', dataOf({ $ref: '#/components/schemas/AnimalPublication' })),
+        ...errs(401, 404, 409, 422),
+      },
+    },
+    get: {
+      tags: ['Animals · Publications'],
+      summary: 'List an animal’s publications (owner / ADMIN / ANIMAL supervisor)',
+      description: 'Shows every status. Non-owners without oversight get 404.',
+      security: bearer,
+      parameters: [animalIdParam, ...pageParams],
+      responses: {
+        '200': ok('Paginated publications', listOf('#/components/schemas/AnimalPublication')),
+        ...errs(401, 404),
+      },
+    },
+  },
+  '/animals/{animalId}/publications/{publicationId}': {
+    get: {
+      tags: ['Animals · Publications'],
+      summary: 'Get one of an animal’s publications (owner / ADMIN / ANIMAL supervisor)',
+      security: bearer,
+      parameters: [animalIdParam, publicationIdParam],
+      responses: {
+        '200': ok('Publication', dataOf({ $ref: '#/components/schemas/AnimalPublication' })),
+        ...errs(401, 404),
+      },
+    },
+  },
+
+  '/animal-publications': {
+    get: {
+      tags: ['Animals · Publications'],
+      summary: 'Browse APPROVED publications (any authenticated user)',
+      description:
+        'Only APPROVED publications. PENDING / REJECTED are never returned here. No owner PII.',
+      security: bearer,
+      parameters: [
+        ...pageParams,
+        { name: 'kind', in: 'query', schema: { type: 'string', enum: kindEnum } },
+      ],
+      responses: {
+        '200': ok(
+          'Paginated approved publications',
+          listOf('#/components/schemas/PublicAnimalPublication'),
+        ),
+        ...errs(401, 422),
+      },
+    },
+  },
+  '/animal-publications/{publicationId}': {
+    get: {
+      tags: ['Animals · Publications'],
+      summary: 'Get one APPROVED publication (any authenticated user)',
+      description: 'Returns 404 unless the publication is APPROVED.',
+      security: bearer,
+      parameters: [publicationIdParam],
+      responses: {
+        '200': ok(
+          'Approved publication',
+          dataOf({ $ref: '#/components/schemas/PublicAnimalPublication' }),
+        ),
+        ...errs(401, 404),
+      },
+    },
+  },
+
+  '/admin/animal-publications': {
+    get: {
+      tags: ['Admin · Animal Publications'],
+      summary: 'List publications for moderation (requires `animal.read`)',
+      description:
+        'Held by ADMIN (override) or an ACTIVE ANIMAL system-supervisor domain assignment. ' +
+        'Filter by `kind` and `status` (typically `status=PENDING`).',
+      security: bearer,
+      parameters: [
+        ...pageParams,
+        { name: 'kind', in: 'query', schema: { type: 'string', enum: kindEnum } },
+        { name: 'status', in: 'query', schema: { type: 'string', enum: statusEnum } },
+      ],
+      responses: {
+        '200': ok('Paginated publications', listOf('#/components/schemas/AnimalPublication')),
+        ...errs(401, 403),
+      },
+    },
+  },
+  '/admin/animal-publications/{publicationId}': {
+    get: {
+      tags: ['Admin · Animal Publications'],
+      summary: 'Get any publication for moderation (requires `animal.read`)',
+      security: bearer,
+      parameters: [publicationIdParam],
+      responses: {
+        '200': ok('Publication', dataOf({ $ref: '#/components/schemas/AnimalPublication' })),
+        ...errs(401, 403, 404),
+      },
+    },
+  },
+  '/admin/animal-publications/{publicationId}/approve': {
+    post: {
+      tags: ['Admin · Animal Publications'],
+      summary: 'Approve a PENDING publication (requires `animal.approve`)',
+      description:
+        'Only a PENDING publication can be approved (409 otherwise). Owners cannot self-approve.',
+      security: bearer,
+      parameters: [publicationIdParam],
+      responses: {
+        '200': ok('Approved', dataOf({ $ref: '#/components/schemas/AnimalPublication' })),
+        ...errs(401, 403, 404, 409),
+      },
+    },
+  },
+  '/admin/animal-publications/{publicationId}/reject': {
+    post: {
+      tags: ['Admin · Animal Publications'],
+      summary: 'Reject a PENDING publication (requires `animal.reject`)',
+      security: bearer,
+      parameters: [publicationIdParam],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: { $ref: '#/components/schemas/RejectAnimalPublicationRequest' },
+          },
+        },
+      },
+      responses: {
+        '200': ok('Rejected', dataOf({ $ref: '#/components/schemas/AnimalPublication' })),
+        ...errs(401, 403, 404, 409, 422),
+      },
+    },
+  },
+};
+
+const tags = [
+  {
+    name: 'Animals · Publications',
+    description: 'Lost / Adoption / Mating publications — owner create, browse APPROVED',
+  },
+  {
+    name: 'Admin · Animal Publications',
+    description: 'Moderation queue — approve / reject (ADMIN or ANIMAL system supervisor)',
+  },
+];
+
+export const phase7OpenApi = { tags, paths, schemas };

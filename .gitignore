@@ -1,0 +1,28 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+*.tsbuildinfo
+
+# test / coverage
+coverage/
+.vitest/
+
+# env & secrets
+.env
+.env.*
+!.env.example
+
+# logs
+*.log
+logs/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# docker volumes (if ever bind-mounted locally)
+.docker-data/

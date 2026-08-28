@@ -1,0 +1,78 @@
+name: bytari
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-bytari}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-bytari}
+      POSTGRES_DB: ${DB_NAME:-bytari}
+    ports:
+      - '${DB_PORT:-5435}:5432'
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${DB_USER:-bytari} -d ${DB_NAME:-bytari}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      target: runtime
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      # Inside the compose network the DB host is the service name.
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-bytari}
+      DB_USER: ${DB_USER:-bytari}
+      DB_PASSWORD: ${DB_PASSWORD:-bytari}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      # Identity — JWT_ACCESS_SECRET is REQUIRED in production (>=32 chars).
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set JWT_ACCESS_SECRET in your environment}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
+      JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-30d}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+      # Real-time
+      REALTIME_ENABLED: ${REALTIME_ENABLED:-true}
+      REALTIME_PATH: ${REALTIME_PATH:-/realtime}
+      # Firebase Cloud Messaging (optional — blank => noop provider)
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
+      FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL:-}
+      FIREBASE_PRIVATE_KEY: ${FIREBASE_PRIVATE_KEY:-}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${FIREBASE_SERVICE_ACCOUNT_JSON:-}
+      # Cloudflare R2 (optional — blank => in-memory storage)
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      R2_BUCKET: ${R2_BUCKET:-}
+      R2_PUBLIC_BASE_URL: ${R2_PUBLIC_BASE_URL:-}
+    ports:
+      - '${PORT:-3000}:3000'
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    profiles:
+      - full
+
+volumes:
+  db-data:
