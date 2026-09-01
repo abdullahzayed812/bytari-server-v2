@@ -14,8 +14,11 @@ import type {
   AddMemberBody,
   AssignSupervisorBody,
   CreateOrganizationBody,
+  DiscoverOrganizationsQuery,
+  FinalizeLogoBody,
   ListMembersQuery,
   ListMyOrganizationsQuery,
+  LogoUploadUrlBody,
   UpdateMemberBody,
   UpdateOrganizationBody,
   UpdateSupervisorBody,
@@ -56,6 +59,23 @@ export class OrganizationController {
     );
   };
 
+  discover = async (req: Request, res: Response): Promise<void> => {
+    const q = validatedQuery<DiscoverOrganizationsQuery>(req);
+    const { items, total } = await this.organizations.discoverPublic({
+      page: q.page,
+      pageSize: q.pageSize,
+      type: q.type,
+      search: q.search,
+      near: q.sort === 'nearest' ? { lat: q.lat as number, lng: q.lng as number } : undefined,
+    });
+    sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
+  };
+
+  getPublicOne = async (req: Request, res: Response): Promise<void> => {
+    const { organizationId } = validatedParams<{ organizationId: string }>(req);
+    sendSuccess(res, await this.organizations.getPublicById(organizationId));
+  };
+
   getOne = async (req: Request, res: Response): Promise<void> => {
     const auth = requireAuth(req);
     const org = requireOrganization(req);
@@ -71,6 +91,22 @@ export class OrganizationController {
     const body = validatedBody<UpdateOrganizationBody>(req);
     const updated = await this.organizations.updateProfile(org.id, body, this.actor(req));
     sendSuccess(res, updated);
+  };
+
+  requestLogoUploadUrl = async (req: Request, res: Response): Promise<void> => {
+    const org = requireOrganization(req);
+    const body = validatedBody<LogoUploadUrlBody>(req);
+    sendSuccess(
+      res,
+      await this.organizations.requestLogoUploadUrl(org.id, body),
+      StatusCodes.CREATED,
+    );
+  };
+
+  finalizeLogo = async (req: Request, res: Response): Promise<void> => {
+    const org = requireOrganization(req);
+    const body = validatedBody<FinalizeLogoBody>(req);
+    sendSuccess(res, await this.organizations.finalizeLogo(org.id, this.actor(req), body));
   };
 
   leave = async (req: Request, res: Response): Promise<void> => {

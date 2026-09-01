@@ -88,6 +88,10 @@ export const PERMISSION_KEYS = [
   // authentication + ownership only (no permission key). This one gates the
   // ADMIN broadcast; granted to NO base role (ADMIN override).
   'notification.admin.send',
+  // Pet Owner Home — promotional banner carousel. Public reads are NOT
+  // permission-gated. Held by ADMIN (override) or a HOME_AD system-supervisor.
+  // Granted to NO base role.
+  'home_ad.manage',
 ] as const;
 export type PermissionKey = (typeof PERMISSION_KEYS)[number];
 
@@ -98,6 +102,7 @@ export const SUPERVISOR_DOMAINS = [
   'CONTENT',
   'CONSULTATION',
   'INQUIRY',
+  'HOME_AD',
 ] as const;
 export type SupervisorDomain = (typeof SUPERVISOR_DOMAINS)[number];
 
@@ -178,6 +183,7 @@ export const PERMISSION_DEFINITIONS: Record<PermissionKey, string> = {
   'content.upload': 'Request upload URLs and register / replace / delete content files',
   'content.category.manage': 'Create, update and delete content categories',
   'notification.admin.send': 'Send an administrative notification to a user / role / all users',
+  'home_ad.manage': 'Create, update, activate/deactivate and delete the Home ad carousel',
 };
 
 /**
@@ -211,6 +217,8 @@ export const SUPERVISOR_DOMAIN_PERMISSIONS: Record<SupervisorDomain, readonly Pe
     'consultation.admin.read',
   ],
   INQUIRY: ['inquiry.read', 'inquiry.respond', 'inquiry.close', 'inquiry.admin.read'],
+  // The responsible Home Ad supervisor: full carousel management.
+  HOME_AD: ['home_ad.manage'],
 };
 
 /**

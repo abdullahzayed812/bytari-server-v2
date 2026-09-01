@@ -73,6 +73,8 @@ import { ContentFileRepository } from './modules/content/infrastructure/content-
 import { CategoryRepository } from './modules/content/infrastructure/category.repository.js';
 import { ContentService } from './modules/content/application/content.service.js';
 import { CategoryService } from './modules/content/application/category.service.js';
+import { HomeAdRepository } from './modules/homeAds/infrastructure/home-ad.repository.js';
+import { HomeAdService } from './modules/homeAds/application/home-ad.service.js';
 import {
   createPushProvider,
   PushNotificationService,
@@ -186,6 +188,8 @@ export interface Container {
   categoryRepository: CategoryRepository;
   contentService: ContentService;
   categoryService: CategoryService;
+  homeAdRepository: HomeAdRepository;
+  homeAdService: HomeAdService;
 
   supervisorRepository: SupervisorRepository;
   pushProvider: PushNotificationProvider;
@@ -309,6 +313,7 @@ export function createContainer(deps: ContainerDeps): Container {
     userService,
     auditService,
     eventBus,
+    objectStorage,
     logger,
   );
   const membershipService = new MembershipService(
@@ -506,6 +511,16 @@ export function createContainer(deps: ContainerDeps): Container {
     logger,
   );
 
+  // --- home ads (Pet Owner Home banner carousel) -------------
+  const homeAdRepository = new HomeAdRepository(db);
+  const homeAdService = new HomeAdService(
+    db,
+    homeAdRepository,
+    objectStorage,
+    auditService,
+    logger,
+  );
+
   // --- notifications & FCM (Phase 15) -----------------------
   // Reuses the Phase-1 push infrastructure (provider abstraction + Firebase
   // adapter + PushNotificationService). Domain modules stay Firebase-unaware:
@@ -612,6 +627,8 @@ export function createContainer(deps: ContainerDeps): Container {
     categoryRepository,
     contentService,
     categoryService,
+    homeAdRepository,
+    homeAdService,
     supervisorRepository,
     pushProvider,
     pushNotificationService,

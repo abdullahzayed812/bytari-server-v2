@@ -15,14 +15,20 @@
  *
  * Run with `npm run db:seed:dev` (see package.json).
  */
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { Knex } from 'knex';
 import type { Logger } from 'pino';
 import { loadConfig, type AppConfig } from '../../config/index.js';
 import { createLogger } from '../../shared/logger/index.js';
 import { createContainer, type Container } from '../../container.js';
 import { createKnex } from '../knex.js';
+import { buildObjectKey, StoragePrefix } from '../../infra/storage/index.js';
 import type { AuditContext } from '../../modules/audit/audit.types.js';
 import type { VeterinarianStatus } from '../../modules/users/user.types.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 import {
   DEV_ANIMALS,
   DEV_MEMBERSHIPS,
@@ -33,6 +39,7 @@ import {
   DEV_PERSONAS,
   DEV_SUPERVISORS,
   type DevOrganization,
+  type DevOrganizationKey,
   type DevPersona,
 } from './personas.js';
 
@@ -109,6 +116,7 @@ export async function runDevSeed(knex: Knex, deps: RunDevSeedDeps = {}): Promise
   const { animalService, veterinaryAccessService, medicalRecordService, vaccinationService } =
     container;
   const { poultryFlockService, productService, contentService, passwordService } = container;
+  const { homeAdService, objectStorage } = container;
 
   /** Non-null lookup into one of the id maps built below. */
   const must = (map: Record<string, string>, key: string, kind: string): string => {
@@ -303,6 +311,40 @@ export async function runDevSeed(knex: Knex, deps: RunDevSeedDeps = {}): Promise
     organizationIdsByKey[def.key] = await ensureOrganization(def);
   }
 
+  // Directory profile (address/coordinates/phone) for the profile-bearing
+  // types, so the Pet Owner directory screens + "nearest" sort have real data
+  // to show in development instead of empty fields.
+  const DEV_PROFILES: Partial<
+    Record<
+      DevOrganizationKey,
+      { address: string; latitude: number; longitude: number; phone: string }
+    >
+  > = {
+    clinic: {
+      address: 'Baghdad — Karrada, 14 Ramadan Street',
+      latitude: 33.3152,
+      longitude: 44.3661,
+      phone: '+964 770 123 4567',
+    },
+    office: {
+      address: 'Baghdad — Mansour District',
+      latitude: 33.3406,
+      longitude: 44.3244,
+      phone: '+964 780 234 5678',
+    },
+    store: {
+      address: 'Basra — Al-Ashar',
+      latitude: 30.5085,
+      longitude: 47.7835,
+      phone: '+964 750 345 6789',
+    },
+  };
+  for (const [key, profile] of Object.entries(DEV_PROFILES)) {
+    const orgId = organizationIdsByKey[key];
+    if (!orgId || !profile) continue;
+    await organizationService.updateProfile(orgId, profile, adminActor);
+  }
+
   // --- memberships (VETERINARIAN / STAFF) ----------------------
   for (const m of DEV_MEMBERSHIPS) {
     const orgId = must(organizationIdsByKey, m.orgKey, 'organization');
@@ -336,7 +378,11 @@ export async function runDevSeed(knex: Knex, deps: RunDevSeedDeps = {}): Promise
         actor,
       );
     } else {
-      await organizationSupervisorService.assign(orgId, { userId, permissions: s.permissions }, actor);
+      await organizationSupervisorService.assign(
+        orgId,
+        { userId, permissions: s.permissions },
+        actor,
+      );
     }
   }
 
@@ -370,6 +416,7 @@ export async function runDevSeed(knex: Knex, deps: RunDevSeedDeps = {}): Promise
   await seedFarmPoultry();
   await seedStoreProducts();
   await seedWelcomeArticle();
+  await seedHomeAds();
 
   logger.info(
     {
@@ -515,10 +562,64 @@ export async function runDevSeed(knex: Knex, deps: RunDevSeedDeps = {}): Promise
     }
 
     const status = (await knex('contents').where({ id: contentId }).first()) as
-      | { status: string }
-      | undefined;
+      { status: string } | undefined;
     if (status?.status !== 'PUBLISHED') {
       await contentService.publish(actor, contentId);
+    }
+  }
+
+  async function seedHomeAds(): Promise<void> {
+    const actor = { actorUserId: adminId, context: SEED_CONTEXT };
+    const banners: Array<{ title: string; subtitle: string; sortOrder: number; file: string }> = [
+      {
+        title: 'رعاية أفضل لحياة صحية وسعيدة',
+        subtitle: 'نرعاهم كأنهم عائلتنا',
+        sortOrder: 0,
+        file: 'banner-1.jpg',
+      },
+      {
+        title: 'استشر طبيبك البيطري في أي وقت',
+        subtitle: 'فريق طبي متخصص جاهز للرد على استفساراتك',
+        sortOrder: 1,
+        file: 'banner-2.jpg',
+      },
+      {
+        title: 'تابع صحة حيوانك بسهولة',
+        subtitle: 'سجلات طبية وتطعيمات في مكان واحد',
+        sortOrder: 2,
+        file: 'banner-3.jpg',
+      },
+    ];
+
+    for (const b of banners) {
+      const existing: { id: string } | undefined = await knex('home_ads')
+        .where({ title: b.title })
+        .first();
+
+      let homeAdId = existing?.id;
+      if (!homeAdId) {
+        const created = await homeAdService.create(actor, {
+          title: b.title,
+          subtitle: b.subtitle,
+          sortOrder: b.sortOrder,
+        });
+        homeAdId = created.id;
+      }
+
+      const row = (await knex('home_ads').where({ id: homeAdId }).first()) as
+        { image_storage_key: string | null; is_active: boolean } | undefined;
+      if (!row?.image_storage_key) {
+        const bytes = await readFile(path.join(__dirname, 'assets', 'home-ads', b.file));
+        const storageKey = buildObjectKey(StoragePrefix.homeAds, b.file);
+        await objectStorage.put(storageKey, bytes, { contentType: 'image/jpeg' });
+        await homeAdService.registerImage(actor, homeAdId, {
+          storageKey,
+          mimeType: 'image/jpeg',
+        });
+      }
+      if (!row?.is_active) {
+        await homeAdService.setActive(actor, homeAdId, true);
+      }
     }
   }
 }

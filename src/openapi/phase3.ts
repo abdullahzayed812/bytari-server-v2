@@ -65,10 +65,45 @@ const schemas: Obj = {
       decisionReason: { type: 'string', nullable: true },
       details: {
         type: 'object',
-        properties: { joinCode: { type: 'string', description: 'FARM only' } },
+        properties: {
+          joinCode: { type: 'string', description: 'FARM only' },
+          address: {
+            type: 'string',
+            nullable: true,
+            description: 'CLINIC / VETERINARY_OFFICE / VETERINARY_STORE only',
+          },
+          latitude: { type: 'number', nullable: true, minimum: -90, maximum: 90 },
+          longitude: { type: 'number', nullable: true, minimum: -180, maximum: 180 },
+          phone: { type: 'string', nullable: true },
+          logoUrl: { type: 'string', nullable: true, description: 'Resolved, not a storage key' },
+        },
       },
       createdAt: { type: 'string', format: 'date-time' },
       updatedAt: { type: 'string', format: 'date-time' },
+    },
+  },
+  PublicOrganization: {
+    type: 'object',
+    description: 'Directory view — any authenticated user, ACTIVE organizations only',
+    properties: {
+      id: { type: 'string', format: 'uuid' },
+      type: {
+        type: 'string',
+        enum: ['CLINIC', 'FARM', 'VETERINARY_OFFICE', 'VETERINARY_STORE'],
+      },
+      name: { type: 'string' },
+      description: { type: 'string', nullable: true },
+      address: { type: 'string', nullable: true },
+      latitude: { type: 'number', nullable: true },
+      longitude: { type: 'number', nullable: true },
+      phone: { type: 'string', nullable: true },
+      logoUrl: { type: 'string', nullable: true },
+      distanceKm: {
+        type: 'number',
+        nullable: true,
+        description: 'Only set when `sort=nearest`',
+      },
+      createdAt: { type: 'string', format: 'date-time' },
     },
   },
   OrganizationMembership: {
@@ -153,6 +188,10 @@ const paths: Obj = {
     patch: {
       tags: ['Organizations'],
       summary: 'Update the organization profile (requires `organization.update`)',
+      description:
+        'address/phone/latitude/longitude are only accepted for CLINIC / VETERINARY_OFFICE / ' +
+        'VETERINARY_STORE (422 `ORGANIZATION_TYPE_NOT_SUPPORTED` otherwise). latitude and ' +
+        'longitude must be provided together.',
       security: bearer,
       parameters: [orgIdParam],
       requestBody: {
@@ -164,6 +203,10 @@ const paths: Obj = {
               properties: {
                 name: { type: 'string' },
                 description: { type: 'string', nullable: true },
+                address: { type: 'string', nullable: true },
+                phone: { type: 'string', nullable: true },
+                latitude: { type: 'number', nullable: true, minimum: -90, maximum: 90 },
+                longitude: { type: 'number', nullable: true, minimum: -180, maximum: 180 },
               },
             },
           },
@@ -172,6 +215,109 @@ const paths: Obj = {
       responses: {
         '200': ok('Updated', dataOf({ $ref: '#/components/schemas/Organization' })),
         ...errs(401, 403, 404, 422),
+      },
+    },
+  },
+  '/organizations/discover': {
+    get: {
+      tags: ['Organizations'],
+      summary: 'Browse ACTIVE organizations — any authenticated user, not just members',
+      description:
+        'Backs the Pet Owner directory screens (clinics / veterinary offices / stores). When ' +
+        '`type` has a directory profile, results include address/coordinates/phone/logo. ' +
+        '`sort=nearest` (requires `lat` and `lng`) orders by server-computed great-circle ' +
+        'distance — the client never computes distance itself.',
+      security: bearer,
+      parameters: [
+        { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
+        { name: 'pageSize', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100 } },
+        {
+          name: 'type',
+          in: 'query',
+          schema: {
+            type: 'string',
+            enum: ['CLINIC', 'FARM', 'VETERINARY_OFFICE', 'VETERINARY_STORE'],
+          },
+        },
+        { name: 'search', in: 'query', schema: { type: 'string' } },
+        { name: 'sort', in: 'query', schema: { type: 'string', enum: ['default', 'nearest'] } },
+        { name: 'lat', in: 'query', schema: { type: 'number', minimum: -90, maximum: 90 } },
+        { name: 'lng', in: 'query', schema: { type: 'number', minimum: -180, maximum: 180 } },
+      ],
+      responses: {
+        '200': ok(
+          'Paginated organizations',
+          dataOf({ type: 'array', items: { $ref: '#/components/schemas/PublicOrganization' } }),
+        ),
+        ...errs(401, 422),
+      },
+    },
+  },
+  '/organizations/discover/{organizationId}': {
+    get: {
+      tags: ['Organizations'],
+      summary: 'Get one ACTIVE organization — any authenticated user, not just members',
+      security: bearer,
+      parameters: [orgIdParam],
+      responses: {
+        '200': ok('Organization', dataOf({ $ref: '#/components/schemas/PublicOrganization' })),
+        ...errs(401, 404),
+      },
+    },
+  },
+  '/organizations/{organizationId}/logo/upload-url': {
+    post: {
+      tags: ['Organizations'],
+      summary: 'Request a presigned upload URL for the organization logo',
+      description:
+        'CLINIC / VETERINARY_OFFICE / VETERINARY_STORE only; requires `organization.update`. ' +
+        'The server generates the storage key — PUT the file bytes to `uploadUrl`, then call ' +
+        'POST .../logo to register it.',
+      security: bearer,
+      parameters: [orgIdParam],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['filename', 'mimeType', 'size'],
+              properties: {
+                filename: { type: 'string' },
+                mimeType: { type: 'string', enum: ['image/png', 'image/jpeg', 'image/webp'] },
+                size: { type: 'integer', maximum: 5 * 1024 * 1024 },
+              },
+            },
+          },
+        },
+      },
+      responses: { '201': ok('Upload URL issued'), ...errs(400, 401, 403, 404, 422) },
+    },
+  },
+  '/organizations/{organizationId}/logo': {
+    post: {
+      tags: ['Organizations'],
+      summary: 'Register an uploaded logo (requires `organization.update`)',
+      security: bearer,
+      parameters: [orgIdParam],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['storageKey', 'mimeType'],
+              properties: {
+                storageKey: { type: 'string' },
+                mimeType: { type: 'string' },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        '200': ok('Logo updated', dataOf({ $ref: '#/components/schemas/Organization' })),
+        ...errs(400, 401, 403, 404, 409, 422),
       },
     },
   },

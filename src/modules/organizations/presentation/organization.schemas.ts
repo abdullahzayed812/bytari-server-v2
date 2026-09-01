@@ -16,16 +16,81 @@ export const createOrganizationBodySchema = z.object({
 });
 export type CreateOrganizationBody = z.infer<typeof createOrganizationBodySchema>;
 
+const latitude = z.coerce.number().min(-90).max(90);
+const longitude = z.coerce.number().min(-180).max(180);
+
 export const updateOrganizationBodySchema = z
   .object({
     name: z.string().trim().min(2).max(160).optional(),
     description: z.string().trim().max(2000).nullable().optional(),
+    // Profile fields — CLINIC / VETERINARY_OFFICE / VETERINARY_STORE only
+    // (`OrganizationPolicy.assertHasProfileFields`, enforced in the service).
+    address: z.string().trim().min(1).max(500).nullable().optional(),
+    phone: z.string().trim().min(3).max(40).nullable().optional(),
+    latitude: latitude.nullable().optional(),
+    longitude: longitude.nullable().optional(),
   })
-  .refine((v) => Object.keys(v).length > 0, { message: 'At least one field is required' });
+  .refine((v) => Object.keys(v).length > 0, { message: 'At least one field is required' })
+  .refine((v) => (v.latitude == null) === (v.longitude == null), {
+    message: 'latitude and longitude must be provided together',
+    path: ['latitude'],
+  });
 export type UpdateOrganizationBody = z.infer<typeof updateOrganizationBodySchema>;
 
 export const listMyOrganizationsQuerySchema = paginationQuerySchema;
 export type ListMyOrganizationsQuery = z.infer<typeof listMyOrganizationsQuerySchema>;
+
+/**
+ * `GET /organizations/discover` — any authenticated user, ACTIVE organizations
+ * only. `sort=nearest` requires both `lat` and `lng`; distance is computed and
+ * ordered server-side (see `OrganizationRepository.discoverWithDetails`) — the
+ * client never computes distance itself.
+ */
+export const discoverOrganizationsQuerySchema = paginationQuerySchema
+  .extend({
+    type: z.enum(ORGANIZATION_TYPES).optional(),
+    search: z.string().trim().min(1).max(160).optional(),
+    sort: z.enum(['default', 'nearest']).optional().default('default'),
+    lat: latitude.optional(),
+    lng: longitude.optional(),
+  })
+  .refine((v) => (v.lat === undefined) === (v.lng === undefined), {
+    message: 'lat and lng must be provided together',
+    path: ['lat'],
+  })
+  .refine((v) => v.sort !== 'nearest' || (v.lat !== undefined && v.lng !== undefined), {
+    message: 'sort=nearest requires lat and lng',
+    path: ['sort'],
+  });
+export type DiscoverOrganizationsQuery = z.infer<typeof discoverOrganizationsQuerySchema>;
+
+export const logoUploadUrlBodySchema = z
+  .object({
+    filename: z
+      .string()
+      .trim()
+      .min(1)
+      .max(255)
+      .refine((v) => !v.includes('/') && !v.includes('\\'), {
+        message: 'filename must not contain path separators',
+      }),
+    mimeType: z.string().trim().min(1).max(255),
+    size: z
+      .number()
+      .int()
+      .positive()
+      .max(5 * 1024 * 1024),
+  })
+  .strict();
+export type LogoUploadUrlBody = z.infer<typeof logoUploadUrlBodySchema>;
+
+export const finalizeLogoBodySchema = z
+  .object({
+    storageKey: z.string().trim().min(1).max(1024),
+    mimeType: z.string().trim().min(1).max(255),
+  })
+  .strict();
+export type FinalizeLogoBody = z.infer<typeof finalizeLogoBodySchema>;
 
 // --- admin -----------------------------------------------------------
 

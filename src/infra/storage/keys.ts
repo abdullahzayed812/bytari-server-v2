@@ -17,6 +17,7 @@ export const StoragePrefix = {
   organizationFiles: 'organizations',
   medicalAttachments: 'medical-records',
   veterinarianDocuments: 'veterinarians/documents',
+  homeAds: 'home-ads',
   misc: 'misc',
 } as const;
 

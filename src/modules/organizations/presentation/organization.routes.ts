@@ -11,8 +11,11 @@ import {
   addMemberBodySchema,
   assignSupervisorBodySchema,
   createOrganizationBodySchema,
+  discoverOrganizationsQuerySchema,
+  finalizeLogoBodySchema,
   listMembersQuerySchema,
   listMyOrganizationsQuerySchema,
+  logoUploadUrlBodySchema,
   organizationMemberParamSchema,
   organizationSupervisorParamSchema,
   updateMemberBodySchema,
@@ -39,6 +42,20 @@ export function createOrganizationRouter(c: Container): Router {
   r.post('/', validate({ body: createOrganizationBodySchema }), asyncHandler(ctrl.create));
   r.get('/', validate({ query: listMyOrganizationsQuerySchema }), asyncHandler(ctrl.listMine));
 
+  // Discovery — any authenticated user (not just members), e.g. the Pet Owner
+  // Home "Available clinics" section. Mounted before `/:organizationId` so
+  // `discover` is never parsed as a uuid param.
+  r.get(
+    '/discover',
+    validate({ query: discoverOrganizationsQuerySchema }),
+    asyncHandler(ctrl.discover),
+  );
+  r.get(
+    '/discover/:organizationId',
+    validate({ params: organizationIdParamSchema }),
+    asyncHandler(ctrl.getPublicOne),
+  );
+
   // --- single organization ------------------------------------
   r.get(
     '/:organizationId',
@@ -54,6 +71,23 @@ export function createOrganizationRouter(c: Container): Router {
     authorizeOrg('organization.update'),
     asyncHandler(ctrl.update),
   );
+  // Logo — same guard as PATCH (`organization.update`); CLINIC / VETERINARY_OFFICE
+  // / VETERINARY_STORE only (`OrganizationPolicy.assertHasProfileFields`).
+  r.post(
+    '/:organizationId/logo/upload-url',
+    validate({ params: organizationIdParamSchema, body: logoUploadUrlBodySchema }),
+    withOrganization,
+    authorizeOrg('organization.update'),
+    asyncHandler(ctrl.requestLogoUploadUrl),
+  );
+  r.post(
+    '/:organizationId/logo',
+    validate({ params: organizationIdParamSchema, body: finalizeLogoBodySchema }),
+    withOrganization,
+    authorizeOrg('organization.update'),
+    asyncHandler(ctrl.finalizeLogo),
+  );
+
   r.post(
     '/:organizationId/leave',
     validate({ params: organizationIdParamSchema }),

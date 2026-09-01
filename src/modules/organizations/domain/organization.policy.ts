@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { ForbiddenError } from '../../../shared/errors/app-error.js';
+import { BadRequestError, ForbiddenError } from '../../../shared/errors/app-error.js';
 import { ErrorCode } from '../../../shared/errors/error-codes.js';
 import type { OrganizationType } from './organization.types.js';
 
@@ -18,6 +18,17 @@ const VET_OWNER_REQUIRED: ReadonlySet<OrganizationType> = new Set<OrganizationTy
 /** Organization types that carry a Farm-ID style join code. */
 const HAS_JOIN_CODE: ReadonlySet<OrganizationType> = new Set<OrganizationType>(['FARM']);
 
+/**
+ * Organization types with a public directory profile (address / coordinates /
+ * phone / logo) — the Pet Owner marketplace pages. FARM is excluded: it isn't
+ * browsed as a directory, it's joined via `join_code`.
+ */
+const HAS_PROFILE_FIELDS: ReadonlySet<OrganizationType> = new Set<OrganizationType>([
+  'CLINIC',
+  'VETERINARY_OFFICE',
+  'VETERINARY_STORE',
+]);
+
 export interface OrganizationCreatorContext {
   status: string;
   veterinarianStatus: string;
@@ -30,6 +41,19 @@ export const OrganizationPolicy = {
 
   hasJoinCode(type: OrganizationType): boolean {
     return HAS_JOIN_CODE.has(type);
+  },
+
+  hasProfileFields(type: OrganizationType): boolean {
+    return HAS_PROFILE_FIELDS.has(type);
+  },
+
+  /** Throws if `type` has no directory profile (address/coords/phone/logo). */
+  assertHasProfileFields(type: OrganizationType): void {
+    if (!HAS_PROFILE_FIELDS.has(type)) {
+      throw new BadRequestError(`${type} organizations do not have a directory profile`, {
+        code: ErrorCode.ORGANIZATION_TYPE_NOT_SUPPORTED,
+      });
+    }
   },
 
   /**

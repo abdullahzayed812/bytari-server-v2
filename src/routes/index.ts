@@ -38,6 +38,7 @@ import {
   createContentCategoryRouter,
   createAdminContentRouter,
 } from '../modules/content/index.js';
+import { createHomeAdRouter, createAdminHomeAdRouter } from '../modules/homeAds/index.js';
 import {
   createNotificationRouter,
   createAdminNotificationRouter,
@@ -123,6 +124,11 @@ export function createApiRouter(c: Container): Router {
   router.use('/content', createContentRouter(c));
   router.use('/content-categories', createContentCategoryRouter(c));
 
+  // --- Pet Owner Home: banner carousel ------------------------
+  // Public reads for the Home screen; admin/supervisor management under
+  // `/admin/home-ads*`.
+  router.use('/home-ads', createHomeAdRouter(c));
+
   // --- Phase 15: notifications & FCM -------------------------
   // Personal notification inbox + device-token management (auth + ownership
   // only). Domain events → NotificationEventHandler (wired in the container).
@@ -137,6 +143,7 @@ export function createApiRouter(c: Container): Router {
   router.use('/admin/animal-publications', createAdminAnimalPublicationRouter(c));
   router.use('/admin', createSupportAdminRouter(c));
   router.use('/admin', createAdminContentRouter(c));
+  router.use('/admin/home-ads', createAdminHomeAdRouter(c));
   router.use('/admin/notifications', createAdminNotificationRouter(c));
   router.use('/admin/audit-logs', createAdminAuditRouter(c));
 
