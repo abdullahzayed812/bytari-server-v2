@@ -6,10 +6,20 @@
  * TypeScript knexfile is required inside the production image.
  *
  * Commands: latest | rollback | status | seed
+ *
+ * When `NODE_ENV=test`, loads `.env.test` (same convention as `test/setup.ts`)
+ * so `npm test` migrates the separate test database, never the dev one —
+ * integration tests TRUNCATE `users` between runs (test/helpers/db.ts).
  */
+import { existsSync } from 'node:fs';
+import { config as loadDotenv } from 'dotenv';
 import { loadConfig } from '../config/index.js';
 import { createLogger } from '../shared/logger/index.js';
 import { createKnex } from './knex.js';
+
+if (process.env.NODE_ENV === 'test' && existsSync('.env.test')) {
+  loadDotenv({ path: '.env.test' });
+}
 
 type Command = 'latest' | 'rollback' | 'status' | 'seed';
 

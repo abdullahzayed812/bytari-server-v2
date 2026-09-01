@@ -290,6 +290,25 @@ additive — never deletes admin-added grants). `0020_bootstrap_admin` creates a
 ADMIN **only** when `BOOTSTRAP_ADMIN_EMAIL` + `_PASSWORD` are in the environment;
 nothing is hardcoded.
 
+### 8.6 User directory — `GET /users/:id`
+
+`users/public-users.routes.ts` mounts `GET /users/:id` (authentication only, no
+permission). It returns a name-level `UserSummary`
+(`{ id, firstName, lastName, veterinarianStatus }`) — **no** email, phone,
+account status, roles, permissions or timestamps; the full account record stays
+under the permissioned `/admin/users/*`. A `DEACTIVATED` account returns `404`.
+
+Rationale: many DTOs already carry an actor / authorship user id
+(`medical_records.recordedByUserId`, `vaccinations.recordedByUserId`,
+`poultry_flocks.createdByUserId`, `products.createdByUserId`,
+`animal_publications.reviewedByUserId`, `animal_ownerships.transferredBy`,
+`animals.createdBy`, …). The organization-membership and animal-ownership DTOs
+already resolve names inline via a `users` join; this endpoint gives every other
+consumer the same `{ id, firstName, lastName }` resolution without widening any
+existing response, and unblocks member / supervisor pickers that take a raw user
+id. Names are not sensitive here — they are already visible to organization
+co-members and in ownership history.
+
 ## 9. Organizations (`src/modules/organizations/`, Phase 3)
 
 Four-layer module (`domain` / `infrastructure` / `application` / `presentation`).
@@ -1481,6 +1500,23 @@ documented, no EventBus change made.
       `GET /health` (+ compose); `docs/OPERATIONS.md` runbook (backups, restore,
       migration-rollback strategy, DR, required prod config); OpenAPI `0.14.0`
       (125 paths, unchanged). **564 tests total.**
+- [x] **Backend Gap Audit — pre Mobile Phase 12**: a full re-audit of the
+      Identity / Organizations / Animals / Medical Records / Vaccinations /
+      Poultry / Media / Authorization surface against the product spec and every
+      completed mobile phase. Outcome: **every confirmed use case
+      (UC-001…UC-017) is already fully supported** — CRUD, the one-owner DB
+      invariant, ownership transfer, no-approval-for-owned-animals, org-scoped + per-animal veterinary-access authorization, IDOR protection via resolver
+      middleware + composite FKs, the transaction→audit→commit→event ordering,
+      and complete domain-event coverage were verified in code, not assumed.
+      **One additive gap fixed** (§8.6): `GET /users/:id` name summary, to
+      resolve the actor / authorship user ids that DTOs already carry and to
+      back member / supervisor pickers. No migration, no change to any existing
+      endpoint or DTO. Everything else (medical / animal file attachments,
+      structured treatment / medication entities, vaccination `dose`) is
+      **spec-acknowledged future work** — docs 04 §4.4 lists "Medical
+      Attachments" but no use case defines the workflow, and the storage-key
+      seam `medical-records/` is reserved for it — deliberately not built.
+      OpenAPI → 126 paths. **+6 tests → 570 total.**
 
 ## 21. Open questions / TBD (from the spec — do not invent)
 

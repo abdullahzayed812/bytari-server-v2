@@ -6,6 +6,8 @@ import { createAdminAuditRouter } from '../modules/audit/admin-audit.routes.js';
 import { createAdminRbacRouter } from '../modules/rbac/admin-rbac.routes.js';
 import { createAdminSupervisorRouter } from '../modules/supervisors/supervisor.routes.js';
 import { createAdminUsersRouter } from '../modules/users/admin-users.routes.js';
+import { createPublicUsersRouter } from '../modules/users/public-users.routes.js';
+import { createSelfUsersRouter } from '../modules/users/self-users.routes.js';
 import { createVeterinarianRouters } from '../modules/veterinarians/veterinarian.routes.js';
 import { createOrganizationRouter } from '../modules/organizations/presentation/organization.routes.js';
 import { createAdminOrganizationRouter } from '../modules/organizations/presentation/admin-organization.routes.js';
@@ -58,6 +60,16 @@ export function createApiRouter(c: Container): Router {
   const rbac = createAdminRbacRouter(c);
 
   router.use('/veterinarians', vets.self);
+
+  // Self-service (`/users/me/*`) MUST be mounted before the public `/users/:id`
+  // directory router below — otherwise `me` would be parsed as a `:id` uuid
+  // param and rejected with 422 instead of reaching the self routes.
+  router.use('/users', createSelfUsersRouter(c));
+
+  // Authenticated user directory (name-level summary only) — resolves the
+  // authorship / actor user ids other DTOs carry, and backs member/supervisor
+  // pickers. The full account record stays under `/admin/users` (permissioned).
+  router.use('/users', createPublicUsersRouter(c));
 
   // --- Phase 3: organizations -------------------------------------
   router.use('/organizations', createOrganizationRouter(c));

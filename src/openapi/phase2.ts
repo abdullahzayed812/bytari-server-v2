@@ -52,6 +52,9 @@ const schemas: Obj = {
       firstName: { type: 'string' },
       lastName: { type: 'string' },
       phone: { type: 'string', nullable: true },
+      gender: { type: 'string', enum: ['MALE', 'FEMALE'], nullable: true },
+      country: { type: 'string', description: 'ISO 3166-1 alpha-2', nullable: true },
+      avatarKey: { type: 'string', nullable: true },
       status: { type: 'string', enum: ['ACTIVE', 'SUSPENDED', 'DEACTIVATED'] },
       veterinarianStatus: {
         type: 'string',
@@ -59,6 +62,21 @@ const schemas: Obj = {
       },
       createdAt: { type: 'string', format: 'date-time' },
       updatedAt: { type: 'string', format: 'date-time' },
+    },
+  },
+  UserSummary: {
+    type: 'object',
+    description:
+      'Name-level directory projection. No email / phone / account status / roles — safe for ' +
+      'resolving authorship & actor ids that other DTOs carry.',
+    properties: {
+      id: { type: 'string', format: 'uuid' },
+      firstName: { type: 'string' },
+      lastName: { type: 'string' },
+      veterinarianStatus: {
+        type: 'string',
+        enum: ['NOT_APPLIED', 'PENDING', 'APPROVED', 'REJECTED'],
+      },
     },
   },
   Tokens: {
@@ -79,6 +97,96 @@ const schemas: Obj = {
       firstName: { type: 'string' },
       lastName: { type: 'string' },
       phone: { type: 'string' },
+      gender: { type: 'string', enum: ['MALE', 'FEMALE'] },
+      country: { type: 'string', description: 'ISO 3166-1 alpha-2 (auto-uppercased)' },
+    },
+  },
+  AvatarUploadUrlBody: {
+    type: 'object',
+    required: ['filename', 'mimeType', 'size'],
+    properties: {
+      filename: { type: 'string', maxLength: 255 },
+      mimeType: { type: 'string', enum: ['image/png', 'image/jpeg', 'image/webp'] },
+      size: { type: 'integer', minimum: 1, maximum: 5 * 1024 * 1024 },
+    },
+  },
+  FinalizeAvatarBody: {
+    type: 'object',
+    required: ['storageKey', 'mimeType', 'filename'],
+    properties: {
+      storageKey: { type: 'string', maxLength: 1024 },
+      mimeType: { type: 'string', enum: ['image/png', 'image/jpeg', 'image/webp'] },
+      filename: { type: 'string', maxLength: 255 },
+    },
+  },
+  PresignedUpload: {
+    type: 'object',
+    properties: {
+      storageKey: { type: 'string' },
+      uploadUrl: { type: 'string' },
+      method: { type: 'string', enum: ['PUT'] },
+      headers: { type: 'object', additionalProperties: { type: 'string' } },
+      expiresInSeconds: { type: 'integer' },
+    },
+  },
+  VeterinarianApplicationDocument: {
+    type: 'object',
+    description: 'Applicant-facing document metadata. Never includes the storage key.',
+    properties: {
+      kind: {
+        type: 'string',
+        enum: ['LICENSE_OR_ID', 'ADDITIONAL_ID', 'STUDENT_ID_FRONT', 'STUDENT_ID_BACK'],
+      },
+      filename: { type: 'string' },
+      mimeType: { type: 'string' },
+      sizeBytes: { type: 'integer' },
+      createdAt: { type: 'string', format: 'date-time' },
+    },
+  },
+  AdminVeterinarianApplicationDocument: {
+    allOf: [
+      { $ref: '#/components/schemas/VeterinarianApplicationDocument' },
+      {
+        type: 'object',
+        properties: { downloadUrl: { type: 'string', description: 'Short-lived signed GET URL' } },
+      },
+    ],
+  },
+  VeterinarianDocumentUploadUrlBody: {
+    type: 'object',
+    required: ['kind', 'filename', 'mimeType', 'size'],
+    properties: {
+      kind: {
+        type: 'string',
+        enum: ['LICENSE_OR_ID', 'ADDITIONAL_ID', 'STUDENT_ID_FRONT', 'STUDENT_ID_BACK'],
+      },
+      filename: { type: 'string', maxLength: 255 },
+      mimeType: { type: 'string' },
+      size: { type: 'integer', minimum: 1, maximum: 5 * 1024 * 1024 },
+    },
+  },
+  ApplyBody: {
+    type: 'object',
+    properties: {
+      note: { type: 'string', maxLength: 1000 },
+      subType: { type: 'string', enum: ['VETERINARIAN', 'STUDENT'], default: 'VETERINARIAN' },
+      documents: {
+        type: 'array',
+        maxItems: 2,
+        items: {
+          type: 'object',
+          required: ['kind', 'storageKey', 'filename', 'mimeType'],
+          properties: {
+            kind: {
+              type: 'string',
+              enum: ['LICENSE_OR_ID', 'ADDITIONAL_ID', 'STUDENT_ID_FRONT', 'STUDENT_ID_BACK'],
+            },
+            storageKey: { type: 'string', maxLength: 1024 },
+            filename: { type: 'string', maxLength: 255 },
+            mimeType: { type: 'string' },
+          },
+        },
+      },
     },
   },
   LoginRequest: {
@@ -123,12 +231,17 @@ const schemas: Obj = {
       id: { type: 'string', format: 'uuid' },
       userId: { type: 'string', format: 'uuid' },
       status: { type: 'string', enum: ['PENDING', 'APPROVED', 'REJECTED'] },
+      subType: { type: 'string', enum: ['VETERINARIAN', 'STUDENT'] },
       note: { type: 'string', nullable: true },
       decidedBy: { type: 'string', format: 'uuid', nullable: true },
       decidedAt: { type: 'string', format: 'date-time', nullable: true },
       decisionReason: { type: 'string', nullable: true },
       createdAt: { type: 'string', format: 'date-time' },
       updatedAt: { type: 'string', format: 'date-time' },
+      documents: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/VeterinarianApplicationDocument' },
+      },
     },
   },
   SupervisorAssignment: {
@@ -166,6 +279,55 @@ const schemas: Obj = {
 // --- paths -------------------------------------------------------------
 
 const paths: Obj = {
+  '/users/me/avatar/upload-url': {
+    post: {
+      tags: ['Users'],
+      summary: 'Request a presigned URL to upload a new avatar image',
+      description:
+        'Authenticated self-service. The server generates the storage key; the client PUTs the ' +
+        'bytes directly to storage, then calls `POST /users/me/avatar` to finalize.',
+      security: bearer,
+      requestBody: bodyOf('AvatarUploadUrlBody'),
+      responses: {
+        '201': ok('Presigned upload', dataOf({ $ref: '#/components/schemas/PresignedUpload' })),
+        ...errs(400, 401, 422, 429),
+      },
+    },
+  },
+  '/users/me/avatar': {
+    post: {
+      tags: ['Users'],
+      summary: 'Finalize an uploaded avatar',
+      description:
+        'Confirms the object exists at `storageKey` (under `users/avatars/`) and re-validates its ' +
+        'REAL size / MIME type from the storage HEAD response — client-declared values are never ' +
+        'trusted. Replaces any previous avatar (best-effort delete after commit).',
+      security: bearer,
+      requestBody: bodyOf('FinalizeAvatarBody'),
+      responses: {
+        '200': ok('Avatar updated', dataOf({ $ref: '#/components/schemas/User' })),
+        ...errs(400, 401, 409, 422, 429),
+      },
+    },
+  },
+  '/users/{id}': {
+    get: {
+      tags: ['Users'],
+      summary: 'Get a user’s public name summary',
+      description:
+        'Any authenticated user. Returns only `{ id, firstName, lastName, veterinarianStatus }` — ' +
+        'for resolving authorship / actor ids (e.g. `recordedByUserId`, `createdByUserId`, ' +
+        '`transferredBy`) and member / supervisor pickers. A DEACTIVATED account returns 404.',
+      security: bearer,
+      parameters: [
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      ],
+      responses: {
+        '200': ok('User summary', dataOf({ $ref: '#/components/schemas/UserSummary' })),
+        ...errs(401, 404, 422),
+      },
+    },
+  },
   '/auth/register': {
     post: {
       tags: ['Auth'],
@@ -277,20 +439,34 @@ const paths: Obj = {
     post: {
       tags: ['Veterinarians'],
       summary: 'Apply to become a veterinarian (moves status to PENDING)',
+      description:
+        'A VETERINARIAN application requires a `LICENSE_OR_ID` document (an `ADDITIONAL_ID` is ' +
+        'optional); a STUDENT application requires both `STUDENT_ID_FRONT` and `STUDENT_ID_BACK`. ' +
+        'Each `documents[].storageKey` must come from `POST /veterinarians/documents/upload-url` ' +
+        'and have an object actually uploaded at it — the server re-validates the real size/MIME ' +
+        'from storage before accepting the application.',
       security: bearer,
       requestBody: {
-        content: {
-          'application/json': {
-            schema: { type: 'object', properties: { note: { type: 'string', maxLength: 1000 } } },
-          },
-        },
+        content: { 'application/json': { schema: { $ref: '#/components/schemas/ApplyBody' } } },
       },
       responses: {
         '201': ok(
           'Application submitted',
           dataOf({ $ref: '#/components/schemas/VeterinarianApplication' }),
         ),
-        ...errs(401, 409, 422),
+        ...errs(400, 401, 409, 422, 429),
+      },
+    },
+  },
+  '/veterinarians/documents/upload-url': {
+    post: {
+      tags: ['Veterinarians'],
+      summary: 'Request a presigned URL to upload an application identity document',
+      security: bearer,
+      requestBody: bodyOf('VeterinarianDocumentUploadUrlBody'),
+      responses: {
+        '201': ok('Presigned upload', dataOf({ $ref: '#/components/schemas/PresignedUpload' })),
+        ...errs(400, 401, 422, 429),
       },
     },
   },
@@ -306,13 +482,38 @@ const paths: Obj = {
     get: {
       tags: ['Admin · Veterinarians'],
       summary: 'List pending veterinarian applications',
-      description: 'Requires `veterinarian.read`.',
+      description:
+        'Requires `veterinarian.read`. Each application includes `subType` and `documents[]` with ' +
+        'a short-lived signed `downloadUrl` per document, so a reviewer can inspect the submitted ' +
+        'identity documents without a separate admin file-browsing route.',
       security: bearer,
       parameters: [
         { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
         { name: 'pageSize', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100 } },
       ],
-      responses: { '200': ok('Paginated applications'), ...errs(401, 403) },
+      responses: {
+        '200': ok(
+          'Paginated applications',
+          dataOf({
+            type: 'array',
+            items: {
+              allOf: [
+                { $ref: '#/components/schemas/VeterinarianApplication' },
+                {
+                  type: 'object',
+                  properties: {
+                    documents: {
+                      type: 'array',
+                      items: { $ref: '#/components/schemas/AdminVeterinarianApplicationDocument' },
+                    },
+                  },
+                },
+              ],
+            },
+          }),
+        ),
+        ...errs(401, 403),
+      },
     },
   },
   '/admin/veterinarians/{userId}/approve': {
@@ -714,6 +915,7 @@ const paths: Obj = {
 
 const tags = [
   { name: 'Auth', description: 'Registration, login, token lifecycle' },
+  { name: 'Users', description: 'Authenticated user directory (name-level summary)' },
   { name: 'Veterinarians', description: 'Veterinarian approval workflow (applicant side)' },
   { name: 'Admin · Users', description: 'Account management' },
   { name: 'Admin · Roles & Permissions', description: 'Global RBAC management' },

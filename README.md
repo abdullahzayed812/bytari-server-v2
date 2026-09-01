@@ -8,6 +8,20 @@ Built from scratch. See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the design an
 
 > **Status: latest shipped is Phase 16 — Production hardening & release readiness.**
 >
+> **Backend Gap Audit (pre Mobile Phase 12, shipped):** a full re-audit of the
+> Identity / Organizations / Animals / Medical Records / Vaccinations / Poultry /
+> Media / Authorization surface against the product spec and every completed
+> mobile phase. Every confirmed use case (UC-001…UC-017) was already fully
+> supported. The **only** additive change: `GET /users/:id` — an
+> authentication-only **name summary** (id + first/last name +
+> `veterinarianStatus`; no email / phone / account status / roles) so clients
+> can resolve the actor / authorship user ids that DTOs already carry
+> (`recordedByUserId`, `createdBy`, `transferredBy`, …) and back
+> member/supervisor pickers. No migration; no existing endpoint or DTO changed.
+> Medical/animal file attachments and structured treatment entities remain
+> spec-acknowledged **future work** (no use case defines the workflow yet).
+> **570 tests.**
+>
 > Phase 16 (shipped): a full security / reliability / observability / deployment
 > audit pass — **no new product endpoints**, Phases 1–15 behaviour unchanged.
 > Concrete changes: a per-node **WebSocket connection cap**
@@ -235,7 +249,13 @@ requirement.
 | `npm run db:rollback`            | Roll back the last migration batch                   |
 | `npm run db:status`              | Show current migration version                       |
 | `npm run db:seed`                | Run seed files                                       |
+| `npm run db:seed:dev`            | Seed development personas (dev-only, see docs/DEV_SEED.md) |
 | `npm run db:migrate:make <name>` | Generate a new migration from the stub               |
+
+`npm test` / `npm run test:integration` need a **separate** `.env.test`
+pointing at its own database (e.g. `bytari_test`) — copy `.env.example`,
+change `DB_NAME`. Integration tests truncate `users` (cascading) between
+runs; without `.env.test` they'll run against whatever `.env` points at.
 
 ## API surface
 
@@ -253,6 +273,7 @@ Health routes are also served under the version prefix (`/api/v1/health`).
 | POST   | `/auth/logout`                           | bearer | —                      |
 | POST   | `/auth/logout-all`                       | bearer | —                      |
 | GET    | `/auth/me`                               | bearer | —                      |
+| GET    | `/users/:id`                             | bearer | — (name summary only)  |
 | POST   | `/veterinarians/apply`                   | bearer | —                      |
 | GET    | `/veterinarians/me/status`               | bearer | —                      |
 | GET    | `/admin/users`                           | bearer | `user.read`            |

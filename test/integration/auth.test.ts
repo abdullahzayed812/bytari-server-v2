@@ -74,13 +74,76 @@ describe('POST /auth/register', () => {
         role: 'ADMIN',
         roles: ['ADMIN'],
         isVeterinarian: true,
+        avatarKey: 'users/avatars/evil.png',
+        veterinarianStatus: 'APPROVED',
+        status: 'ACTIVE',
       });
     expect(res.status).toBe(201);
+    expect(res.body.data.user.avatarKey).toBeNull();
+    expect(res.body.data.user.veterinarianStatus).toBe('NOT_APPLIED');
     const me = await request(app)
       .get('/api/v1/auth/me')
       .set(bearer(res.body.data.tokens.accessToken));
     expect(me.body.data.roles).toEqual(['PET_OWNER']);
     expect(me.body.data.isAdmin).toBe(false);
+    expect(me.body.data.user.avatarKey).toBeNull();
+  });
+
+  it('accepts optional gender / country and round-trips them through GET /auth/me', async () => {
+    const email = uniqueEmail();
+    const res = await request(app).post('/api/v1/auth/register').send({
+      email,
+      password: 'a-very-strong-password',
+      firstName: 'A',
+      lastName: 'B',
+      gender: 'FEMALE',
+      country: 'jo',
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.data.user.gender).toBe('FEMALE');
+    expect(res.body.data.user.country).toBe('JO'); // auto-uppercased
+
+    const me = await request(app)
+      .get('/api/v1/auth/me')
+      .set(bearer(res.body.data.tokens.accessToken));
+    expect(me.body.data.user.gender).toBe('FEMALE');
+    expect(me.body.data.user.country).toBe('JO');
+  });
+
+  it('rejects an invalid gender enum value (422)', async () => {
+    const res = await request(app).post('/api/v1/auth/register').send({
+      email: uniqueEmail(),
+      password: 'a-very-strong-password',
+      firstName: 'A',
+      lastName: 'B',
+      gender: 'OTHER',
+    });
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('rejects a malformed country code (422)', async () => {
+    const res = await request(app).post('/api/v1/auth/register').send({
+      email: uniqueEmail(),
+      password: 'a-very-strong-password',
+      firstName: 'A',
+      lastName: 'B',
+      country: 'jor', // 3 letters — still invalid after auto-uppercasing
+    });
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
+  });
+});
+
+describe('GET /users/:id', () => {
+  it('returns exactly the name-level summary — no gender / country / avatarKey leak', async () => {
+    const u = await registerUser(app);
+    const viewer = await registerUser(app);
+    const res = await request(app).get(`/api/v1/users/${u.id}`).set(bearer(viewer.accessToken));
+    expect(res.status).toBe(200);
+    expect(Object.keys(res.body.data).sort()).toEqual(
+      ['firstName', 'id', 'lastName', 'veterinarianStatus'].sort(),
+    );
   });
 });
 

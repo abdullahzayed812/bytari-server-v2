@@ -790,6 +790,25 @@ export async function uploadContentFile(
     });
 }
 
+// --- Mobile auth & registration: avatars / veterinarian documents ---
+
+/**
+ * Seed an object directly through the storage instance (not a real HTTP PUT),
+ * mirroring the pattern `content.test.ts` uses for `uploadContentFile`. Returns
+ * the storage key so the caller can pass it to a finalize / apply endpoint.
+ */
+export async function seedStorageObject(
+  storage: ObjectStorage,
+  prefix: string,
+  buffer: Buffer,
+  contentType: string,
+): Promise<{ storageKey: string }> {
+  seq += 1;
+  const storageKey = `${prefix}/seed/${Date.now()}.${seq}`;
+  await storage.put(storageKey, buffer, { contentType });
+  return { storageKey };
+}
+
 // --- Phase 15: notifications & FCM -------------------------
 
 export async function registerDevice(

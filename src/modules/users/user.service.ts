@@ -1,14 +1,19 @@
 import type { Knex } from 'knex';
 import type { Logger } from 'pino';
-import { ConflictError, ForbiddenError, NotFoundError } from '../../shared/errors/app-error.js';
+import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '../../shared/errors/app-error.js';
+import { ErrorCode } from '../../shared/errors/error-codes.js';
 import type { EventBus } from '../../shared/events/index.js';
+import { buildObjectKey, StoragePrefix, type ObjectStorage } from '../../infra/storage/index.js';
 import { AuditAction, AuditEntityType, type AuditContext } from '../audit/audit.types.js';
 import type { AuditService } from '../audit/audit.service.js';
 import type { RefreshSessionRepository } from '../auth/refresh-session.repository.js';
+import { toPublicUser } from './user.mapper.js';
+import { UserPolicy } from './user.policy.js';
 import type { UserRepository } from './user.repository.js';
 import type {
   CreateUserData,
   ListUsersFilter,
+  PublicUser,
   User,
   UserStatus,
   VeterinarianStatus,
@@ -18,6 +23,8 @@ export interface ActorContext {
   actorUserId: string | null;
   context?: AuditContext;
 }
+
+const AVATAR_UPLOAD_URL_TTL_SECONDS = 600;
 
 /**
  * User lifecycle & account-status operations. Registration/authentication logic
@@ -30,6 +37,7 @@ export class UserService {
     private readonly db: Knex,
     private readonly users: UserRepository,
     private readonly sessions: RefreshSessionRepository,
+    private readonly storage: ObjectStorage,
     private readonly audit: AuditService,
     private readonly events: EventBus,
     logger: Logger,
@@ -171,5 +179,90 @@ export class UserService {
     trx: Knex.Transaction,
   ): Promise<User> {
     return this.users.update(id, { veterinarianStatus: status }, trx);
+  }
+
+  // --- avatar (presigned direct-to-storage upload) -----------------
+
+  async requestAvatarUploadUrl(
+    userId: string,
+    input: { filename: string; mimeType: string; size: number },
+  ): Promise<{
+    storageKey: string;
+    uploadUrl: string;
+    method: 'PUT';
+    headers: Record<string, string>;
+    expiresInSeconds: number;
+  }> {
+    await this.getById(userId);
+    UserPolicy.assertAvatarUploadRequest(input.mimeType, input.size);
+
+    // The server ALWAYS generates the key — the client never controls it.
+    const storageKey = buildObjectKey(StoragePrefix.userAvatars, input.filename);
+    const uploadUrl = await this.storage.getSignedUrl(storageKey, {
+      operation: 'put',
+      expiresIn: AVATAR_UPLOAD_URL_TTL_SECONDS,
+      contentType: input.mimeType,
+    });
+
+    return {
+      storageKey,
+      uploadUrl,
+      method: 'PUT',
+      headers: { 'Content-Type': input.mimeType },
+      expiresInSeconds: AVATAR_UPLOAD_URL_TTL_SECONDS,
+    };
+  }
+
+  async finalizeAvatar(
+    userId: string,
+    actor: ActorContext,
+    input: { storageKey: string; mimeType: string; filename: string },
+  ): Promise<PublicUser> {
+    UserPolicy.assertKeyBelongsToPrefix(input.storageKey, StoragePrefix.userAvatars);
+
+    // Storage I/O ALWAYS happens before the transaction opens.
+    const head = await this.storage.head(input.storageKey);
+    if (!head) {
+      throw new BadRequestError('no uploaded object exists at that storage key', {
+        code: ErrorCode.STORAGE_OBJECT_MISSING,
+      });
+    }
+    const realMime = head.contentType ?? input.mimeType;
+    UserPolicy.assertRegisteredAvatar(realMime, head.size);
+
+    const existing = await this.getById(userId);
+    const previousKey = existing.avatarKey;
+
+    const updated = await this.db.transaction(async (tx) => {
+      const user = await this.users.update(userId, { avatarKey: input.storageKey }, tx);
+      await this.audit.record(
+        {
+          action: AuditAction.USER_AVATAR_UPDATED,
+          entityType: AuditEntityType.USER,
+          entityId: userId,
+          actorUserId: actor.actorUserId,
+          // NB: no storage key / URL / credentials in audit metadata.
+          metadata: { userId, sizeBytes: head.size },
+          context: actor.context,
+        },
+        tx,
+      );
+      return user;
+    });
+
+    // Best-effort cleanup of the replaced object AFTER commit (§28 pattern).
+    if (previousKey && previousKey !== input.storageKey) {
+      try {
+        await this.storage.delete(previousKey);
+      } catch (err) {
+        this.log.error(
+          { err, userId },
+          'failed to delete replaced avatar storage object — needs a sweep',
+        );
+      }
+    }
+
+    this.events.publish('user.avatar.updated', { userId });
+    return toPublicUser(updated);
   }
 }

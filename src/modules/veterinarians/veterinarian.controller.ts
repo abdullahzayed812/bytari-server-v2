@@ -6,7 +6,12 @@ import { validatedBody, validatedParams, validatedQuery } from '../../shared/htt
 import { auditContextFromRequest } from '../audit/audit-context.js';
 import { requireAuth } from '../auth/authenticate.middleware.js';
 import type { VeterinarianService } from './veterinarian.service.js';
-import type { ApplyBody, PendingQuery, RejectBody } from './veterinarian.schemas.js';
+import type {
+  ApplyBody,
+  DocumentUploadUrlBody,
+  PendingQuery,
+  RejectBody,
+} from './veterinarian.schemas.js';
 
 export class VeterinarianController {
   constructor(private readonly vets: VeterinarianService) {}
@@ -23,10 +28,17 @@ export class VeterinarianController {
     const body = validatedBody<ApplyBody>(req);
     const application = await this.vets.apply(
       auth.userId,
-      { note: body.note },
+      { note: body.note, subType: body.subType, documents: body.documents },
       auditContextFromRequest(req),
     );
     sendSuccess(res, application, StatusCodes.CREATED);
+  };
+
+  requestDocumentUploadUrl = async (req: Request, res: Response): Promise<void> => {
+    const auth = requireAuth(req);
+    const body = validatedBody<DocumentUploadUrlBody>(req);
+    const result = await this.vets.requestDocumentUploadUrl(auth.userId, body);
+    sendSuccess(res, result, StatusCodes.CREATED);
   };
 
   myStatus = async (req: Request, res: Response): Promise<void> => {

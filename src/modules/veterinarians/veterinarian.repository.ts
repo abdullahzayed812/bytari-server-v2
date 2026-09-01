@@ -1,13 +1,24 @@
 import type { Knex } from 'knex';
 import {
   rowToApplication,
-  type PendingApplicationSummary,
   type VetApplicationStatus,
-  type VeterinarianApplication,
+  type VetApplicationSubType,
   type VeterinarianApplicationRow,
 } from './veterinarian.types.js';
 
 const TABLE = 'veterinarian_applications';
+
+/** An application row without its `documents` — the repository has no storage access. */
+export type VeterinarianApplicationRecord = ReturnType<typeof rowToApplication>;
+
+export interface PendingApplicationRecord extends VeterinarianApplicationRecord {
+  user: {
+    id: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+  };
+}
 
 export class VeterinarianRepository {
   constructor(private readonly db: Knex) {}
@@ -19,7 +30,7 @@ export class VeterinarianRepository {
   async findPendingByUser(
     userId: string,
     trx?: Knex.Transaction,
-  ): Promise<VeterinarianApplication | null> {
+  ): Promise<VeterinarianApplicationRecord | null> {
     const row = await this.conn(trx)<VeterinarianApplicationRow>(TABLE)
       .where({ user_id: userId, status: 'PENDING' })
       .first();
@@ -29,7 +40,7 @@ export class VeterinarianRepository {
   async findLatestByUser(
     userId: string,
     trx?: Knex.Transaction,
-  ): Promise<VeterinarianApplication | null> {
+  ): Promise<VeterinarianApplicationRecord | null> {
     const row = await this.conn(trx)<VeterinarianApplicationRow>(TABLE)
       .where({ user_id: userId })
       .orderBy('created_at', 'desc')
@@ -37,12 +48,25 @@ export class VeterinarianRepository {
     return row ? rowToApplication(row) : null;
   }
 
-  async create(
-    data: { userId: string; note?: string | null },
+  async findById(
+    id: string,
     trx?: Knex.Transaction,
-  ): Promise<VeterinarianApplication> {
+  ): Promise<VeterinarianApplicationRecord | null> {
+    const row = await this.conn(trx)<VeterinarianApplicationRow>(TABLE).where({ id }).first();
+    return row ? rowToApplication(row) : null;
+  }
+
+  async create(
+    data: { userId: string; note?: string | null; subType: VetApplicationSubType },
+    trx?: Knex.Transaction,
+  ): Promise<VeterinarianApplicationRecord> {
     const [row] = await this.conn(trx)<VeterinarianApplicationRow>(TABLE)
-      .insert({ user_id: data.userId, note: data.note ?? null, status: 'PENDING' })
+      .insert({
+        user_id: data.userId,
+        note: data.note ?? null,
+        sub_type: data.subType,
+        status: 'PENDING',
+      })
       .returning('*');
     return rowToApplication(row as VeterinarianApplicationRow);
   }
@@ -51,7 +75,7 @@ export class VeterinarianRepository {
     id: string,
     decision: { status: VetApplicationStatus; decidedBy: string; decisionReason?: string | null },
     trx?: Knex.Transaction,
-  ): Promise<VeterinarianApplication> {
+  ): Promise<VeterinarianApplicationRecord> {
     const [row] = await this.conn(trx)<VeterinarianApplicationRow>(TABLE)
       .where({ id })
       .update({
@@ -69,7 +93,7 @@ export class VeterinarianRepository {
     page: number,
     pageSize: number,
     trx?: Knex.Transaction,
-  ): Promise<{ items: PendingApplicationSummary[]; total: number }> {
+  ): Promise<{ items: PendingApplicationRecord[]; total: number }> {
     const countRow = await this.conn(trx)(TABLE)
       .where({ status: 'PENDING' })
       .count<{ count: string }>({ count: '*' })

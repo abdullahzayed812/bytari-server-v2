@@ -6,12 +6,21 @@ import {
   phoneSchema,
 } from '../../shared/validation/common.js';
 
+// Not `.strict()` — unknown / privileged keys (e.g. a client-supplied `role`)
+// are silently stripped rather than rejected, matching the existing contract.
 export const registerBodySchema = z.object({
   email: emailSchema,
   password: passwordSchema,
   firstName: nameSchema,
   lastName: nameSchema,
   phone: phoneSchema.optional(),
+  gender: z.enum(['MALE', 'FEMALE']).optional(),
+  country: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z]{2}$/, 'country must be an ISO 3166-1 alpha-2 code')
+    .optional(),
 });
 export type RegisterBody = z.infer<typeof registerBodySchema>;
 

@@ -116,6 +116,18 @@ const envSchema = z
     BOOTSTRAP_ADMIN_PASSWORD: z.string().min(12).optional(),
     BOOTSTRAP_ADMIN_FIRST_NAME: z.string().default('System'),
     BOOTSTRAP_ADMIN_LAST_NAME: z.string().default('Administrator'),
+
+    // --- Development persona seed (dev-seed) --------------------------
+    // Runs automatically when NODE_ENV=development. Set true to opt in
+    // elsewhere (e.g. a shared staging box) — never allowed in production.
+    ENABLE_DEV_SEEDS: booleanFromString.default('false'),
+
+    // --- Outbound email (Gmail SMTP via nodemailer) — all-or-nothing ----
+    EMAIL_USER: z.string().email().optional(),
+    // A Gmail App Password (16 chars, no spaces) — never the account password.
+    EMAIL_PASS: z.string().optional(),
+    // Display "From" address. Defaults to EMAIL_USER when unset.
+    EMAIL_FROM: z.string().optional(),
   })
   .superRefine((env, ctx) => {
     // Firebase: if any single credential field is provided, the whole set must be.
@@ -132,6 +144,17 @@ const envSchema = z
         path: ['FIREBASE_PROJECT_ID'],
         message:
           'Incomplete Firebase config: set FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL and FIREBASE_PRIVATE_KEY together, or provide FIREBASE_SERVICE_ACCOUNT_JSON.',
+      });
+    }
+
+    // Email: both credentials are required together.
+    const anyEmail = isSet(env.EMAIL_USER) || isSet(env.EMAIL_PASS);
+    const allEmail = isSet(env.EMAIL_USER) && isSet(env.EMAIL_PASS);
+    if (anyEmail && !allEmail) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['EMAIL_USER'],
+        message: 'Incomplete email config: EMAIL_USER and EMAIL_PASS must both be set.',
       });
     }
 
@@ -174,6 +197,8 @@ const envSchema = z
       isSet(env.R2_ACCESS_KEY_ID) &&
       isSet(env.R2_SECRET_ACCESS_KEY) &&
       isSet(env.R2_BUCKET);
+
+    const emailConfigured = isSet(env.EMAIL_USER) && isSet(env.EMAIL_PASS);
 
     return {
       env: env.NODE_ENV,
@@ -230,6 +255,13 @@ const envSchema = z
             }
           : null,
       },
+      email: emailConfigured
+        ? {
+            user: env.EMAIL_USER as string,
+            pass: env.EMAIL_PASS as string,
+            from: env.EMAIL_FROM ?? (env.EMAIL_USER as string),
+          }
+        : null,
       auth: {
         jwt: {
           accessSecret: isSet(env.JWT_ACCESS_SECRET) ? env.JWT_ACCESS_SECRET : null,
@@ -257,6 +289,9 @@ const envSchema = z
               }
             : null,
       },
+      devSeed: {
+        enabled: env.NODE_ENV === 'development' || env.ENABLE_DEV_SEEDS,
+      },
     };
   });
 
@@ -264,6 +299,7 @@ export type AppConfig = z.infer<typeof envSchema>;
 export type RealtimeConfig = AppConfig['realtime'];
 export type FirebaseConfig = NonNullable<AppConfig['firebase']>;
 export type R2Config = NonNullable<AppConfig['storage']['r2']>;
+export type EmailConfig = NonNullable<AppConfig['email']>;
 export type AuthConfig = AppConfig['auth'];
 
 let cached: AppConfig | undefined;

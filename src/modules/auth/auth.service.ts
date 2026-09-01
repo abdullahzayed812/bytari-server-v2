@@ -50,6 +50,8 @@ export class AuthService {
           firstName: input.firstName,
           lastName: input.lastName,
           phone: input.phone ?? null,
+          gender: input.gender ?? null,
+          country: input.country ?? null,
         },
         { actorUserId: null, context: ctx },
         tx,

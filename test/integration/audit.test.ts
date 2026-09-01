@@ -1,10 +1,11 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
+import { StoragePrefix } from '../../src/infra/storage/keys.js';
 import { buildTestApp } from '../helpers/app.js';
 import { closeTestDb, ensureSchema, getTestDb, resetDb } from '../helpers/db.js';
-import { bearer, registerAdmin, registerUser } from '../helpers/factories.js';
+import { bearer, registerAdmin, registerUser, seedStorageObject } from '../helpers/factories.js';
 
-const { app } = buildTestApp();
+const { app, container } = buildTestApp();
 
 beforeAll(() => ensureSchema());
 beforeEach(() => resetDb());
@@ -49,7 +50,25 @@ describe('audit log', () => {
 
   it('records the veterinarian approval chain', async () => {
     const u = await registerUser(app);
-    await request(app).post('/api/v1/veterinarians/apply').set(bearer(u.accessToken)).send({});
+    const { storageKey } = await seedStorageObject(
+      container.objectStorage,
+      StoragePrefix.veterinarianDocuments,
+      Buffer.alloc(100, 1),
+      'application/pdf',
+    );
+    await request(app)
+      .post('/api/v1/veterinarians/apply')
+      .set(bearer(u.accessToken))
+      .send({
+        documents: [
+          {
+            kind: 'LICENSE_OR_ID',
+            storageKey,
+            filename: 'license.pdf',
+            mimeType: 'application/pdf',
+          },
+        ],
+      });
     const admin = await registerAdmin(app);
     await request(app)
       .post(`/api/v1/admin/veterinarians/${u.id}/approve`)

@@ -23,6 +23,7 @@ import { TokenService } from './modules/auth/token.service.js';
 import { AuthService } from './modules/auth/auth.service.js';
 import { createAuthenticate } from './modules/auth/authenticate.middleware.js';
 import { VeterinarianRepository } from './modules/veterinarians/veterinarian.repository.js';
+import { VeterinarianDocumentRepository } from './modules/veterinarians/veterinarian-document.repository.js';
 import { VeterinarianService } from './modules/veterinarians/veterinarian.service.js';
 import { SupervisorRepository } from './modules/supervisors/supervisor.repository.js';
 import { SupervisorService } from './modules/supervisors/supervisor.service.js';
@@ -77,6 +78,7 @@ import {
   PushNotificationService,
   type PushNotificationProvider,
 } from './infra/push/index.js';
+import { createEmailProvider, EmailService, type EmailProvider } from './infra/email/index.js';
 import { NotificationRepository } from './modules/notifications/infrastructure/notification.repository.js';
 import { DeviceTokenRepository } from './modules/notifications/infrastructure/device-token.repository.js';
 import { PreferenceRepository } from './modules/notifications/infrastructure/preference.repository.js';
@@ -106,6 +108,12 @@ export interface ContainerDeps {
    * a fake so no real Firebase credentials are needed.
    */
   pushProvider?: PushNotificationProvider;
+  /**
+   * Outbound email provider. Defaults to the configured implementation (Gmail
+   * SMTP when EMAIL_USER/EMAIL_PASS are present, else a logging no-op). Tests
+   * inject a fake so no real mailbox is needed.
+   */
+  emailProvider?: EmailProvider;
 }
 
 /**
@@ -182,6 +190,8 @@ export interface Container {
   supervisorRepository: SupervisorRepository;
   pushProvider: PushNotificationProvider;
   pushNotificationService: PushNotificationService;
+  emailProvider: EmailProvider;
+  emailService: EmailService;
   deviceTokenRepository: DeviceTokenRepository;
   notificationRepository: NotificationRepository;
   preferenceRepository: PreferenceRepository;
@@ -239,12 +249,17 @@ export function createContainer(deps: ContainerDeps): Container {
     logger,
   );
 
+  // --- object storage (hoisted: needed by UserService & VeterinarianService
+  // for avatar / document presigned uploads, as well as the content module) --
+  const objectStorage = deps.objectStorage ?? createObjectStorage(config, logger);
+
   // --- users -------------------------------------------------------
   const userRepository = new UserRepository(db);
   const userService = new UserService(
     db,
     userRepository,
     refreshSessionRepository,
+    objectStorage,
     auditService,
     eventBus,
     logger,
@@ -266,8 +281,10 @@ export function createContainer(deps: ContainerDeps): Container {
   const veterinarianService = new VeterinarianService(
     db,
     new VeterinarianRepository(db),
+    new VeterinarianDocumentRepository(db),
     userService,
     roleRepository,
+    objectStorage,
     auditService,
     eventBus,
     logger,
@@ -467,7 +484,7 @@ export function createContainer(deps: ContainerDeps): Container {
   );
 
   // --- content management (Phase 14) ------------------------
-  const objectStorage = deps.objectStorage ?? createObjectStorage(config, logger);
+  // `objectStorage` was hoisted above (needed earlier by UserService / VeterinarianService).
   const contentRepository = new ContentRepository(db);
   const contentFileRepository = new ContentFileRepository(db);
   const categoryRepository = new CategoryRepository(db);
@@ -495,6 +512,8 @@ export function createContainer(deps: ContainerDeps): Container {
   // events → NotificationEventHandler → NotificationService → in-app row (+ FCM).
   const pushProvider: PushNotificationProvider =
     deps.pushProvider ?? createPushProvider(config, logger);
+  const emailProvider: EmailProvider = deps.emailProvider ?? createEmailProvider(config, logger);
+  const emailService = new EmailService(emailProvider, logger);
   const deviceTokenRepository = new DeviceTokenRepository(db);
   const pushNotificationService = new PushNotificationService(
     pushProvider,
@@ -596,6 +615,8 @@ export function createContainer(deps: ContainerDeps): Container {
     supervisorRepository,
     pushProvider,
     pushNotificationService,
+    emailProvider,
+    emailService,
     deviceTokenRepository,
     notificationRepository,
     preferenceRepository,

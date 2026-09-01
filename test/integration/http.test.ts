@@ -28,10 +28,14 @@ describe('HTTP application', () => {
     const res = await request(app).get('/');
     expect(res.status).toBe(200);
     expect(res.body.data).toMatchObject({ name: 'bytari-backend', apiBase: API_PREFIX });
+    // Storage reflects whatever `.env` actually configures (R2 vs. the
+    // in-memory fallback) — this suite runs against the real loaded config,
+    // not a fixed fixture, so it asserts on that rather than one hardcoded value.
+    const config = loadConfig();
     expect(res.body.data.infrastructure).toMatchObject({
       realtime: { enabled: true, path: '/realtime', connections: 0 },
       push: { provider: 'noop' },
-      storage: { provider: 'in-memory' },
+      storage: { provider: config.storage.r2 ? 'cloudflare-r2' : 'in-memory' },
     });
   });
 

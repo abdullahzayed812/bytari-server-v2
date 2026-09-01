@@ -1,4 +1,12 @@
-import type { PublicUser, User, UserRow, UserStatus, VeterinarianStatus } from './user.types.js';
+import type {
+  Gender,
+  PublicUser,
+  User,
+  UserRow,
+  UserStatus,
+  UserSummary,
+  VeterinarianStatus,
+} from './user.types.js';
 
 export function rowToUser(row: UserRow): User {
   return {
@@ -8,6 +16,9 @@ export function rowToUser(row: UserRow): User {
     firstName: row.first_name,
     lastName: row.last_name,
     phone: row.phone,
+    gender: (row.gender as Gender | null) ?? null,
+    country: row.country,
+    avatarKey: row.avatar_key,
     status: row.status as UserStatus,
     veterinarianStatus: row.veterinarian_status as VeterinarianStatus,
     createdAt: row.created_at,
@@ -23,9 +34,22 @@ export function toPublicUser(user: User): PublicUser {
     firstName: user.firstName,
     lastName: user.lastName,
     phone: user.phone,
+    gender: user.gender,
+    country: user.country,
+    avatarKey: user.avatarKey,
     status: user.status,
     veterinarianStatus: user.veterinarianStatus,
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString(),
+  };
+}
+
+/** Name-only directory projection. See {@link UserSummary}. */
+export function toUserSummary(user: User): UserSummary {
+  return {
+    id: user.id,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    veterinarianStatus: user.veterinarianStatus,
   };
 }

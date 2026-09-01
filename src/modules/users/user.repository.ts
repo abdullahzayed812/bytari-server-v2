@@ -41,6 +41,8 @@ export class UserRepository {
         first_name: data.firstName,
         last_name: data.lastName,
         phone: data.phone ?? null,
+        gender: data.gender ?? null,
+        country: data.country ?? null,
       })
       .returning('*');
     return rowToUser(row as UserRow);
@@ -51,6 +53,9 @@ export class UserRepository {
     if (patch.firstName !== undefined) dbPatch.first_name = patch.firstName;
     if (patch.lastName !== undefined) dbPatch.last_name = patch.lastName;
     if (patch.phone !== undefined) dbPatch.phone = patch.phone;
+    if (patch.gender !== undefined) dbPatch.gender = patch.gender;
+    if (patch.country !== undefined) dbPatch.country = patch.country;
+    if (patch.avatarKey !== undefined) dbPatch.avatar_key = patch.avatarKey;
     if (patch.status !== undefined) dbPatch.status = patch.status;
     if (patch.veterinarianStatus !== undefined)
       dbPatch.veterinarian_status = patch.veterinarianStatus;

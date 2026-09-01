@@ -19,6 +19,8 @@ export interface RegisterInput {
   firstName: string;
   lastName: string;
   phone?: string | null;
+  gender?: 'MALE' | 'FEMALE' | null;
+  country?: string | null;
 }
 
 export interface LoginInput {

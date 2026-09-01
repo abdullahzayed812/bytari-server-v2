@@ -13,8 +13,10 @@ export const StoragePrefix = {
   articles: 'content/articles',
   animalImages: 'animals',
   userUploads: 'users',
+  userAvatars: 'users/avatars',
   organizationFiles: 'organizations',
   medicalAttachments: 'medical-records',
+  veterinarianDocuments: 'veterinarians/documents',
   misc: 'misc',
 } as const;
 
