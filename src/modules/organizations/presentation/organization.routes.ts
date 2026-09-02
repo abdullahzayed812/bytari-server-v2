@@ -12,12 +12,17 @@ import {
   assignSupervisorBodySchema,
   createOrganizationBodySchema,
   discoverOrganizationsQuerySchema,
+  finalizeGalleryBodySchema,
   finalizeLogoBodySchema,
+  galleryUploadUrlBodySchema,
   listMembersQuerySchema,
   listMyOrganizationsQuerySchema,
+  listReviewsQuerySchema,
   logoUploadUrlBodySchema,
   organizationMemberParamSchema,
   organizationSupervisorParamSchema,
+  removeGalleryImageQuerySchema,
+  submitReviewBodySchema,
   updateMemberBodySchema,
   updateOrganizationBodySchema,
   updateSupervisorBodySchema,
@@ -30,6 +35,7 @@ export function createOrganizationRouter(c: Container): Router {
     c.membershipService,
     c.organizationSupervisorService,
     c.authorizationService,
+    c.organizationEngagementService,
   );
   const { withOrganization, authorizeOrg } = createOrganizationMiddleware({
     organizations: c.organizationRepository,
@@ -87,12 +93,62 @@ export function createOrganizationRouter(c: Container): Router {
     authorizeOrg('organization.update'),
     asyncHandler(ctrl.finalizeLogo),
   );
+  // Gallery — same guard as the logo; up to 8 photos, appended one at a time.
+  r.post(
+    '/:organizationId/gallery/upload-url',
+    validate({ params: organizationIdParamSchema, body: galleryUploadUrlBodySchema }),
+    withOrganization,
+    authorizeOrg('organization.update'),
+    asyncHandler(ctrl.requestGalleryUploadUrl),
+  );
+  r.post(
+    '/:organizationId/gallery',
+    validate({ params: organizationIdParamSchema, body: finalizeGalleryBodySchema }),
+    withOrganization,
+    authorizeOrg('organization.update'),
+    asyncHandler(ctrl.addGalleryImage),
+  );
+  r.delete(
+    '/:organizationId/gallery',
+    validate({ params: organizationIdParamSchema, query: removeGalleryImageQuerySchema }),
+    withOrganization,
+    authorizeOrg('organization.update'),
+    asyncHandler(ctrl.removeGalleryImage),
+  );
 
   r.post(
     '/:organizationId/leave',
     validate({ params: organizationIdParamSchema }),
     withOrganization,
     asyncHandler(ctrl.leave),
+  );
+
+  // --- engagement: follow + reviews (any authenticated user, not just
+  // members — the Clinic Details screen; ACTIVE-only is enforced inside
+  // `OrganizationEngagementService`, same rule `discover/:id` uses) ------
+  r.post(
+    '/:organizationId/follow',
+    validate({ params: organizationIdParamSchema }),
+    withOrganization,
+    asyncHandler(ctrl.follow),
+  );
+  r.delete(
+    '/:organizationId/follow',
+    validate({ params: organizationIdParamSchema }),
+    withOrganization,
+    asyncHandler(ctrl.unfollow),
+  );
+  r.post(
+    '/:organizationId/reviews',
+    validate({ params: organizationIdParamSchema, body: submitReviewBodySchema }),
+    withOrganization,
+    asyncHandler(ctrl.submitReview),
+  );
+  r.get(
+    '/:organizationId/reviews',
+    validate({ params: organizationIdParamSchema, query: listReviewsQuerySchema }),
+    withOrganization,
+    asyncHandler(ctrl.listReviews),
   );
 
   // --- members ------------------------------------------------------

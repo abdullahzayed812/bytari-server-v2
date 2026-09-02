@@ -1,4 +1,4 @@
-import type { AnimalSex, AnimalSpecies, AnimalStatus } from './animal.constants.js';
+import type { AnimalAgeEstimate, AnimalSex, AnimalSpecies, AnimalStatus } from './animal.constants.js';
 
 /** Full animal aggregate (internal). Never returned raw from a controller. */
 export interface Animal {
@@ -12,6 +12,11 @@ export interface Animal {
   status: AnimalStatus;
   createdBy: string;
   deactivatedAt: string | null;
+  color: string | null;
+  distinguishingFeatures: string | null;
+  ageEstimate: AnimalAgeEstimate | null;
+  /** R2 storage keys — resolved to URLs by the service layer, same as organization galleries. */
+  galleryKeys: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -49,6 +54,11 @@ export interface AnimalDTO {
   status: AnimalStatus;
   createdBy: string;
   currentOwnerUserId: string | null;
+  color: string | null;
+  distinguishingFeatures: string | null;
+  ageEstimate: AnimalAgeEstimate | null;
+  /** Resolved gallery photo URLs — R2 keys never leave the repository layer. */
+  galleryUrls: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -74,6 +84,9 @@ export interface CreateAnimalInput {
   sex?: AnimalSex;
   dateOfBirth?: string | null;
   notes?: string | null;
+  color?: string | null;
+  distinguishingFeatures?: string | null;
+  ageEstimate?: AnimalAgeEstimate | null;
 }
 
 export interface UpdateAnimalInput {
@@ -83,6 +96,9 @@ export interface UpdateAnimalInput {
   sex?: AnimalSex;
   dateOfBirth?: string | null;
   notes?: string | null;
+  color?: string | null;
+  distinguishingFeatures?: string | null;
+  ageEstimate?: AnimalAgeEstimate | null;
 }
 
 export interface ListAnimalsFilter {
@@ -106,6 +122,10 @@ export interface AnimalRow {
   status: string;
   created_by: string;
   deactivated_at: Date | null;
+  color: string | null;
+  distinguishing_features: string | null;
+  age_estimate: string | null;
+  gallery_keys: string[] | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -139,6 +159,10 @@ export function rowToAnimal(row: AnimalRow): Animal {
     status: row.status as AnimalStatus,
     createdBy: row.created_by,
     deactivatedAt: row.deactivated_at ? row.deactivated_at.toISOString() : null,
+    color: row.color,
+    distinguishingFeatures: row.distinguishing_features,
+    ageEstimate: row.age_estimate as AnimalAgeEstimate | null,
+    galleryKeys: row.gallery_keys ?? [],
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
   };
@@ -157,7 +181,11 @@ export function rowToOwnership(row: AnimalOwnershipRow): AnimalOwnership {
   };
 }
 
-export function toAnimalDTO(animal: Animal, currentOwnerUserId: string | null): AnimalDTO {
+export function toAnimalDTO(
+  animal: Animal,
+  currentOwnerUserId: string | null,
+  galleryUrls: string[] = [],
+): AnimalDTO {
   return {
     id: animal.id,
     name: animal.name,
@@ -169,6 +197,10 @@ export function toAnimalDTO(animal: Animal, currentOwnerUserId: string | null): 
     status: animal.status,
     createdBy: animal.createdBy,
     currentOwnerUserId,
+    color: animal.color,
+    distinguishingFeatures: animal.distinguishingFeatures,
+    ageEstimate: animal.ageEstimate,
+    galleryUrls,
     createdAt: animal.createdAt,
     updatedAt: animal.updatedAt,
   };

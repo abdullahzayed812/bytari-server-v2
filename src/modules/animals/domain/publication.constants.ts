@@ -11,6 +11,17 @@ export type PublicationKind = (typeof PUBLICATION_KINDS)[number];
 export const PUBLICATION_STATUSES = ['PENDING', 'APPROVED', 'REJECTED'] as const;
 export type PublicationStatus = (typeof PUBLICATION_STATUSES)[number];
 
+/** Self-declared, listing-time claims — not a verified medical record. */
+export const HEALTH_STATUSES = ['EXCELLENT', 'GOOD', 'FAIR', 'POOR'] as const;
+export type HealthStatus = (typeof HEALTH_STATUSES)[number];
+
+export const VACCINATION_STATUSES = ['COMPLETE', 'PARTIAL', 'NONE'] as const;
+export type VaccinationStatus = (typeof VACCINATION_STATUSES)[number];
+
+/** A viewer's fire-and-forget interaction with a listing — notifies the owner, no workflow. */
+export const PUBLICATION_INTERACTION_TYPES = ['REQUEST', 'SIGHTING'] as const;
+export type PublicationInteractionType = (typeof PUBLICATION_INTERACTION_TYPES)[number];
+
 /** Audit action names per kind + transition (mirrors docs §25). */
 export const PUBLICATION_AUDIT_ACTIONS: Record<
   PublicationKind,

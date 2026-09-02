@@ -17,6 +17,9 @@ export interface CreateAnimalData {
   dateOfBirth: string | null;
   notes: string | null;
   createdBy: string;
+  color?: string | null;
+  distinguishingFeatures?: string | null;
+  ageEstimate?: string | null;
 }
 
 export interface UpdateAnimalData {
@@ -26,6 +29,11 @@ export interface UpdateAnimalData {
   sex?: string;
   dateOfBirth?: string | null;
   notes?: string | null;
+  color?: string | null;
+  distinguishingFeatures?: string | null;
+  ageEstimate?: string | null;
+  /** Full replacement of the gallery array — the service reads-modifies-writes. */
+  galleryKeys?: string[];
 }
 
 export class AnimalRepository {
@@ -51,6 +59,9 @@ export class AnimalRepository {
         notes: data.notes,
         created_by: data.createdBy,
         status: 'ACTIVE',
+        color: data.color ?? null,
+        distinguishing_features: data.distinguishingFeatures ?? null,
+        age_estimate: data.ageEstimate ?? null,
       })
       .returning('*')) as AnimalRow[];
     if (!row) throw new Error('animal insert did not return a row');
@@ -65,6 +76,11 @@ export class AnimalRepository {
     if (patch.sex !== undefined) dbPatch.sex = patch.sex;
     if (patch.dateOfBirth !== undefined) dbPatch.date_of_birth = patch.dateOfBirth;
     if (patch.notes !== undefined) dbPatch.notes = patch.notes;
+    if (patch.color !== undefined) dbPatch.color = patch.color;
+    if (patch.distinguishingFeatures !== undefined)
+      dbPatch.distinguishing_features = patch.distinguishingFeatures;
+    if (patch.ageEstimate !== undefined) dbPatch.age_estimate = patch.ageEstimate;
+    if (patch.galleryKeys !== undefined) dbPatch.gallery_keys = patch.galleryKeys;
 
     const [row] = (await trx(TABLE).where({ id }).update(dbPatch).returning('*')) as AnimalRow[];
     if (!row) throw new Error('animal not found after update');

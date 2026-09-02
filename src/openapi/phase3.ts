@@ -98,6 +98,14 @@ const schemas: Obj = {
       longitude: { type: 'number', nullable: true },
       phone: { type: 'string', nullable: true },
       logoUrl: { type: 'string', nullable: true },
+      workingHours: { type: 'string', nullable: true },
+      services: { type: 'array', items: { type: 'string' } },
+      email: { type: 'string', nullable: true },
+      whatsapp: { type: 'string', nullable: true },
+      instagramUrl: { type: 'string', nullable: true },
+      facebookUrl: { type: 'string', nullable: true },
+      tiktokUrl: { type: 'string', nullable: true },
+      galleryUrls: { type: 'array', items: { type: 'string' } },
       distanceKm: {
         type: 'number',
         nullable: true,
@@ -105,6 +113,38 @@ const schemas: Obj = {
       },
       createdAt: { type: 'string', format: 'date-time' },
     },
+  },
+  PublicOrganizationDetail: {
+    allOf: [
+      { $ref: '#/components/schemas/PublicOrganization' },
+      {
+        type: 'object',
+        description: 'GET /organizations/discover/{id} — the Clinic Details screen',
+        properties: {
+          veterinarians: {
+            type: 'array',
+            description: 'ACTIVE VETERINARIAN members — public-safe subset',
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'string', format: 'uuid' },
+                firstName: { type: 'string' },
+                lastName: { type: 'string' },
+              },
+            },
+          },
+          engagement: {
+            type: 'object',
+            properties: {
+              isFollowing: { type: 'boolean' },
+              followersCount: { type: 'integer' },
+              rating: { type: 'number', nullable: true, description: 'Average, 1 decimal' },
+              reviewsCount: { type: 'integer' },
+            },
+          },
+        },
+      },
+    ],
   },
   OrganizationMembership: {
     type: 'object',
@@ -207,6 +247,13 @@ const paths: Obj = {
                 phone: { type: 'string', nullable: true },
                 latitude: { type: 'number', nullable: true, minimum: -90, maximum: 90 },
                 longitude: { type: 'number', nullable: true, minimum: -180, maximum: 180 },
+                workingHours: { type: 'string', nullable: true },
+                services: { type: 'array', items: { type: 'string' }, maxItems: 20 },
+                email: { type: 'string', nullable: true, format: 'email' },
+                whatsapp: { type: 'string', nullable: true },
+                instagramUrl: { type: 'string', nullable: true, format: 'uri' },
+                facebookUrl: { type: 'string', nullable: true, format: 'uri' },
+                tiktokUrl: { type: 'string', nullable: true, format: 'uri' },
               },
             },
           },
@@ -256,11 +303,18 @@ const paths: Obj = {
   '/organizations/discover/{organizationId}': {
     get: {
       tags: ['Organizations'],
-      summary: 'Get one ACTIVE organization — any authenticated user, not just members',
+      summary: 'Clinic Details — one ACTIVE organization, any authenticated user, not just members',
+      description:
+        "Full profile + the ACTIVE veterinarian roster + the viewer's engagement summary " +
+        '(follow state, rating). Composed from three independent reads — see ' +
+        '`OrganizationController.getPublicOne`.',
       security: bearer,
       parameters: [orgIdParam],
       responses: {
-        '200': ok('Organization', dataOf({ $ref: '#/components/schemas/PublicOrganization' })),
+        '200': ok(
+          'Organization',
+          dataOf({ $ref: '#/components/schemas/PublicOrganizationDetail' }),
+        ),
         ...errs(401, 404),
       },
     },

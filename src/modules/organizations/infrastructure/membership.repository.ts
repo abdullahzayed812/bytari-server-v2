@@ -217,6 +217,28 @@ export class MembershipRepository {
     return rows.map((r) => ({ organizationId: r.organization_id, roleKey: r.role_key }));
   }
 
+  /**
+   * ACTIVE VETERINARIAN members of an organization, public-safe subset only
+   * (no email, no role/status) — backs the Clinic Details "الأطباء" list.
+   * Capped at 20; a directory profile doesn't need the full roster.
+   */
+  async listPublicVeterinarians(
+    organizationId: string,
+    trx?: Knex.Transaction,
+  ): Promise<Array<{ id: string; firstName: string; lastName: string }>> {
+    const rows = await this.base(trx)
+      .join('users as u', 'u.id', 'm.user_id')
+      .where({ 'm.organization_id': organizationId, 'r.key': 'VETERINARIAN', 'm.status': 'ACTIVE' })
+      .orderBy('m.created_at', 'asc')
+      .limit(20)
+      .select('u.id as id', 'u.first_name as first_name', 'u.last_name as last_name');
+    return (rows as Array<{ id: string; first_name: string; last_name: string }>).map((r) => ({
+      id: r.id,
+      firstName: r.first_name,
+      lastName: r.last_name,
+    }));
+  }
+
   async countActiveOwners(organizationId: string, trx?: Knex.Transaction): Promise<number> {
     const row = await this.base(trx)
       .where({ 'm.organization_id': organizationId, 'r.key': 'OWNER', 'm.status': 'ACTIVE' })

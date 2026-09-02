@@ -10,6 +10,9 @@ import { phase12OpenApi } from './phase12.js';
 import { phase13OpenApi } from './phase13.js';
 import { phase14OpenApi } from './phase14.js';
 import { phase15OpenApi } from './phase15.js';
+import { advertisementsOpenApi } from './advertisements.js';
+import { tipsOpenApi } from './tips.js';
+import { phase17OpenApi } from './phase17.js';
 
 /**
  * OpenAPI 3.1 document. Assembled from a small base (health endpoints) plus
@@ -82,6 +85,9 @@ export function buildOpenApiDocument(version: string): OpenApiDocument {
       ...phase13OpenApi.tags,
       ...phase14OpenApi.tags,
       ...phase15OpenApi.tags,
+      ...advertisementsOpenApi.tags,
+      ...tipsOpenApi.tags,
+      ...phase17OpenApi.tags,
     ],
     paths: {
       ...phase2OpenApi.paths,
@@ -96,6 +102,9 @@ export function buildOpenApiDocument(version: string): OpenApiDocument {
       ...phase13OpenApi.paths,
       ...phase14OpenApi.paths,
       ...phase15OpenApi.paths,
+      ...advertisementsOpenApi.paths,
+      ...tipsOpenApi.paths,
+      ...phase17OpenApi.paths,
       '/health': {
         get: {
           tags: ['Health'],
@@ -154,6 +163,9 @@ export function buildOpenApiDocument(version: string): OpenApiDocument {
         ...phase13OpenApi.schemas,
         ...phase14OpenApi.schemas,
         ...phase15OpenApi.schemas,
+        ...advertisementsOpenApi.schemas,
+        ...tipsOpenApi.schemas,
+        ...phase17OpenApi.schemas,
       },
       responses: {
         NotFound: {

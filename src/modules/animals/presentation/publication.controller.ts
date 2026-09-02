@@ -6,8 +6,16 @@ import { validatedBody, validatedParams, validatedQuery } from '../../../shared/
 import { auditContextFromRequest, type AuditContextResult } from '../../audit/audit-context.js';
 import { requireAuth } from '../../auth/authenticate.middleware.js';
 import type { AnimalPublicationService } from '../application/animal-publication.service.js';
+import type {
+  InteractionActor,
+  PublicationInteractionService,
+} from '../application/publication-interaction.service.js';
 import { requireAnimal } from './animal.middleware.js';
-import type { CreatePublicationBody, PublicPublicationsQuery } from './publication.schemas.js';
+import type {
+  CreateInteractionBody,
+  CreatePublicationBody,
+  PublicPublicationsQuery,
+} from './publication.schemas.js';
 
 interface PageQuery {
   page: number;
@@ -15,13 +23,17 @@ interface PageQuery {
 }
 
 /**
- * Owner-facing publication create / read, plus the authenticated public browse.
- * Moderation lives in {@link AdminPublicationController}.
+ * Owner-facing publication create / read, the authenticated public browse,
+ * and the viewer interaction actions ("طلب التبني" / "طلب تزاوج" / "ابلاغ عن
+ * مشاهدة"). Moderation lives in {@link AdminPublicationController}.
  */
 export class PublicationController {
-  constructor(private readonly publications: AnimalPublicationService) {}
+  constructor(
+    private readonly publications: AnimalPublicationService,
+    private readonly interactions: PublicationInteractionService,
+  ) {}
 
-  private actor(req: Request): { actorUserId: string; context: AuditContextResult } {
+  private actor(req: Request): InteractionActor {
     return { actorUserId: requireAuth(req).userId, context: auditContextFromRequest(req) };
   }
 
@@ -35,7 +47,7 @@ export class PublicationController {
         status: animal.status,
         currentOwnerUserId: animal.currentOwnerUserId,
       },
-      { kind: body.kind, note: body.note },
+      body,
       this.actor(req),
     );
     sendSuccess(res, dto, StatusCodes.CREATED);
@@ -66,6 +78,8 @@ export class PublicationController {
       page: q.page,
       pageSize: q.pageSize,
       kind: q.kind,
+      species: q.species,
+      search: q.search,
     });
     sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
   };
@@ -73,5 +87,17 @@ export class PublicationController {
   getPublic = async (req: Request, res: Response): Promise<void> => {
     const { publicationId } = validatedParams<{ publicationId: string }>(req);
     sendSuccess(res, await this.publications.getPublic(publicationId));
+  };
+
+  // --- viewer interactions: "طلب التبني" / "طلب تزاوج" / "ابلاغ عن مشاهدة" ---
+
+  createInteraction = async (req: Request, res: Response): Promise<void> => {
+    const { publicationId } = validatedParams<{ publicationId: string }>(req);
+    const body = validatedBody<CreateInteractionBody>(req);
+    sendSuccess(
+      res,
+      await this.interactions.create(publicationId, body, this.actor(req)),
+      StatusCodes.CREATED,
+    );
   };
 }

@@ -30,15 +30,20 @@ import { SupervisorService } from './modules/supervisors/supervisor.service.js';
 import { OrganizationRepository } from './modules/organizations/infrastructure/organization.repository.js';
 import { MembershipRepository } from './modules/organizations/infrastructure/membership.repository.js';
 import { OrganizationRbacRepository } from './modules/organizations/infrastructure/organization-rbac.repository.js';
+import { OrganizationFollowRepository } from './modules/organizations/infrastructure/organization-follow.repository.js';
+import { OrganizationReviewRepository } from './modules/organizations/infrastructure/organization-review.repository.js';
 import { OrganizationService } from './modules/organizations/application/organization.service.js';
 import { MembershipService } from './modules/organizations/application/membership.service.js';
 import { OrganizationSupervisorService } from './modules/organizations/application/organization-supervisor.service.js';
+import { OrganizationEngagementService } from './modules/organizations/application/organization-engagement.service.js';
 import { AnimalRepository } from './modules/animals/infrastructure/animal.repository.js';
 import { AnimalOwnershipRepository } from './modules/animals/infrastructure/animal-ownership.repository.js';
 import { AnimalPublicationRepository } from './modules/animals/infrastructure/animal-publication.repository.js';
+import { PublicationInteractionRepository } from './modules/animals/infrastructure/publication-interaction.repository.js';
 import { AnimalService } from './modules/animals/application/animal.service.js';
 import { AnimalOwnershipService } from './modules/animals/application/animal-ownership.service.js';
 import { AnimalPublicationService } from './modules/animals/application/animal-publication.service.js';
+import { PublicationInteractionService } from './modules/animals/application/publication-interaction.service.js';
 import { AnimalClinicAccessRepository } from './modules/veterinary-care/infrastructure/animal-clinic-access.repository.js';
 import { MedicalRecordRepository } from './modules/veterinary-care/infrastructure/medical-record.repository.js';
 import { VaccinationRepository } from './modules/veterinary-care/infrastructure/vaccination.repository.js';
@@ -73,8 +78,12 @@ import { ContentFileRepository } from './modules/content/infrastructure/content-
 import { CategoryRepository } from './modules/content/infrastructure/category.repository.js';
 import { ContentService } from './modules/content/application/content.service.js';
 import { CategoryService } from './modules/content/application/category.service.js';
-import { HomeAdRepository } from './modules/homeAds/infrastructure/home-ad.repository.js';
-import { HomeAdService } from './modules/homeAds/application/home-ad.service.js';
+import { TipRepository } from './modules/content/infrastructure/tip.repository.js';
+import { TipEngagementRepository } from './modules/content/infrastructure/tip-engagement.repository.js';
+import { TipService } from './modules/content/application/tip.service.js';
+import { AdCampaignRepository } from './modules/advertisements/infrastructure/ad-campaign.repository.js';
+import { AdSlideRepository } from './modules/advertisements/infrastructure/ad-slide.repository.js';
+import { AdvertisementService } from './modules/advertisements/application/advertisement.service.js';
 import {
   createPushProvider,
   PushNotificationService,
@@ -144,16 +153,21 @@ export interface Container {
   organizationRepository: OrganizationRepository;
   membershipRepository: MembershipRepository;
   organizationRbacRepository: OrganizationRbacRepository;
+  organizationFollowRepository: OrganizationFollowRepository;
+  organizationReviewRepository: OrganizationReviewRepository;
   organizationService: OrganizationService;
   membershipService: MembershipService;
   organizationSupervisorService: OrganizationSupervisorService;
+  organizationEngagementService: OrganizationEngagementService;
 
   animalRepository: AnimalRepository;
   animalOwnershipRepository: AnimalOwnershipRepository;
   animalPublicationRepository: AnimalPublicationRepository;
+  publicationInteractionRepository: PublicationInteractionRepository;
   animalService: AnimalService;
   animalOwnershipService: AnimalOwnershipService;
   animalPublicationService: AnimalPublicationService;
+  publicationInteractionService: PublicationInteractionService;
 
   animalClinicAccessRepository: AnimalClinicAccessRepository;
   medicalRecordRepository: MedicalRecordRepository;
@@ -188,8 +202,12 @@ export interface Container {
   categoryRepository: CategoryRepository;
   contentService: ContentService;
   categoryService: CategoryService;
-  homeAdRepository: HomeAdRepository;
-  homeAdService: HomeAdService;
+  tipRepository: TipRepository;
+  tipEngagementRepository: TipEngagementRepository;
+  tipService: TipService;
+  adCampaignRepository: AdCampaignRepository;
+  adSlideRepository: AdSlideRepository;
+  advertisementService: AdvertisementService;
 
   supervisorRepository: SupervisorRepository;
   pushProvider: PushNotificationProvider;
@@ -335,6 +353,14 @@ export function createContainer(deps: ContainerDeps): Container {
     eventBus,
     logger,
   );
+  const organizationFollowRepository = new OrganizationFollowRepository(db);
+  const organizationReviewRepository = new OrganizationReviewRepository(db);
+  const organizationEngagementService = new OrganizationEngagementService(
+    organizationRepository,
+    organizationFollowRepository,
+    organizationReviewRepository,
+    logger,
+  );
 
   // --- animals & ownership (Phase 4) --------------------------
   const animalRepository = new AnimalRepository(db);
@@ -345,6 +371,7 @@ export function createContainer(deps: ContainerDeps): Container {
     animalOwnershipRepository,
     auditService,
     eventBus,
+    objectStorage,
     logger,
   );
   const animalOwnershipService = new AnimalOwnershipService(
@@ -363,6 +390,14 @@ export function createContainer(deps: ContainerDeps): Container {
     db,
     animalPublicationRepository,
     auditService,
+    eventBus,
+    objectStorage,
+    logger,
+  );
+  const publicationInteractionRepository = new PublicationInteractionRepository(db);
+  const publicationInteractionService = new PublicationInteractionService(
+    publicationInteractionRepository,
+    animalPublicationService,
     eventBus,
     logger,
   );
@@ -510,12 +545,25 @@ export function createContainer(deps: ContainerDeps): Container {
     eventBus,
     logger,
   );
-
-  // --- home ads (Pet Owner Home banner carousel) -------------
-  const homeAdRepository = new HomeAdRepository(db);
-  const homeAdService = new HomeAdService(
+  const tipRepository = new TipRepository(db);
+  const tipEngagementRepository = new TipEngagementRepository(db);
+  const tipService = new TipService(
     db,
-    homeAdRepository,
+    tipRepository,
+    tipEngagementRepository,
+    categoryRepository,
+    objectStorage,
+    auditService,
+    logger,
+  );
+
+  // --- advertisements (multi-section campaigns + ordered slides) ---
+  const adCampaignRepository = new AdCampaignRepository(db);
+  const adSlideRepository = new AdSlideRepository(db);
+  const advertisementService = new AdvertisementService(
+    db,
+    adCampaignRepository,
+    adSlideRepository,
     objectStorage,
     auditService,
     logger,
@@ -590,15 +638,20 @@ export function createContainer(deps: ContainerDeps): Container {
     organizationRepository,
     membershipRepository,
     organizationRbacRepository,
+    organizationFollowRepository,
+    organizationReviewRepository,
     organizationService,
     membershipService,
     organizationSupervisorService,
+    organizationEngagementService,
     animalRepository,
     animalOwnershipRepository,
     animalPublicationRepository,
+    publicationInteractionRepository,
     animalService,
     animalOwnershipService,
     animalPublicationService,
+    publicationInteractionService,
     animalClinicAccessRepository,
     medicalRecordRepository,
     vaccinationRepository,
@@ -627,8 +680,12 @@ export function createContainer(deps: ContainerDeps): Container {
     categoryRepository,
     contentService,
     categoryService,
-    homeAdRepository,
-    homeAdService,
+    tipRepository,
+    tipEngagementRepository,
+    tipService,
+    adCampaignRepository,
+    adSlideRepository,
+    advertisementService,
     supervisorRepository,
     pushProvider,
     pushNotificationService,

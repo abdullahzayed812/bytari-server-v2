@@ -11,13 +11,14 @@ export const StoragePrefix = {
   books: 'content/books',
   magazines: 'content/magazines',
   articles: 'content/articles',
+  tipCovers: 'content/tips',
   animalImages: 'animals',
   userUploads: 'users',
   userAvatars: 'users/avatars',
   organizationFiles: 'organizations',
   medicalAttachments: 'medical-records',
   veterinarianDocuments: 'veterinarians/documents',
-  homeAds: 'home-ads',
+  advertisements: 'advertisements',
   misc: 'misc',
 } as const;
 

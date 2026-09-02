@@ -419,7 +419,7 @@ export async function assignSystemSupervisor(
   app: Express,
   adminToken: string,
   userId: string,
-  domain: 'ANIMAL' | 'CLINIC' | 'STORE' | 'CONTENT' | 'CONSULTATION' | 'INQUIRY',
+  domain: 'ANIMAL' | 'CLINIC' | 'STORE' | 'CONTENT' | 'CONSULTATION' | 'INQUIRY' | 'ADVERTISEMENT',
 ): Promise<{ id: string }> {
   const res = await request(app)
     .post('/api/v1/admin/supervisors')
@@ -450,20 +450,79 @@ export interface TestPublication {
 }
 
 /** Owner publishes an animal as LOST / ADOPTION / MATING. */
+/**
+ * Create a Lost / Adoption / Mating publication. Each kind requires a
+ * different field set (contact info always; LOST needs when/where; ADOPTION /
+ * MATING need city + health/vaccination status) — sane defaults are filled in
+ * for anything not explicitly overridden, so most call sites only need `kind`.
+ */
 export async function createAnimalPublication(
   app: Express,
   ownerToken: string,
   animalId: string,
-  input: { kind: 'LOST' | 'ADOPTION' | 'MATING'; note?: string },
+  input: {
+    kind: 'LOST' | 'ADOPTION' | 'MATING';
+    note?: string;
+    extraNotes?: string;
+    contactName?: string;
+    contactPhone?: string;
+    city?: string;
+    healthStatus?: 'EXCELLENT' | 'GOOD' | 'FAIR' | 'POOR';
+    vaccinationStatus?: 'COMPLETE' | 'PARTIAL' | 'NONE';
+    isSterilized?: boolean;
+    lostDate?: string;
+    lostTime?: string;
+    lostGovernorate?: string;
+    lostDistrict?: string;
+    lostLocationDetail?: string;
+    healthNotes?: string;
+  },
 ): Promise<TestPublication> {
+  const body: Record<string, unknown> = {
+    kind: input.kind,
+    note: input.note,
+    contactName: input.contactName ?? 'Test Contact',
+    contactPhone: input.contactPhone ?? '07701234567',
+  };
+  if (input.kind === 'LOST') {
+    body.lostDate = input.lostDate ?? '2026-01-01';
+    body.lostTime = input.lostTime;
+    body.lostGovernorate = input.lostGovernorate ?? 'Baghdad';
+    body.lostDistrict = input.lostDistrict ?? 'Karrada';
+    body.lostLocationDetail = input.lostLocationDetail;
+    body.healthNotes = input.healthNotes;
+  } else {
+    body.extraNotes = input.extraNotes;
+    body.city = input.city ?? 'Baghdad';
+    body.healthStatus = input.healthStatus ?? 'GOOD';
+    body.vaccinationStatus = input.vaccinationStatus ?? 'COMPLETE';
+    if (input.kind === 'ADOPTION') {
+      body.isSterilized = input.isSterilized ?? false;
+      body.note = body.note ?? 'Friendly and playful, looking for a loving home.';
+    }
+  }
+
   const res = await request(app)
     .post(`/api/v1/animals/${animalId}/publications`)
     .set(bearer(ownerToken))
-    .send({ kind: input.kind, ...(input.note !== undefined ? { note: input.note } : {}) });
+    .send(body);
   if (res.status !== 201) {
     throw new Error(`createAnimalPublication failed: ${res.status} ${JSON.stringify(res.body)}`);
   }
   return res.body.data as TestPublication;
+}
+
+/** A viewer's interaction with an APPROVED publication ("طلب" / "ابلاغ"). Returns the raw response. */
+export async function createPublicationInteraction(
+  app: Express,
+  actorToken: string,
+  publicationId: string,
+  input: { type: 'REQUEST' | 'SIGHTING'; message?: string },
+): Promise<request.Response> {
+  return request(app)
+    .post(`/api/v1/animal-publications/${publicationId}/interactions`)
+    .set(bearer(actorToken))
+    .send(input);
 }
 
 /** Moderator approves a pending publication. Returns the HTTP response. */
@@ -880,4 +939,164 @@ export async function adminSendNotification(
   body: Record<string, unknown>,
 ): Promise<request.Response> {
   return request(app).post('/api/v1/admin/notifications').set(bearer(adminToken)).send(body);
+}
+
+// --- Advertisements: campaigns + ordered slides -----------------
+
+/** Register a plain user and assign them the ADVERTISEMENT system-supervisor domain. */
+export async function registerAdvertisementSupervisor(
+  app: Express,
+  adminToken: string,
+): Promise<RegisteredUser> {
+  const sup = await registerUser(app, { email: uniqueEmail('adsup') });
+  await assignSystemSupervisor(app, adminToken, sup.id, 'ADVERTISEMENT');
+  return sup;
+}
+
+export async function createAdCampaign(
+  app: Express,
+  actorToken: string,
+  body: Record<string, unknown>,
+): Promise<request.Response> {
+  return request(app).post('/api/v1/admin/ads').set(bearer(actorToken)).send(body);
+}
+
+export async function addAdSlide(
+  app: Express,
+  actorToken: string,
+  campaignId: string,
+  body: Record<string, unknown> = {},
+): Promise<request.Response> {
+  return request(app)
+    .post(`/api/v1/admin/ads/${campaignId}/slides`)
+    .set(bearer(actorToken))
+    .send(body);
+}
+
+/** Presigned upload cycle against the mocked storage, then register the image. */
+export async function uploadAdSlideImage(
+  app: Express,
+  container: { objectStorage: ObjectStorage },
+  actorToken: string,
+  campaignId: string,
+  slideId: string,
+  input: { filename: string; mimeType: string; size: number } = {
+    filename: 'banner.png',
+    mimeType: 'image/png',
+    size: 2048,
+  },
+): Promise<request.Response> {
+  const urlRes = await request(app)
+    .post(`/api/v1/admin/ads/${campaignId}/slides/${slideId}/image/upload-url`)
+    .set(bearer(actorToken))
+    .send(input);
+  if (urlRes.status !== 201) return urlRes;
+  const storageKey = urlRes.body.data.storageKey as string;
+  await container.objectStorage.put(storageKey, Buffer.alloc(input.size, 1), {
+    contentType: input.mimeType,
+  });
+  return request(app)
+    .post(`/api/v1/admin/ads/${campaignId}/slides/${slideId}/image`)
+    .set(bearer(actorToken))
+    .send({ storageKey, mimeType: input.mimeType });
+}
+
+/** Full helper: create a campaign, add N imaged slides, activate it. */
+export async function seedActiveAdCampaign(
+  app: Express,
+  container: { objectStorage: ObjectStorage },
+  actorToken: string,
+  input: { placement: string; type: 'BANNER' | 'CAROUSEL'; title?: string; slides?: number },
+): Promise<{ campaignId: string; slideIds: string[] }> {
+  const created = await createAdCampaign(app, actorToken, {
+    placement: input.placement,
+    type: input.type,
+    title: input.title ?? `${input.placement} campaign`,
+  });
+  if (created.status !== 201) {
+    throw new Error(
+      `seedActiveAdCampaign create failed: ${created.status} ${JSON.stringify(created.body)}`,
+    );
+  }
+  const campaignId = created.body.data.id as string;
+  const n = input.slides ?? (input.type === 'BANNER' ? 1 : 2);
+  const slideIds: string[] = [];
+  for (let i = 0; i < n; i += 1) {
+    const slide = await addAdSlide(app, actorToken, campaignId, { title: `slide ${i + 1}` });
+    if (slide.status !== 201) {
+      throw new Error(
+        `seedActiveAdCampaign slide failed: ${slide.status} ${JSON.stringify(slide.body)}`,
+      );
+    }
+    const slideId = slide.body.data.id as string;
+    slideIds.push(slideId);
+    await uploadAdSlideImage(app, container, actorToken, campaignId, slideId);
+  }
+  await request(app).post(`/api/v1/admin/ads/${campaignId}/activate`).set(bearer(actorToken));
+  return { campaignId, slideIds };
+}
+
+// --- Tips (structured care advice in the content module) --------
+
+export async function createTip(
+  app: Express,
+  actorToken: string,
+  body: Record<string, unknown> = {},
+): Promise<request.Response> {
+  return request(app)
+    .post('/api/v1/admin/tips')
+    .set(bearer(actorToken))
+    .send({ title: 'Summer feeding for sheep', ...body });
+}
+
+export async function publishTip(
+  app: Express,
+  actorToken: string,
+  tipId: string,
+): Promise<request.Response> {
+  return request(app).post(`/api/v1/admin/tips/${tipId}/publish`).set(bearer(actorToken));
+}
+
+/** Create + publish a tip in one step; returns its id. */
+export async function seedPublishedTip(
+  app: Express,
+  actorToken: string,
+  body: Record<string, unknown> = {},
+): Promise<string> {
+  const created = await createTip(app, actorToken, body);
+  if (created.status !== 201) {
+    throw new Error(
+      `seedPublishedTip create failed: ${created.status} ${JSON.stringify(created.body)}`,
+    );
+  }
+  const id = created.body.data.id as string;
+  await publishTip(app, actorToken, id);
+  return id;
+}
+
+/** Presigned cover upload cycle against the mocked storage, then register. */
+export async function uploadTipCover(
+  app: Express,
+  container: { objectStorage: ObjectStorage },
+  actorToken: string,
+  tipId: string,
+  input: { filename: string; mimeType: string; size: number } = {
+    filename: 'cover.png',
+    mimeType: 'image/png',
+    size: 4096,
+  },
+): Promise<request.Response> {
+  const urlRes = await request(app)
+    .post(`/api/v1/admin/tips/${tipId}/cover/upload-url`)
+    .set(bearer(actorToken))
+    .send(input);
+  if (urlRes.status !== 201) return urlRes;
+  const storageKey = urlRes.body.data.storageKey as string;
+  await container.objectStorage.put(storageKey, Buffer.alloc(input.size, 1), {
+    contentType: input.mimeType,
+  });
+  return request(app)
+    .post(`/api/v1/admin/tips/${tipId}/cover`)
+    .set(bearer(actorToken))
+    .send({ storageKey, mimeType: input.mimeType });
 }

@@ -18,6 +18,10 @@ export type CreateOrganizationBody = z.infer<typeof createOrganizationBodySchema
 
 const latitude = z.coerce.number().min(-90).max(90);
 const longitude = z.coerce.number().min(-180).max(180);
+/** Trimmed, `''` → `null` (so clearing a field via an empty input just works). */
+const optionalUrl = z.string().trim().max(300).url().nullable().optional();
+const optionalText = (max: number): z.ZodOptional<z.ZodNullable<z.ZodString>> =>
+  z.string().trim().min(1).max(max).nullable().optional();
 
 export const updateOrganizationBodySchema = z
   .object({
@@ -29,6 +33,13 @@ export const updateOrganizationBodySchema = z
     phone: z.string().trim().min(3).max(40).nullable().optional(),
     latitude: latitude.nullable().optional(),
     longitude: longitude.nullable().optional(),
+    workingHours: optionalText(200),
+    services: z.array(z.string().trim().min(1).max(60)).max(20).optional(),
+    email: z.string().trim().max(255).email().nullable().optional(),
+    whatsapp: optionalText(40),
+    instagramUrl: optionalUrl,
+    facebookUrl: optionalUrl,
+    tiktokUrl: optionalUrl,
   })
   .refine((v) => Object.keys(v).length > 0, { message: 'At least one field is required' })
   .refine((v) => (v.latitude == null) === (v.longitude == null), {
@@ -91,6 +102,31 @@ export const finalizeLogoBodySchema = z
   })
   .strict();
 export type FinalizeLogoBody = z.infer<typeof finalizeLogoBodySchema>;
+
+/** Same shape as the logo upload flow — one gallery photo at a time. */
+export const galleryUploadUrlBodySchema = logoUploadUrlBodySchema;
+export type GalleryUploadUrlBody = z.infer<typeof galleryUploadUrlBodySchema>;
+
+export const finalizeGalleryBodySchema = finalizeLogoBodySchema;
+export type FinalizeGalleryBody = z.infer<typeof finalizeGalleryBodySchema>;
+
+export const removeGalleryImageQuerySchema = z.object({
+  storageKey: z.string().trim().min(1).max(1024),
+});
+export type RemoveGalleryImageQuery = z.infer<typeof removeGalleryImageQuerySchema>;
+
+// --- engagement: follow + reviews (Clinic Details) --------------------
+
+export const submitReviewBodySchema = z
+  .object({
+    rating: z.coerce.number().int().min(1).max(5),
+    comment: z.string().trim().max(1000).nullable().optional(),
+  })
+  .strict();
+export type SubmitReviewBody = z.infer<typeof submitReviewBodySchema>;
+
+export const listReviewsQuerySchema = paginationQuerySchema;
+export type ListReviewsQuery = z.infer<typeof listReviewsQuerySchema>;
 
 // --- admin -----------------------------------------------------------
 

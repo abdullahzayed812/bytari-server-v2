@@ -5,8 +5,11 @@ import type { Container } from '../../../container.js';
 import { AnimalController } from './animal.controller.js';
 import { animalIdParamSchema, createAnimalMiddleware } from './animal.middleware.js';
 import {
+  animalGalleryUploadUrlBodySchema,
   createAnimalBodySchema,
+  finalizeAnimalGalleryBodySchema,
   listAnimalsQuerySchema,
+  removeAnimalGalleryImageQuerySchema,
   transferOwnershipBodySchema,
   updateAnimalBodySchema,
 } from './animal.schemas.js';
@@ -66,6 +69,29 @@ export function createAnimalRouter(c: Container): Router {
     withAnimal,
     authorizeAnimalRead('animal.ownership.read'),
     asyncHandler(ctrl.history),
+  );
+
+  // --- gallery — owner (or ADMIN) only, same guard as write ------
+  r.post(
+    '/:animalId/gallery/upload-url',
+    validate({ params: animalIdParamSchema, body: animalGalleryUploadUrlBodySchema }),
+    withAnimal,
+    authorizeAnimalWrite(),
+    asyncHandler(ctrl.requestGalleryUploadUrl),
+  );
+  r.post(
+    '/:animalId/gallery',
+    validate({ params: animalIdParamSchema, body: finalizeAnimalGalleryBodySchema }),
+    withAnimal,
+    authorizeAnimalWrite(),
+    asyncHandler(ctrl.addGalleryImage),
+  );
+  r.delete(
+    '/:animalId/gallery',
+    validate({ params: animalIdParamSchema, query: removeAnimalGalleryImageQuerySchema }),
+    withAnimal,
+    authorizeAnimalWrite(),
+    asyncHandler(ctrl.removeGalleryImage),
   );
 
   return r;

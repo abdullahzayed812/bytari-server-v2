@@ -10,6 +10,7 @@ import { PublicationController } from './publication.controller.js';
 import { animalIdParamSchema, createAnimalMiddleware, requireAnimal } from './animal.middleware.js';
 import {
   animalPublicationParamSchema,
+  createInteractionBodySchema,
   createPublicationBodySchema,
   listAnimalPublicationsQuerySchema,
   moderationPublicationsQuerySchema,
@@ -24,7 +25,7 @@ import {
  * `.../publications` paths never collide with Phase 4's `/:animalId`.
  */
 export function createAnimalPublicationRouter(c: Container): Router {
-  const ctrl = new PublicationController(c.animalPublicationService);
+  const ctrl = new PublicationController(c.animalPublicationService, c.publicationInteractionService);
   const { withAnimal } = createAnimalMiddleware({
     animals: c.animalService,
     authz: c.authorizationService,
@@ -86,7 +87,7 @@ export function createAnimalPublicationRouter(c: Container): Router {
  * only; the DTO carries no owner PII or moderation metadata.
  */
 export function createPublicPublicationRouter(c: Container): Router {
-  const ctrl = new PublicationController(c.animalPublicationService);
+  const ctrl = new PublicationController(c.animalPublicationService, c.publicationInteractionService);
   const r = Router();
   r.use(c.authenticate);
 
@@ -95,6 +96,13 @@ export function createPublicPublicationRouter(c: Container): Router {
     '/:publicationId',
     validate({ params: publicationIdParamSchema }),
     asyncHandler(ctrl.getPublic),
+  );
+  // "طلب التبني" / "طلب تزاوج" / "ابلاغ عن مشاهدة" — any authenticated user
+  // except the listing's own owner (enforced in the service).
+  r.post(
+    '/:publicationId/interactions',
+    validate({ params: publicationIdParamSchema, body: createInteractionBodySchema }),
+    asyncHandler(ctrl.createInteraction),
   );
 
   return r;

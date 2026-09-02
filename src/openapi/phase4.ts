@@ -46,6 +46,7 @@ const animalIdParam = {
 const speciesEnum = ['DOG', 'CAT', 'BIRD', 'RABBIT', 'REPTILE', 'FISH', 'HORSE', 'OTHER'];
 const sexEnum = ['MALE', 'FEMALE', 'UNKNOWN'];
 const statusEnum = ['ACTIVE', 'DEACTIVATED'];
+const ageEstimateEnum = ['UNDER_1_YEAR', 'ONE_TO_3_YEARS', 'THREE_TO_7_YEARS', 'OVER_7_YEARS'];
 
 const schemas: Obj = {
   Animal: {
@@ -62,6 +63,15 @@ const schemas: Obj = {
       status: { type: 'string', enum: statusEnum },
       createdBy: { type: 'string', format: 'uuid' },
       currentOwnerUserId: { type: 'string', format: 'uuid', nullable: true },
+      color: { type: 'string', nullable: true },
+      distinguishingFeatures: { type: 'string', nullable: true },
+      ageEstimate: {
+        type: 'string',
+        enum: ageEstimateEnum,
+        nullable: true,
+        description: 'For when the exact dateOfBirth is unknown',
+      },
+      galleryUrls: { type: 'array', items: { type: 'string' }, description: 'Resolved photo URLs' },
       createdAt: { type: 'string', format: 'date-time' },
       updatedAt: { type: 'string', format: 'date-time' },
     },
@@ -106,6 +116,9 @@ const schemas: Obj = {
         description: 'YYYY-MM-DD; not in the future',
       },
       notes: { type: 'string', maxLength: 2000 },
+      color: { type: 'string', minLength: 1, maxLength: 80 },
+      distinguishingFeatures: { type: 'string', minLength: 1, maxLength: 500 },
+      ageEstimate: { type: 'string', enum: ageEstimateEnum },
     },
   },
   UpdateAnimalRequest: {
@@ -120,6 +133,9 @@ const schemas: Obj = {
       sex: { type: 'string', enum: sexEnum },
       dateOfBirth: { type: 'string', format: 'date', nullable: true },
       notes: { type: 'string', maxLength: 2000, nullable: true },
+      color: { type: 'string', minLength: 1, maxLength: 80, nullable: true },
+      distinguishingFeatures: { type: 'string', minLength: 1, maxLength: 500, nullable: true },
+      ageEstimate: { type: 'string', enum: ageEstimateEnum, nullable: true },
     },
   },
   TransferOwnershipRequest: {
@@ -259,6 +275,70 @@ const paths: Obj = {
           },
         }),
         ...errs(401, 404),
+      },
+    },
+  },
+  '/animals/{animalId}/gallery/upload-url': {
+    post: {
+      tags: ['Animals'],
+      summary: 'Request a presigned upload URL for an animal photo (owner or ADMIN)',
+      description:
+        'Up to 8 photos. PUT the bytes to `uploadUrl`, then POST .../gallery to register it.',
+      security: bearer,
+      parameters: [animalIdParam],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['filename', 'mimeType', 'size'],
+              properties: {
+                filename: { type: 'string' },
+                mimeType: { type: 'string', enum: ['image/png', 'image/jpeg', 'image/webp'] },
+                size: { type: 'integer', maximum: 5 * 1024 * 1024 },
+              },
+            },
+          },
+        },
+      },
+      responses: { '201': ok('Upload URL issued'), ...errs(400, 401, 404, 422) },
+    },
+  },
+  '/animals/{animalId}/gallery': {
+    post: {
+      tags: ['Animals'],
+      summary: 'Register an uploaded animal photo (owner or ADMIN)',
+      security: bearer,
+      parameters: [animalIdParam],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['storageKey', 'mimeType'],
+              properties: { storageKey: { type: 'string' }, mimeType: { type: 'string' } },
+            },
+          },
+        },
+      },
+      responses: {
+        '200': ok('Gallery updated', dataOf({ $ref: '#/components/schemas/Animal' })),
+        ...errs(400, 401, 404, 409, 422),
+      },
+    },
+    delete: {
+      tags: ['Animals'],
+      summary: 'Remove one animal photo by storage key (owner or ADMIN)',
+      security: bearer,
+      parameters: [
+        animalIdParam,
+        { name: 'storageKey', in: 'query', required: true, schema: { type: 'string' } },
+      ],
+      responses: {
+        '200': ok('Gallery updated', dataOf({ $ref: '#/components/schemas/Animal' })),
+        ...errs(400, 401, 404, 422),
       },
     },
   },

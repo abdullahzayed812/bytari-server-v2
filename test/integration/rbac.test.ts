@@ -155,7 +155,7 @@ describe('roles ↔ permissions', () => {
     // + 2 Phase-7 `animal.approve` / `animal.reject` + 3 Phase-12 `chat.*`
     // + 11 Phase-13 (`consultation.*`, `inquiry.*`, `ai.settings.manage`)
     // + 8 Phase-14 `content.*` + 1 Phase-15 `notification.admin.send`
-    // + 1 `home_ad.manage` (Pet Owner Home banner carousel).
+    // + 1 `advertisement.manage` (multi-section advertisement campaigns).
     const keys = (perms.body.data as Array<{ key: string }>).map((p) => p.key);
     expect(keys).toContain('user.read');
     expect(keys).toContain('organization.admin.approve');
@@ -166,7 +166,7 @@ describe('roles ↔ permissions', () => {
     expect(keys).toContain('ai.settings.manage');
     expect(keys).toContain('content.publish');
     expect(keys).toContain('notification.admin.send');
-    expect(keys).toContain('home_ad.manage');
+    expect(keys).toContain('advertisement.manage');
     expect(keys.length).toBe(54);
   });
 });

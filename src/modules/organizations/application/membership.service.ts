@@ -52,6 +52,13 @@ export class MembershipService {
     return this.memberships.listForOrg(organizationId, filter);
   }
 
+  /** Public-safe ACTIVE veterinarian roster — any authenticated user, not just members. */
+  listPublicVeterinarians(
+    organizationId: string,
+  ): Promise<Array<{ id: string; firstName: string; lastName: string }>> {
+    return this.memberships.listPublicVeterinarians(organizationId);
+  }
+
   async getMember(
     organizationId: string,
     membershipId: string,

@@ -43,6 +43,15 @@ export interface OrganizationProfile {
   longitude: number | null;
   phone: string | null;
   logoUrl: string | null;
+  workingHours: string | null;
+  services: string[];
+  email: string | null;
+  whatsapp: string | null;
+  instagramUrl: string | null;
+  facebookUrl: string | null;
+  tiktokUrl: string | null;
+  /** Resolved gallery photo URLs (R2 keys resolved server-side, same as `logoUrl`). */
+  galleryUrls: string[];
 }
 
 export const emptyOrganizationProfile: OrganizationProfile = {
@@ -51,7 +60,67 @@ export const emptyOrganizationProfile: OrganizationProfile = {
   longitude: null,
   phone: null,
   logoUrl: null,
+  workingHours: null,
+  services: [],
+  email: null,
+  whatsapp: null,
+  instagramUrl: null,
+  facebookUrl: null,
+  tiktokUrl: null,
+  galleryUrls: [],
 };
+
+/** A clinic's ACTIVE veterinarian members — public-safe subset (no email, no role/status). */
+export interface PublicVeterinarian {
+  id: string;
+  firstName: string;
+  lastName: string;
+}
+
+/** Aggregate engagement stats for one organization's public profile. */
+export interface OrganizationEngagementSummary {
+  isFollowing: boolean;
+  followersCount: number;
+  /** Average rating rounded to 1 decimal, `null` when there are no reviews yet. */
+  rating: number | null;
+  reviewsCount: number;
+}
+
+export interface OrganizationReview {
+  id: string;
+  organizationId: string;
+  userId: string;
+  rating: number;
+  comment: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OrganizationReviewWithAuthor extends OrganizationReview {
+  author: { firstName: string; lastName: string };
+}
+
+export interface OrganizationReviewRow {
+  id: string;
+  organization_id: string;
+  user_id: string;
+  rating: number;
+  comment: string | null;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export function rowToOrganizationReview(row: OrganizationReviewRow): OrganizationReview {
+  return {
+    id: row.id,
+    organizationId: row.organization_id,
+    userId: row.user_id,
+    rating: row.rating,
+    comment: row.comment,
+    createdAt: row.created_at.toISOString(),
+    updatedAt: row.updated_at.toISOString(),
+  };
+}
 
 export interface OrganizationDetails extends Partial<OrganizationProfile> {
   /** FARM only. */
@@ -103,6 +172,14 @@ export interface ProfileDetailRow {
   longitude: number | null;
   phone: string | null;
   logo_key: string | null;
+  working_hours: string | null;
+  services: string[] | null;
+  email: string | null;
+  whatsapp: string | null;
+  instagram_url: string | null;
+  facebook_url: string | null;
+  tiktok_url: string | null;
+  gallery_keys: string[] | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -137,6 +214,18 @@ export interface PublicOrganizationDTO extends OrganizationProfile {
   createdAt: string;
 }
 
+/**
+ * `GET /organizations/discover/:id` full response — the base
+ * {@link PublicOrganizationDTO} plus the Clinic Details screen's remaining
+ * sections: the ACTIVE veterinarian roster (from `organization_memberships`,
+ * not a new field on the org itself) and the viewer's engagement summary
+ * (follow state / count, rating / review count).
+ */
+export interface PublicOrganizationDetailDTO extends PublicOrganizationDTO {
+  veterinarians: PublicVeterinarian[];
+  engagement: OrganizationEngagementSummary;
+}
+
 export function toPublicOrganizationDTO(
   org: Organization,
   profile: OrganizationProfile = emptyOrganizationProfile,
@@ -154,6 +243,14 @@ export function toPublicOrganizationDTO(
     longitude: profile.longitude,
     phone: profile.phone,
     logoUrl: profile.logoUrl,
+    workingHours: profile.workingHours,
+    services: profile.services,
+    email: profile.email,
+    whatsapp: profile.whatsapp,
+    instagramUrl: profile.instagramUrl,
+    facebookUrl: profile.facebookUrl,
+    tiktokUrl: profile.tiktokUrl,
+    galleryUrls: profile.galleryUrls,
     distanceKm,
     createdAt: org.createdAt,
   };

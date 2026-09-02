@@ -9,8 +9,11 @@ import type { AnimalService } from '../application/animal.service.js';
 import type { AnimalOwnershipService } from '../application/animal-ownership.service.js';
 import { requireAnimal } from './animal.middleware.js';
 import type {
+  AnimalGalleryUploadUrlBody,
   CreateAnimalBody,
+  FinalizeAnimalGalleryBody,
   ListAnimalsQuery,
+  RemoveAnimalGalleryImageQuery,
   TransferOwnershipBody,
   UpdateAnimalBody,
 } from './animal.schemas.js';
@@ -86,5 +89,29 @@ export class AnimalController {
   history = async (req: Request, res: Response): Promise<void> => {
     const animal = requireAnimal(req);
     sendSuccess(res, await this.ownership.history(animal.id));
+  };
+
+  // --- gallery --------------------------------------------------------
+
+  requestGalleryUploadUrl = async (req: Request, res: Response): Promise<void> => {
+    const animal = requireAnimal(req);
+    const body = validatedBody<AnimalGalleryUploadUrlBody>(req);
+    sendSuccess(
+      res,
+      await this.animals.requestGalleryUploadUrl(animal.id, this.actor(req), body),
+      StatusCodes.CREATED,
+    );
+  };
+
+  addGalleryImage = async (req: Request, res: Response): Promise<void> => {
+    const animal = requireAnimal(req);
+    const body = validatedBody<FinalizeAnimalGalleryBody>(req);
+    sendSuccess(res, await this.animals.addGalleryImage(animal.id, this.actor(req), body));
+  };
+
+  removeGalleryImage = async (req: Request, res: Response): Promise<void> => {
+    const animal = requireAnimal(req);
+    const { storageKey } = validatedQuery<RemoveAnimalGalleryImageQuery>(req);
+    sendSuccess(res, await this.animals.removeGalleryImage(animal.id, this.actor(req), storageKey));
   };
 }

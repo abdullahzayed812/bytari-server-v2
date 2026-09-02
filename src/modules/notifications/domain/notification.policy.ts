@@ -71,6 +71,18 @@ const COPY: Record<NotificationType, { title: string; body: string }> = {
   INQUIRY_CLOSED: { title: 'Inquiry closed', body: 'Your inquiry has been closed.' },
   CONTENT_PUBLISHED: { title: 'New content published', body: 'New content is available.' },
   ADMIN_ANNOUNCEMENT: { title: 'Announcement', body: 'You have a new announcement.' },
+  PUBLICATION_ADOPTION_REQUESTED: {
+    title: 'Adoption request',
+    body: 'Someone is interested in adopting your listed animal.',
+  },
+  PUBLICATION_MATING_REQUESTED: {
+    title: 'Mating request',
+    body: 'Someone is interested in mating with your listed animal.',
+  },
+  PUBLICATION_SIGHTING_REPORTED: {
+    title: 'Sighting reported',
+    body: 'Someone reported a sighting of your lost animal.',
+  },
 };
 
 type P = Record<string, unknown>;
@@ -161,6 +173,9 @@ export class NotificationPolicy {
         return this.threadClosed('CONSULTATION', 'CONSULTATION_CLOSED', p);
       case 'inquiry.closed':
         return this.threadClosed('INQUIRY', 'INQUIRY_CLOSED', p);
+
+      case 'animal.publication.interaction.created':
+        return this.publicationInteraction(p);
 
       default:
         return [];
@@ -335,6 +350,40 @@ export class NotificationPolicy {
         },
       ),
     );
+  }
+
+  /**
+   * "طلب التبني" / "طلب تزاوج" / "ابلاغ عن مشاهدة" — notify the listing owner.
+   * No repository lookup needed: the event payload already carries the owner
+   * id (`PublicationInteractionService` resolved it via the ownership guard).
+   */
+  private publicationInteraction(p: P): NotificationSpec[] {
+    const owner = str(p.publicationOwnerUserId);
+    const requester = str(p.requesterUserId);
+    const publicationId = str(p.publicationId);
+    const interactionId = str(p.interactionId);
+    if (!owner) return [];
+
+    const type: NotificationType =
+      p.type === 'SIGHTING'
+        ? 'PUBLICATION_SIGHTING_REPORTED'
+        : p.kind === 'MATING'
+          ? 'PUBLICATION_MATING_REQUESTED'
+          : 'PUBLICATION_ADOPTION_REQUESTED';
+
+    return [
+      this.spec(
+        type,
+        owner,
+        { publicationId },
+        {
+          actorUserId: requester || null,
+          entityType: 'ANIMAL_PUBLICATION',
+          entityId: publicationId,
+          sourceEventKey: `animal.publication.interaction.created:${interactionId}`,
+        },
+      ),
+    ];
   }
 
   private async threadClosed(

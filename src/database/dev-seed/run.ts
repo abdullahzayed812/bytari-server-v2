@@ -116,7 +116,8 @@ export async function runDevSeed(knex: Knex, deps: RunDevSeedDeps = {}): Promise
   const { animalService, veterinaryAccessService, medicalRecordService, vaccinationService } =
     container;
   const { poultryFlockService, productService, contentService, passwordService } = container;
-  const { homeAdService, objectStorage } = container;
+  const { tipService } = container;
+  const { advertisementService, objectStorage } = container;
 
   /** Non-null lookup into one of the id maps built below. */
   const must = (map: Record<string, string>, key: string, kind: string): string => {
@@ -416,7 +417,8 @@ export async function runDevSeed(knex: Knex, deps: RunDevSeedDeps = {}): Promise
   await seedFarmPoultry();
   await seedStoreProducts();
   await seedWelcomeArticle();
-  await seedHomeAds();
+  await seedAdvertisements();
+  await seedTips();
 
   logger.info(
     {
@@ -568,58 +570,239 @@ export async function runDevSeed(knex: Knex, deps: RunDevSeedDeps = {}): Promise
     }
   }
 
-  async function seedHomeAds(): Promise<void> {
+  async function seedAdvertisements(): Promise<void> {
     const actor = { actorUserId: adminId, context: SEED_CONTEXT };
-    const banners: Array<{ title: string; subtitle: string; sortOrder: number; file: string }> = [
+
+    interface SeedSlide {
+      title?: string;
+      subtitle?: string;
+      ctaLabel?: string;
+      ctaUrl?: string;
+      file: string;
+    }
+    const campaigns: Array<{
+      placement: string;
+      type: 'BANNER' | 'CAROUSEL';
+      title: string;
+      slides: SeedSlide[];
+    }> = [
       {
-        title: 'رعاية أفضل لحياة صحية وسعيدة',
-        subtitle: 'نرعاهم كأنهم عائلتنا',
-        sortOrder: 0,
-        file: 'banner-1.jpg',
+        placement: 'HOME',
+        type: 'CAROUSEL',
+        title: 'حملة الصفحة الرئيسية',
+        slides: [
+          {
+            title: 'غذاء صحي لحياة أفضل',
+            subtitle: 'أطعمة أصلية ومكملات غذائية',
+            ctaLabel: 'تسوق الآن',
+            ctaUrl: '/(app)/(tabs)/services',
+            file: 'banner-1.jpg',
+          },
+          {
+            title: 'استشر طبيبك البيطري في أي وقت',
+            subtitle: 'فريق طبي متخصص جاهز للرد على استفساراتك',
+            file: 'banner-2.jpg',
+          },
+          {
+            title: 'تابع صحة حيوانك بسهولة',
+            subtitle: 'سجلات طبية وتطعيمات في مكان واحد',
+            file: 'banner-3.jpg',
+          },
+        ],
       },
       {
-        title: 'استشر طبيبك البيطري في أي وقت',
-        subtitle: 'فريق طبي متخصص جاهز للرد على استفساراتك',
-        sortOrder: 1,
-        file: 'banner-2.jpg',
+        placement: 'PETS',
+        type: 'BANNER',
+        title: 'حملة قسم الحيوانات الأليفة',
+        slides: [
+          {
+            title: 'رعاية أفضل لحياة صحية وسعيدة',
+            subtitle: 'نرعاهم كأنهم عائلتنا',
+            file: 'banner-1.jpg',
+          },
+        ],
       },
       {
-        title: 'تابع صحة حيوانك بسهولة',
-        subtitle: 'سجلات طبية وتطعيمات في مكان واحد',
-        sortOrder: 2,
-        file: 'banner-3.jpg',
+        placement: 'CLINICS',
+        type: 'CAROUSEL',
+        title: 'حملة قسم العيادات',
+        slides: [
+          {
+            title: 'عيادات بيطرية موثوقة قريبة منك',
+            subtitle: 'احجز موعدك في دقائق',
+            file: 'banner-2.jpg',
+          },
+          {
+            title: 'خصومات على الفحص الدوري',
+            subtitle: 'لفترة محدودة',
+            file: 'banner-3.jpg',
+          },
+        ],
       },
     ];
 
-    for (const b of banners) {
-      const existing: { id: string } | undefined = await knex('home_ads')
-        .where({ title: b.title })
+    for (const c of campaigns) {
+      let existing: { id: string } | undefined = await knex('ad_campaigns')
+        .where({ placement: c.placement, title: c.title })
         .first();
 
-      let homeAdId = existing?.id;
-      if (!homeAdId) {
-        const created = await homeAdService.create(actor, {
-          title: b.title,
-          subtitle: b.subtitle,
-          sortOrder: b.sortOrder,
+      if (!existing) {
+        const created = await advertisementService.createCampaign(actor, {
+          placement: c.placement,
+          type: c.type,
+          title: c.title,
+          sortOrder: 0,
         });
-        homeAdId = created.id;
-      }
+        existing = { id: created.id };
 
-      const row = (await knex('home_ads').where({ id: homeAdId }).first()) as
-        { image_storage_key: string | null; is_active: boolean } | undefined;
-      if (!row?.image_storage_key) {
-        const bytes = await readFile(path.join(__dirname, 'assets', 'home-ads', b.file));
-        const storageKey = buildObjectKey(StoragePrefix.homeAds, b.file);
-        await objectStorage.put(storageKey, bytes, { contentType: 'image/jpeg' });
-        await homeAdService.registerImage(actor, homeAdId, {
-          storageKey,
-          mimeType: 'image/jpeg',
-        });
+        for (const s of c.slides) {
+          const slide = await advertisementService.addSlide(actor, created.id, {
+            title: s.title ?? null,
+            subtitle: s.subtitle ?? null,
+            ctaLabel: s.ctaLabel ?? null,
+            ctaUrl: s.ctaUrl ?? null,
+          });
+          const bytes = await readFile(path.join(__dirname, 'assets', 'advertisements', s.file));
+          const storageKey = buildObjectKey(StoragePrefix.advertisements, s.file);
+          await objectStorage.put(storageKey, bytes, { contentType: 'image/jpeg' });
+          await advertisementService.registerSlideImage(actor, created.id, slide.id, {
+            storageKey,
+            mimeType: 'image/jpeg',
+          });
+        }
+        await advertisementService.setCampaignActive(actor, created.id, true);
       }
-      if (!row?.is_active) {
-        await homeAdService.setActive(actor, homeAdId, true);
+    }
+  }
+
+  async function seedTips(): Promise<void> {
+    const actor = { actorUserId: adminId, context: SEED_CONTEXT };
+
+    // Reuse `categories` for the tip taxonomy.
+    const categories: Record<string, string> = {};
+    for (const [slug, name] of [
+      ['nutrition', 'التغذية'],
+      ['health', 'الصحة'],
+      ['production', 'الإنتاج'],
+    ] as const) {
+      const found = (await knex('categories').where({ slug }).whereNull('deleted_at').first()) as
+        { id: string } | undefined;
+      let id: string | undefined = found?.id;
+      if (!id) {
+        const inserted: Array<{ id: string }> = await knex('categories')
+          .insert({ slug, name, created_by_user_id: adminId })
+          .returning('id');
+        id = inserted[0]?.id;
       }
+      if (!id) throw new Error(`dev-seed: failed to resolve category "${slug}"`);
+      categories[slug] = id;
+    }
+
+    const tips: Array<{
+      title: string;
+      summary: string;
+      readMinutes: number;
+      priority: 'IMPORTANT' | 'RECOMMENDED' | 'NORMAL';
+      categorySlug: keyof typeof categories;
+      bodyIntro: string;
+      keyPoints: string[];
+      warningPoints: string[];
+      vetAdvice: string;
+      tipOfDay?: boolean;
+    }> = [
+      {
+        title: 'أفضل طرق تغذية الأغنام في الصيف',
+        summary:
+          'تعرف على تغذية متوازنة للطاقة والماء والمعادن للحفاظ على صحة الأغنام وإنتاجيتها في الأجواء الحارة.',
+        readMinutes: 5,
+        priority: 'IMPORTANT',
+        categorySlug: 'nutrition',
+        bodyIntro:
+          'في فصل الصيف، تحتاج الأغنام إلى تغذية متوازنة تساعدها على تحمل الحرارة والحفاظ على إنتاجيتها وصحتها. الاهتمام بتوفير العلف الجيد، والماء النظيف، والمعادن الضرورية هو مفتاح نجاحك.',
+        keyPoints: [
+          'وفر علفاً جيداً وغنياً بالألياف مثل البرسيم أو الدريس.',
+          'قدم الأعلاف في الصباح الباكر أو في المساء لتقليل تأثير الحرارة.',
+          'تأكد من توفر ماء نظيف وبارد طوال اليوم.',
+          'أضف الأملاح والمعادن لدعم صحة الأغنام وتعويض الفاقد.',
+          'تجنب التغيير المفاجئ في نوع أو كمية العلف.',
+        ],
+        warningPoints: [
+          'فقدان الشهية أو الامتناع عن الأكل.',
+          'علامات الجفاف مثل اللسان الجاف أو الجلد الأقل مرونة.',
+          'فقدان الوزن السريع أو الضعف العام.',
+        ],
+        vetAdvice:
+          'إذا استمرت الأعراض لأكثر من يومين أو لاحظت إصابة عدة حيوانات معاً، يُنصح باستشارة طبيب بيطري لتشخيص الحالة والعلاج المناسب.',
+        tipOfDay: true,
+      },
+      {
+        title: 'أهم الفيتامينات لنمو الأغنام',
+        summary: 'الفيتامينات الأساسية ودورها في نمو الحملان ومناعتها.',
+        readMinutes: 4,
+        priority: 'IMPORTANT',
+        categorySlug: 'nutrition',
+        bodyIntro: 'تلعب الفيتامينات A و D و E دوراً محورياً في نمو العظام والمناعة والخصوبة.',
+        keyPoints: [
+          'فيتامين A لصحة الجلد والعيون والمناعة.',
+          'فيتامين D لامتصاص الكالسيوم ونمو العظام.',
+          'فيتامين E مع السيلينيوم للوقاية من مرض العضلات البيضاء.',
+        ],
+        warningPoints: ['ضعف الحملان عند الولادة.', 'تكرار حالات الإسهال والالتهابات.'],
+        vetAdvice: 'برنامج تكميل الفيتامينات يُحدد بحسب تحليل العلف واستشارة الطبيب البيطري.',
+      },
+      {
+        title: 'كيفية التعامل مع حالات الإسهال عند العجول',
+        summary: 'خطوات عملية لعزل العجل وتعويض السوائل ومنع انتشار العدوى.',
+        readMinutes: 6,
+        priority: 'RECOMMENDED',
+        categorySlug: 'health',
+        bodyIntro: 'الإسهال من أكثر أسباب نفوق العجول حديثة الولادة؛ السرعة في التدخل تنقذ حياتها.',
+        keyPoints: [
+          'اعزل العجل المصاب فوراً.',
+          'عوّض السوائل والأملاح عن طريق الفم.',
+          'استمر في الرضاعة ما لم ينصح الطبيب بغير ذلك.',
+          'نظّف وطهّر مكان الإيواء.',
+        ],
+        warningPoints: ['جفاف واضح أو خمول شديد.', 'دم في البراز أو ارتفاع الحرارة.'],
+        vetAdvice:
+          'استشر الطبيب البيطري إذا لم تتحسن الحالة خلال ٢٤ ساعة أو ظهرت علامات جفاف شديد.',
+      },
+      {
+        title: 'تحسين إنتاج الحليب في الأبقار الحلوب',
+        summary: 'عوامل التغذية والراحة والحلب التي ترفع إنتاج الحليب وجودته.',
+        readMinutes: 5,
+        priority: 'RECOMMENDED',
+        categorySlug: 'production',
+        bodyIntro: 'إنتاج الحليب نتيجة تفاعل التغذية والوراثة والإدارة وصحة الضرع.',
+        keyPoints: [
+          'رتب علائق متوازنة الطاقة والبروتين.',
+          'وفر ماء نظيفاً بكميات كافية.',
+          'حافظ على نظافة الضرع وروتين حلب ثابت.',
+          'قلل الإجهاد الحراري بالتهوية والتظليل.',
+        ],
+        warningPoints: ['انخفاض مفاجئ في الإنتاج.', 'تكتلات أو تغير لون الحليب.'],
+        vetAdvice: 'الفحص الدوري للضرع واختبار التهاب الضرع تحت إشراف الطبيب البيطري.',
+      },
+    ];
+
+    for (const tip of tips) {
+      const existing = (await knex('content_tips').where({ title: tip.title }).first()) as
+        { id: string; status: string; is_tip_of_day: boolean } | undefined;
+      if (existing) continue;
+
+      const created = await tipService.createTip(actor, {
+        title: tip.title,
+        summary: tip.summary,
+        readMinutes: tip.readMinutes,
+        priority: tip.priority,
+        categoryId: categories[tip.categorySlug],
+        bodyIntro: tip.bodyIntro,
+        keyPoints: tip.keyPoints,
+        warningPoints: tip.warningPoints,
+        vetAdvice: tip.vetAdvice,
+      });
+      await tipService.publishTip(actor, created.id);
+      if (tip.tipOfDay) await tipService.setTipOfDay(actor, created.id, true);
     }
   }
 }

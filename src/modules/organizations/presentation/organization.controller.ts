@@ -9,16 +9,22 @@ import type { AuthorizationService } from '../../authorization/authorization.ser
 import type { OrganizationService } from '../application/organization.service.js';
 import type { MembershipService } from '../application/membership.service.js';
 import type { OrganizationSupervisorService } from '../application/organization-supervisor.service.js';
+import type { OrganizationEngagementService } from '../application/organization-engagement.service.js';
 import { requireOrganization } from './organization.middleware.js';
 import type {
   AddMemberBody,
   AssignSupervisorBody,
   CreateOrganizationBody,
   DiscoverOrganizationsQuery,
+  FinalizeGalleryBody,
   FinalizeLogoBody,
+  GalleryUploadUrlBody,
   ListMembersQuery,
   ListMyOrganizationsQuery,
+  ListReviewsQuery,
   LogoUploadUrlBody,
+  RemoveGalleryImageQuery,
+  SubmitReviewBody,
   UpdateMemberBody,
   UpdateOrganizationBody,
   UpdateSupervisorBody,
@@ -31,6 +37,7 @@ export class OrganizationController {
     private readonly members: MembershipService,
     private readonly supervisors: OrganizationSupervisorService,
     private readonly authz: AuthorizationService,
+    private readonly engagement: OrganizationEngagementService,
   ) {}
 
   private actor(req: Request): { actorUserId: string; context: AuditContextResult } {
@@ -71,9 +78,23 @@ export class OrganizationController {
     sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
   };
 
+  /**
+   * `GET /organizations/discover/:organizationId` — the Clinic Details screen.
+   * Composes three independent reads: the base public profile, the ACTIVE
+   * veterinarian roster (from memberships — not a field on the org), and the
+   * viewer's engagement summary (follow state, rating). All three 404 the same
+   * way when the org doesn't exist / isn't ACTIVE, since `organizations.getPublicById`
+   * is the one that actually enforces that and `Promise.all` rejects together.
+   */
   getPublicOne = async (req: Request, res: Response): Promise<void> => {
     const { organizationId } = validatedParams<{ organizationId: string }>(req);
-    sendSuccess(res, await this.organizations.getPublicById(organizationId));
+    const { userId } = requireAuth(req);
+    const [organization, veterinarians, engagementSummary] = await Promise.all([
+      this.organizations.getPublicById(organizationId),
+      this.members.listPublicVeterinarians(organizationId),
+      this.engagement.getSummary(organizationId, userId),
+    ]);
+    sendSuccess(res, { ...organization, veterinarians, engagement: engagementSummary });
   };
 
   getOne = async (req: Request, res: Response): Promise<void> => {
@@ -107,6 +128,69 @@ export class OrganizationController {
     const org = requireOrganization(req);
     const body = validatedBody<FinalizeLogoBody>(req);
     sendSuccess(res, await this.organizations.finalizeLogo(org.id, this.actor(req), body));
+  };
+
+  // --- gallery --------------------------------------------------------
+
+  requestGalleryUploadUrl = async (req: Request, res: Response): Promise<void> => {
+    const org = requireOrganization(req);
+    const body = validatedBody<GalleryUploadUrlBody>(req);
+    sendSuccess(
+      res,
+      await this.organizations.requestGalleryUploadUrl(org.id, body),
+      StatusCodes.CREATED,
+    );
+  };
+
+  addGalleryImage = async (req: Request, res: Response): Promise<void> => {
+    const org = requireOrganization(req);
+    const body = validatedBody<FinalizeGalleryBody>(req);
+    sendSuccess(res, await this.organizations.addGalleryImage(org.id, this.actor(req), body));
+  };
+
+  removeGalleryImage = async (req: Request, res: Response): Promise<void> => {
+    const org = requireOrganization(req);
+    const { storageKey } = validatedQuery<RemoveGalleryImageQuery>(req);
+    sendSuccess(
+      res,
+      await this.organizations.removeGalleryImage(org.id, this.actor(req), storageKey),
+    );
+  };
+
+  // --- engagement: follow + reviews ------------------------------
+
+  follow = async (req: Request, res: Response): Promise<void> => {
+    const { userId } = requireAuth(req);
+    const org = requireOrganization(req);
+    await this.engagement.follow(org.id, userId);
+    sendSuccess(res, { success: true });
+  };
+
+  unfollow = async (req: Request, res: Response): Promise<void> => {
+    const { userId } = requireAuth(req);
+    const org = requireOrganization(req);
+    await this.engagement.unfollow(org.id, userId);
+    sendSuccess(res, { success: true });
+  };
+
+  submitReview = async (req: Request, res: Response): Promise<void> => {
+    const { userId } = requireAuth(req);
+    const org = requireOrganization(req);
+    const body = validatedBody<SubmitReviewBody>(req);
+    sendSuccess(
+      res,
+      await this.engagement.submitReview(org.id, userId, {
+        rating: body.rating,
+        comment: body.comment ?? null,
+      }),
+    );
+  };
+
+  listReviews = async (req: Request, res: Response): Promise<void> => {
+    const org = requireOrganization(req);
+    const q = validatedQuery<ListReviewsQuery>(req);
+    const { items, total } = await this.engagement.listReviews(org.id, q.page, q.pageSize);
+    sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
   };
 
   leave = async (req: Request, res: Response): Promise<void> => {

@@ -1,5 +1,5 @@
 import type { Knex } from 'knex';
-import type { AnimalSpecies } from '../domain/animal.constants.js';
+import type { AnimalSex, AnimalSpecies } from '../domain/animal.constants.js';
 import {
   rowToPublication,
   type AnimalPublication,
@@ -16,6 +16,19 @@ export interface CreatePublicationData {
   kind: string;
   note: string | null;
   createdByUserId: string;
+  contactName: string;
+  contactPhone: string;
+  city: string | null;
+  extraNotes: string | null;
+  healthStatus: string | null;
+  vaccinationStatus: string | null;
+  isSterilized: boolean | null;
+  lostDate: string | null;
+  lostTime: string | null;
+  lostGovernorate: string | null;
+  lostDistrict: string | null;
+  lostLocationDetail: string | null;
+  healthNotes: string | null;
 }
 
 export interface ReviewPublicationData {
@@ -29,6 +42,31 @@ interface JoinedRow extends AnimalPublicationRow {
   a_name: string;
   a_species: string;
   a_breed: string | null;
+  a_sex: string;
+  a_date_of_birth: string | Date | null;
+  a_color: string | null;
+  a_distinguishing_features: string | null;
+  a_age_estimate: string | null;
+  a_gallery_keys: string[] | null;
+}
+
+const ANIMAL_JOIN_COLUMNS = [
+  'a.id as a_id',
+  'a.name as a_name',
+  'a.species as a_species',
+  'a.breed as a_breed',
+  'a.sex as a_sex',
+  'a.date_of_birth as a_date_of_birth',
+  'a.color as a_color',
+  'a.distinguishing_features as a_distinguishing_features',
+  'a.age_estimate as a_age_estimate',
+  'a.gallery_keys as a_gallery_keys',
+];
+
+function toDateOnly(value: string | Date | null): string | null {
+  if (value === null) return null;
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  return value.slice(0, 10);
 }
 
 function toWithAnimal(row: JoinedRow): AnimalPublicationWithAnimal {
@@ -39,6 +77,12 @@ function toWithAnimal(row: JoinedRow): AnimalPublicationWithAnimal {
       name: row.a_name,
       species: row.a_species as AnimalSpecies,
       breed: row.a_breed,
+      sex: row.a_sex as AnimalSex,
+      dateOfBirth: toDateOnly(row.a_date_of_birth),
+      color: row.a_color,
+      distinguishingFeatures: row.a_distinguishing_features,
+      ageEstimate: row.a_age_estimate as never,
+      galleryKeys: row.a_gallery_keys ?? [],
     },
   };
 }
@@ -86,6 +130,19 @@ export class AnimalPublicationRepository {
         kind: data.kind,
         note: data.note,
         created_by_user_id: data.createdByUserId,
+        contact_name: data.contactName,
+        contact_phone: data.contactPhone,
+        city: data.city,
+        extra_notes: data.extraNotes,
+        health_status: data.healthStatus,
+        vaccination_status: data.vaccinationStatus,
+        is_sterilized: data.isSterilized,
+        lost_date: data.lostDate,
+        lost_time: data.lostTime,
+        lost_governorate: data.lostGovernorate,
+        lost_district: data.lostDistrict,
+        lost_location_detail: data.lostLocationDetail,
+        health_notes: data.healthNotes,
       })
       .returning('*')) as AnimalPublicationRow[];
     if (!row) throw new Error('publication insert did not return a row');
@@ -156,7 +213,7 @@ export class AnimalPublicationRepository {
     return { items: rows.map(rowToPublication), total };
   }
 
-  /** Public browse — APPROVED publications only, joined with a non-PII animal summary. */
+  /** Public browse — APPROVED publications only, joined with the animal summary. */
   async listPublicApproved(
     filter: PublicListFilter,
     trx?: Knex.Transaction,
@@ -166,6 +223,10 @@ export class AnimalPublicationRepository {
         .join('animals as a', 'a.id', 'p.animal_id')
         .where('p.status', 'APPROVED');
       if (filter.kind) qb.andWhere('p.kind', filter.kind);
+      if (filter.species) qb.andWhere('a.species', filter.species);
+      if (filter.search) {
+        qb.andWhereRaw('lower(a.name) like ?', [`%${filter.search.toLowerCase()}%`]);
+      }
       return qb;
     };
 
@@ -176,13 +237,7 @@ export class AnimalPublicationRepository {
       .orderBy('p.reviewed_at', 'desc')
       .limit(filter.pageSize)
       .offset((filter.page - 1) * filter.pageSize)
-      .select(
-        'p.*',
-        'a.id as a_id',
-        'a.name as a_name',
-        'a.species as a_species',
-        'a.breed as a_breed',
-      );
+      .select('p.*', ...ANIMAL_JOIN_COLUMNS);
 
     return { items: rows.map(toWithAnimal), total };
   }
@@ -195,13 +250,7 @@ export class AnimalPublicationRepository {
     const row: JoinedRow | undefined = await this.conn(trx)(`${TABLE} as p`)
       .join('animals as a', 'a.id', 'p.animal_id')
       .where({ 'p.id': id, 'p.status': 'APPROVED' })
-      .select(
-        'p.*',
-        'a.id as a_id',
-        'a.name as a_name',
-        'a.species as a_species',
-        'a.breed as a_breed',
-      )
+      .select('p.*', ...ANIMAL_JOIN_COLUMNS)
       .first();
     return row ? toWithAnimal(row) : null;
   }

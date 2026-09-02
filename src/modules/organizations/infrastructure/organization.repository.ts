@@ -1,5 +1,6 @@
 import type { Knex } from 'knex';
 import {
+  emptyOrganizationProfile,
   rowToOrganization,
   type Organization,
   type OrganizationProfile,
@@ -42,6 +43,15 @@ export interface OrganizationProfilePatch {
   longitude?: number | null;
   phone?: string | null;
   logoKey?: string | null;
+  workingHours?: string | null;
+  services?: string[] | null;
+  email?: string | null;
+  whatsapp?: string | null;
+  instagramUrl?: string | null;
+  facebookUrl?: string | null;
+  tiktokUrl?: string | null;
+  /** Full replacement of the gallery array — callers read-modify-write. */
+  galleryKeys?: string[];
 }
 
 export interface DiscoverWithDetailsFilter {
@@ -55,20 +65,19 @@ export interface DiscoverWithDetailsFilter {
 
 export interface DiscoveredOrganization {
   organization: Organization;
-  profile: OrganizationProfile & { logoKey: string | null };
+  profile: OrganizationProfile & { logoKey: string | null; galleryKeys: string[] };
   /** km, rounded to 1 decimal — only set when `near` was provided. */
   distanceKm: number | null;
 }
 
-function rowToProfile(row?: ProfileDetailRow): OrganizationProfile & { logoKey: string | null } {
+function rowToProfile(
+  row?: ProfileDetailRow,
+): OrganizationProfile & { logoKey: string | null; galleryKeys: string[] } {
   if (!row) {
     return {
-      address: null,
-      latitude: null,
-      longitude: null,
-      phone: null,
-      logoUrl: null,
+      ...emptyOrganizationProfile,
       logoKey: null,
+      galleryKeys: [],
     };
   }
   return {
@@ -78,6 +87,15 @@ function rowToProfile(row?: ProfileDetailRow): OrganizationProfile & { logoKey: 
     phone: row.phone,
     logoUrl: null,
     logoKey: row.logo_key,
+    workingHours: row.working_hours,
+    services: row.services ?? [],
+    email: row.email,
+    whatsapp: row.whatsapp,
+    instagramUrl: row.instagram_url,
+    facebookUrl: row.facebook_url,
+    tiktokUrl: row.tiktok_url,
+    galleryUrls: [],
+    galleryKeys: row.gallery_keys ?? [],
   };
 }
 
@@ -111,8 +129,15 @@ export class OrganizationRepository {
       details.latitude = profile.latitude;
       details.longitude = profile.longitude;
       details.phone = profile.phone;
-      // `logoUrl` is resolved by the service (needs `ObjectStorage`); the raw
-      // key never leaves the repository layer.
+      details.workingHours = profile.workingHours;
+      details.services = profile.services;
+      details.email = profile.email;
+      details.whatsapp = profile.whatsapp;
+      details.instagramUrl = profile.instagramUrl;
+      details.facebookUrl = profile.facebookUrl;
+      details.tiktokUrl = profile.tiktokUrl;
+      // `logoUrl` / `galleryUrls` are resolved by the service (needs
+      // `ObjectStorage`); the raw keys never leave the repository layer.
     }
     return { ...org, details };
   }
@@ -141,6 +166,14 @@ export class OrganizationRepository {
     if (patch.longitude !== undefined) dbPatch.longitude = patch.longitude;
     if (patch.phone !== undefined) dbPatch.phone = patch.phone;
     if (patch.logoKey !== undefined) dbPatch.logo_key = patch.logoKey;
+    if (patch.workingHours !== undefined) dbPatch.working_hours = patch.workingHours;
+    if (patch.services !== undefined) dbPatch.services = patch.services;
+    if (patch.email !== undefined) dbPatch.email = patch.email;
+    if (patch.whatsapp !== undefined) dbPatch.whatsapp = patch.whatsapp;
+    if (patch.instagramUrl !== undefined) dbPatch.instagram_url = patch.instagramUrl;
+    if (patch.facebookUrl !== undefined) dbPatch.facebook_url = patch.facebookUrl;
+    if (patch.tiktokUrl !== undefined) dbPatch.tiktok_url = patch.tiktokUrl;
+    if (patch.galleryKeys !== undefined) dbPatch.gallery_keys = patch.galleryKeys;
     if (Object.keys(dbPatch).length === 1) return; // nothing but updated_at — no-op
 
     const updated = await trx(DETAIL_TABLE[type])
@@ -183,6 +216,14 @@ export class OrganizationRepository {
       'd.longitude as d_longitude',
       'd.phone as d_phone',
       'd.logo_key as d_logo_key',
+      'd.working_hours as d_working_hours',
+      'd.services as d_services',
+      'd.email as d_email',
+      'd.whatsapp as d_whatsapp',
+      'd.instagram_url as d_instagram_url',
+      'd.facebook_url as d_facebook_url',
+      'd.tiktok_url as d_tiktok_url',
+      'd.gallery_keys as d_gallery_keys',
     );
 
     if (filter.near) {
@@ -217,6 +258,14 @@ export class OrganizationRepository {
         d_longitude: number | null;
         d_phone: string | null;
         d_logo_key: string | null;
+        d_working_hours: string | null;
+        d_services: string[] | null;
+        d_email: string | null;
+        d_whatsapp: string | null;
+        d_instagram_url: string | null;
+        d_facebook_url: string | null;
+        d_tiktok_url: string | null;
+        d_gallery_keys: string[] | null;
         distance_km?: string | number | null;
       }
     >;
@@ -230,6 +279,14 @@ export class OrganizationRepository {
         longitude: row.d_longitude,
         phone: row.d_phone,
         logo_key: row.d_logo_key,
+        working_hours: row.d_working_hours,
+        services: row.d_services,
+        email: row.d_email,
+        whatsapp: row.d_whatsapp,
+        instagram_url: row.d_instagram_url,
+        facebook_url: row.d_facebook_url,
+        tiktok_url: row.d_tiktok_url,
+        gallery_keys: row.d_gallery_keys,
         created_at: row.created_at,
         updated_at: row.updated_at,
       }),

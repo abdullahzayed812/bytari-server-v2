@@ -83,6 +83,10 @@ export const ErrorCode = {
   // --- Notifications & FCM (Phase 15) ---
   /** Admin broadcast would target more users than the synchronous limit allows. */
   BROADCAST_TOO_LARGE: 'BROADCAST_TOO_LARGE',
+
+  // --- Organization directory & engagement (Clinic Details) ---
+  /** A gallery upload would exceed the per-organization photo cap. */
+  GALLERY_LIMIT_EXCEEDED: 'GALLERY_LIMIT_EXCEEDED',
 } as const;
 
 export type ErrorCodeValue = (typeof ErrorCode)[keyof typeof ErrorCode];

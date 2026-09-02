@@ -25,6 +25,34 @@ const pubPath = (animalId: string, id?: string): string =>
 const adminPath = (id?: string, suffix = ''): string =>
   `/api/v1/admin/animal-publications${id ? `/${id}` : ''}${suffix}`;
 
+/** A fully valid LOST create body — each kind requires a different field set. */
+function lostBody(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    kind: 'LOST',
+    contactName: 'Test Contact',
+    contactPhone: '07701234567',
+    lostDate: '2026-01-01',
+    lostGovernorate: 'Baghdad',
+    lostDistrict: 'Karrada',
+    ...overrides,
+  };
+}
+
+/** A fully valid ADOPTION create body. */
+function adoptionBody(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    kind: 'ADOPTION',
+    note: 'Friendly and playful, looking for a loving home.',
+    contactName: 'Test Contact',
+    contactPhone: '07701234567',
+    city: 'Baghdad',
+    healthStatus: 'GOOD',
+    vaccinationStatus: 'COMPLETE',
+    isSterilized: false,
+    ...overrides,
+  };
+}
+
 describe('animal publications — owner create', () => {
   it('the owner publishes an animal as LOST; it starts PENDING and is not public', async () => {
     const owner = await registerUser(app);
@@ -33,7 +61,7 @@ describe('animal publications — owner create', () => {
     const res = await request(app)
       .post(pubPath(animal.id))
       .set(bearer(owner.accessToken))
-      .send({ kind: 'LOST', note: 'last seen near the park' });
+      .send(lostBody({ note: 'last seen near the park' }));
     expect(res.status).toBe(201);
     expect(res.body.data).toMatchObject({
       animalId: animal.id,
@@ -70,7 +98,7 @@ describe('animal publications — owner create', () => {
     const res = await request(app)
       .post(pubPath(animal.id))
       .set(bearer(attacker.accessToken))
-      .send({ kind: 'LOST' });
+      .send(lostBody());
     expect(res.status).toBe(404);
     expect(await getTestDb()('animal_publications')).toHaveLength(0);
   });
@@ -82,7 +110,7 @@ describe('animal publications — owner create', () => {
     const res = await request(app)
       .post(pubPath(animal.id))
       .set(bearer(admin.accessToken))
-      .send({ kind: 'LOST' });
+      .send(lostBody());
     expect(res.status).toBe(404);
   });
 
@@ -100,7 +128,7 @@ describe('animal publications — owner create', () => {
     const deactivated = await request(app)
       .post(pubPath(animal.id))
       .set(bearer(owner.accessToken))
-      .send({ kind: 'LOST' });
+      .send(lostBody());
     expect(deactivated.status).toBe(409);
     expect(deactivated.body.error.code).toBe('ANIMAL_NOT_ACTIVE');
   });
@@ -113,7 +141,7 @@ describe('animal publications — owner create', () => {
     const dup = await request(app)
       .post(pubPath(animal.id))
       .set(bearer(owner.accessToken))
-      .send({ kind: 'LOST' });
+      .send(lostBody());
     expect(dup.status).toBe(409);
     expect(dup.body.error.code).toBe('PUBLICATION_ALREADY_OPEN');
 
@@ -121,23 +149,34 @@ describe('animal publications — owner create', () => {
     const adopt = await request(app)
       .post(pubPath(animal.id))
       .set(bearer(owner.accessToken))
-      .send({ kind: 'ADOPTION' });
+      .send(adoptionBody());
     expect(adopt.status).toBe(201);
   });
 
-  it('ignores client-supplied status / reviewer / owner fields', async () => {
+  it('rejects client-supplied status / reviewer / owner fields (unknown keys, strict schema)', async () => {
     const owner = await registerUser(app);
     const other = await registerUser(app);
     const animal = await createAnimal(app, owner.accessToken);
 
-    const res = await request(app).post(pubPath(animal.id)).set(bearer(owner.accessToken)).send({
-      kind: 'LOST',
-      status: 'APPROVED',
-      reviewedByUserId: owner.id,
-      reviewedAt: '2020-01-01T00:00:00Z',
-      createdByUserId: other.id,
-      rejectionReason: 'x',
-    });
+    const forged = await request(app)
+      .post(pubPath(animal.id))
+      .set(bearer(owner.accessToken))
+      .send({
+        ...lostBody(),
+        status: 'APPROVED',
+        reviewedByUserId: owner.id,
+        reviewedAt: '2020-01-01T00:00:00Z',
+        createdByUserId: other.id,
+        rejectionReason: 'x',
+      });
+    expect(forged.status).toBe(422);
+    expect(await getTestDb()('animal_publications')).toHaveLength(0);
+
+    // the same request without the forged keys succeeds with server-controlled defaults
+    const res = await request(app)
+      .post(pubPath(animal.id))
+      .set(bearer(owner.accessToken))
+      .send(lostBody());
     expect(res.status).toBe(201);
     expect(res.body.data).toMatchObject({
       status: 'PENDING',

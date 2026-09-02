@@ -22,6 +22,19 @@ export const ANIMAL_SEXES = ['MALE', 'FEMALE', 'UNKNOWN'] as const;
 export type AnimalSex = (typeof ANIMAL_SEXES)[number];
 
 /**
+ * A controlled label for when the exact `dateOfBirth` isn't known — common for
+ * a found / rescued / stray animal, which the Lost / Adoption / Mating listing
+ * forms need to collect.
+ */
+export const ANIMAL_AGE_ESTIMATES = [
+  'UNDER_1_YEAR',
+  'ONE_TO_3_YEARS',
+  'THREE_TO_7_YEARS',
+  'OVER_7_YEARS',
+] as const;
+export type AnimalAgeEstimate = (typeof ANIMAL_AGE_ESTIMATES)[number];
+
+/**
  * Animal Core lifecycle ONLY. Listing workflows (LOST / FOR_ADOPTION /
  * FOR_MATING) are future domains and are NOT modelled here (spec §6).
  */

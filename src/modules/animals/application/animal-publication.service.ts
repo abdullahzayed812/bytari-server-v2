@@ -3,6 +3,7 @@ import type { Logger } from 'pino';
 import { ConflictError, NotFoundError } from '../../../shared/errors/app-error.js';
 import { ErrorCode } from '../../../shared/errors/error-codes.js';
 import type { EventBus } from '../../../shared/events/index.js';
+import type { ObjectStorage } from '../../../infra/storage/index.js';
 import { AuditEntityType, type AuditContext } from '../../audit/audit.types.js';
 import type { AuditService } from '../../audit/audit.service.js';
 import { PublicationPolicy } from '../domain/publication.policy.js';
@@ -11,12 +12,15 @@ import {
   toPublicPublicationDTO,
   toPublicationDTO,
   type AnimalPublicationDTO,
+  type AnimalPublicationWithAnimal,
   type CreatePublicationInput,
   type ListPublicationsFilter,
   type PublicListFilter,
   type PublicPublicationDTO,
 } from '../domain/publication.types.js';
 import type { AnimalPublicationRepository } from '../infrastructure/animal-publication.repository.js';
+
+const IMAGE_URL_TTL_SECONDS = 3600;
 
 export interface PublicationActor {
   actorUserId: string;
@@ -43,9 +47,31 @@ export class AnimalPublicationService {
     private readonly publications: AnimalPublicationRepository,
     private readonly audit: AuditService,
     private readonly events: EventBus,
+    private readonly storage: ObjectStorage,
     logger: Logger,
   ) {
     this.log = logger.child({ component: 'animal-publication-service' });
+  }
+
+  private async resolveGalleryUrls(keys: string[]): Promise<string[]> {
+    if (keys.length === 0) return [];
+    const urls = await Promise.all(
+      keys.map(
+        async (key) =>
+          this.storage.getPublicUrl(key) ??
+          (await this.storage.getSignedUrl(key, {
+            operation: 'get',
+            expiresIn: IMAGE_URL_TTL_SECONDS,
+          })),
+      ),
+    );
+    return urls.filter((u): u is string => u !== null);
+  }
+
+  private async withResolvedGallery(item: AnimalPublicationWithAnimal): Promise<PublicPublicationDTO> {
+    const dto = toPublicPublicationDTO(item);
+    const galleryUrls = await this.resolveGalleryUrls(item.animal.galleryKeys);
+    return { ...dto, animal: { ...dto.animal, galleryUrls } };
   }
 
   // --- owner ------------------------------------------------------
@@ -72,6 +98,19 @@ export class AnimalPublicationService {
           kind: input.kind,
           note: input.note ?? null,
           createdByUserId: actor.actorUserId,
+          contactName: input.contactName,
+          contactPhone: input.contactPhone,
+          city: input.city ?? null,
+          extraNotes: input.extraNotes ?? null,
+          healthStatus: input.healthStatus ?? null,
+          vaccinationStatus: input.vaccinationStatus ?? null,
+          isSterilized: input.isSterilized ?? null,
+          lostDate: input.lostDate ?? null,
+          lostTime: input.lostTime ?? null,
+          lostGovernorate: input.lostGovernorate ?? null,
+          lostDistrict: input.lostDistrict ?? null,
+          lostLocationDetail: input.lostLocationDetail ?? null,
+          healthNotes: input.healthNotes ?? null,
         },
         tx,
       );
@@ -196,12 +235,26 @@ export class AnimalPublicationService {
     filter: PublicListFilter,
   ): Promise<{ items: PublicPublicationDTO[]; total: number }> {
     const { items, total } = await this.publications.listPublicApproved(filter);
-    return { items: items.map(toPublicPublicationDTO), total };
+    return { items: await Promise.all(items.map((i) => this.withResolvedGallery(i))), total };
   }
 
   async getPublic(publicationId: string): Promise<PublicPublicationDTO> {
     const found = await this.publications.findPublicApprovedById(publicationId);
     if (!found) throw new NotFoundError('Publication not found');
-    return toPublicPublicationDTO(found);
+    return this.withResolvedGallery(found);
+  }
+
+  /** Internal helper for {@link PublicationInteractionService} — the publication owner + status + kind. */
+  async loadOwnershipContext(
+    publicationId: string,
+  ): Promise<{ id: string; createdByUserId: string; status: string; kind: string } | null> {
+    const found = await this.publications.findById(publicationId);
+    if (!found) return null;
+    return {
+      id: found.id,
+      createdByUserId: found.createdByUserId,
+      status: found.status,
+      kind: found.kind,
+    };
   }
 }

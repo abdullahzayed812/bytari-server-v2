@@ -29,6 +29,10 @@ export const NOTIFICATION_TYPES = [
   'INQUIRY_CLOSED',
   // content (catalogue entry only — no automatic broadcast; used by admin sends)
   'CONTENT_PUBLISHED',
+  // animal lifecycle publications — viewer interactions
+  'PUBLICATION_ADOPTION_REQUESTED',
+  'PUBLICATION_MATING_REQUESTED',
+  'PUBLICATION_SIGHTING_REPORTED',
   // admin
   'ADMIN_ANNOUNCEMENT',
 ] as const;

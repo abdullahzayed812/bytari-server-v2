@@ -109,7 +109,14 @@ describe('animal-publication events + audit', () => {
     const dup = await request(app)
       .post(`/api/v1/animals/${animal.id}/publications`)
       .set(bearer(owner.accessToken))
-      .send({ kind: 'LOST' });
+      .send({
+        kind: 'LOST',
+        contactName: 'Test Contact',
+        contactPhone: '07701234567',
+        lostDate: '2026-01-01',
+        lostGovernorate: 'Baghdad',
+        lostDistrict: 'Karrada',
+      });
     await tick();
 
     expect(dup.status).toBe(409);

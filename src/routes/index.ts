@@ -37,8 +37,10 @@ import {
   createContentRouter,
   createContentCategoryRouter,
   createAdminContentRouter,
+  createTipRouter,
+  createAdminTipRouter,
 } from '../modules/content/index.js';
-import { createHomeAdRouter, createAdminHomeAdRouter } from '../modules/homeAds/index.js';
+import { createPublicAdRouter, createAdminAdRouter } from '../modules/advertisements/index.js';
 import {
   createNotificationRouter,
   createAdminNotificationRouter,
@@ -123,11 +125,13 @@ export function createApiRouter(c: Container): Router {
   // `/admin/content*`. Realtime `content:feed` wired in `server.ts`.
   router.use('/content', createContentRouter(c));
   router.use('/content-categories', createContentCategoryRouter(c));
+  // "Tips" — structured care advice inside the content module.
+  router.use('/tips', createTipRouter(c));
 
-  // --- Pet Owner Home: banner carousel ------------------------
-  // Public reads for the Home screen; admin/supervisor management under
-  // `/admin/home-ads*`.
-  router.use('/home-ads', createHomeAdRouter(c));
+  // --- Advertisements: multi-section campaigns ----------------
+  // Public feed `GET /ads?placement=…` for any authenticated user; admin /
+  // supervisor management under `/admin/ads*`.
+  router.use('/ads', createPublicAdRouter(c));
 
   // --- Phase 15: notifications & FCM -------------------------
   // Personal notification inbox + device-token management (auth + ownership
@@ -143,7 +147,8 @@ export function createApiRouter(c: Container): Router {
   router.use('/admin/animal-publications', createAdminAnimalPublicationRouter(c));
   router.use('/admin', createSupportAdminRouter(c));
   router.use('/admin', createAdminContentRouter(c));
-  router.use('/admin/home-ads', createAdminHomeAdRouter(c));
+  router.use('/admin/tips', createAdminTipRouter(c));
+  router.use('/admin/ads', createAdminAdRouter(c));
   router.use('/admin/notifications', createAdminNotificationRouter(c));
   router.use('/admin/audit-logs', createAdminAuditRouter(c));
 
