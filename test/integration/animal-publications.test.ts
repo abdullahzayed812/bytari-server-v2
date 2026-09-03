@@ -370,7 +370,7 @@ describe('animal publications — visibility & IDOR', () => {
     const animal = await createAnimal(app, owner.accessToken);
     const pub = await createAnimalPublication(app, owner.accessToken, animal.id, { kind: 'LOST' });
 
-    await transferAnimal(app, owner.accessToken, animal.id, newOwner.id);
+    await transferAnimal(app, owner.accessToken, animal.id, newOwner.id, newOwner.accessToken);
 
     const row = (await getTestDb()('animal_publications').where({ id: pub.id }).first()) as {
       created_by_user_id: string;

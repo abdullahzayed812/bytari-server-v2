@@ -14,7 +14,6 @@ import type {
   FinalizeAnimalGalleryBody,
   ListAnimalsQuery,
   RemoveAnimalGalleryImageQuery,
-  TransferOwnershipBody,
   UpdateAnimalBody,
 } from './animal.schemas.js';
 
@@ -72,18 +71,6 @@ export class AnimalController {
   deactivate = async (req: Request, res: Response): Promise<void> => {
     const animal = requireAnimal(req);
     sendSuccess(res, await this.animals.deactivate(animal.id, this.actor(req)));
-  };
-
-  transfer = async (req: Request, res: Response): Promise<void> => {
-    const animal = requireAnimal(req);
-    const body = validatedBody<TransferOwnershipBody>(req);
-    const record = await this.ownership.transfer(
-      animal.id,
-      body.toUserId,
-      this.actor(req),
-      body.reason,
-    );
-    sendSuccess(res, record);
   };
 
   history = async (req: Request, res: Response): Promise<void> => {

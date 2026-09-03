@@ -1,4 +1,9 @@
-import type { AnimalAgeEstimate, AnimalSex, AnimalSpecies, AnimalStatus } from './animal.constants.js';
+import type {
+  AnimalAgeEstimate,
+  AnimalSex,
+  AnimalSpecies,
+  AnimalStatus,
+} from './animal.constants.js';
 
 /** Full animal aggregate (internal). Never returned raw from a controller. */
 export interface Animal {

@@ -68,7 +68,9 @@ export class AnimalPublicationService {
     return urls.filter((u): u is string => u !== null);
   }
 
-  private async withResolvedGallery(item: AnimalPublicationWithAnimal): Promise<PublicPublicationDTO> {
+  private async withResolvedGallery(
+    item: AnimalPublicationWithAnimal,
+  ): Promise<PublicPublicationDTO> {
     const dto = toPublicPublicationDTO(item);
     const galleryUrls = await this.resolveGalleryUrls(item.animal.galleryKeys);
     return { ...dto, animal: { ...dto.animal, galleryUrls } };

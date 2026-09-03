@@ -111,6 +111,12 @@ const schemas: Obj = {
       authorName: { type: 'string', nullable: true },
       status: { type: 'string', enum: statusEnum },
       publishedAt: { type: 'string', format: 'date-time', nullable: true },
+      coverImageUrl: {
+        type: 'string',
+        nullable: true,
+        description:
+          'Resolved URL of the COVER file (public or signed), or null when there is none',
+      },
       categories: { type: 'array', items: { $ref: '#/components/schemas/Category' } },
       files: { type: 'array', items: { $ref: '#/components/schemas/ContentFile' } },
       createdByUserId: { type: 'string', format: 'uuid', nullable: true },

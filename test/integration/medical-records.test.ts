@@ -315,7 +315,7 @@ describe('medical records — owner-facing read + ownership transfer', () => {
     });
     const newOwner = await registerUser(app);
 
-    await transferAnimal(app, petOwner.accessToken, animal.id, newOwner.id);
+    await transferAnimal(app, petOwner.accessToken, animal.id, newOwner.id, newOwner.accessToken);
 
     // history row unchanged
     const row = (await getTestDb()('medical_records').where({ id: rec.id }).first()) as {

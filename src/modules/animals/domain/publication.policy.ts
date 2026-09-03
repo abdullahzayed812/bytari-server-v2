@@ -39,7 +39,10 @@ export const PublicationPolicy = {
   },
 
   /** A viewer cannot "request" or "report" their own listing. */
-  assertNotOwnPublication(publication: Pick<AnimalPublication, 'createdByUserId'>, actorUserId: string): void {
+  assertNotOwnPublication(
+    publication: Pick<AnimalPublication, 'createdByUserId'>,
+    actorUserId: string,
+  ): void {
     if (publication.createdByUserId === actorUserId) {
       throw new ForbiddenError('You cannot interact with your own listing', {
         code: ErrorCode.PERMISSION_DENIED,

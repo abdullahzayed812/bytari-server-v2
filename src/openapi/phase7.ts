@@ -153,7 +153,14 @@ const schemas: Obj = {
   },
   CreateLostPublicationRequest: {
     type: 'object',
-    required: ['kind', 'contactName', 'contactPhone', 'lostDate', 'lostGovernorate', 'lostDistrict'],
+    required: [
+      'kind',
+      'contactName',
+      'contactPhone',
+      'lostDate',
+      'lostGovernorate',
+      'lostDistrict',
+    ],
     properties: {
       kind: { type: 'string', enum: ['LOST'] },
       note: { type: 'string', maxLength: 2000, description: 'معلومات إضافية قد تساعد في العثور' },

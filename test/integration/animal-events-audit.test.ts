@@ -4,7 +4,13 @@ import type { DomainEvent } from '../../src/shared/events/index.js';
 import { ALL_EVENTS } from '../../src/shared/events/index.js';
 import { buildTestApp } from '../helpers/app.js';
 import { closeTestDb, ensureSchema, getTestDb, resetDb } from '../helpers/db.js';
-import { bearer, createAnimal, registerUser } from '../helpers/factories.js';
+import {
+  acceptTransferRequest,
+  bearer,
+  createAnimal,
+  createTransferRequest,
+  registerUser,
+} from '../helpers/factories.js';
 
 const { app, container } = buildTestApp();
 
@@ -65,15 +71,19 @@ describe('animal domain events + audit', () => {
     expect(actions).toContain('ANIMAL_DEACTIVATED');
   });
 
-  it('writes ANIMAL_OWNERSHIP_TRANSFERRED with previous/new owner ids and emits the event', async () => {
+  it('accepting a transfer request writes ANIMAL_OWNERSHIP_TRANSFERRED with previous/new owner ids and emits the event', async () => {
     const owner = await registerUser(app);
     const recipient = await registerUser(app);
     const animal = await createAnimal(app, owner.accessToken);
 
-    await request(app)
-      .post(`/api/v1/animals/${animal.id}/ownership/transfer`)
-      .set(bearer(owner.accessToken))
-      .send({ toUserId: recipient.id, reason: 'rehomed' });
+    const created = await createTransferRequest(
+      app,
+      owner.accessToken,
+      animal.id,
+      recipient.id,
+      'rehomed',
+    );
+    await acceptTransferRequest(app, recipient.accessToken, created.body.data.id);
     await tick();
 
     expect(captured).toContain('animal.ownership.transferred');
@@ -89,15 +99,16 @@ describe('animal domain events + audit', () => {
     });
   });
 
-  it('does not emit a success event or write audit when a transfer fails validation', async () => {
+  it('does not emit a success event or write audit when accepting fails validation', async () => {
     const owner = await registerUser(app);
+    const recipient = await registerUser(app);
     const animal = await createAnimal(app, owner.accessToken);
+    const created = await createTransferRequest(app, owner.accessToken, animal.id, recipient.id);
+    // the animal is deactivated after the request was created, before acceptance
+    await request(app).delete(`/api/v1/animals/${animal.id}`).set(bearer(owner.accessToken));
     captured.length = 0;
 
-    const res = await request(app)
-      .post(`/api/v1/animals/${animal.id}/ownership/transfer`)
-      .set(bearer(owner.accessToken))
-      .send({ toUserId: owner.id }); // same owner → 409
+    const res = await acceptTransferRequest(app, recipient.accessToken, created.body.data.id);
     await tick();
 
     expect(res.status).toBe(409);

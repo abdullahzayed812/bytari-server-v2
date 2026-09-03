@@ -223,22 +223,78 @@ export async function createAnimal(
   return res.body.data as TestAnimal;
 }
 
-/** Transfer an animal's ownership from `ownerToken` to `toUserId`. */
+/**
+ * Transfer an animal's ownership from `ownerToken` to `toUserId`, via the
+ * request/acceptance workflow (there is no instant-transfer endpoint) — creates
+ * a transfer request and immediately accepts it with `toUserToken`.
+ */
 export async function transferAnimal(
   app: Express,
   ownerToken: string,
   animalId: string,
   toUserId: string,
+  toUserToken: string,
   reason?: string,
 ): Promise<unknown> {
-  const res = await request(app)
-    .post(`/api/v1/animals/${animalId}/ownership/transfer`)
-    .set(bearer(ownerToken))
-    .send({ toUserId, ...(reason !== undefined ? { reason } : {}) });
-  if (res.status !== 200) {
-    throw new Error(`transferAnimal failed: ${res.status} ${JSON.stringify(res.body)}`);
+  const created = await createTransferRequest(app, ownerToken, animalId, toUserId, reason);
+  if (created.status !== 201) {
+    throw new Error(
+      `transferAnimal (create) failed: ${created.status} ${JSON.stringify(created.body)}`,
+    );
   }
-  return res.body.data;
+  const accepted = await acceptTransferRequest(app, toUserToken, created.body.data.id as string);
+  if (accepted.status !== 200) {
+    throw new Error(
+      `transferAnimal (accept) failed: ${accepted.status} ${JSON.stringify(accepted.body)}`,
+    );
+  }
+  return accepted.body.data;
+}
+
+/** Request-based ownership transfer ("نقل ملكية بموافقة") — create only. Returns the raw response. */
+export async function createTransferRequest(
+  app: Express,
+  fromToken: string,
+  animalId: string,
+  toUserId: string,
+  reason?: string,
+): Promise<request.Response> {
+  return request(app)
+    .post(`/api/v1/animals/${animalId}/transfer-requests`)
+    .set(bearer(fromToken))
+    .send({ toUserId, ...(reason !== undefined ? { reason } : {}) });
+}
+
+export async function acceptTransferRequest(
+  app: Express,
+  toToken: string,
+  requestId: string,
+): Promise<request.Response> {
+  return request(app)
+    .post(`/api/v1/animal-transfer-requests/${requestId}/accept`)
+    .set(bearer(toToken));
+}
+
+export async function rejectTransferRequest(
+  app: Express,
+  toToken: string,
+  requestId: string,
+  reason?: string,
+): Promise<request.Response> {
+  return request(app)
+    .post(`/api/v1/animal-transfer-requests/${requestId}/reject`)
+    .set(bearer(toToken))
+    .send(reason !== undefined ? { reason } : {});
+}
+
+export async function cancelTransferRequest(
+  app: Express,
+  fromToken: string,
+  requestId: string,
+): Promise<request.Response> {
+  return request(app)
+    .post(`/api/v1/animal-transfer-requests/${requestId}/cancel`)
+    .set(bearer(fromToken));
 }
 
 // --- Phase 5: veterinary care ----------------------------------

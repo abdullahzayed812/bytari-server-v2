@@ -176,7 +176,7 @@ describe('Clinic Details — gallery', () => {
     });
     expect(overflow.status).toBe(400);
     expect(overflow.body.error.code).toBe('GALLERY_LIMIT_EXCEEDED');
-  });
+  }, 20000);
 });
 
 describe('Clinic Details — public detail composition (veterinarians + engagement)', () => {

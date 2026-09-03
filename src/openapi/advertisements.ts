@@ -48,6 +48,7 @@ const slideIdParam = { name: 'slideId', in: 'path', required: true, schema: uuid
 const PLACEMENTS = [
   'HOME',
   'PETS',
+  'POULTRY_FARMS',
   'CLINICS',
   'VETERINARY_OFFICES',
   'VETERINARY_STORES',

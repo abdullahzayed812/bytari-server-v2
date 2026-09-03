@@ -83,6 +83,18 @@ const COPY: Record<NotificationType, { title: string; body: string }> = {
     title: 'Sighting reported',
     body: 'Someone reported a sighting of your lost animal.',
   },
+  TRANSFER_REQUEST_RECEIVED: {
+    title: 'Ownership transfer request',
+    body: 'Someone wants to transfer an animal to you.',
+  },
+  TRANSFER_REQUEST_ACCEPTED: {
+    title: 'Transfer request accepted',
+    body: 'Your ownership transfer request was accepted.',
+  },
+  TRANSFER_REQUEST_REJECTED: {
+    title: 'Transfer request declined',
+    body: 'Your ownership transfer request was declined.',
+  },
 };
 
 type P = Record<string, unknown>;
@@ -176,6 +188,28 @@ export class NotificationPolicy {
 
       case 'animal.publication.interaction.created':
         return this.publicationInteraction(p);
+
+      case 'animal.transfer.requested':
+        return this.toUser('TRANSFER_REQUEST_RECEIVED', str(p.toUserId), {
+          animalId: str(p.animalId),
+          entityType: 'ANIMAL_TRANSFER_REQUEST',
+          entityId: str(p.requestId),
+          key: `${event.name}:${str(p.requestId)}`,
+        });
+      case 'animal.transfer.accepted':
+        return this.toUser('TRANSFER_REQUEST_ACCEPTED', str(p.fromUserId), {
+          animalId: str(p.animalId),
+          entityType: 'ANIMAL_TRANSFER_REQUEST',
+          entityId: str(p.requestId),
+          key: `${event.name}:${str(p.requestId)}`,
+        });
+      case 'animal.transfer.rejected':
+        return this.toUser('TRANSFER_REQUEST_REJECTED', str(p.fromUserId), {
+          animalId: str(p.animalId),
+          entityType: 'ANIMAL_TRANSFER_REQUEST',
+          entityId: str(p.requestId),
+          key: `${event.name}:${str(p.requestId)}`,
+        });
 
       default:
         return [];

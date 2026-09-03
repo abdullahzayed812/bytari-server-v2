@@ -16,6 +16,11 @@ export interface CreatePoultryFlockData {
   arrivalDate: string;
   notes: string | null;
   createdByUserId: string;
+  batchNumber: number;
+  initialBirdCount: number;
+  averageWeightGrams?: number | null;
+  targetPricePerKg?: number | null;
+  expectedSaleDate?: string | null;
 }
 
 export interface UpdatePoultryFlockData {
@@ -25,6 +30,10 @@ export interface UpdatePoultryFlockData {
   arrivalDate?: string;
   status?: string;
   notes?: string | null;
+  initialBirdCount?: number | null;
+  averageWeightGrams?: number | null;
+  targetPricePerKg?: number | null;
+  expectedSaleDate?: string | null;
 }
 
 export class PoultryFlockRepository {
@@ -51,6 +60,15 @@ export class PoultryFlockRepository {
     return row ? rowToPoultryFlock(row) : null;
   }
 
+  /** Next per-farm batch number (1-based). Call inside the create transaction. */
+  async nextBatchNumber(organizationId: string, trx: Knex.Transaction): Promise<number> {
+    const row = (await trx(TABLE)
+      .where({ organization_id: organizationId })
+      .max<{ max: number | string | null }>({ max: 'batch_number' })
+      .first()) as { max: number | string | null } | undefined;
+    return Number(row?.max ?? 0) + 1;
+  }
+
   async create(data: CreatePoultryFlockData, trx: Knex.Transaction): Promise<PoultryFlock> {
     const [row] = (await trx(TABLE)
       .insert({
@@ -62,6 +80,11 @@ export class PoultryFlockRepository {
         arrival_date: data.arrivalDate,
         notes: data.notes,
         created_by_user_id: data.createdByUserId,
+        batch_number: data.batchNumber,
+        initial_bird_count: data.initialBirdCount,
+        average_weight_grams: data.averageWeightGrams ?? null,
+        target_price_per_kg: data.targetPricePerKg ?? null,
+        expected_sale_date: data.expectedSaleDate ?? null,
       })
       .returning('*')) as PoultryFlockRow[];
     if (!row) throw new Error('poultry flock insert did not return a row');
@@ -79,6 +102,12 @@ export class PoultryFlockRepository {
     if (patch.birdCount !== undefined) dbPatch.bird_count = patch.birdCount;
     if (patch.arrivalDate !== undefined) dbPatch.arrival_date = patch.arrivalDate;
     if (patch.notes !== undefined) dbPatch.notes = patch.notes;
+    if (patch.initialBirdCount !== undefined) dbPatch.initial_bird_count = patch.initialBirdCount;
+    if (patch.averageWeightGrams !== undefined) {
+      dbPatch.average_weight_grams = patch.averageWeightGrams;
+    }
+    if (patch.targetPricePerKg !== undefined) dbPatch.target_price_per_kg = patch.targetPricePerKg;
+    if (patch.expectedSaleDate !== undefined) dbPatch.expected_sale_date = patch.expectedSaleDate;
     if (patch.status !== undefined) {
       dbPatch.status = patch.status;
       dbPatch.closed_at = patch.status === 'CLOSED' ? new Date() : null;

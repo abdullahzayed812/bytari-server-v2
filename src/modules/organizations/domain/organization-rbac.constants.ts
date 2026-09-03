@@ -42,6 +42,31 @@ export const ORG_PERMISSION_KEYS = [
   'farm.poultry.create',
   'farm.poultry.update',
   'farm.poultry.delete',
+  // --- Poultry Farm operations (Poultry Farms module) — FARM organizations ---
+  // The Farm Details screen: daily records + weekly/batch summaries, expenses,
+  // treatments & vaccinations, appointments, individual cases. The farm-profile
+  // header (image / address / capacity / establishment date / category) reuses
+  // `organization.update`. Batch/weekly summaries read with `farm.poultry.read`.
+  'farm.daily_record.read',
+  'farm.daily_record.create',
+  'farm.daily_record.update',
+  'farm.daily_record.delete',
+  'farm.expense.read',
+  'farm.expense.create',
+  'farm.expense.update',
+  'farm.expense.delete',
+  'farm.health_event.read',
+  'farm.health_event.create',
+  'farm.health_event.update',
+  'farm.health_event.delete',
+  'farm.appointment.read',
+  'farm.appointment.create',
+  'farm.appointment.update',
+  'farm.appointment.delete',
+  'farm.case.read',
+  'farm.case.create',
+  'farm.case.update',
+  'farm.case.delete',
   // --- Veterinary store products (Phase 10) — VETERINARY_STORE organizations ---
   // Stock changes are `product.inventory.adjust`, NOT `product.update` — a
   // controlled operation, never a free-form field edit.
@@ -101,6 +126,26 @@ export const ORG_PERMISSION_DEFINITIONS: Record<OrgPermissionKey, string> = {
   'farm.poultry.create': 'Register a poultry flock for this farm',
   'farm.poultry.update': 'Update this farm’s poultry flocks',
   'farm.poultry.delete': 'Delete this farm’s poultry flocks',
+  'farm.daily_record.read': 'View a poultry batch’s daily records and weekly summary',
+  'farm.daily_record.create': 'Add a daily record for a poultry batch',
+  'farm.daily_record.update': 'Update a poultry batch’s daily record',
+  'farm.daily_record.delete': 'Delete a poultry batch’s daily record',
+  'farm.expense.read': 'View this farm’s expenses',
+  'farm.expense.create': 'Record an expense for this farm',
+  'farm.expense.update': 'Update this farm’s expenses',
+  'farm.expense.delete': 'Delete this farm’s expenses',
+  'farm.health_event.read': 'View this farm’s treatments and vaccinations',
+  'farm.health_event.create': 'Record a treatment or vaccination for this farm',
+  'farm.health_event.update': 'Update this farm’s treatments and vaccinations',
+  'farm.health_event.delete': 'Delete this farm’s treatments and vaccinations',
+  'farm.appointment.read': 'View this farm’s appointments',
+  'farm.appointment.create': 'Schedule an appointment for this farm',
+  'farm.appointment.update': 'Update this farm’s appointments',
+  'farm.appointment.delete': 'Delete this farm’s appointments',
+  'farm.case.read': 'View this farm’s individual cases',
+  'farm.case.create': 'Open an individual case for this farm',
+  'farm.case.update': 'Update this farm’s individual cases',
+  'farm.case.delete': 'Delete this farm’s individual cases',
   'product.read': 'View this veterinary store’s products',
   'product.create': 'Add a product to this veterinary store',
   'product.update': 'Update this veterinary store’s products (profile fields, not stock)',
@@ -141,13 +186,45 @@ export const ORG_ROLE_PERMISSIONS: Record<OrgRoleKey, OrgPermissionKey[]> = {
     'farm.poultry.create',
     'farm.poultry.update',
     'farm.poultry.delete',
+    // Poultry Farm operations — the farm veterinarian runs day-to-day
+    // operations on the Farm Details screen.
+    'farm.daily_record.read',
+    'farm.daily_record.create',
+    'farm.daily_record.update',
+    'farm.daily_record.delete',
+    'farm.expense.read',
+    'farm.expense.create',
+    'farm.expense.update',
+    'farm.expense.delete',
+    'farm.health_event.read',
+    'farm.health_event.create',
+    'farm.health_event.update',
+    'farm.health_event.delete',
+    'farm.appointment.read',
+    'farm.appointment.create',
+    'farm.appointment.update',
+    'farm.appointment.delete',
+    'farm.case.read',
+    'farm.case.create',
+    'farm.case.update',
+    'farm.case.delete',
   ],
   // Phase 6: farm STAFF (employees) can view poultry data; write access to
   // poultry stays with veterinarians / the owner / an assigned supervisor.
+  // Poultry Farm operations follow the same rule — STAFF is read-only.
   // Phase 10: veterinary-store STAFF can view the product catalogue; create /
   // update / delete / inventory stay with the OWNER (override) or an explicitly
   // assigned SUPERVISOR — a Supervisor gets NO product permission by default.
-  STAFF: ['organization.read', 'farm.poultry.read', 'product.read'],
+  STAFF: [
+    'organization.read',
+    'farm.poultry.read',
+    'farm.daily_record.read',
+    'farm.expense.read',
+    'farm.health_event.read',
+    'farm.appointment.read',
+    'farm.case.read',
+    'product.read',
+  ],
 };
 
 export function isOrgRoleKey(value: string): value is OrgRoleKey {

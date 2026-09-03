@@ -10,7 +10,6 @@ import {
   finalizeAnimalGalleryBodySchema,
   listAnimalsQuerySchema,
   removeAnimalGalleryImageQuerySchema,
-  transferOwnershipBodySchema,
   updateAnimalBodySchema,
 } from './animal.schemas.js';
 
@@ -56,13 +55,6 @@ export function createAnimalRouter(c: Container): Router {
     asyncHandler(ctrl.deactivate),
   );
 
-  r.post(
-    '/:animalId/ownership/transfer',
-    validate({ params: animalIdParamSchema, body: transferOwnershipBodySchema }),
-    withAnimal,
-    authorizeAnimalWrite(),
-    asyncHandler(ctrl.transfer),
-  );
   r.get(
     '/:animalId/ownership/history',
     validate({ params: animalIdParamSchema }),

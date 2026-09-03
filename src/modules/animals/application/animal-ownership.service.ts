@@ -37,11 +37,23 @@ export class AnimalOwnershipService {
     this.log = logger.child({ component: 'animal-ownership-service' });
   }
 
+  /**
+   * `trx` lets a caller that already owns a transaction (e.g. the transfer-
+   * request acceptance flow) compose this atomically instead of nesting a
+   * second top-level transaction. Omit it for the normal owner-initiated,
+   * instant-transfer call, which still opens its own. When `trx` is given,
+   * the DB mutation runs inside it but the domain event is NOT published
+   * here — the caller owns the commit and must publish
+   * `animal.ownership.transferred` itself once its own transaction commits
+   * (never publish before commit — a reader could see the event but not yet
+   * the row).
+   */
   async transfer(
     animalId: string,
     toUserId: string,
     actor: OwnershipActor,
     reason?: string,
+    trx?: Knex.Transaction,
   ): Promise<OwnershipRecordDTO> {
     const animal = await this.animals.findById(animalId);
     if (!animal) throw new NotFoundError('Animal not found');
@@ -58,7 +70,7 @@ export class AnimalOwnershipService {
 
     const previousOwnerUserId = current.ownerUserId;
 
-    await this.db.transaction(async (tx) => {
+    const run = async (tx: Knex.Transaction): Promise<void> => {
       const closed = await this.ownerships.endCurrent(animalId, new Date(), tx);
       if (closed !== 1) {
         // Someone else changed ownership between our read and this write.
@@ -91,15 +103,20 @@ export class AnimalOwnershipService {
         },
         tx,
       );
-    });
+    };
 
-    this.events.publish('animal.ownership.transferred', {
-      animalId,
-      previousOwnerUserId,
-      newOwnerUserId: toUserId,
-    });
+    if (trx) {
+      await run(trx);
+    } else {
+      await this.db.transaction(run);
+      this.events.publish('animal.ownership.transferred', {
+        animalId,
+        previousOwnerUserId,
+        newOwnerUserId: toUserId,
+      });
+    }
 
-    const history = await this.ownerships.listForAnimal(animalId);
+    const history = await this.ownerships.listForAnimal(animalId, trx);
     const currentRecord = history.find((h) => h.isCurrent);
     if (!currentRecord) throw new InternalError('transfer produced no current ownership');
     return currentRecord;

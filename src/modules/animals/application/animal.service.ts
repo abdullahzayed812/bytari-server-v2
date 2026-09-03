@@ -1,6 +1,11 @@
 import type { Knex } from 'knex';
 import type { Logger } from 'pino';
-import { BadRequestError, ConflictError, InternalError, NotFoundError } from '../../../shared/errors/app-error.js';
+import {
+  BadRequestError,
+  ConflictError,
+  InternalError,
+  NotFoundError,
+} from '../../../shared/errors/app-error.js';
 import { ErrorCode } from '../../../shared/errors/error-codes.js';
 import type { EventBus } from '../../../shared/events/index.js';
 import { buildObjectKey, StoragePrefix, type ObjectStorage } from '../../../infra/storage/index.js';
@@ -132,7 +137,9 @@ export class AnimalService {
     const { items, total } = await this.animals.listForOwner(ownerUserId, filter);
     // Current owner of every row is `ownerUserId` by construction of the query.
     const dtos = await Promise.all(
-      items.map(async (a) => toAnimalDTO(a, ownerUserId, await this.resolveGalleryUrls(a.galleryKeys))),
+      items.map(async (a) =>
+        toAnimalDTO(a, ownerUserId, await this.resolveGalleryUrls(a.galleryKeys)),
+      ),
     );
     return { items: dtos, total };
   }
@@ -223,9 +230,12 @@ export class AnimalService {
       });
     }
     if (animal.galleryKeys.length >= MAX_GALLERY_IMAGES) {
-      throw new BadRequestError(`the gallery already has the maximum of ${MAX_GALLERY_IMAGES} photos`, {
-        code: ErrorCode.GALLERY_LIMIT_EXCEEDED,
-      });
+      throw new BadRequestError(
+        `the gallery already has the maximum of ${MAX_GALLERY_IMAGES} photos`,
+        {
+          code: ErrorCode.GALLERY_LIMIT_EXCEEDED,
+        },
+      );
     }
 
     const storageKey = buildObjectKey(StoragePrefix.animalImages, input.filename);
@@ -274,9 +284,12 @@ export class AnimalService {
       });
     }
     if (animal.galleryKeys.length >= MAX_GALLERY_IMAGES) {
-      throw new BadRequestError(`the gallery already has the maximum of ${MAX_GALLERY_IMAGES} photos`, {
-        code: ErrorCode.GALLERY_LIMIT_EXCEEDED,
-      });
+      throw new BadRequestError(
+        `the gallery already has the maximum of ${MAX_GALLERY_IMAGES} photos`,
+        {
+          code: ErrorCode.GALLERY_LIMIT_EXCEEDED,
+        },
+      );
     }
 
     const galleryKeys = [...animal.galleryKeys, input.storageKey];

@@ -116,6 +116,8 @@ export async function runDevSeed(knex: Knex, deps: RunDevSeedDeps = {}): Promise
   const { animalService, veterinaryAccessService, medicalRecordService, vaccinationService } =
     container;
   const { poultryFlockService, productService, contentService, passwordService } = container;
+  const { poultryDailyRecordService, farmExpenseService, poultryHealthEventService } = container;
+  const { farmAppointmentService, poultryCaseService, farmProfileService } = container;
   const { tipService } = container;
   const { advertisementService, objectStorage } = container;
 
@@ -490,21 +492,129 @@ export async function runDevSeed(knex: Knex, deps: RunDevSeedDeps = {}): Promise
   async function seedFarmPoultry(): Promise<void> {
     const farmId = organizationIdsByKey.farm;
     if (!farmId) return;
+    const actor = { actorUserId: must(userIdsByKey, 'farmOwner', 'user'), context: SEED_CONTEXT };
+
+    await farmProfileService
+      .updateProfile(
+        farmId,
+        {
+          address: 'محافظة بابل - المسيب',
+          capacity: 10000,
+          establishedOn: '2024-02-10',
+          farmCategory: 'MIXED',
+        },
+        actor,
+      )
+      .catch(() => undefined);
 
     const name = 'Broiler Batch A';
-    const existing = await knex('poultry_flocks').where({ organization_id: farmId, name }).first();
-    if (existing) return;
+    const existingFlock = (await knex('poultry_flocks')
+      .where({ organization_id: farmId, name })
+      .first()) as { id: string } | undefined;
 
-    await poultryFlockService.create(
-      { id: farmId, type: 'FARM' as const },
+    const flockId = existingFlock
+      ? existingFlock.id
+      : (
+          await poultryFlockService.create(
+            { id: farmId, type: 'FARM' as const },
+            {
+              name,
+              birdType: 'CHICKEN',
+              birdCount: 5000,
+              arrivalDate: '2026-02-01',
+              notes: 'Dev flock.',
+              initialBirdCount: 5000,
+              averageWeightGrams: 230,
+              targetPricePerKg: 2.5,
+            },
+            actor,
+          )
+        ).id;
+
+    const seededRow = await knex('poultry_daily_records')
+      .where({ poultry_flock_id: flockId })
+      .first();
+    if (seededRow) return;
+
+    await poultryDailyRecordService.create(
+      farmId,
+      flockId,
       {
-        name,
-        birdType: 'CHICKEN',
-        birdCount: 5000,
-        arrivalDate: '2026-02-01',
-        notes: 'Dev flock.',
+        recordDate: '2026-02-01',
+        feedKg: 240,
+        waterLiters: 2000,
+        appetite: 'GOOD',
+        activity: 'ACTIVE',
+        mortalityCount: 20,
+        mortalityCause: 'برد',
+        treatment: 'فيتامينات + أملاح',
+        expenseAmount: 850,
+        averageWeightGrams: 230,
       },
-      { actorUserId: must(userIdsByKey, 'farmOwner', 'user'), context: SEED_CONTEXT },
+      actor,
+    );
+
+    await farmExpenseService.create(
+      farmId,
+      {
+        category: 'FEED',
+        amount: 250000,
+        description: 'شراء علف مركز للدفعة.',
+        spentOn: '2026-02-02',
+        poultryFlockId: flockId,
+      },
+      actor,
+    );
+    await farmExpenseService.create(
+      farmId,
+      {
+        category: 'MEDICINE',
+        amount: 75000,
+        description: 'أدوية وفيتامينات.',
+        spentOn: '2026-02-02',
+      },
+      actor,
+    );
+
+    await poultryHealthEventService.create(
+      farmId,
+      flockId,
+      {
+        kind: 'VACCINATION',
+        name: 'نيوكاسل',
+        dose: '1 مل',
+        eventDate: '2026-02-05',
+        coverageCount: 4980,
+        nextDueDate: '2026-03-05',
+        status: 'DONE',
+      },
+      actor,
+    );
+
+    await farmAppointmentService.create(
+      farmId,
+      {
+        title: 'زيارة الطبيب المشرف',
+        description: 'زيارة دورية لمتابعة صحة القطيع',
+        category: 'VET_VISIT',
+        scheduledFor: '2026-02-12',
+        poultryFlockId: flockId,
+      },
+      actor,
+    );
+
+    await poultryCaseService.create(
+      farmId,
+      flockId,
+      {
+        animalTag: 'A-01',
+        sex: 'FEMALE',
+        diagnosis: 'ضعف عام',
+        treatment: 'فيتامينات',
+        startedOn: '2026-02-06',
+        nextFollowupOn: '2026-02-09',
+      },
+      actor,
     );
   }
 

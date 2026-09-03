@@ -15,13 +15,15 @@ import { createAnimalRouter } from '../modules/animals/presentation/animal.route
 import {
   createAdminAnimalPublicationRouter,
   createAnimalPublicationRouter,
+  createAnimalTransferRequestRouter,
   createPublicPublicationRouter,
+  createTransferRequestRouter,
 } from '../modules/animals/index.js';
 import {
   createClinicalVeterinaryRouter,
   createOwnerMedicalRouter,
 } from '../modules/veterinary-care/index.js';
-import { createFarmRouter } from '../modules/farms/index.js';
+import { createFarmRouter, createPoultryOpsRouter } from '../modules/farms/index.js';
 import { createVeterinaryStoreRouter } from '../modules/veterinary-store/index.js';
 import {
   createChatRouter,
@@ -80,6 +82,13 @@ export function createApiRouter(c: Container): Router {
   // --- Phase 4: animals & ownership ------------------------------
   router.use('/animals', createAnimalRouter(c));
 
+  // --- Animal ownership transfer requests (request/acceptance) --
+  // Create extends `/animals/:animalId/transfer-requests`; "my requests"
+  // (sent/received) + accept/reject/cancel live at `/animal-transfer-requests`
+  // (a literal `/animals/sent` segment would be shadowed by `/animals/:animalId`).
+  router.use('/animals', createAnimalTransferRequestRouter(c));
+  router.use('/animal-transfer-requests', createTransferRequestRouter(c));
+
   // --- Phase 5: veterinary care & medical records ---------------
   // Clinic-facing routes extend `/organizations/:organizationId/...`; the
   // owner-facing read routes extend `/animals/:animalId/...`. Both are mounted
@@ -91,6 +100,11 @@ export function createApiRouter(c: Container): Router {
   // Farm-ID join flow + poultry CRUD extend `/organizations/...`; the farm
   // organization itself (create / approve / members / supervisors) is Phase 3.
   router.use('/organizations', createFarmRouter(c));
+
+  // Poultry Farm operations (Farm Details screen): daily records + weekly/batch
+  // summaries, expenses, treatments & vaccinations, appointments, cases, and the
+  // farm-profile header. Extends `/organizations/:organizationId/...`.
+  router.use('/organizations', createPoultryOpsRouter(c));
 
   // --- Phase 7: animal lifecycle publications (Lost/Adoption/Mating) ---
   // Owner create/read extends `/animals/:animalId/publications`; the public

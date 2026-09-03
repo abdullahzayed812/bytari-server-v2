@@ -3,7 +3,7 @@ import { StatusCodes } from 'http-status-codes';
 import { pageMeta } from '../../../shared/http/pagination.js';
 import { sendSuccess } from '../../../shared/http/response.js';
 import { validatedBody, validatedParams, validatedQuery } from '../../../shared/http/validate.js';
-import { auditContextFromRequest, type AuditContextResult } from '../../audit/audit-context.js';
+import { auditContextFromRequest } from '../../audit/audit-context.js';
 import { requireAuth } from '../../auth/authenticate.middleware.js';
 import type { AnimalPublicationService } from '../application/animal-publication.service.js';
 import type {

@@ -51,6 +51,7 @@ export class PoultryFlockService {
     FarmPolicy.assertFarmOrganization(org);
 
     const flock = await this.db.transaction(async (tx) => {
+      const batchNumber = await this.flocks.nextBatchNumber(org.id, tx);
       const created = await this.flocks.create(
         {
           organizationId: org.id,
@@ -60,6 +61,11 @@ export class PoultryFlockService {
           arrivalDate: input.arrivalDate,
           notes: input.notes ?? null,
           createdByUserId: actor.actorUserId,
+          batchNumber,
+          initialBirdCount: input.initialBirdCount ?? input.birdCount,
+          averageWeightGrams: input.averageWeightGrams ?? null,
+          targetPricePerKg: input.targetPricePerKg ?? null,
+          expectedSaleDate: input.expectedSaleDate ?? null,
         },
         tx,
       );

@@ -30,158 +30,23 @@ async function ownershipRows(animalId: string): Promise<
     .select('owner_user_id', 'started_at', 'ended_at', 'transferred_by');
 }
 
-describe('ownership transfer', () => {
-  it('lets the current owner transfer to another active user', async () => {
-    const owner = await registerUser(app);
-    const recipient = await registerUser(app);
-    const animal = await createAnimal(app, owner.accessToken);
-
-    const res = await request(app)
-      .post(`/api/v1/animals/${animal.id}/ownership/transfer`)
-      .set(bearer(owner.accessToken))
-      .send({ toUserId: recipient.id, reason: 'moving abroad' });
-
-    expect(res.status).toBe(200);
-    expect(res.body.data).toMatchObject({
-      ownerUserId: recipient.id,
-      isCurrent: true,
-      transferReason: 'moving abroad',
-    });
-
-    // history: old row closed, new row open — exactly one current
-    const rows = await ownershipRows(animal.id);
-    expect(rows).toHaveLength(2);
-    expect(rows[0]).toMatchObject({ owner_user_id: owner.id });
-    expect(rows[0]?.ended_at).not.toBeNull();
-    expect(rows[1]).toMatchObject({ owner_user_id: recipient.id, ended_at: null });
-    const current = rows.filter((r) => r.ended_at === null);
-    expect(current).toHaveLength(1);
-
-    // the animal now belongs to the recipient
-    const asRecipient = await request(app)
-      .get(`/api/v1/animals/${animal.id}`)
-      .set(bearer(recipient.accessToken));
-    expect(asRecipient.status).toBe(200);
-    expect(asRecipient.body.data.currentOwnerUserId).toBe(recipient.id);
-
-    // and no longer to the previous owner
-    const asOldOwner = await request(app)
-      .get(`/api/v1/animals/${animal.id}`)
-      .set(bearer(owner.accessToken));
-    expect(asOldOwner.status).toBe(404);
-  });
-
-  it('lets an ADMIN transfer any animal', async () => {
-    const owner = await registerUser(app);
-    const recipient = await registerUser(app);
-    const admin = await registerAdmin(app);
-    const animal = await createAnimal(app, owner.accessToken);
-
-    const res = await request(app)
-      .post(`/api/v1/animals/${animal.id}/ownership/transfer`)
-      .set(bearer(admin.accessToken))
-      .send({ toUserId: recipient.id });
-    expect(res.status).toBe(200);
-    expect(res.body.data.ownerUserId).toBe(recipient.id);
-  });
-
-  it('does not let a non-owner initiate a transfer (404, no state change)', async () => {
-    const owner = await registerUser(app);
-    const attacker = await registerUser(app);
-    const animal = await createAnimal(app, owner.accessToken);
-
-    const res = await request(app)
-      .post(`/api/v1/animals/${animal.id}/ownership/transfer`)
-      .set(bearer(attacker.accessToken))
-      .send({ toUserId: attacker.id });
-    expect(res.status).toBe(404);
-
-    const rows = await ownershipRows(animal.id);
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ owner_user_id: owner.id, ended_at: null });
-  });
-
-  it('ignores any ownership info in the request body — current owner comes from the server', async () => {
-    const owner = await registerUser(app);
-    const recipient = await registerUser(app);
-    const stranger = await registerUser(app);
-    const animal = await createAnimal(app, owner.accessToken);
-
-    const res = await request(app)
-      .post(`/api/v1/animals/${animal.id}/ownership/transfer`)
-      .set(bearer(owner.accessToken))
-      .send({ toUserId: recipient.id, currentOwnerId: stranger.id, fromUserId: stranger.id });
-    expect(res.status).toBe(200);
-
-    const rows = await ownershipRows(animal.id);
-    expect(rows[0]?.owner_user_id).toBe(owner.id);
-    expect(rows[1]?.owner_user_id).toBe(recipient.id);
-  });
-
-  it('rejects a transfer to an unknown user with 404', async () => {
-    const owner = await registerUser(app);
-    const animal = await createAnimal(app, owner.accessToken);
-    const res = await request(app)
-      .post(`/api/v1/animals/${animal.id}/ownership/transfer`)
-      .set(bearer(owner.accessToken))
-      .send({ toUserId: '00000000-0000-0000-0000-0000000000aa' });
-    expect(res.status).toBe(404);
-    expect(await ownershipRows(animal.id)).toHaveLength(1);
-  });
-
-  it('rejects a transfer to an inactive user with 400 INVALID_TRANSFER_TARGET', async () => {
-    const owner = await registerUser(app);
-    const recipient = await registerUser(app);
-    await getTestDb()('users').where({ id: recipient.id }).update({ status: 'SUSPENDED' });
-    const animal = await createAnimal(app, owner.accessToken);
-
-    const res = await request(app)
-      .post(`/api/v1/animals/${animal.id}/ownership/transfer`)
-      .set(bearer(owner.accessToken))
-      .send({ toUserId: recipient.id });
-    expect(res.status).toBe(400);
-    expect(res.body.error.code).toBe('INVALID_TRANSFER_TARGET');
-    expect(await ownershipRows(animal.id)).toHaveLength(1);
-  });
-
-  it('rejects a transfer to the current owner with 409 INVALID_TRANSFER_TARGET', async () => {
-    const owner = await registerUser(app);
-    const animal = await createAnimal(app, owner.accessToken);
-    const res = await request(app)
-      .post(`/api/v1/animals/${animal.id}/ownership/transfer`)
-      .set(bearer(owner.accessToken))
-      .send({ toUserId: owner.id });
-    expect(res.status).toBe(409);
-    expect(res.body.error.code).toBe('INVALID_TRANSFER_TARGET');
-    expect(await ownershipRows(animal.id)).toHaveLength(1);
-  });
-
-  it('rejects a transfer on a deactivated animal with 409 ANIMAL_NOT_ACTIVE (no partial records)', async () => {
-    const owner = await registerUser(app);
-    const recipient = await registerUser(app);
-    const animal = await createAnimal(app, owner.accessToken);
-    await request(app).delete(`/api/v1/animals/${animal.id}`).set(bearer(owner.accessToken));
-
-    const res = await request(app)
-      .post(`/api/v1/animals/${animal.id}/ownership/transfer`)
-      .set(bearer(owner.accessToken))
-      .send({ toUserId: recipient.id });
-    expect(res.status).toBe(409);
-    expect(res.body.error.code).toBe('ANIMAL_NOT_ACTIVE');
-
-    const rows = await ownershipRows(animal.id);
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ owner_user_id: owner.id, ended_at: null });
-  });
-
+/**
+ * Ownership only ever moves via the request/acceptance workflow now — see
+ * `animal-transfer-requests.test.ts` for the full create/accept/reject/cancel
+ * validation matrix (self-target, inactive target, deactivated animal, ADMIN
+ * override, non-owner protection, concurrency). This file covers what remains
+ * endpoint-agnostic: the ownership ledger's own invariants, and the read-only
+ * history endpoint.
+ */
+describe('ownership ledger invariants', () => {
   it('keeps exactly one current owner across a chain of transfers', async () => {
     const u1 = await registerUser(app);
     const u2 = await registerUser(app);
     const u3 = await registerUser(app);
     const animal = await createAnimal(app, u1.accessToken);
 
-    await transferAnimal(app, u1.accessToken, animal.id, u2.id);
-    await transferAnimal(app, u2.accessToken, animal.id, u3.id);
+    await transferAnimal(app, u1.accessToken, animal.id, u2.id, u2.accessToken);
+    await transferAnimal(app, u2.accessToken, animal.id, u3.id, u3.accessToken);
 
     const rows = await ownershipRows(animal.id);
     expect(rows.map((r) => r.owner_user_id)).toEqual([u1.id, u2.id, u3.id]);
@@ -206,7 +71,7 @@ describe('ownership history', () => {
     const u1 = await registerUser(app);
     const u2 = await registerUser(app);
     const animal = await createAnimal(app, u1.accessToken);
-    await transferAnimal(app, u1.accessToken, animal.id, u2.id, 'gift');
+    await transferAnimal(app, u1.accessToken, animal.id, u2.id, u2.accessToken, 'gift');
 
     const res = await request(app)
       .get(`/api/v1/animals/${animal.id}/ownership/history`)
@@ -237,7 +102,7 @@ describe('ownership history', () => {
     const u1 = await registerUser(app);
     const u2 = await registerUser(app);
     const animal = await createAnimal(app, u1.accessToken);
-    await transferAnimal(app, u1.accessToken, animal.id, u2.id);
+    await transferAnimal(app, u1.accessToken, animal.id, u2.id, u2.accessToken);
 
     const asFormer = await request(app)
       .get(`/api/v1/animals/${animal.id}/ownership/history`)

@@ -40,10 +40,12 @@ import { AnimalRepository } from './modules/animals/infrastructure/animal.reposi
 import { AnimalOwnershipRepository } from './modules/animals/infrastructure/animal-ownership.repository.js';
 import { AnimalPublicationRepository } from './modules/animals/infrastructure/animal-publication.repository.js';
 import { PublicationInteractionRepository } from './modules/animals/infrastructure/publication-interaction.repository.js';
+import { AnimalTransferRequestRepository } from './modules/animals/infrastructure/animal-transfer-request.repository.js';
 import { AnimalService } from './modules/animals/application/animal.service.js';
 import { AnimalOwnershipService } from './modules/animals/application/animal-ownership.service.js';
 import { AnimalPublicationService } from './modules/animals/application/animal-publication.service.js';
 import { PublicationInteractionService } from './modules/animals/application/publication-interaction.service.js';
+import { AnimalTransferRequestService } from './modules/animals/application/animal-transfer-request.service.js';
 import { AnimalClinicAccessRepository } from './modules/veterinary-care/infrastructure/animal-clinic-access.repository.js';
 import { MedicalRecordRepository } from './modules/veterinary-care/infrastructure/medical-record.repository.js';
 import { VaccinationRepository } from './modules/veterinary-care/infrastructure/vaccination.repository.js';
@@ -53,8 +55,20 @@ import { VaccinationService } from './modules/veterinary-care/application/vaccin
 import { MedicalHistoryService } from './modules/veterinary-care/application/medical-history.service.js';
 import { FarmDetailsRepository } from './modules/farms/infrastructure/farm-details.repository.js';
 import { PoultryFlockRepository } from './modules/farms/infrastructure/poultry-flock.repository.js';
+import { FarmProfileRepository } from './modules/farms/infrastructure/farm-profile.repository.js';
+import { PoultryDailyRecordRepository } from './modules/farms/infrastructure/poultry-daily-record.repository.js';
+import { FarmExpenseRepository } from './modules/farms/infrastructure/farm-expense.repository.js';
+import { PoultryHealthEventRepository } from './modules/farms/infrastructure/poultry-health-event.repository.js';
+import { FarmAppointmentRepository } from './modules/farms/infrastructure/farm-appointment.repository.js';
+import { PoultryCaseRepository } from './modules/farms/infrastructure/poultry-case.repository.js';
 import { FarmJoinService } from './modules/farms/application/farm-join.service.js';
 import { PoultryFlockService } from './modules/farms/application/poultry-flock.service.js';
+import { FarmProfileService } from './modules/farms/application/farm-profile.service.js';
+import { PoultryDailyRecordService } from './modules/farms/application/poultry-daily-record.service.js';
+import { FarmExpenseService } from './modules/farms/application/farm-expense.service.js';
+import { PoultryHealthEventService } from './modules/farms/application/poultry-health-event.service.js';
+import { FarmAppointmentService } from './modules/farms/application/farm-appointment.service.js';
+import { PoultryCaseService } from './modules/farms/application/poultry-case.service.js';
 import { ProductRepository } from './modules/veterinary-store/infrastructure/product.repository.js';
 import { ProductService } from './modules/veterinary-store/application/product.service.js';
 import { ConversationRepository } from './modules/chat/infrastructure/conversation.repository.js';
@@ -164,10 +178,12 @@ export interface Container {
   animalOwnershipRepository: AnimalOwnershipRepository;
   animalPublicationRepository: AnimalPublicationRepository;
   publicationInteractionRepository: PublicationInteractionRepository;
+  animalTransferRequestRepository: AnimalTransferRequestRepository;
   animalService: AnimalService;
   animalOwnershipService: AnimalOwnershipService;
   animalPublicationService: AnimalPublicationService;
   publicationInteractionService: PublicationInteractionService;
+  animalTransferRequestService: AnimalTransferRequestService;
 
   animalClinicAccessRepository: AnimalClinicAccessRepository;
   medicalRecordRepository: MedicalRecordRepository;
@@ -179,8 +195,20 @@ export interface Container {
 
   farmDetailsRepository: FarmDetailsRepository;
   poultryFlockRepository: PoultryFlockRepository;
+  farmProfileRepository: FarmProfileRepository;
+  poultryDailyRecordRepository: PoultryDailyRecordRepository;
+  farmExpenseRepository: FarmExpenseRepository;
+  poultryHealthEventRepository: PoultryHealthEventRepository;
+  farmAppointmentRepository: FarmAppointmentRepository;
+  poultryCaseRepository: PoultryCaseRepository;
   farmJoinService: FarmJoinService;
   poultryFlockService: PoultryFlockService;
+  farmProfileService: FarmProfileService;
+  poultryDailyRecordService: PoultryDailyRecordService;
+  farmExpenseService: FarmExpenseService;
+  poultryHealthEventService: PoultryHealthEventService;
+  farmAppointmentService: FarmAppointmentService;
+  poultryCaseService: PoultryCaseService;
 
   productRepository: ProductRepository;
   productService: ProductService;
@@ -402,6 +430,18 @@ export function createContainer(deps: ContainerDeps): Container {
     logger,
   );
 
+  // --- animal ownership transfer requests (request/acceptance) -----
+  const animalTransferRequestRepository = new AnimalTransferRequestRepository(db);
+  const animalTransferRequestService = new AnimalTransferRequestService(
+    db,
+    animalTransferRequestRepository,
+    animalOwnershipService,
+    userService,
+    auditService,
+    eventBus,
+    logger,
+  );
+
   // --- veterinary care (Phase 5) -----------------------------
   const animalClinicAccessRepository = new AnimalClinicAccessRepository(db);
   const medicalRecordRepository = new MedicalRecordRepository(db);
@@ -454,6 +494,61 @@ export function createContainer(deps: ContainerDeps): Container {
   const poultryFlockService = new PoultryFlockService(
     db,
     poultryFlockRepository,
+    auditService,
+    eventBus,
+    logger,
+  );
+
+  const farmProfileRepository = new FarmProfileRepository(db);
+  const poultryDailyRecordRepository = new PoultryDailyRecordRepository(db);
+  const farmExpenseRepository = new FarmExpenseRepository(db);
+  const poultryHealthEventRepository = new PoultryHealthEventRepository(db);
+  const farmAppointmentRepository = new FarmAppointmentRepository(db);
+  const poultryCaseRepository = new PoultryCaseRepository(db);
+  const farmProfileService = new FarmProfileService(
+    db,
+    farmProfileRepository,
+    objectStorage,
+    auditService,
+    eventBus,
+    logger,
+  );
+  const poultryDailyRecordService = new PoultryDailyRecordService(
+    db,
+    poultryDailyRecordRepository,
+    poultryFlockRepository,
+    farmExpenseRepository,
+    auditService,
+    eventBus,
+    logger,
+  );
+  const farmExpenseService = new FarmExpenseService(
+    db,
+    farmExpenseRepository,
+    auditService,
+    eventBus,
+    logger,
+  );
+  const poultryHealthEventService = new PoultryHealthEventService(
+    db,
+    poultryHealthEventRepository,
+    poultryFlockRepository,
+    auditService,
+    eventBus,
+    logger,
+  );
+  const farmAppointmentService = new FarmAppointmentService(
+    db,
+    farmAppointmentRepository,
+    auditService,
+    eventBus,
+    logger,
+  );
+  const poultryCaseService = new PoultryCaseService(
+    db,
+    poultryCaseRepository,
+    poultryFlockRepository,
+    objectStorage,
     auditService,
     eventBus,
     logger,
@@ -648,10 +743,12 @@ export function createContainer(deps: ContainerDeps): Container {
     animalOwnershipRepository,
     animalPublicationRepository,
     publicationInteractionRepository,
+    animalTransferRequestRepository,
     animalService,
     animalOwnershipService,
     animalPublicationService,
     publicationInteractionService,
+    animalTransferRequestService,
     animalClinicAccessRepository,
     medicalRecordRepository,
     vaccinationRepository,
@@ -661,8 +758,20 @@ export function createContainer(deps: ContainerDeps): Container {
     medicalHistoryService,
     farmDetailsRepository,
     poultryFlockRepository,
+    farmProfileRepository,
+    poultryDailyRecordRepository,
+    farmExpenseRepository,
+    poultryHealthEventRepository,
+    farmAppointmentRepository,
+    poultryCaseRepository,
     farmJoinService,
     poultryFlockService,
+    farmProfileService,
+    poultryDailyRecordService,
+    farmExpenseService,
+    poultryHealthEventService,
+    farmAppointmentService,
+    poultryCaseService,
     productRepository,
     productService,
     conversationRepository,

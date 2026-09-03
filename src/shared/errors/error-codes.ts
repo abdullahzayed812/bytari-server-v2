@@ -42,6 +42,10 @@ export const ErrorCode = {
   ANIMAL_NOT_ACTIVE: 'ANIMAL_NOT_ACTIVE',
   /** Ownership transfer target is invalid (missing, inactive, or already the owner). */
   INVALID_TRANSFER_TARGET: 'INVALID_TRANSFER_TARGET',
+  /** An open (PENDING) transfer request already exists for this animal. */
+  TRANSFER_REQUEST_ALREADY_OPEN: 'TRANSFER_REQUEST_ALREADY_OPEN',
+  /** Accept/reject/cancel attempted on a request that is not PENDING. */
+  TRANSFER_REQUEST_NOT_PENDING: 'TRANSFER_REQUEST_NOT_PENDING',
 
   // --- Veterinary care (Phase 5) ---
   /**
@@ -55,6 +59,8 @@ export const ErrorCode = {
   INVALID_JOIN_CODE: 'INVALID_JOIN_CODE',
   /** The poultry flock is CLOSED — updates are refused. */
   POULTRY_FLOCK_NOT_ACTIVE: 'POULTRY_FLOCK_NOT_ACTIVE',
+  /** A daily record already exists for that flock + calendar day. */
+  POULTRY_DAILY_RECORD_DUPLICATE_DATE: 'POULTRY_DAILY_RECORD_DUPLICATE_DATE',
 
   // --- Animal publications / lifecycle (Phase 7) ---
   /** A moderation action was attempted on a publication that is not PENDING. */

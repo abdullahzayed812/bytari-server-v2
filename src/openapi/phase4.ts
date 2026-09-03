@@ -5,7 +5,7 @@
  * Access to an individual animal is OWNERSHIP-scoped: the current owner (the one
  * open row in `animal_ownerships`) or an ADMIN. Cross-user access is hidden as
  * `404` rather than `403`. The initial owner is always the creator — the client
- * cannot choose it — and ownership is only ever moved via the transfer endpoint.
+ * cannot choose it — and ownership only ever moves once a transfer request is accepted by its recipient.
  */
 
 type Obj = Record<string, unknown>;
@@ -138,14 +138,62 @@ const schemas: Obj = {
       ageEstimate: { type: 'string', enum: ageEstimateEnum, nullable: true },
     },
   },
-  TransferOwnershipRequest: {
+  CreateTransferRequestRequest: {
     type: 'object',
     required: ['toUserId'],
     description:
-      'The current owner is taken from the server, never the request body. `toUserId` must be an existing active user who is not already the current owner.',
+      'The current owner (from the server, never the request body) proposes a transfer. `toUserId` ' +
+      'must be an existing active user who is not already the current owner. Ownership does not move ' +
+      'until the recipient accepts.',
     properties: {
       toUserId: { type: 'string', format: 'uuid' },
       reason: { type: 'string', maxLength: 500 },
+    },
+  },
+  RejectTransferRequestRequest: {
+    type: 'object',
+    properties: {
+      reason: { type: 'string', maxLength: 500 },
+    },
+  },
+  AnimalTransferRequest: {
+    type: 'object',
+    description:
+      'A proposed ownership transfer awaiting the recipient’s response. Accepting it performs the ' +
+      'actual ownership transfer (a new `OwnershipRecord` interval); rejecting/cancelling never does.',
+    properties: {
+      id: { type: 'string', format: 'uuid' },
+      animal: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          name: { type: 'string' },
+          species: { type: 'string', enum: speciesEnum },
+          breed: { type: 'string', nullable: true },
+        },
+      },
+      fromUser: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          firstName: { type: 'string' },
+          lastName: { type: 'string' },
+        },
+      },
+      toUser: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          firstName: { type: 'string' },
+          lastName: { type: 'string' },
+        },
+      },
+      status: { type: 'string', enum: ['PENDING', 'ACCEPTED', 'REJECTED', 'CANCELLED'] },
+      reason: { type: 'string', nullable: true },
+      responseReason: { type: 'string', nullable: true },
+      respondedAt: { type: 'string', format: 'date-time', nullable: true },
+      createdAt: { type: 'string', format: 'date-time' },
+      updatedAt: { type: 'string', format: 'date-time' },
     },
   },
 };
@@ -235,28 +283,156 @@ const paths: Obj = {
       },
     },
   },
-  '/animals/{animalId}/ownership/transfer': {
+  '/animals/{animalId}/transfer-requests': {
     post: {
       tags: ['Animals · Ownership'],
-      summary: 'Transfer ownership to another user (current owner or ADMIN)',
+      summary: 'Propose an ownership transfer to another user (current owner or ADMIN)',
       description:
-        'Closes the current ownership interval and opens a new one for `toUserId` in a single ' +
-        'transaction. The animal must be ACTIVE; the target must be an existing active user and ' +
-        'not the current owner.',
+        'Starts PENDING. Ownership does not move until the recipient calls the `accept` action below. ' +
+        'At most one open (PENDING) request per animal.',
       security: bearer,
       parameters: [animalIdParam],
       requestBody: {
         required: true,
         content: {
-          'application/json': { schema: { $ref: '#/components/schemas/TransferOwnershipRequest' } },
+          'application/json': {
+            schema: { $ref: '#/components/schemas/CreateTransferRequestRequest' },
+          },
+        },
+      },
+      responses: {
+        '201': ok(
+          'Transfer request created (PENDING)',
+          dataOf({ $ref: '#/components/schemas/AnimalTransferRequest' }),
+        ),
+        ...errs(400, 401, 404, 409, 422),
+      },
+    },
+  },
+  '/animal-transfer-requests/sent': {
+    get: {
+      tags: ['Animals · Ownership'],
+      summary: 'Transfer requests I created, paginated',
+      security: bearer,
+      responses: {
+        '200': ok(
+          'Sent transfer requests',
+          dataOf({ type: 'array', items: { $ref: '#/components/schemas/AnimalTransferRequest' } }),
+        ),
+        ...errs(401),
+      },
+    },
+  },
+  '/animal-transfer-requests/received': {
+    get: {
+      tags: ['Animals · Ownership'],
+      summary: 'Transfer requests proposing me as the new owner, paginated',
+      security: bearer,
+      responses: {
+        '200': ok(
+          'Received transfer requests',
+          dataOf({ type: 'array', items: { $ref: '#/components/schemas/AnimalTransferRequest' } }),
+        ),
+        ...errs(401),
+      },
+    },
+  },
+  '/animal-transfer-requests/{requestId}': {
+    get: {
+      tags: ['Animals · Ownership'],
+      summary: 'One transfer request (sender or recipient only — 404 otherwise)',
+      security: bearer,
+      parameters: [
+        {
+          name: 'requestId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string', format: 'uuid' },
+        },
+      ],
+      responses: {
+        '200': ok(
+          'Transfer request',
+          dataOf({ $ref: '#/components/schemas/AnimalTransferRequest' }),
+        ),
+        ...errs(401, 404),
+      },
+    },
+  },
+  '/animal-transfer-requests/{requestId}/accept': {
+    post: {
+      tags: ['Animals · Ownership'],
+      summary: 'Accept a transfer request (recipient only) — ownership actually moves',
+      description:
+        'Atomically resolves the request to ACCEPTED and performs the same ownership transfer as the ' +
+        'legacy instant-transfer flow (new `OwnershipRecord` interval, `ANIMAL_OWNERSHIP_TRANSFERRED` audit).',
+      security: bearer,
+      parameters: [
+        {
+          name: 'requestId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string', format: 'uuid' },
+        },
+      ],
+      responses: {
+        '200': ok(
+          'Request accepted; ownership transferred',
+          dataOf({ $ref: '#/components/schemas/AnimalTransferRequest' }),
+        ),
+        ...errs(401, 403, 404, 409),
+      },
+    },
+  },
+  '/animal-transfer-requests/{requestId}/reject': {
+    post: {
+      tags: ['Animals · Ownership'],
+      summary: 'Reject a transfer request (recipient only) — ownership is not touched',
+      security: bearer,
+      parameters: [
+        {
+          name: 'requestId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string', format: 'uuid' },
+        },
+      ],
+      requestBody: {
+        required: false,
+        content: {
+          'application/json': {
+            schema: { $ref: '#/components/schemas/RejectTransferRequestRequest' },
+          },
         },
       },
       responses: {
         '200': ok(
-          'New current ownership record',
-          dataOf({ $ref: '#/components/schemas/OwnershipRecord' }),
+          'Request rejected',
+          dataOf({ $ref: '#/components/schemas/AnimalTransferRequest' }),
         ),
-        ...errs(400, 401, 404, 409, 422),
+        ...errs(401, 403, 404, 409),
+      },
+    },
+  },
+  '/animal-transfer-requests/{requestId}/cancel': {
+    post: {
+      tags: ['Animals · Ownership'],
+      summary: 'Cancel a transfer request (sender only)',
+      security: bearer,
+      parameters: [
+        {
+          name: 'requestId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string', format: 'uuid' },
+        },
+      ],
+      responses: {
+        '200': ok(
+          'Request cancelled',
+          dataOf({ $ref: '#/components/schemas/AnimalTransferRequest' }),
+        ),
+        ...errs(401, 403, 404, 409),
       },
     },
   },

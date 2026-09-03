@@ -3,7 +3,10 @@ import { NotFoundError } from '../../../shared/errors/app-error.js';
 import type { EventBus } from '../../../shared/events/index.js';
 import type { AuditContext } from '../../audit/audit.types.js';
 import { PublicationPolicy } from '../domain/publication.policy.js';
-import type { CreateInteractionInput, PublicationInteraction } from '../domain/publication.types.js';
+import type {
+  CreateInteractionInput,
+  PublicationInteraction,
+} from '../domain/publication.types.js';
 import type { AnimalPublicationService } from './animal-publication.service.js';
 import type { PublicationInteractionRepository } from '../infrastructure/publication-interaction.repository.js';
 

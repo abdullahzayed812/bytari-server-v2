@@ -90,9 +90,3 @@ export const listAnimalsQuerySchema = paginationQuerySchema.extend({
   search: z.string().trim().min(1).max(120).optional(),
 });
 export type ListAnimalsQuery = z.infer<typeof listAnimalsQuerySchema>;
-
-export const transferOwnershipBodySchema = z.object({
-  toUserId: z.string().uuid(),
-  reason: z.string().trim().max(500).optional(),
-});
-export type TransferOwnershipBody = z.infer<typeof transferOwnershipBodySchema>;

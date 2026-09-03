@@ -246,7 +246,7 @@ describe('medical history timeline — owner-facing', () => {
     await seedEntries(vet.accessToken, clinic.id, animal.id);
     const newOwner = await registerUser(app);
 
-    await transferAnimal(app, petOwner.accessToken, animal.id, newOwner.id);
+    await transferAnimal(app, petOwner.accessToken, animal.id, newOwner.id, newOwner.accessToken);
 
     const oldOwner = await request(app)
       .get(ownerHistory(animal.id))
