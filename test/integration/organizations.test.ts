@@ -100,7 +100,7 @@ describe('owner veterinarian requirement', () => {
       .expect(201);
   });
 
-  it('a non-veterinarian CANNOT create a CLINIC or FARM (403)', async () => {
+  it('a non-veterinarian CANNOT create a CLINIC (403) but CAN create a FARM (201)', async () => {
     const user = await registerUser(app);
     const clinic = await request(app)
       .post('/api/v1/organizations')
@@ -109,11 +109,13 @@ describe('owner veterinarian requirement', () => {
     expect(clinic.status).toBe(403);
     expect(clinic.body.error.code).toBe('VETERINARIAN_APPROVAL_REQUIRED');
 
+    // A Pet Owner may create their own poultry farm (still PENDING; org-scoped
+    // OWNER only). Only CLINIC keeps the approved-vet-owner requirement.
     await request(app)
       .post('/api/v1/organizations')
       .set(bearer(user.accessToken))
       .send({ type: 'FARM', name: 'Org F' })
-      .expect(403);
+      .expect(201);
   });
 
   it('a PENDING veterinarian CANNOT create a CLINIC (403)', async () => {
@@ -125,28 +127,25 @@ describe('owner veterinarian requirement', () => {
       .expect(403);
   });
 
-  it('a REJECTED veterinarian CANNOT create a FARM (403)', async () => {
+  it('a REJECTED veterinarian CANNOT create a CLINIC (403)', async () => {
     const rejected = await registerRejectedVet(app);
     const res = await request(app)
       .post('/api/v1/organizations')
       .set(bearer(rejected.accessToken))
-      .send({ type: 'FARM', name: 'Org F' });
+      .send({ type: 'CLINIC', name: 'Org C' });
     expect(res.status).toBe(403);
     expect(res.body.error.code).toBe('VETERINARIAN_APPROVAL_REQUIRED');
   });
 
-  it('a non-veterinarian CAN create a VETERINARY_OFFICE and VETERINARY_STORE', async () => {
+  it('a non-veterinarian CAN create a FARM, VETERINARY_OFFICE and VETERINARY_STORE', async () => {
     const user = await registerUser(app);
-    await request(app)
-      .post('/api/v1/organizations')
-      .set(bearer(user.accessToken))
-      .send({ type: 'VETERINARY_OFFICE', name: 'Office' })
-      .expect(201);
-    await request(app)
-      .post('/api/v1/organizations')
-      .set(bearer(user.accessToken))
-      .send({ type: 'VETERINARY_STORE', name: 'Store' })
-      .expect(201);
+    for (const type of ['FARM', 'VETERINARY_OFFICE', 'VETERINARY_STORE']) {
+      await request(app)
+        .post('/api/v1/organizations')
+        .set(bearer(user.accessToken))
+        .send({ type, name: `Org ${type}` })
+        .expect(201);
+    }
   });
 
   it('the server ignores a client-supplied owner / status (no escalation)', async () => {

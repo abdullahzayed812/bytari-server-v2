@@ -78,12 +78,6 @@ export interface ContentDTO {
   authorName: string | null;
   status: ContentStatus;
   publishedAt: string | null;
-  /**
-   * Resolved URL of the item's COVER file (public R2 URL or a signed fallback),
-   * or `null` when there is no cover. Same convention as `content_tips`
-   * `coverImageUrl` — the client never builds it.
-   */
-  coverImageUrl: string | null;
   categories: Category[];
   files: AdminContentFileDTO[] | PublicContentFileDTO[];
   createdByUserId: string | null;

@@ -12,6 +12,7 @@ import { phase14OpenApi } from './phase14.js';
 import { phase15OpenApi } from './phase15.js';
 import { advertisementsOpenApi } from './advertisements.js';
 import { tipsOpenApi } from './tips.js';
+import { newsOpenApi } from './news.js';
 import { poultryOpsOpenApi } from './poultryOps.js';
 import { phase17OpenApi } from './phase17.js';
 
@@ -88,6 +89,7 @@ export function buildOpenApiDocument(version: string): OpenApiDocument {
       ...phase15OpenApi.tags,
       ...advertisementsOpenApi.tags,
       ...tipsOpenApi.tags,
+      ...newsOpenApi.tags,
       ...poultryOpsOpenApi.tags,
       ...phase17OpenApi.tags,
     ],
@@ -106,6 +108,7 @@ export function buildOpenApiDocument(version: string): OpenApiDocument {
       ...phase15OpenApi.paths,
       ...advertisementsOpenApi.paths,
       ...tipsOpenApi.paths,
+      ...newsOpenApi.paths,
       ...poultryOpsOpenApi.paths,
       ...phase17OpenApi.paths,
       '/health': {
@@ -168,6 +171,7 @@ export function buildOpenApiDocument(version: string): OpenApiDocument {
         ...phase15OpenApi.schemas,
         ...advertisementsOpenApi.schemas,
         ...tipsOpenApi.schemas,
+        ...newsOpenApi.schemas,
         ...poultryOpsOpenApi.schemas,
         ...phase17OpenApi.schemas,
       },

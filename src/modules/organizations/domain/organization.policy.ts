@@ -9,11 +9,17 @@ import type { OrganizationType } from './organization.types.js';
  * new types / rules arrive.
  */
 
-/** Organization types whose owner MUST be a globally APPROVED veterinarian. */
-const VET_OWNER_REQUIRED: ReadonlySet<OrganizationType> = new Set<OrganizationType>([
-  'CLINIC',
-  'FARM',
-]);
+/**
+ * Organization types whose owner MUST be a globally APPROVED veterinarian.
+ *
+ * FARM is intentionally NOT here: a Pet Owner (any ACTIVE user) can create
+ * their own poultry farm through the "Add Poultry Farm" form. The farm is still
+ * created as `PENDING` and reviewed by an admin before it goes ACTIVE, and the
+ * creator is only ever an organization-scoped OWNER — never a new global role.
+ * Joining an *existing* farm as a VETERINARIAN member still requires approval
+ * (`assertCanHoldRole` / the join-code route guard).
+ */
+const VET_OWNER_REQUIRED: ReadonlySet<OrganizationType> = new Set<OrganizationType>(['CLINIC']);
 
 /** Organization types that carry a Farm-ID style join code. */
 const HAS_JOIN_CODE: ReadonlySet<OrganizationType> = new Set<OrganizationType>(['FARM']);

@@ -128,6 +128,17 @@ export const AuditAction = {
   TIP_OF_DAY_SET: 'TIP_OF_DAY_SET',
   TIP_OF_DAY_CLEARED: 'TIP_OF_DAY_CLEARED',
 
+  // --- News (structured news type inside the content module) ---
+  NEWS_CREATED: 'NEWS_CREATED',
+  NEWS_UPDATED: 'NEWS_UPDATED',
+  NEWS_PUBLISHED: 'NEWS_PUBLISHED',
+  NEWS_ARCHIVED: 'NEWS_ARCHIVED',
+  NEWS_DELETED: 'NEWS_DELETED',
+  NEWS_RESTORED: 'NEWS_RESTORED',
+  NEWS_COVER_UPDATED: 'NEWS_COVER_UPDATED',
+  NEWS_GALLERY_UPDATED: 'NEWS_GALLERY_UPDATED',
+  NEWS_FEATURED_SET: 'NEWS_FEATURED_SET',
+
   // --- Notifications & FCM (Phase 15) ---
   // Normal notification creation / read is NOT audited — only device-token and
   // administrative actions.
@@ -179,6 +190,7 @@ export const AuditEntityType = {
   CONTENT_FILE: 'CONTENT_FILE',
   CONTENT_CATEGORY: 'CONTENT_CATEGORY',
   TIP: 'TIP',
+  NEWS: 'NEWS',
   NOTIFICATION: 'NOTIFICATION',
   DEVICE_PUSH_TOKEN: 'DEVICE_PUSH_TOKEN',
   AD_CAMPAIGN: 'AD_CAMPAIGN',

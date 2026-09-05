@@ -6,34 +6,32 @@ const approvedVet = { status: 'ACTIVE', veterinarianStatus: 'APPROVED' };
 const plainUser = { status: 'ACTIVE', veterinarianStatus: 'NOT_APPLIED' };
 
 describe('OrganizationPolicy.assertCanCreate', () => {
-  it('allows an approved vet to create CLINIC / FARM', () => {
+  it('allows an approved vet to create a CLINIC', () => {
     expect(() => OrganizationPolicy.assertCanCreate('CLINIC', approvedVet)).not.toThrow();
-    expect(() => OrganizationPolicy.assertCanCreate('FARM', approvedVet)).not.toThrow();
   });
 
-  it('blocks a non-approved vet from CLINIC / FARM with VETERINARIAN_APPROVAL_REQUIRED', () => {
+  it('blocks a non-approved vet from a CLINIC with VETERINARIAN_APPROVAL_REQUIRED', () => {
     const cases = [
       plainUser,
       { status: 'ACTIVE', veterinarianStatus: 'PENDING' },
       { status: 'ACTIVE', veterinarianStatus: 'REJECTED' },
     ];
     for (const user of cases) {
-      for (const type of ['CLINIC', 'FARM'] as const) {
-        try {
-          OrganizationPolicy.assertCanCreate(type, user);
-          throw new Error('expected throw');
-        } catch (err) {
-          expect(err).toBeInstanceOf(AppError);
-          expect((err as AppError).code).toBe('VETERINARIAN_APPROVAL_REQUIRED');
-          expect((err as AppError).statusCode).toBe(403);
-        }
+      try {
+        OrganizationPolicy.assertCanCreate('CLINIC', user);
+        throw new Error('expected throw');
+      } catch (err) {
+        expect(err).toBeInstanceOf(AppError);
+        expect((err as AppError).code).toBe('VETERINARIAN_APPROVAL_REQUIRED');
+        expect((err as AppError).statusCode).toBe(403);
       }
     }
   });
 
-  it('allows anyone to create VETERINARY_OFFICE / VETERINARY_STORE', () => {
-    expect(() => OrganizationPolicy.assertCanCreate('VETERINARY_OFFICE', plainUser)).not.toThrow();
-    expect(() => OrganizationPolicy.assertCanCreate('VETERINARY_STORE', plainUser)).not.toThrow();
+  it('allows anyone (incl. a Pet Owner) to create FARM / VETERINARY_OFFICE / VETERINARY_STORE', () => {
+    for (const type of ['FARM', 'VETERINARY_OFFICE', 'VETERINARY_STORE'] as const) {
+      expect(() => OrganizationPolicy.assertCanCreate(type, plainUser)).not.toThrow();
+    }
   });
 
   it('blocks a non-active account regardless of type', () => {
@@ -71,7 +69,7 @@ describe('OrganizationPolicy other rules', () => {
 
   it('ownerMustBeApprovedVeterinarian / hasJoinCode reflect the type table', () => {
     expect(OrganizationPolicy.ownerMustBeApprovedVeterinarian('CLINIC')).toBe(true);
-    expect(OrganizationPolicy.ownerMustBeApprovedVeterinarian('FARM')).toBe(true);
+    expect(OrganizationPolicy.ownerMustBeApprovedVeterinarian('FARM')).toBe(false);
     expect(OrganizationPolicy.ownerMustBeApprovedVeterinarian('VETERINARY_OFFICE')).toBe(false);
     expect(OrganizationPolicy.ownerMustBeApprovedVeterinarian('VETERINARY_STORE')).toBe(false);
     expect(OrganizationPolicy.hasJoinCode('FARM')).toBe(true);

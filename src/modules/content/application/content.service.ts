@@ -108,21 +108,12 @@ export class ContentService {
     return this.assemble(content, cats, fileList, admin);
   }
 
-  private async resolveCoverUrl(fileList: ContentFile[]): Promise<string | null> {
-    const cover = fileList.find((f) => f.kind === 'COVER' && f.deletedAt === null);
-    if (!cover) return null;
-    return (
-      this.storage.getPublicUrl(cover.storageKey) ??
-      (await this.storage.getSignedUrl(cover.storageKey, { operation: 'get', expiresIn: 3600 }))
-    );
-  }
-
-  private async assemble(
+  private assemble(
     content: Content,
     cats: Category[],
     fileList: ContentFile[],
     admin: boolean,
-  ): Promise<ContentDTO> {
+  ): ContentDTO {
     return {
       id: content.id,
       type: content.type,
@@ -132,7 +123,6 @@ export class ContentService {
       authorName: content.authorName,
       status: content.status,
       publishedAt: content.publishedAt,
-      coverImageUrl: await this.resolveCoverUrl(fileList),
       categories: cats,
       files: admin ? fileList.map(toAdminFileDTO) : fileList.map(toPublicFileDTO),
       createdByUserId: content.createdByUserId,

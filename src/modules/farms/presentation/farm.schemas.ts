@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { paginationQuerySchema } from '../../../shared/http/pagination.js';
 import { POULTRY_BIRD_TYPES, POULTRY_FLOCK_STATUSES } from '../domain/farm.constants.js';
+import { FARM_CATEGORIES } from '../domain/poultry-ops.constants.js';
 
 /** `YYYY-MM-DD`, a real calendar date, not in the future. */
 const pastOrTodayDate = z
@@ -32,6 +33,33 @@ export const joinFarmBodySchema = z.object({
     .transform((s) => s.toUpperCase()),
 });
 export type JoinFarmBody = z.infer<typeof joinFarmBodySchema>;
+
+// --- "Add Poultry Farm" creation form -------------------------------
+
+const shortText = (max: number): z.ZodString => z.string().trim().min(1).max(max);
+const capacityCount = z.coerce.number().int().min(0).max(100_000_000);
+
+/**
+ * `POST /organizations/farms` — the domain-specific farm creation form. The
+ * user never chooses an organization type; the backend creates a FARM
+ * organization + `farm_details` + the OWNER membership in one transaction and
+ * starts it as `PENDING` (admin review before activation). Required per the
+ * reference design: name, location, governorate, production type.
+ */
+export const createFarmBodySchema = z.object({
+  name: shortText(160),
+  location: shortText(200),
+  governorate: shortText(120),
+  farmCategory: z.enum(FARM_CATEGORIES),
+  description: z.string().trim().min(1).max(2000).nullable().optional(),
+  address: shortText(500).nullable().optional(),
+  capacity: capacityCount.nullable().optional(),
+  currentBirdCount: capacityCount.nullable().optional(),
+  contactName: shortText(160).nullable().optional(),
+  contactPhone: z.string().trim().min(3).max(40).nullable().optional(),
+  contactEmail: z.string().trim().max(255).email().nullable().optional(),
+});
+export type CreateFarmBody = z.infer<typeof createFarmBodySchema>;
 
 // --- poultry flocks --------------------------------------------
 

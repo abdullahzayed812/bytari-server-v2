@@ -8,6 +8,7 @@ import { FarmController } from './farm.controller.js';
 import { PoultryController } from './poultry.controller.js';
 import { createFarmMiddleware } from './farm.middleware.js';
 import {
+  createFarmBodySchema,
   createPoultryFlockBodySchema,
   flockParamSchema,
   joinFarmBodySchema,
@@ -28,7 +29,7 @@ import {
  *   …/organizations/:organizationId/poultry/flocks[/:flockId]    (poultry CRUD)
  */
 export function createFarmRouter(c: Container): Router {
-  const farmCtrl = new FarmController(c.farmJoinService);
+  const farmCtrl = new FarmController(c.farmJoinService, c.organizationService);
   const poultryCtrl = new PoultryController(c.poultryFlockService);
   const { requireApprovedVeterinarian } = createAuthorizationMiddleware(c.authorizationService);
   const { withOrganization, authorizeOrg } = createOrganizationMiddleware({
@@ -39,6 +40,12 @@ export function createFarmRouter(c: Container): Router {
 
   const r = Router();
   r.use(c.authenticate);
+
+  // --- "Add Poultry Farm" (domain-specific creation form) ------
+  // Any ACTIVE user (a Pet Owner included) creates their own farm; the org is
+  // created PENDING and the caller becomes its OWNER. No `authorizeOrg` — there
+  // is no organization yet; `OrganizationService.create` runs the create policy.
+  r.post('/farms', validate({ body: createFarmBodySchema }), asyncHandler(farmCtrl.createFarm));
 
   // --- Farm-ID join flow ---------------------------------------
   r.post(

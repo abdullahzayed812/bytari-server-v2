@@ -118,7 +118,7 @@ export async function runDevSeed(knex: Knex, deps: RunDevSeedDeps = {}): Promise
   const { poultryFlockService, productService, contentService, passwordService } = container;
   const { poultryDailyRecordService, farmExpenseService, poultryHealthEventService } = container;
   const { farmAppointmentService, poultryCaseService, farmProfileService } = container;
-  const { tipService } = container;
+  const { tipService, newsService } = container;
   const { advertisementService, objectStorage } = container;
 
   /** Non-null lookup into one of the id maps built below. */
@@ -421,6 +421,7 @@ export async function runDevSeed(knex: Knex, deps: RunDevSeedDeps = {}): Promise
   await seedWelcomeArticle();
   await seedAdvertisements();
   await seedTips();
+  await seedNews();
 
   logger.info(
     {
@@ -498,10 +499,16 @@ export async function runDevSeed(knex: Knex, deps: RunDevSeedDeps = {}): Promise
       .updateProfile(
         farmId,
         {
-          address: 'محافظة بابل - المسيب',
+          location: 'بابل - المسيب',
+          governorate: 'بابل',
+          address: 'محافظة بابل - المسيب، قرب الطريق العام',
           capacity: 10000,
+          currentBirdCount: 8500,
           establishedOn: '2024-02-10',
           farmCategory: 'MIXED',
+          contactName: 'مالك المزرعة',
+          contactPhone: '+9647700000000',
+          contactEmail: 'farm.owner@example.test',
         },
         actor,
       )
@@ -913,6 +920,126 @@ export async function runDevSeed(knex: Knex, deps: RunDevSeedDeps = {}): Promise
       });
       await tipService.publishTip(actor, created.id);
       if (tip.tipOfDay) await tipService.setTipOfDay(actor, created.id, true);
+    }
+  }
+
+  async function seedNews(): Promise<void> {
+    const actor = { actorUserId: adminId, context: SEED_CONTEXT };
+
+    const categories: Record<string, string> = {};
+    for (const [slug, name] of [
+      ['prices-markets', 'الأسعار والأسواق'],
+      ['husbandry', 'التربية والتغذية'],
+      ['disease-prevention', 'الأمراض والوقاية'],
+    ] as const) {
+      const found = (await knex('categories').where({ slug }).whereNull('deleted_at').first()) as
+        { id: string } | undefined;
+      let id: string | undefined = found?.id;
+      if (!id) {
+        const inserted: Array<{ id: string }> = await knex('categories')
+          .insert({ slug, name, created_by_user_id: adminId })
+          .returning('id');
+        id = inserted[0]?.id;
+      }
+      if (!id) throw new Error(`dev-seed: failed to resolve category "${slug}"`);
+      categories[slug] = id;
+    }
+
+    const items: Array<{
+      title: string;
+      summary: string;
+      source: string;
+      isFeatured: boolean;
+      tag: 'NORMAL' | 'URGENT' | 'IMPORTANT_ALERT';
+      categorySlug: keyof typeof categories;
+      body: string;
+      reasonPoints: string[];
+      advicePoints: string[];
+      alertNote: string;
+    }> = [
+      {
+        title: 'ارتفاع أسعار البيض في أغلب المحافظات اليوم',
+        summary:
+          'تشهد أسعار البيض ارتفاعاً ملحوظاً اليوم في معظم المحافظات نتيجة زيادة الطلب الموسمي وارتفاع تكاليف الإنتاج.',
+        source: 'وزارة الزراعة العراقية',
+        isFeatured: true,
+        tag: 'NORMAL',
+        categorySlug: 'prices-markets',
+        body: 'أعلنت وزارة الزراعة العراقية عن ارتفاع أسعار البيض في أغلب المحافظات خلال اليوم بسبب ارتفاع تكاليف الأعلاف، وزيادة الطلب الموسمي، وارتفاع أجور النقل، مما أدى إلى زيادة في أسعار البيع للمستهلك.',
+        reasonPoints: [
+          'ارتفاع أسعار الأعلاف محلياً وعالمياً.',
+          'زيادة الطلب على البيض مع اقتراب المواسم والأعياد.',
+          'ارتفاع تكاليف النقل والمواصلات بين المحافظات.',
+          'انخفاض معدل إنتاج البيض بسبب ارتفاع درجات الحرارة.',
+        ],
+        advicePoints: [
+          'إدارة تكاليف الأعلاف والبحث عن بدائل مناسبة.',
+          'تحسين التهوية والتبريد داخل الحقول.',
+          'متابعة برامج التحصين والصحة باستمرار.',
+          'تخطيط الإنتاج بما يتناسب مع الطلب الموسمي.',
+        ],
+        alertNote:
+          'ننصح المربين بمتابعة تحديثات الأسعار بشكل يومي من المصادر الرسمية واتخاذ القرارات المناسبة لتقليل الخسائر وتحسين الإنتاج.',
+      },
+      {
+        title: 'أهمية التهوية الجيدة في حقول الدواجن صيفاً',
+        summary: 'التهوية السليمة تقلل الإجهاد الحراري وترفع معدلات النمو وتحد من النفوق.',
+        source: 'الإرشاد البيطري',
+        isFeatured: false,
+        tag: 'URGENT',
+        categorySlug: 'husbandry',
+        body: 'مع ارتفاع درجات الحرارة تصبح التهوية الجيدة عاملاً حاسماً في الحفاظ على صحة القطيع وإنتاجيته، إذ تقلل من تراكم الغازات والرطوبة وتخفض حرارة العنبر.',
+        reasonPoints: [
+          'ارتفاع الحرارة يرفع معدل النفوق ويقلل استهلاك العلف.',
+          'سوء التهوية يزيد رطوبة الفرشة وأمراض الجهاز التنفسي.',
+        ],
+        advicePoints: [
+          'صيانة المراوح وأنظمة التبريد قبل موجات الحر.',
+          'ضبط سرعة الهواء بحسب عمر الطيور.',
+          'توفير ماء شرب بارد ونظيف طوال اليوم.',
+        ],
+        alertNote: 'راقب سلوك الطيور خلال ساعات الظهيرة وتدخّل سريعاً عند ظهور اللهاث الشديد.',
+      },
+      {
+        title: 'تنبيه حول انتشار مرض تنفسي في بعض الحقول',
+        summary: 'رصدت جهات بيطرية حالات إصابة بأعراض تنفسية في عدد من الحقول وتدعو للوقاية.',
+        source: 'دائرة الثروة الحيوانية',
+        isFeatured: false,
+        tag: 'IMPORTANT_ALERT',
+        categorySlug: 'disease-prevention',
+        body: 'دعت الجهات البيطرية مربي الدواجن إلى تشديد إجراءات الأمان الحيوي بعد رصد حالات إصابة بأعراض تنفسية في عدد من الحقول، مع التأكيد على أهمية العزل والتحصين.',
+        reasonPoints: [
+          'ضعف إجراءات الأمان الحيوي عند مداخل الحقول.',
+          'التقلبات الحرارية بين الليل والنهار.',
+        ],
+        advicePoints: [
+          'منع دخول الزوار والمركبات دون تطهير.',
+          'عزل أي طائر تظهر عليه أعراض ومتابعته.',
+          'مراجعة برنامج التحصين مع الطبيب البيطري.',
+        ],
+        alertNote:
+          'عند ارتفاع نسبة النفوق أو ظهور أعراض تنفسية واضحة، تواصل فوراً مع الطبيب المشرف.',
+      },
+    ];
+
+    for (const item of items) {
+      const existing = (await knex('news').where({ title: item.title }).first()) as
+        { id: string } | undefined;
+      if (existing) continue;
+
+      const created = await newsService.createNews(actor, {
+        title: item.title,
+        summary: item.summary,
+        source: item.source,
+        isFeatured: item.isFeatured,
+        tag: item.tag,
+        categoryId: categories[item.categorySlug],
+        body: item.body,
+        reasonPoints: item.reasonPoints,
+        advicePoints: item.advicePoints,
+        alertNote: item.alertNote,
+      });
+      await newsService.publishNews(actor, created.id);
     }
   }
 }

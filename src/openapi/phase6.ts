@@ -60,7 +60,30 @@ const pageParams = [
 const birdTypeEnum = ['CHICKEN', 'DUCK', 'TURKEY', 'QUAIL', 'GOOSE', 'OTHER'];
 const flockStatusEnum = ['ACTIVE', 'CLOSED'];
 
+const farmCategoryEnum = ['BROILER', 'LAYER', 'MIXED', 'BREEDER', 'HATCHERY', 'OTHER'];
+
 const schemas: Obj = {
+  CreateFarmRequest: {
+    type: 'object',
+    required: ['name', 'location', 'governorate', 'farmCategory'],
+    description:
+      'The "Add Poultry Farm" form. The user never picks an organization type; the backend ' +
+      'creates a FARM organization + `farm_details` + the caller’s OWNER membership in one ' +
+      'transaction and starts it PENDING (admin review before activation).',
+    properties: {
+      name: { type: 'string', minLength: 1, maxLength: 160 },
+      location: { type: 'string', minLength: 1, maxLength: 200, description: 'Short display area' },
+      governorate: { type: 'string', minLength: 1, maxLength: 120 },
+      farmCategory: { type: 'string', enum: farmCategoryEnum, description: 'Production type' },
+      description: { type: 'string', maxLength: 2000, nullable: true },
+      address: { type: 'string', maxLength: 500, nullable: true },
+      capacity: { type: 'integer', minimum: 0, nullable: true },
+      currentBirdCount: { type: 'integer', minimum: 0, nullable: true },
+      contactName: { type: 'string', maxLength: 160, nullable: true },
+      contactPhone: { type: 'string', maxLength: 40, nullable: true },
+      contactEmail: { type: 'string', format: 'email', maxLength: 255, nullable: true },
+    },
+  },
   FarmJoinRequest: {
     type: 'object',
     required: ['joinCode'],
@@ -117,6 +140,36 @@ const schemas: Obj = {
 const flocksBase = '/organizations/{organizationId}/poultry/flocks';
 
 const paths: Obj = {
+  '/organizations/farms': {
+    post: {
+      tags: ['Farms · Join'],
+      summary: 'Add a poultry farm (domain-specific creation form)',
+      description:
+        'Any ACTIVE user — a Pet Owner included — creates their own poultry farm. Reuses the ' +
+        'organization creation use case: one transaction creates the FARM organization, its ' +
+        '`farm_details` row (with every submitted field), and the caller’s OWNER membership; ' +
+        'the org starts PENDING. No new global role — ownership is the organization OWNER role. ' +
+        'Only CLINIC still requires an approved-vet owner.',
+      security: bearer,
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': { schema: { $ref: '#/components/schemas/CreateFarmRequest' } },
+        },
+      },
+      responses: {
+        '201': ok(
+          'Farm created (PENDING)',
+          dataOf({
+            type: 'object',
+            description: 'The created organization + its `details` (incl. `joinCode`).',
+            properties: { id: uuid, type: { type: 'string' }, name: { type: 'string' } },
+          }),
+        ),
+        ...errs(400, 401, 403, 422),
+      },
+    },
+  },
   '/organizations/join': {
     post: {
       tags: ['Farms · Join'],

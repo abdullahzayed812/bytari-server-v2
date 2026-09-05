@@ -41,6 +41,8 @@ import {
   createAdminContentRouter,
   createTipRouter,
   createAdminTipRouter,
+  createNewsRouter,
+  createAdminNewsRouter,
 } from '../modules/content/index.js';
 import { createPublicAdRouter, createAdminAdRouter } from '../modules/advertisements/index.js';
 import {
@@ -141,6 +143,8 @@ export function createApiRouter(c: Container): Router {
   router.use('/content-categories', createContentCategoryRouter(c));
   // "Tips" — structured care advice inside the content module.
   router.use('/tips', createTipRouter(c));
+  // "News" (آخر الأخبار) — a general news type inside the content module.
+  router.use('/news', createNewsRouter(c));
 
   // --- Advertisements: multi-section campaigns ----------------
   // Public feed `GET /ads?placement=…` for any authenticated user; admin /
@@ -162,6 +166,7 @@ export function createApiRouter(c: Container): Router {
   router.use('/admin', createSupportAdminRouter(c));
   router.use('/admin', createAdminContentRouter(c));
   router.use('/admin/tips', createAdminTipRouter(c));
+  router.use('/admin/news', createAdminNewsRouter(c));
   router.use('/admin/ads', createAdminAdRouter(c));
   router.use('/admin/notifications', createAdminNotificationRouter(c));
   router.use('/admin/audit-logs', createAdminAuditRouter(c));

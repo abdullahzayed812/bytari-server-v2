@@ -38,36 +38,60 @@ function iso(v: Date): string {
 
 export interface FarmProfile {
   imageUrl: string | null;
+  location: string | null;
+  governorate: string | null;
   address: string | null;
   capacity: number | null;
+  currentBirdCount: number | null;
   establishedOn: string | null;
   farmCategory: FarmCategory | null;
+  contactName: string | null;
+  contactPhone: string | null;
+  contactEmail: string | null;
 }
 
 export const emptyFarmProfile: FarmProfile = {
   imageUrl: null,
+  location: null,
+  governorate: null,
   address: null,
   capacity: null,
+  currentBirdCount: null,
   establishedOn: null,
   farmCategory: null,
+  contactName: null,
+  contactPhone: null,
+  contactEmail: null,
 };
 
 export interface FarmProfileRow {
   organization_id: string;
   image_key: string | null;
   image_provider: string | null;
+  location: string | null;
+  governorate: string | null;
   address: string | null;
   capacity: number | string | null;
+  current_bird_count: number | string | null;
   established_on: string | Date | null;
   farm_category: string | null;
+  contact_name: string | null;
+  contact_phone: string | null;
+  contact_email: string | null;
   join_code: string;
 }
 
 export interface UpdateFarmProfileInput {
+  location?: string | null;
+  governorate?: string | null;
   address?: string | null;
   capacity?: number | null;
+  currentBirdCount?: number | null;
   establishedOn?: string | null;
   farmCategory?: FarmCategory | null;
+  contactName?: string | null;
+  contactPhone?: string | null;
+  contactEmail?: string | null;
 }
 
 // =====================================================================

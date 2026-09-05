@@ -95,6 +95,11 @@ import { CategoryService } from './modules/content/application/category.service.
 import { TipRepository } from './modules/content/infrastructure/tip.repository.js';
 import { TipEngagementRepository } from './modules/content/infrastructure/tip-engagement.repository.js';
 import { TipService } from './modules/content/application/tip.service.js';
+import {
+  NewsRepository,
+  NewsBookmarkRepository,
+} from './modules/content/infrastructure/news.repository.js';
+import { NewsService } from './modules/content/application/news.service.js';
 import { AdCampaignRepository } from './modules/advertisements/infrastructure/ad-campaign.repository.js';
 import { AdSlideRepository } from './modules/advertisements/infrastructure/ad-slide.repository.js';
 import { AdvertisementService } from './modules/advertisements/application/advertisement.service.js';
@@ -233,6 +238,9 @@ export interface Container {
   tipRepository: TipRepository;
   tipEngagementRepository: TipEngagementRepository;
   tipService: TipService;
+  newsRepository: NewsRepository;
+  newsBookmarkRepository: NewsBookmarkRepository;
+  newsService: NewsService;
   adCampaignRepository: AdCampaignRepository;
   adSlideRepository: AdSlideRepository;
   advertisementService: AdvertisementService;
@@ -651,6 +659,17 @@ export function createContainer(deps: ContainerDeps): Container {
     auditService,
     logger,
   );
+  const newsRepository = new NewsRepository(db);
+  const newsBookmarkRepository = new NewsBookmarkRepository(db);
+  const newsService = new NewsService(
+    db,
+    newsRepository,
+    newsBookmarkRepository,
+    categoryRepository,
+    objectStorage,
+    auditService,
+    logger,
+  );
 
   // --- advertisements (multi-section campaigns + ordered slides) ---
   const adCampaignRepository = new AdCampaignRepository(db);
@@ -792,6 +811,9 @@ export function createContainer(deps: ContainerDeps): Container {
     tipRepository,
     tipEngagementRepository,
     tipService,
+    newsRepository,
+    newsBookmarkRepository,
+    newsService,
     adCampaignRepository,
     adSlideRepository,
     advertisementService,

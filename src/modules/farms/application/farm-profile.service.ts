@@ -61,13 +61,19 @@ export class FarmProfileService {
     if (!row) return { ...emptyFarmProfile };
     return {
       imageUrl: await this.resolveImageUrl(row.image_key),
+      location: row.location,
+      governorate: row.governorate,
       address: row.address,
       capacity: row.capacity === null ? null : Number(row.capacity),
+      currentBirdCount: row.current_bird_count === null ? null : Number(row.current_bird_count),
       establishedOn:
         row.established_on instanceof Date
           ? row.established_on.toISOString().slice(0, 10)
           : (row.established_on ?? null),
       farmCategory: (row.farm_category as FarmCategory | null) ?? null,
+      contactName: row.contact_name,
+      contactPhone: row.contact_phone,
+      contactEmail: row.contact_email,
     };
   }
 
@@ -80,10 +86,16 @@ export class FarmProfileService {
       await this.profiles.update(
         organizationId,
         {
+          location: patch.location,
+          governorate: patch.governorate,
           address: patch.address,
           capacity: patch.capacity,
+          currentBirdCount: patch.currentBirdCount,
           establishedOn: patch.establishedOn,
           farmCategory: patch.farmCategory,
+          contactName: patch.contactName,
+          contactPhone: patch.contactPhone,
+          contactEmail: patch.contactEmail,
         },
         tx,
       );

@@ -22,13 +22,32 @@ export { ContentFileRepository } from './infrastructure/content-file.repository.
 export { CategoryRepository } from './infrastructure/category.repository.js';
 export { TipRepository } from './infrastructure/tip.repository.js';
 export { TipEngagementRepository } from './infrastructure/tip-engagement.repository.js';
+export { NewsRepository, NewsBookmarkRepository } from './infrastructure/news.repository.js';
 export { ContentService } from './application/content.service.js';
 export { CategoryService } from './application/category.service.js';
 export { TipService } from './application/tip.service.js';
+export { NewsService } from './application/news.service.js';
+export {
+  NEWS_TAGS,
+  NEWS_STATUSES,
+  isNewsTag,
+  type NewsTag,
+  type NewsStatus,
+} from './domain/news.constants.js';
+export type {
+  News,
+  NewsDTO,
+  NewsListItemDTO,
+  AdminNewsDTO,
+  NewsCategoryRef,
+  ListNewsFilter,
+  ListAdminNewsFilter,
+} from './domain/news.types.js';
 export {
   createContentRouter,
   createContentCategoryRouter,
   createAdminContentRouter,
 } from './presentation/content.routes.js';
 export { createTipRouter, createAdminTipRouter } from './presentation/tip.routes.js';
+export { createNewsRouter, createAdminNewsRouter } from './presentation/news.routes.js';
 export { createContentRealtime, type ContentRealtimeWiring } from './realtime/content-realtime.js';

@@ -37,10 +37,16 @@ export const flockScopeParamSchema = z.object({ organizationId: uuid, flockId: u
 
 export const updateFarmProfileBodySchema = z
   .object({
+    location: shortText.max(200).nullable().optional(),
+    governorate: shortText.max(120).nullable().optional(),
     address: shortText.max(500).nullable().optional(),
     capacity: count.nullable().optional(),
+    currentBirdCount: count.nullable().optional(),
     establishedOn: pastOrToday.nullable().optional(),
     farmCategory: z.enum(FARM_CATEGORIES).nullable().optional(),
+    contactName: shortText.max(160).nullable().optional(),
+    contactPhone: z.string().trim().min(3).max(40).nullable().optional(),
+    contactEmail: z.string().trim().max(255).email().nullable().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: 'At least one field is required' });
 export type UpdateFarmProfileBody = z.infer<typeof updateFarmProfileBodySchema>;
