@@ -4,7 +4,7 @@ import {
   type ListPoultryFlocksFilter,
   type PoultryFlock,
   type PoultryFlockRow,
-} from '../domain/farm.types.js';
+} from '../domain/poultry-flock.types.js';
 
 const TABLE = 'poultry_flocks';
 

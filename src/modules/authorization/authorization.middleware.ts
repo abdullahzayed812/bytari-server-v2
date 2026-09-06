@@ -13,6 +13,8 @@ export interface AuthorizationMiddleware {
   authorize: (permission: string) => RequestHandler;
   /** Require an approved veterinarian account (role + status = APPROVED). */
   requireApprovedVeterinarian: () => RequestHandler;
+  /** Require an approved trader account (status = APPROVED, no role component). */
+  requireApprovedTrader: () => RequestHandler;
 }
 
 export function createAuthorizationMiddleware(
@@ -30,5 +32,11 @@ export function createAuthorizationMiddleware(
       next();
     });
 
-  return { authorize, requireApprovedVeterinarian };
+  const requireApprovedTrader = (): RequestHandler =>
+    asyncHandler((req, _res, next) => {
+      authz.assertApprovedTrader(requireAuth(req));
+      next();
+    });
+
+  return { authorize, requireApprovedVeterinarian, requireApprovedTrader };
 }

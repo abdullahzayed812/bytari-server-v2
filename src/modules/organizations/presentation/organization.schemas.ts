@@ -157,10 +157,16 @@ export const listMembersQuerySchema = paginationQuerySchema.extend({
 });
 export type ListMembersQuery = z.infer<typeof listMembersQuerySchema>;
 
-export const addMemberBodySchema = z.object({
-  userId: z.string().uuid(),
-  role: z.enum(['VETERINARIAN', 'STAFF']),
-});
+export const addMemberBodySchema = z
+  .object({
+    userId: z.string().uuid().optional(),
+    email: z.string().trim().toLowerCase().email().optional(),
+    role: z.enum(['VETERINARIAN', 'STAFF']),
+  })
+  .refine((v) => Boolean(v.userId) !== Boolean(v.email), {
+    message: 'Provide exactly one of userId or email',
+    path: ['userId'],
+  });
 export type AddMemberBody = z.infer<typeof addMemberBodySchema>;
 
 export const updateMemberBodySchema = z

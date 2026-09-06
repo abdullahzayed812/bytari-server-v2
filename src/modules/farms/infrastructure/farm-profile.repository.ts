@@ -10,12 +10,17 @@ export interface FarmProfilePatch {
   capacity?: number | null;
   currentBirdCount?: number | null;
   establishedOn?: string | null;
-  farmCategory?: string | null;
+  poultryProductionType?: string | null;
   contactName?: string | null;
   contactPhone?: string | null;
   contactEmail?: string | null;
   imageKey?: string | null;
   imageProvider?: string | null;
+  farmSpecies?: string | null;
+  currentSheepCount?: number | null;
+  currentCattleCount?: number | null;
+  sheepProductionType?: string | null;
+  cattleProductionType?: string | null;
 }
 
 /**
@@ -49,12 +54,19 @@ export class FarmProfileRepository {
     if (patch.capacity !== undefined) dbPatch.capacity = patch.capacity;
     if (patch.currentBirdCount !== undefined) dbPatch.current_bird_count = patch.currentBirdCount;
     if (patch.establishedOn !== undefined) dbPatch.established_on = patch.establishedOn;
-    if (patch.farmCategory !== undefined) dbPatch.farm_category = patch.farmCategory;
+    if (patch.poultryProductionType !== undefined)
+      dbPatch.poultry_production_type = patch.poultryProductionType;
     if (patch.contactName !== undefined) dbPatch.contact_name = patch.contactName;
     if (patch.contactPhone !== undefined) dbPatch.contact_phone = patch.contactPhone;
     if (patch.contactEmail !== undefined) dbPatch.contact_email = patch.contactEmail;
     if (patch.imageKey !== undefined) dbPatch.image_key = patch.imageKey;
     if (patch.imageProvider !== undefined) dbPatch.image_provider = patch.imageProvider;
+    if (patch.farmSpecies !== undefined) dbPatch.farm_species = patch.farmSpecies;
+    if (patch.currentSheepCount !== undefined) dbPatch.current_sheep_count = patch.currentSheepCount;
+    if (patch.currentCattleCount !== undefined) dbPatch.current_cattle_count = patch.currentCattleCount;
+    if (patch.sheepProductionType !== undefined) dbPatch.sheep_production_type = patch.sheepProductionType;
+    if (patch.cattleProductionType !== undefined)
+      dbPatch.cattle_production_type = patch.cattleProductionType;
     if (Object.keys(dbPatch).length === 1) return 0;
     return trx(TABLE).where({ organization_id: organizationId }).update(dbPatch);
   }

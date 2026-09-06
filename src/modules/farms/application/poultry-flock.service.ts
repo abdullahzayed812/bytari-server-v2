@@ -5,13 +5,14 @@ import type { EventBus } from '../../../shared/events/index.js';
 import { AuditAction, AuditEntityType, type AuditContext } from '../../audit/audit.types.js';
 import type { AuditService } from '../../audit/audit.service.js';
 import { FarmPolicy } from '../domain/farm.policy.js';
+import { PoultryFlockPolicy } from '../domain/poultry-flock.policy.js';
 import {
   toPoultryFlockDTO,
   type CreatePoultryFlockInput,
   type ListPoultryFlocksFilter,
   type PoultryFlockDTO,
   type UpdatePoultryFlockInput,
-} from '../domain/farm.types.js';
+} from '../domain/poultry-flock.types.js';
 import type { PoultryFlockRepository } from '../infrastructure/poultry-flock.repository.js';
 
 export interface FarmActor {
@@ -115,7 +116,7 @@ export class PoultryFlockService {
     // A CLOSED flock is historical; only re-opening it (status change) or an
     // explicit status field is allowed. Reject content edits on a closed flock.
     const onlyStatusChange = Object.keys(patch).length === 1 && patch.status !== undefined;
-    if (!onlyStatusChange) FarmPolicy.assertFlockMutable(existing);
+    if (!onlyStatusChange) PoultryFlockPolicy.assertFlockMutable(existing);
 
     const updated = await this.db.transaction(async (tx) => {
       const flock = await this.flocks.update(flockId, patch, tx);

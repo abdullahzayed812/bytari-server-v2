@@ -1,22 +1,25 @@
-import type { PoultryBirdType, PoultryFlockStatus } from './farm.constants.js';
+import type { SheepBatchStatus } from './sheep-batch.constants.js';
 
 // --- internal aggregate ----------------------------------------------
 
-export interface PoultryFlock {
+export interface SheepBatch {
   id: string;
   organizationId: string;
   name: string;
-  birdType: PoultryBirdType;
-  birdCount: number;
+  breed: string | null;
+  headCount: number;
+  lambCount: number | null;
+  maleCount: number | null;
+  femaleCount: number | null;
   arrivalDate: string;
-  status: PoultryFlockStatus;
+  status: SheepBatchStatus;
   notes: string | null;
   /** Per-farm sequential batch number ("الدفعة رقم N"). */
   batchNumber: number | null;
-  /** Birds placed at the start of the batch — the denominator for mortality. */
-  initialBirdCount: number | null;
-  /** Latest recorded average bird weight, grams. `numeric` → string. */
-  averageWeightGrams: string | null;
+  /** Head count placed at the start of the batch — the denominator for mortality. */
+  initialHeadCount: number | null;
+  /** Latest recorded average weight, kg. `numeric` → string. */
+  averageWeightKg: string | null;
   /** Optional planned sale price, used for the profit estimate. `numeric` → string. */
   targetPricePerKg: string | null;
   expectedSaleDate: string | null;
@@ -26,59 +29,65 @@ export interface PoultryFlock {
   updatedAt: string;
 }
 
-// --- API DTO -------------------------------------------------------
-
-export type PoultryFlockDTO = PoultryFlock;
+export type SheepBatchDTO = SheepBatch;
 
 // --- input shapes ------------------------------------------------
 
-export interface CreatePoultryFlockInput {
+export interface CreateSheepBatchInput {
   name: string;
-  birdType: PoultryBirdType;
-  birdCount: number;
+  breed?: string | null;
+  headCount: number;
+  lambCount?: number | null;
+  maleCount?: number | null;
+  femaleCount?: number | null;
   arrivalDate: string;
   notes?: string | null;
-  initialBirdCount?: number | null;
-  averageWeightGrams?: number | null;
+  initialHeadCount?: number | null;
+  averageWeightKg?: number | null;
   targetPricePerKg?: number | null;
   expectedSaleDate?: string | null;
 }
 
-export interface UpdatePoultryFlockInput {
+export interface UpdateSheepBatchInput {
   name?: string;
-  birdType?: PoultryBirdType;
-  birdCount?: number;
+  breed?: string | null;
+  headCount?: number;
+  lambCount?: number | null;
+  maleCount?: number | null;
+  femaleCount?: number | null;
   arrivalDate?: string;
-  status?: PoultryFlockStatus;
+  status?: SheepBatchStatus;
   notes?: string | null;
-  initialBirdCount?: number | null;
-  averageWeightGrams?: number | null;
+  initialHeadCount?: number | null;
+  averageWeightKg?: number | null;
   targetPricePerKg?: number | null;
   expectedSaleDate?: string | null;
 }
 
-export interface ListPoultryFlocksFilter {
+export interface ListSheepBatchesFilter {
   page: number;
   pageSize: number;
-  status?: PoultryFlockStatus;
-  birdType?: PoultryBirdType;
+  status?: SheepBatchStatus;
 }
 
 // --- row ---------------------------------------------------------
 
-export interface PoultryFlockRow {
+export interface SheepBatchRow {
   id: string;
   organization_id: string;
   organization_type: string;
   name: string;
-  bird_type: string;
-  bird_count: number | string;
+  breed: string | null;
+  head_count: number | string;
+  lamb_count: number | string | null;
+  male_count: number | string | null;
+  female_count: number | string | null;
   arrival_date: string | Date;
   status: string;
   notes: string | null;
   batch_number: number | string | null;
-  initial_bird_count: number | string | null;
-  average_weight_grams: number | string | null;
+  initial_head_count: number | string | null;
+  average_weight_kg: number | string | null;
   target_price_per_kg: number | string | null;
   expected_sale_date: string | Date | null;
   created_by_user_id: string | null;
@@ -93,19 +102,26 @@ function dateOnly(value: string | Date | null): string | null {
   return value.slice(0, 10);
 }
 
-export function rowToPoultryFlock(row: PoultryFlockRow): PoultryFlock {
+function intOrNull(v: number | string | null): number | null {
+  return v === null ? null : Number(v);
+}
+
+export function rowToSheepBatch(row: SheepBatchRow): SheepBatch {
   return {
     id: row.id,
     organizationId: row.organization_id,
     name: row.name,
-    birdType: row.bird_type as PoultryBirdType,
-    birdCount: Number(row.bird_count),
+    breed: row.breed,
+    headCount: Number(row.head_count),
+    lambCount: intOrNull(row.lamb_count),
+    maleCount: intOrNull(row.male_count),
+    femaleCount: intOrNull(row.female_count),
     arrivalDate: dateOnly(row.arrival_date) as string,
-    status: row.status as PoultryFlockStatus,
+    status: row.status as SheepBatchStatus,
     notes: row.notes,
-    batchNumber: row.batch_number === null ? null : Number(row.batch_number),
-    initialBirdCount: row.initial_bird_count === null ? null : Number(row.initial_bird_count),
-    averageWeightGrams: row.average_weight_grams === null ? null : String(row.average_weight_grams),
+    batchNumber: intOrNull(row.batch_number),
+    initialHeadCount: intOrNull(row.initial_head_count),
+    averageWeightKg: row.average_weight_kg === null ? null : String(row.average_weight_kg),
     targetPricePerKg: row.target_price_per_kg === null ? null : String(row.target_price_per_kg),
     expectedSaleDate: dateOnly(row.expected_sale_date),
     createdByUserId: row.created_by_user_id,
@@ -115,6 +131,6 @@ export function rowToPoultryFlock(row: PoultryFlockRow): PoultryFlock {
   };
 }
 
-export function toPoultryFlockDTO(flock: PoultryFlock): PoultryFlockDTO {
-  return { ...flock };
+export function toSheepBatchDTO(batch: SheepBatch): SheepBatchDTO {
+  return { ...batch };
 }

@@ -67,6 +67,26 @@ const schemas: Obj = {
         type: 'object',
         properties: {
           joinCode: { type: 'string', description: 'FARM only' },
+          subscriptionStartDate: {
+            type: 'string',
+            format: 'date',
+            nullable: true,
+            description: 'FARM only — admin/supervisor-controlled',
+          },
+          subscriptionEndDate: {
+            type: 'string',
+            format: 'date',
+            nullable: true,
+            description: 'FARM only — admin/supervisor-controlled',
+          },
+          subscriptionStatus: {
+            type: 'string',
+            nullable: true,
+            enum: ['NOT_STARTED', 'ACTIVE', 'EXPIRED'],
+            description:
+              'FARM only — computed server-side from the subscription dates vs now(), ' +
+              'separate from `status` (the approval state)',
+          },
           address: {
             type: 'string',
             nullable: true,
@@ -395,7 +415,8 @@ const paths: Obj = {
     post: {
       tags: ['Organizations · Members'],
       summary: 'Add a member as VETERINARIAN or STAFF (requires `member.add`)',
-      description: 'Adding a VETERINARIAN requires the target to be an APPROVED veterinarian.',
+      description:
+        'Identify the target by exactly one of `userId` or `email` (the email must belong to an existing account). Adding a VETERINARIAN requires the target to be an APPROVED veterinarian.',
       security: bearer,
       parameters: [orgIdParam],
       requestBody: {
@@ -404,9 +425,10 @@ const paths: Obj = {
           'application/json': {
             schema: {
               type: 'object',
-              required: ['userId', 'role'],
+              required: ['role'],
               properties: {
                 userId: { type: 'string', format: 'uuid' },
+                email: { type: 'string', format: 'email' },
                 role: { type: 'string', enum: ['VETERINARIAN', 'STAFF'] },
               },
             },
@@ -683,6 +705,116 @@ const paths: Obj = {
         },
       ],
       responses: { '200': ok('Removed'), ...errs(400, 401, 403, 404) },
+    },
+  },
+  '/admin/organizations/farms': {
+    get: {
+      tags: ['Admin · Organizations'],
+      summary:
+        'Poultry Farms management list — owner, supervisors, subscription dates/status, ' +
+        'open-renewal flag (`organization.admin.read`)',
+      security: bearer,
+      parameters: [
+        { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
+        { name: 'pageSize', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100 } },
+        {
+          name: 'status',
+          in: 'query',
+          schema: { type: 'string', enum: ['PENDING', 'ACTIVE', 'REJECTED', 'SUSPENDED', 'DEACTIVATED'] },
+        },
+        {
+          name: 'subscriptionStatus',
+          in: 'query',
+          schema: { type: 'string', enum: ['NOT_STARTED', 'ACTIVE', 'EXPIRED'] },
+        },
+      ],
+      responses: { '200': ok('Farms'), ...errs(401, 403) },
+    },
+  },
+  '/admin/organizations/{id}/subscription-renewals': {
+    get: {
+      tags: ['Admin · Organizations'],
+      summary: 'List a farm’s subscription renewal requests (`organization.admin.read`)',
+      security: bearer,
+      parameters: [idParam],
+      responses: { '200': ok('Renewal requests'), ...errs(401, 403, 404) },
+    },
+  },
+  '/admin/organizations/{id}/subscription': {
+    post: {
+      tags: ['Admin · Organizations'],
+      summary: 'Set a farm’s subscription period directly (`organization.admin.subscription`)',
+      security: bearer,
+      parameters: [idParam],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['startDate', 'endDate'],
+              properties: {
+                startDate: { type: 'string', format: 'date' },
+                endDate: { type: 'string', format: 'date' },
+              },
+            },
+          },
+        },
+      },
+      responses: { '200': ok('Updated'), ...errs(400, 401, 403, 404, 422) },
+    },
+  },
+  '/admin/organizations/{id}/subscription-renewals/{requestId}/approve': {
+    post: {
+      tags: ['Admin · Organizations'],
+      summary:
+        'Approve a farm’s renewal request and set the new subscription period ' +
+        '(`organization.admin.subscription`)',
+      security: bearer,
+      parameters: [
+        idParam,
+        { name: 'requestId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['startDate', 'endDate'],
+              properties: {
+                startDate: { type: 'string', format: 'date' },
+                endDate: { type: 'string', format: 'date' },
+              },
+            },
+          },
+        },
+      },
+      responses: { '200': ok('Approved'), ...errs(400, 401, 403, 404, 409, 422) },
+    },
+  },
+  '/admin/organizations/{id}/subscription-renewals/{requestId}/reject': {
+    post: {
+      tags: ['Admin · Organizations'],
+      summary: 'Reject a farm’s renewal request (`organization.admin.subscription`)',
+      security: bearer,
+      parameters: [
+        idParam,
+        { name: 'requestId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['reason'],
+              properties: { reason: { type: 'string', minLength: 3 } },
+            },
+          },
+        },
+      },
+      responses: { '200': ok('Rejected'), ...errs(400, 401, 403, 404, 409, 422) },
     },
   },
 };

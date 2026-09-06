@@ -1,8 +1,9 @@
 export * from './domain/farm.constants.js';
-export * from './domain/farm.types.js';
+export * from './domain/poultry-flock.types.js';
 export * from './domain/poultry-ops.constants.js';
 export * from './domain/poultry-ops.types.js';
 export { FarmPolicy } from './domain/farm.policy.js';
+export { PoultryFlockPolicy } from './domain/poultry-flock.policy.js';
 export { FarmDetailsRepository } from './infrastructure/farm-details.repository.js';
 export { PoultryFlockRepository } from './infrastructure/poultry-flock.repository.js';
 export { FarmProfileRepository } from './infrastructure/farm-profile.repository.js';

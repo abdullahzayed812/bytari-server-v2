@@ -5,9 +5,19 @@
  * migration.
  */
 
+// --- flocks (poultry_flocks) -------------------------------------
+
+/** Poultry bird types. Text + CHECK (not a catalogue table) — extend via migration. */
+export const POULTRY_BIRD_TYPES = ['CHICKEN', 'DUCK', 'TURKEY', 'QUAIL', 'GOOSE', 'OTHER'] as const;
+export type PoultryBirdType = (typeof POULTRY_BIRD_TYPES)[number];
+
+/** Poultry flock lifecycle. ACTIVE while the batch is on the farm; CLOSED when finished. */
+export const POULTRY_FLOCK_STATUSES = ['ACTIVE', 'CLOSED'] as const;
+export type PoultryFlockStatus = (typeof POULTRY_FLOCK_STATUSES)[number];
+
 // --- farm profile (farm_details) --------------------------------------
 
-export const FARM_CATEGORIES = [
+export const POULTRY_PRODUCTION_TYPES = [
   'BROILER',
   'LAYER',
   'MIXED',
@@ -15,7 +25,7 @@ export const FARM_CATEGORIES = [
   'HATCHERY',
   'OTHER',
 ] as const;
-export type FarmCategory = (typeof FARM_CATEGORIES)[number];
+export type PoultryProductionType = (typeof POULTRY_PRODUCTION_TYPES)[number];
 
 // --- daily records --------------------------------------------------
 

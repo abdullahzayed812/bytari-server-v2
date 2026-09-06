@@ -4,6 +4,13 @@ import { asyncHandler } from '../../../shared/http/async-handler.js';
 import { validate } from '../../../shared/http/validate.js';
 import { idParamSchema } from '../../../shared/validation/common.js';
 import type { Container } from '../../../container.js';
+import {
+  adminFarmRenewalRequestParamSchema,
+  adminListFarmsQuerySchema,
+  approveRenewalBodySchema,
+  rejectRenewalBodySchema,
+  setSubscriptionBodySchema,
+} from '../../farms/presentation/farm-subscription.schemas.js';
 import { AdminOrganizationController } from './admin-organization.controller.js';
 import {
   adminListOrganizationsQuerySchema,
@@ -23,10 +30,20 @@ export function createAdminOrganizationRouter(c: Container): Router {
     c.organizationRepository,
     c.membershipService,
     c.organizationSupervisorService,
+    c.farmSubscriptionRenewalRepository,
+    c.farmSubscriptionService,
   );
   const { authorize } = c.authorization;
   const r = Router();
   r.use(c.authenticate);
+
+  // Mounted BEFORE `/:id` so `/farms` is never parsed as an org id.
+  r.get(
+    '/farms',
+    authorize('organization.admin.read'),
+    validate({ query: adminListFarmsQuerySchema }),
+    asyncHandler(ctrl.listFarms),
+  );
 
   r.get(
     '/',
@@ -95,6 +112,32 @@ export function createAdminOrganizationRouter(c: Container): Router {
     authorize('organization.admin.manage'),
     validate({ params: orgMemberParamSchema }),
     asyncHandler(ctrl.removeSupervisor),
+  );
+
+  // --- Poultry Farms: subscription + renewal requests -----------------
+  r.get(
+    '/:id/subscription-renewals',
+    authorize('organization.admin.read'),
+    validate({ params: idParamSchema }),
+    asyncHandler(ctrl.listFarmSubscriptionRenewals),
+  );
+  r.post(
+    '/:id/subscription',
+    authorize('organization.admin.subscription'),
+    validate({ params: idParamSchema, body: setSubscriptionBodySchema }),
+    asyncHandler(ctrl.setFarmSubscription),
+  );
+  r.post(
+    '/:id/subscription-renewals/:requestId/approve',
+    authorize('organization.admin.subscription'),
+    validate({ params: adminFarmRenewalRequestParamSchema, body: approveRenewalBodySchema }),
+    asyncHandler(ctrl.approveFarmRenewal),
+  );
+  r.post(
+    '/:id/subscription-renewals/:requestId/reject',
+    authorize('organization.admin.subscription'),
+    validate({ params: adminFarmRenewalRequestParamSchema, body: rejectRenewalBodySchema }),
+    asyncHandler(ctrl.rejectFarmRenewal),
   );
 
   return r;

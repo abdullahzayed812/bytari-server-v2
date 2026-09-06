@@ -67,7 +67,9 @@ export function createOrganizationRouter(c: Container): Router {
     '/:organizationId',
     validate({ params: organizationIdParamSchema }),
     withOrganization,
-    authorizeOrg('organization.read'),
+    // The owner must always be able to view their own organization, even
+    // while it's PENDING/REJECTED/SUSPENDED (e.g. a farm awaiting approval).
+    authorizeOrg('organization.read', { allowInactiveForOwner: true }),
     asyncHandler(ctrl.getOne),
   );
   r.patch(

@@ -56,6 +56,7 @@ import { MedicalHistoryService } from './modules/veterinary-care/application/med
 import { FarmDetailsRepository } from './modules/farms/infrastructure/farm-details.repository.js';
 import { PoultryFlockRepository } from './modules/farms/infrastructure/poultry-flock.repository.js';
 import { FarmProfileRepository } from './modules/farms/infrastructure/farm-profile.repository.js';
+import { FarmSubscriptionRenewalRepository } from './modules/farms/infrastructure/farm-subscription-renewal.repository.js';
 import { PoultryDailyRecordRepository } from './modules/farms/infrastructure/poultry-daily-record.repository.js';
 import { FarmExpenseRepository } from './modules/farms/infrastructure/farm-expense.repository.js';
 import { PoultryHealthEventRepository } from './modules/farms/infrastructure/poultry-health-event.repository.js';
@@ -64,13 +65,40 @@ import { PoultryCaseRepository } from './modules/farms/infrastructure/poultry-ca
 import { FarmJoinService } from './modules/farms/application/farm-join.service.js';
 import { PoultryFlockService } from './modules/farms/application/poultry-flock.service.js';
 import { FarmProfileService } from './modules/farms/application/farm-profile.service.js';
+import { FarmSubscriptionService } from './modules/farms/application/farm-subscription.service.js';
 import { PoultryDailyRecordService } from './modules/farms/application/poultry-daily-record.service.js';
 import { FarmExpenseService } from './modules/farms/application/farm-expense.service.js';
 import { PoultryHealthEventService } from './modules/farms/application/poultry-health-event.service.js';
 import { FarmAppointmentService } from './modules/farms/application/farm-appointment.service.js';
 import { PoultryCaseService } from './modules/farms/application/poultry-case.service.js';
+import { SheepBatchRepository } from './modules/livestock/infrastructure/sheep-batch.repository.js';
+import { SheepDailyRecordRepository } from './modules/livestock/infrastructure/sheep-daily-record.repository.js';
+import { SheepHealthEventRepository } from './modules/livestock/infrastructure/sheep-health-event.repository.js';
+import { SheepCaseRepository } from './modules/livestock/infrastructure/sheep-case.repository.js';
+import { SheepBatchService } from './modules/livestock/application/sheep-batch.service.js';
+import { SheepDailyRecordService } from './modules/livestock/application/sheep-daily-record.service.js';
+import { SheepHealthEventService } from './modules/livestock/application/sheep-health-event.service.js';
+import { SheepCaseService } from './modules/livestock/application/sheep-case.service.js';
+import { CattleBatchRepository } from './modules/livestock/infrastructure/cattle-batch.repository.js';
+import { CattleDailyRecordRepository } from './modules/livestock/infrastructure/cattle-daily-record.repository.js';
+import { CattleHealthEventRepository } from './modules/livestock/infrastructure/cattle-health-event.repository.js';
+import { CattleCaseRepository } from './modules/livestock/infrastructure/cattle-case.repository.js';
+import { CattleBatchService } from './modules/livestock/application/cattle-batch.service.js';
+import { CattleDailyRecordService } from './modules/livestock/application/cattle-daily-record.service.js';
+import { CattleHealthEventService } from './modules/livestock/application/cattle-health-event.service.js';
+import { CattleCaseService } from './modules/livestock/application/cattle-case.service.js';
 import { ProductRepository } from './modules/veterinary-store/infrastructure/product.repository.js';
 import { ProductService } from './modules/veterinary-store/application/product.service.js';
+import { TraderRepository } from './modules/poultryMarket/infrastructure/trader.repository.js';
+import { PoultryOfferRepository } from './modules/poultryMarket/infrastructure/poultry-offer.repository.js';
+import { EggOfferRepository } from './modules/poultryMarket/infrastructure/egg-offer.repository.js';
+import { ExchangeRateRepository } from './modules/poultryMarket/infrastructure/exchange-rate.repository.js';
+import { PoultryMarketStatisticsRepository } from './modules/poultryMarket/infrastructure/poultry-market-statistics.repository.js';
+import { TraderService } from './modules/poultryMarket/application/trader.service.js';
+import { PoultryOfferService } from './modules/poultryMarket/application/poultry-offer.service.js';
+import { EggOfferService } from './modules/poultryMarket/application/egg-offer.service.js';
+import { ExchangeRateService } from './modules/poultryMarket/application/exchange-rate.service.js';
+import { PoultryMarketStatisticsService } from './modules/poultryMarket/application/poultry-market-statistics.service.js';
 import { ConversationRepository } from './modules/chat/infrastructure/conversation.repository.js';
 import { MessageRepository } from './modules/chat/infrastructure/message.repository.js';
 import { ChatService } from './modules/chat/application/chat.service.js';
@@ -201,6 +229,7 @@ export interface Container {
   farmDetailsRepository: FarmDetailsRepository;
   poultryFlockRepository: PoultryFlockRepository;
   farmProfileRepository: FarmProfileRepository;
+  farmSubscriptionRenewalRepository: FarmSubscriptionRenewalRepository;
   poultryDailyRecordRepository: PoultryDailyRecordRepository;
   farmExpenseRepository: FarmExpenseRepository;
   poultryHealthEventRepository: PoultryHealthEventRepository;
@@ -209,14 +238,44 @@ export interface Container {
   farmJoinService: FarmJoinService;
   poultryFlockService: PoultryFlockService;
   farmProfileService: FarmProfileService;
+  farmSubscriptionService: FarmSubscriptionService;
   poultryDailyRecordService: PoultryDailyRecordService;
   farmExpenseService: FarmExpenseService;
   poultryHealthEventService: PoultryHealthEventService;
   farmAppointmentService: FarmAppointmentService;
   poultryCaseService: PoultryCaseService;
 
+  sheepBatchRepository: SheepBatchRepository;
+  sheepDailyRecordRepository: SheepDailyRecordRepository;
+  sheepHealthEventRepository: SheepHealthEventRepository;
+  sheepCaseRepository: SheepCaseRepository;
+  sheepBatchService: SheepBatchService;
+  sheepDailyRecordService: SheepDailyRecordService;
+  sheepHealthEventService: SheepHealthEventService;
+  sheepCaseService: SheepCaseService;
+
+  cattleBatchRepository: CattleBatchRepository;
+  cattleDailyRecordRepository: CattleDailyRecordRepository;
+  cattleHealthEventRepository: CattleHealthEventRepository;
+  cattleCaseRepository: CattleCaseRepository;
+  cattleBatchService: CattleBatchService;
+  cattleDailyRecordService: CattleDailyRecordService;
+  cattleHealthEventService: CattleHealthEventService;
+  cattleCaseService: CattleCaseService;
+
   productRepository: ProductRepository;
   productService: ProductService;
+
+  traderRepository: TraderRepository;
+  traderService: TraderService;
+  poultryOfferRepository: PoultryOfferRepository;
+  poultryOfferService: PoultryOfferService;
+  eggOfferRepository: EggOfferRepository;
+  eggOfferService: EggOfferService;
+  exchangeRateRepository: ExchangeRateRepository;
+  exchangeRateService: ExchangeRateService;
+  poultryMarketStatisticsRepository: PoultryMarketStatisticsRepository;
+  poultryMarketStatisticsService: PoultryMarketStatisticsService;
 
   conversationRepository: ConversationRepository;
   messageRepository: MessageRepository;
@@ -508,6 +567,7 @@ export function createContainer(deps: ContainerDeps): Container {
   );
 
   const farmProfileRepository = new FarmProfileRepository(db);
+  const farmSubscriptionRenewalRepository = new FarmSubscriptionRenewalRepository(db);
   const poultryDailyRecordRepository = new PoultryDailyRecordRepository(db);
   const farmExpenseRepository = new FarmExpenseRepository(db);
   const poultryHealthEventRepository = new PoultryHealthEventRepository(db);
@@ -517,6 +577,13 @@ export function createContainer(deps: ContainerDeps): Container {
     db,
     farmProfileRepository,
     objectStorage,
+    auditService,
+    eventBus,
+    logger,
+  );
+  const farmSubscriptionService = new FarmSubscriptionService(
+    db,
+    farmSubscriptionRenewalRepository,
     auditService,
     eventBus,
     logger,
@@ -562,9 +629,125 @@ export function createContainer(deps: ContainerDeps): Container {
     logger,
   );
 
+  // --- Sheep Farms & Cattle Farms -----------------------------
+  const sheepBatchRepository = new SheepBatchRepository(db);
+  const sheepDailyRecordRepository = new SheepDailyRecordRepository(db);
+  const sheepHealthEventRepository = new SheepHealthEventRepository(db);
+  const sheepCaseRepository = new SheepCaseRepository(db);
+  const sheepBatchService = new SheepBatchService(
+    db,
+    sheepBatchRepository,
+    auditService,
+    eventBus,
+    logger,
+  );
+  const sheepDailyRecordService = new SheepDailyRecordService(
+    db,
+    sheepDailyRecordRepository,
+    sheepBatchRepository,
+    farmExpenseRepository,
+    auditService,
+    eventBus,
+    logger,
+  );
+  const sheepHealthEventService = new SheepHealthEventService(
+    db,
+    sheepHealthEventRepository,
+    sheepBatchRepository,
+    auditService,
+    eventBus,
+    logger,
+  );
+  const sheepCaseService = new SheepCaseService(
+    db,
+    sheepCaseRepository,
+    sheepBatchRepository,
+    objectStorage,
+    auditService,
+    eventBus,
+    logger,
+  );
+
+  const cattleBatchRepository = new CattleBatchRepository(db);
+  const cattleDailyRecordRepository = new CattleDailyRecordRepository(db);
+  const cattleHealthEventRepository = new CattleHealthEventRepository(db);
+  const cattleCaseRepository = new CattleCaseRepository(db);
+  const cattleBatchService = new CattleBatchService(
+    db,
+    cattleBatchRepository,
+    auditService,
+    eventBus,
+    logger,
+  );
+  const cattleDailyRecordService = new CattleDailyRecordService(
+    db,
+    cattleDailyRecordRepository,
+    cattleBatchRepository,
+    farmExpenseRepository,
+    auditService,
+    eventBus,
+    logger,
+  );
+  const cattleHealthEventService = new CattleHealthEventService(
+    db,
+    cattleHealthEventRepository,
+    cattleBatchRepository,
+    auditService,
+    eventBus,
+    logger,
+  );
+  const cattleCaseService = new CattleCaseService(
+    db,
+    cattleCaseRepository,
+    cattleBatchRepository,
+    objectStorage,
+    auditService,
+    eventBus,
+    logger,
+  );
+
   // --- veterinary store & products (Phase 10) ----------------
   const productRepository = new ProductRepository(db);
   const productService = new ProductService(db, productRepository, auditService, eventBus, logger);
+
+  // --- Poultry Markets (trader registration / offers / exchange rates) ---
+  const traderRepository = new TraderRepository(db);
+  const traderService = new TraderService(
+    db,
+    traderRepository,
+    userService,
+    auditService,
+    eventBus,
+    logger,
+  );
+  const poultryOfferRepository = new PoultryOfferRepository(db);
+  const poultryOfferService = new PoultryOfferService(
+    db,
+    poultryOfferRepository,
+    objectStorage,
+    auditService,
+    eventBus,
+    logger,
+  );
+  const eggOfferRepository = new EggOfferRepository(db);
+  const eggOfferService = new EggOfferService(
+    db,
+    eggOfferRepository,
+    objectStorage,
+    auditService,
+    eventBus,
+    logger,
+  );
+  const exchangeRateRepository = new ExchangeRateRepository(db);
+  const exchangeRateService = new ExchangeRateService(
+    db,
+    exchangeRateRepository,
+    auditService,
+    eventBus,
+    logger,
+  );
+  const poultryMarketStatisticsRepository = new PoultryMarketStatisticsRepository(db);
+  const poultryMarketStatisticsService = new PoultryMarketStatisticsService(poultryMarketStatisticsRepository, logger);
 
   // --- chat & real-time messaging (Phase 12) -----------------
   const conversationRepository = new ConversationRepository(db);
@@ -778,6 +961,7 @@ export function createContainer(deps: ContainerDeps): Container {
     farmDetailsRepository,
     poultryFlockRepository,
     farmProfileRepository,
+    farmSubscriptionRenewalRepository,
     poultryDailyRecordRepository,
     farmExpenseRepository,
     poultryHealthEventRepository,
@@ -786,13 +970,40 @@ export function createContainer(deps: ContainerDeps): Container {
     farmJoinService,
     poultryFlockService,
     farmProfileService,
+    farmSubscriptionService,
     poultryDailyRecordService,
     farmExpenseService,
     poultryHealthEventService,
     farmAppointmentService,
     poultryCaseService,
+    sheepBatchRepository,
+    sheepDailyRecordRepository,
+    sheepHealthEventRepository,
+    sheepCaseRepository,
+    sheepBatchService,
+    sheepDailyRecordService,
+    sheepHealthEventService,
+    sheepCaseService,
+    cattleBatchRepository,
+    cattleDailyRecordRepository,
+    cattleHealthEventRepository,
+    cattleCaseRepository,
+    cattleBatchService,
+    cattleDailyRecordService,
+    cattleHealthEventService,
+    cattleCaseService,
     productRepository,
     productService,
+    traderRepository,
+    traderService,
+    poultryOfferRepository,
+    poultryOfferService,
+    eggOfferRepository,
+    eggOfferService,
+    exchangeRateRepository,
+    exchangeRateService,
+    poultryMarketStatisticsRepository,
+    poultryMarketStatisticsService,
     conversationRepository,
     messageRepository,
     chatService,

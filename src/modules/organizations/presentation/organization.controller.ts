@@ -225,7 +225,7 @@ export class OrganizationController {
     const body = validatedBody<AddMemberBody>(req);
     const member = await this.members.addMember(
       org.id,
-      { userId: body.userId, roleKey: body.role },
+      { userId: body.userId, email: body.email, roleKey: body.role },
       this.actor(req),
     );
     sendSuccess(res, member, StatusCodes.CREATED);

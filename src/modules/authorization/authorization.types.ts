@@ -10,6 +10,7 @@ export interface AuthPrincipal {
   email: string;
   status: string;
   veterinarianStatus: string;
+  traderStatus: string;
   roleKeys: string[];
   sessionId: string | null;
 }

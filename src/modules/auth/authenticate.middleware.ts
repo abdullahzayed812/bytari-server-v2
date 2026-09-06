@@ -43,6 +43,7 @@ export function createAuthenticate(deps: AuthenticateDeps): RequestHandler {
       email: user.email,
       status: user.status,
       veterinarianStatus: user.veterinarianStatus,
+      traderStatus: user.traderStatus,
       roleKeys: await deps.roles.getRoleKeysForUser(user.id),
       sessionId,
     };

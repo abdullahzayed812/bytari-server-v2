@@ -62,6 +62,7 @@ export class AuthController {
       email: auth.email,
       status: auth.status,
       veterinarianStatus: auth.veterinarianStatus,
+      traderStatus: auth.traderStatus,
       roleKeys: auth.roleKeys,
       sessionId: auth.sessionId,
     };
@@ -79,6 +80,10 @@ export class AuthController {
       veterinarian: {
         status: user.veterinarianStatus,
         approved: this.authz.isApprovedVeterinarian(principal),
+      },
+      trader: {
+        status: user.traderStatus,
+        approved: this.authz.isApprovedTrader(principal),
       },
     });
   };

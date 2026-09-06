@@ -59,6 +59,7 @@ export class UserRepository {
     if (patch.status !== undefined) dbPatch.status = patch.status;
     if (patch.veterinarianStatus !== undefined)
       dbPatch.veterinarian_status = patch.veterinarianStatus;
+    if (patch.traderStatus !== undefined) dbPatch.trader_status = patch.traderStatus;
     if (patch.passwordHash !== undefined) dbPatch.password_hash = patch.passwordHash;
 
     const [row] = await this.table(trx).where({ id }).update(dbPatch).returning('*');

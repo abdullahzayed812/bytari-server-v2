@@ -34,6 +34,10 @@ export const PERMISSION_KEYS = [
   'organization.admin.approve',
   'organization.admin.status',
   'organization.admin.manage',
+  // Poultry Farms module — farm subscription administration (spec §4/§6):
+  // setting a farm's subscription period directly, and approving/rejecting
+  // subscription renewal requests. Granted to NO base role (ADMIN override).
+  'organization.admin.subscription',
   // Phase 4 — animals. Normal access is OWNERSHIP-scoped (owner-or-ADMIN); these
   // exist for the ADMIN override and future Animal-Supervisor delegation, and
   // are granted to NO role by default.
@@ -93,6 +97,19 @@ export const PERMISSION_KEYS = [
   // an ADVERTISEMENT system-supervisor; governs every placement. Granted to NO
   // base role.
   'advertisement.manage',
+  // Poultry Markets — trader registration review. Held by ADMIN (override) or
+  // MODERATOR (read-only oversight, mirrors 'veterinarian.read'). Approve /
+  // reject / suspend are granted to NO base role.
+  'trader.admin.read',
+  'trader.admin.approve',
+  'trader.admin.reject',
+  'trader.admin.suspend',
+  // Poultry Markets — offer moderation (delete any poultry/egg offer) and
+  // exchange-rate board entry. Held by ADMIN (override) or a MARKET
+  // system-supervisor (see SUPERVISOR_DOMAIN_PERMISSIONS). Granted to NO base role.
+  'market.offer.admin.read',
+  'market.offer.admin.delete',
+  'market.rate.manage',
 ] as const;
 export type PermissionKey = (typeof PERMISSION_KEYS)[number];
 
@@ -104,6 +121,7 @@ export const SUPERVISOR_DOMAINS = [
   'CONSULTATION',
   'INQUIRY',
   'ADVERTISEMENT',
+  'MARKET',
 ] as const;
 export type SupervisorDomain = (typeof SUPERVISOR_DOMAINS)[number];
 
@@ -152,6 +170,8 @@ export const PERMISSION_DEFINITIONS: Record<PermissionKey, string> = {
   'organization.admin.approve': 'Approve or reject pending organizations',
   'organization.admin.status': 'Suspend, activate or deactivate organizations',
   'organization.admin.manage': 'Remove members / supervisors from any organization',
+  'organization.admin.subscription':
+    'Set a farm’s subscription period and approve/reject subscription renewal requests',
   'animal.read': 'View an animal outside of ownership (delegated / oversight)',
   'animal.create': 'Create animals (reserved — Phase 4 create is authentication-only)',
   'animal.update': 'Update an animal outside of ownership (delegated / oversight)',
@@ -186,6 +206,13 @@ export const PERMISSION_DEFINITIONS: Record<PermissionKey, string> = {
   'notification.admin.send': 'Send an administrative notification to a user / role / all users',
   'advertisement.manage':
     'Create, update, activate/deactivate and delete advertisement campaigns and slides across all placements',
+  'trader.admin.read': 'View trader registration profiles/applications',
+  'trader.admin.approve': 'Approve a pending trader registration',
+  'trader.admin.reject': 'Reject a pending trader registration',
+  'trader.admin.suspend': 'Suspend or reactivate an approved trader',
+  'market.offer.admin.read': 'List and view any poultry/egg market offer (system-wide)',
+  'market.offer.admin.delete': 'Delete any poultry/egg market offer (moderation)',
+  'market.rate.manage': 'Enter/update the poultry and egg exchange-rate boards',
 };
 
 /**
@@ -222,6 +249,10 @@ export const SUPERVISOR_DOMAIN_PERMISSIONS: Record<SupervisorDomain, readonly Pe
   // The responsible Advertisement supervisor: full campaign + slide management
   // for every placement.
   ADVERTISEMENT: ['advertisement.manage'],
+  // The responsible Market specialist: offer moderation + exchange-rate entry
+  // (governorate-wide data, not per-organization — trader approve/reject/
+  // suspend stays ADMIN/MODERATOR-oversight-only, not part of this domain).
+  MARKET: ['market.offer.admin.read', 'market.offer.admin.delete', 'market.rate.manage'],
 };
 
 /**
@@ -239,6 +270,7 @@ export const ROLE_PERMISSIONS: Record<RoleKey, PermissionKey[]> = {
     'supervisor.read',
     'audit.read',
     'organization.admin.read',
+    'trader.admin.read',
   ],
   PET_OWNER: [],
   VETERINARIAN: [],

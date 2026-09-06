@@ -24,7 +24,15 @@ import {
   createOwnerMedicalRouter,
 } from '../modules/veterinary-care/index.js';
 import { createFarmRouter, createPoultryOpsRouter } from '../modules/farms/index.js';
+import { createSheepBatchRouter, createCattleBatchRouter } from '../modules/livestock/index.js';
 import { createVeterinaryStoreRouter } from '../modules/veterinary-store/index.js';
+import {
+  createTraderRouters,
+  createPoultryOfferRouters,
+  createEggOfferRouters,
+  createExchangeRateRouter,
+  createPoultryMarketStatisticsRouter,
+} from '../modules/poultryMarket/index.js';
 import {
   createChatRouter,
   createChatMessageRouter,
@@ -108,6 +116,12 @@ export function createApiRouter(c: Container): Router {
   // farm-profile header. Extends `/organizations/:organizationId/...`.
   router.use('/organizations', createPoultryOpsRouter(c));
 
+  // Sheep Farms & Cattle Farms — mirrors the Phase 6 farm/poultry routes above
+  // for two more species. `farm/profile|expenses|appointments|subscription*`
+  // are NOT duplicated — both reuse the poultry routers' routes unchanged.
+  router.use('/organizations', createSheepBatchRouter(c));
+  router.use('/organizations', createCattleBatchRouter(c));
+
   // --- Phase 7: animal lifecycle publications (Lost/Adoption/Mating) ---
   // Owner create/read extends `/animals/:animalId/publications`; the public
   // browse lives at `/animal-publications` (a literal `/animals/lost` segment
@@ -119,6 +133,18 @@ export function createApiRouter(c: Container): Router {
   // Product CRUD + inventory extend `/organizations/:organizationId/products`;
   // the store organization itself (create / approve / members) is Phase 3.
   router.use('/organizations', createVeterinaryStoreRouter(c));
+
+  // --- Poultry Markets: trader registration / offers / exchange rates ---
+  // Trader status is a per-USER concept, not per-organization — every route
+  // here is mounted at the top level, no `:organizationId` in any path.
+  const traders = createTraderRouters(c);
+  const poultryOffers = createPoultryOfferRouters(c);
+  const eggOffers = createEggOfferRouters(c);
+  router.use('/traders', traders.self);
+  router.use('/poultry-offers', poultryOffers.self);
+  router.use('/egg-offers', eggOffers.self);
+  router.use('/poultry-market/exchange-rates', createExchangeRateRouter(c));
+  router.use('/poultry-market/statistics', createPoultryMarketStatisticsRouter(c));
 
   // --- Phase 12: chat & real-time messaging -------------------
   // `POST /organizations/:organizationId/conversations` starts a conversation;
@@ -162,6 +188,9 @@ export function createApiRouter(c: Container): Router {
   router.use('/admin/veterinarians', vets.admin);
   router.use('/admin/supervisors', createAdminSupervisorRouter(c));
   router.use('/admin/organizations', createAdminOrganizationRouter(c));
+  router.use('/admin/traders', traders.admin);
+  router.use('/admin/poultry-offers', poultryOffers.admin);
+  router.use('/admin/egg-offers', eggOffers.admin);
   router.use('/admin/animal-publications', createAdminAnimalPublicationRouter(c));
   router.use('/admin', createSupportAdminRouter(c));
   router.use('/admin', createAdminContentRouter(c));

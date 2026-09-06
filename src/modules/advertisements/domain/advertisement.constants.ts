@@ -34,6 +34,14 @@ export const AD_PLACEMENTS = [
   'CONSULTATIONS',
   'COURSES',
   'SEMINARS',
+  // Poultry Markets module — one ad slot per market/bourse landing screen.
+  'POULTRY_MARKET',
+  'EGG_MARKET',
+  'EXCHANGE_RATES',
+  'TRADER_REGISTRATION',
+  // Sheep Farms & Cattle Farms — the combined landing screen's ad slot.
+  'SHEEP_FARMS',
+  'CATTLE_FARMS',
 ] as const;
 export type AdPlacement = (typeof AD_PLACEMENTS)[number];
 export const DEFAULT_AD_PLACEMENT: AdPlacement = 'HOME';

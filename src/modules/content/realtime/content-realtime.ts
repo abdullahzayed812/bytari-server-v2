@@ -33,6 +33,7 @@ class ContentFeedAuthorizer implements RealtimeAuthorizer {
       email: user.email,
       status: user.status,
       veterinarianStatus: user.veterinarianStatus,
+      traderStatus: user.traderStatus,
       roleKeys: await this.roles.getRoleKeysForUser(user.id),
       sessionId: null,
     };

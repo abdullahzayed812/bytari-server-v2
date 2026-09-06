@@ -14,7 +14,7 @@ const validBody = {
   name: 'مزرعة النور للدواجن',
   location: 'بغداد - الدورة',
   governorate: 'بغداد',
-  farmCategory: 'BROILER',
+  poultryProductionType: 'BROILER',
   description: 'حقل دواجن لاحم',
   address: 'شارع 14، قرب الجسر',
   capacity: 10000,
@@ -59,7 +59,7 @@ describe('POST /organizations/farms — Add Poultry Farm', () => {
     expect(details).toMatchObject({
       location: 'بغداد - الدورة',
       governorate: 'بغداد',
-      farm_category: 'BROILER',
+      poultry_production_type: 'BROILER',
       capacity: 10000,
       current_bird_count: 8500,
       contact_name: 'زهير الراوي',
@@ -110,7 +110,7 @@ describe('POST /organizations/farms — Add Poultry Farm', () => {
       governorate: 'بغداد',
       capacity: 10000,
       currentBirdCount: 8500,
-      farmCategory: 'BROILER',
+      poultryProductionType: 'BROILER',
       contactName: 'زهير الراوي',
     });
   });
@@ -126,8 +126,8 @@ describe('POST /organizations/farms — Add Poultry Farm', () => {
       { ...validBody, name: undefined },
       { ...validBody, location: undefined },
       { ...validBody, governorate: undefined },
-      { ...validBody, farmCategory: undefined },
-      { ...validBody, farmCategory: 'DRAGON' },
+      { ...validBody, poultryProductionType: undefined },
+      { ...validBody, poultryProductionType: 'DRAGON' },
       { ...validBody, contactEmail: 'not-an-email' },
     ]) {
       const res = await request(app)

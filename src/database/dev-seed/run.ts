@@ -505,7 +505,7 @@ export async function runDevSeed(knex: Knex, deps: RunDevSeedDeps = {}): Promise
           capacity: 10000,
           currentBirdCount: 8500,
           establishedOn: '2024-02-10',
-          farmCategory: 'MIXED',
+          poultryProductionType: 'MIXED',
           contactName: 'مالك المزرعة',
           contactPhone: '+9647700000000',
           contactEmail: 'farm.owner@example.test',

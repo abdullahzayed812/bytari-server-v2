@@ -122,9 +122,37 @@ export function rowToOrganizationReview(row: OrganizationReviewRow): Organizatio
   };
 }
 
+/**
+ * A FARM's subscription validity — deliberately SEPARATE from
+ * `Organization.status` (the approval state). Computed server-side from the
+ * stored dates vs. `now()`, never stored itself, so there is nothing to drift
+ * out of sync (§`computeFarmSubscriptionStatus`).
+ */
+export const FARM_SUBSCRIPTION_STATUSES = ['NOT_STARTED', 'ACTIVE', 'EXPIRED'] as const;
+export type FarmSubscriptionStatus = (typeof FARM_SUBSCRIPTION_STATUSES)[number];
+
+/**
+ * Pure — no I/O, no device-clock trust. `now` defaults to the real clock but
+ * is injectable for tests. Both dates are `YYYY-MM-DD` (or `null` before the
+ * farm's first subscription period is ever set).
+ */
+export function computeFarmSubscriptionStatus(
+  startDate: string | null,
+  endDate: string | null,
+  now: Date = new Date(),
+): FarmSubscriptionStatus {
+  if (!startDate || !endDate) return 'NOT_STARTED';
+  const today = now.toISOString().slice(0, 10);
+  return endDate >= today ? 'ACTIVE' : 'EXPIRED';
+}
+
 export interface OrganizationDetails extends Partial<OrganizationProfile> {
   /** FARM only. */
   joinCode?: string;
+  /** FARM only — subscription period + derived status. */
+  subscriptionStartDate?: string | null;
+  subscriptionEndDate?: string | null;
+  subscriptionStatus?: FarmSubscriptionStatus;
 }
 
 export interface OrganizationWithDetails extends Organization {

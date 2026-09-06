@@ -5,6 +5,14 @@ import { sendSuccess } from '../../../shared/http/response.js';
 import { validatedBody, validatedParams, validatedQuery } from '../../../shared/http/validate.js';
 import { auditContextFromRequest, type AuditContextResult } from '../../audit/audit-context.js';
 import { requireAuth } from '../../auth/authenticate.middleware.js';
+import type { FarmSubscriptionService } from '../../farms/application/farm-subscription.service.js';
+import type {
+  AdminListFarmsQuery,
+  ApproveRenewalBody,
+  RejectRenewalBody,
+  SetSubscriptionBody,
+} from '../../farms/presentation/farm-subscription.schemas.js';
+import type { FarmSubscriptionRenewalRepository } from '../../farms/infrastructure/farm-subscription-renewal.repository.js';
 import type { OrganizationService } from '../application/organization.service.js';
 import type { MembershipService } from '../application/membership.service.js';
 import type { OrganizationSupervisorService } from '../application/organization-supervisor.service.js';
@@ -22,6 +30,8 @@ export class AdminOrganizationController {
     private readonly organizationRepo: OrganizationRepository,
     private readonly members: MembershipService,
     private readonly supervisors: OrganizationSupervisorService,
+    private readonly farmRenewals: FarmSubscriptionRenewalRepository,
+    private readonly farmSubscription: FarmSubscriptionService,
   ) {}
 
   private actor(req: Request): { actorUserId: string; context: AuditContextResult } {
@@ -100,5 +110,52 @@ export class AdminOrganizationController {
     const { id, memberId } = validatedParams<{ id: string; memberId: string }>(req);
     await this.supervisors.remove(id, memberId, this.actor(req));
     sendSuccess(res, { success: true });
+  };
+
+  // --- Poultry Farms management (subscription + renewal requests) ----
+
+  listFarms = async (req: Request, res: Response): Promise<void> => {
+    const q = validatedQuery<AdminListFarmsQuery>(req);
+    const { items, total } = await this.farmRenewals.listFarmsForAdmin({
+      page: q.page,
+      pageSize: q.pageSize,
+      status: q.status,
+      subscriptionStatus: q.subscriptionStatus,
+    });
+    sendSuccess(res, items, 200, pageMeta(q.page, q.pageSize, total));
+  };
+
+  listFarmSubscriptionRenewals = async (req: Request, res: Response): Promise<void> => {
+    const { id } = validatedParams<{ id: string }>(req);
+    if (!(await this.organizationRepo.findById(id))) {
+      throw new NotFoundError('Organization not found');
+    }
+    const { items, total } = await this.farmSubscription.listRenewalRequests(id, {
+      page: 1,
+      pageSize: 100,
+    });
+    sendSuccess(res, items, 200, pageMeta(1, 100, total));
+  };
+
+  setFarmSubscription = async (req: Request, res: Response): Promise<void> => {
+    const { id } = validatedParams<{ id: string }>(req);
+    const body = validatedBody<SetSubscriptionBody>(req);
+    await this.farmSubscription.setSubscription(id, body, this.actor(req));
+    sendSuccess(res, { updated: true });
+  };
+
+  approveFarmRenewal = async (req: Request, res: Response): Promise<void> => {
+    const { id, requestId } = validatedParams<{ id: string; requestId: string }>(req);
+    const body = validatedBody<ApproveRenewalBody>(req);
+    sendSuccess(res, await this.farmSubscription.approveRenewal(id, requestId, body, this.actor(req)));
+  };
+
+  rejectFarmRenewal = async (req: Request, res: Response): Promise<void> => {
+    const { id, requestId } = validatedParams<{ id: string; requestId: string }>(req);
+    const body = validatedBody<RejectRenewalBody>(req);
+    sendSuccess(
+      res,
+      await this.farmSubscription.rejectRenewal(id, requestId, body.reason, this.actor(req)),
+    );
   };
 }

@@ -5,8 +5,8 @@ import { ErrorCode } from '../../../shared/errors/error-codes.js';
 import type { EventBus } from '../../../shared/events/index.js';
 import type { AuditContext } from '../../audit/audit.types.js';
 import type { AuditService } from '../../audit/audit.service.js';
-import type { PoultryFlock } from '../domain/farm.types.js';
-import { FarmPolicy } from '../domain/farm.policy.js';
+import type { PoultryFlock } from '../domain/poultry-flock.types.js';
+import { PoultryFlockPolicy } from '../domain/poultry-flock.policy.js';
 import { PoultryOpsAuditAction, PoultryOpsAuditEntity } from '../domain/poultry-ops.constants.js';
 import type {
   BatchSummary,
@@ -99,7 +99,7 @@ export class PoultryDailyRecordService {
     actor: FarmActor,
   ): Promise<PoultryDailyRecord> {
     const flock = await this.loadFlock(organizationId, flockId);
-    FarmPolicy.assertFlockMutable(flock);
+    PoultryFlockPolicy.assertFlockMutable(flock);
     if (new Date(`${input.recordDate}T00:00:00Z`) > new Date()) {
       throw new BadRequestError('recordDate cannot be in the future');
     }
@@ -149,7 +149,7 @@ export class PoultryDailyRecordService {
     actor: FarmActor,
   ): Promise<PoultryDailyRecord> {
     const flock = await this.loadFlock(organizationId, flockId);
-    FarmPolicy.assertFlockMutable(flock);
+    PoultryFlockPolicy.assertFlockMutable(flock);
     const existing = await this.records.findByIdForFlock(recordId, flockId);
     if (!existing) throw new NotFoundError('Daily record not found');
 

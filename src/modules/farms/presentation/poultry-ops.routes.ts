@@ -3,7 +3,16 @@ import { asyncHandler } from '../../../shared/http/async-handler.js';
 import { validate } from '../../../shared/http/validate.js';
 import type { Container } from '../../../container.js';
 import { createOrganizationMiddleware } from '../../organizations/presentation/organization.middleware.js';
-import { createFarmMiddleware, withFarmOrganization } from './farm.middleware.js';
+import { createFarmSubscriptionMiddleware, withFarmOrganization } from './farm.middleware.js';
+import { createPoultryFlockMiddleware } from './poultry-flock.middleware.js';
+import {
+  approveRenewalBodySchema,
+  createRenewalRequestBodySchema,
+  listRenewalRequestsQuerySchema,
+  rejectRenewalBodySchema,
+  renewalRequestParamSchema,
+  setSubscriptionBodySchema,
+} from './farm-subscription.schemas.js';
 import { PoultryOpsController } from './poultry-ops.controller.js';
 import {
   appointmentIdParamSchema,
@@ -53,45 +62,61 @@ export function createPoultryOpsRouter(c: Container): Router {
     c.poultryHealthEventService,
     c.farmAppointmentService,
     c.poultryCaseService,
+    c.farmSubscriptionService,
   );
   const { withOrganization, authorizeOrg } = createOrganizationMiddleware({
     organizations: c.organizationRepository,
     authz: c.authorizationService,
   });
-  const { withPoultryFlock } = createFarmMiddleware({ flocks: c.poultryFlockRepository });
+  const { requireActiveFarmSubscription } = createFarmSubscriptionMiddleware({
+    subscriptions: c.farmSubscriptionRenewalRepository,
+    authz: c.authorizationService,
+  });
+  const { withPoultryFlock } = createPoultryFlockMiddleware({
+    flocks: c.poultryFlockRepository,
+  });
 
   const r = Router();
   r.use(c.authenticate);
 
+  // `org`/`flock` stay ungated — used ONLY by the farm-profile GET and the
+  // subscription/renewal routes, which must work precisely while the
+  // subscription is not active. Every other route below requires an ACTIVE
+  // subscription (`orgOp`/`flockOp`) — spec: no farm operation while
+  // EXPIRED/NOT_STARTED.
   const org = [withOrganization, withFarmOrganization] as const;
-  const flock = [withOrganization, withFarmOrganization] as const;
+  const orgOp = [withOrganization, withFarmOrganization, requireActiveFarmSubscription] as const;
+  const flockOp = [withOrganization, withFarmOrganization, requireActiveFarmSubscription] as const;
 
   // --- farm profile (Farm Details header) --------------------------
   r.get(
     '/:organizationId/farm/profile',
     validate({ params: organizationParamSchema }),
     ...org,
-    authorizeOrg('organization.read'),
+    // The farm owner must be able to view their own farm's profile even
+    // while it's PENDING approval, or once EXPIRED — see
+    // organization.middleware.ts. Read-only; no subscription gate.
+    authorizeOrg('organization.read', { allowInactiveForOwner: true }),
     asyncHandler(ctrl.getProfile),
   );
   r.patch(
     '/:organizationId/farm/profile',
     validate({ params: organizationParamSchema, body: updateFarmProfileBodySchema }),
-    ...org,
+    ...orgOp,
     authorizeOrg('organization.update'),
     asyncHandler(ctrl.updateProfile),
   );
   r.post(
     '/:organizationId/farm/profile/image/upload-url',
     validate({ params: organizationParamSchema, body: imageUploadUrlBodySchema }),
-    ...org,
+    ...orgOp,
     authorizeOrg('organization.update'),
     asyncHandler(ctrl.requestProfileImageUploadUrl),
   );
   r.post(
     '/:organizationId/farm/profile/image',
     validate({ params: organizationParamSchema, body: registerImageBodySchema }),
-    ...org,
+    ...orgOp,
     authorizeOrg('organization.update'),
     asyncHandler(ctrl.registerProfileImage),
   );
@@ -101,7 +126,7 @@ export function createPoultryOpsRouter(c: Container): Router {
   r.get(
     `${flockBase}/summary`,
     validate({ params: flockScopeParamSchema }),
-    ...flock,
+    ...flockOp,
     authorizeOrg('farm.poultry.read'),
     withPoultryFlock,
     asyncHandler(ctrl.batchSummary),
@@ -109,7 +134,7 @@ export function createPoultryOpsRouter(c: Container): Router {
   r.get(
     `${flockBase}/weekly-summary`,
     validate({ params: flockScopeParamSchema, query: weeklySummaryQuerySchema }),
-    ...flock,
+    ...flockOp,
     authorizeOrg('farm.poultry.read'),
     withPoultryFlock,
     asyncHandler(ctrl.weeklySummary),
@@ -120,7 +145,7 @@ export function createPoultryOpsRouter(c: Container): Router {
   r.get(
     dailyBase,
     validate({ params: flockScopeParamSchema, query: listDailyRecordsQuerySchema }),
-    ...flock,
+    ...flockOp,
     authorizeOrg('farm.daily_record.read'),
     withPoultryFlock,
     asyncHandler(ctrl.listDailyRecords),
@@ -128,7 +153,7 @@ export function createPoultryOpsRouter(c: Container): Router {
   r.post(
     dailyBase,
     validate({ params: flockScopeParamSchema, body: createDailyRecordBodySchema }),
-    ...flock,
+    ...flockOp,
     authorizeOrg('farm.daily_record.create'),
     withPoultryFlock,
     asyncHandler(ctrl.createDailyRecord),
@@ -136,7 +161,7 @@ export function createPoultryOpsRouter(c: Container): Router {
   r.get(
     `${dailyBase}/:recordId`,
     validate({ params: recordIdParamSchema }),
-    ...flock,
+    ...flockOp,
     authorizeOrg('farm.daily_record.read'),
     withPoultryFlock,
     asyncHandler(ctrl.getDailyRecord),
@@ -144,7 +169,7 @@ export function createPoultryOpsRouter(c: Container): Router {
   r.patch(
     `${dailyBase}/:recordId`,
     validate({ params: recordIdParamSchema, body: updateDailyRecordBodySchema }),
-    ...flock,
+    ...flockOp,
     authorizeOrg('farm.daily_record.update'),
     withPoultryFlock,
     asyncHandler(ctrl.updateDailyRecord),
@@ -152,7 +177,7 @@ export function createPoultryOpsRouter(c: Container): Router {
   r.delete(
     `${dailyBase}/:recordId`,
     validate({ params: recordIdParamSchema }),
-    ...flock,
+    ...flockOp,
     authorizeOrg('farm.daily_record.delete'),
     withPoultryFlock,
     asyncHandler(ctrl.deleteDailyRecord),
@@ -163,42 +188,42 @@ export function createPoultryOpsRouter(c: Container): Router {
   r.get(
     expenseBase,
     validate({ params: organizationParamSchema, query: listExpensesQuerySchema }),
-    ...org,
+    ...orgOp,
     authorizeOrg('farm.expense.read'),
     asyncHandler(ctrl.listExpenses),
   );
   r.get(
     `${expenseBase}/summary`,
     validate({ params: organizationParamSchema }),
-    ...org,
+    ...orgOp,
     authorizeOrg('farm.expense.read'),
     asyncHandler(ctrl.expenseSummary),
   );
   r.post(
     expenseBase,
     validate({ params: organizationParamSchema, body: createExpenseBodySchema }),
-    ...org,
+    ...orgOp,
     authorizeOrg('farm.expense.create'),
     asyncHandler(ctrl.createExpense),
   );
   r.get(
     `${expenseBase}/:expenseId`,
     validate({ params: expenseIdParamSchema }),
-    ...org,
+    ...orgOp,
     authorizeOrg('farm.expense.read'),
     asyncHandler(ctrl.getExpense),
   );
   r.patch(
     `${expenseBase}/:expenseId`,
     validate({ params: expenseIdParamSchema, body: updateExpenseBodySchema }),
-    ...org,
+    ...orgOp,
     authorizeOrg('farm.expense.update'),
     asyncHandler(ctrl.updateExpense),
   );
   r.delete(
     `${expenseBase}/:expenseId`,
     validate({ params: expenseIdParamSchema }),
-    ...org,
+    ...orgOp,
     authorizeOrg('farm.expense.delete'),
     asyncHandler(ctrl.deleteExpense),
   );
@@ -208,7 +233,7 @@ export function createPoultryOpsRouter(c: Container): Router {
   r.get(
     healthBase,
     validate({ params: flockScopeParamSchema, query: listHealthEventsQuerySchema }),
-    ...flock,
+    ...flockOp,
     authorizeOrg('farm.health_event.read'),
     withPoultryFlock,
     asyncHandler(ctrl.listHealthEvents),
@@ -216,7 +241,7 @@ export function createPoultryOpsRouter(c: Container): Router {
   r.post(
     healthBase,
     validate({ params: flockScopeParamSchema, body: createHealthEventBodySchema }),
-    ...flock,
+    ...flockOp,
     authorizeOrg('farm.health_event.create'),
     withPoultryFlock,
     asyncHandler(ctrl.createHealthEvent),
@@ -224,7 +249,7 @@ export function createPoultryOpsRouter(c: Container): Router {
   r.get(
     `${healthBase}/:eventId`,
     validate({ params: healthEventIdParamSchema }),
-    ...flock,
+    ...flockOp,
     authorizeOrg('farm.health_event.read'),
     withPoultryFlock,
     asyncHandler(ctrl.getHealthEvent),
@@ -232,7 +257,7 @@ export function createPoultryOpsRouter(c: Container): Router {
   r.patch(
     `${healthBase}/:eventId`,
     validate({ params: healthEventIdParamSchema, body: updateHealthEventBodySchema }),
-    ...flock,
+    ...flockOp,
     authorizeOrg('farm.health_event.update'),
     withPoultryFlock,
     asyncHandler(ctrl.updateHealthEvent),
@@ -240,7 +265,7 @@ export function createPoultryOpsRouter(c: Container): Router {
   r.delete(
     `${healthBase}/:eventId`,
     validate({ params: healthEventIdParamSchema }),
-    ...flock,
+    ...flockOp,
     authorizeOrg('farm.health_event.delete'),
     withPoultryFlock,
     asyncHandler(ctrl.deleteHealthEvent),
@@ -251,35 +276,35 @@ export function createPoultryOpsRouter(c: Container): Router {
   r.get(
     apptBase,
     validate({ params: organizationParamSchema, query: listAppointmentsQuerySchema }),
-    ...org,
+    ...orgOp,
     authorizeOrg('farm.appointment.read'),
     asyncHandler(ctrl.listAppointments),
   );
   r.post(
     apptBase,
     validate({ params: organizationParamSchema, body: createAppointmentBodySchema }),
-    ...org,
+    ...orgOp,
     authorizeOrg('farm.appointment.create'),
     asyncHandler(ctrl.createAppointment),
   );
   r.get(
     `${apptBase}/:appointmentId`,
     validate({ params: appointmentIdParamSchema }),
-    ...org,
+    ...orgOp,
     authorizeOrg('farm.appointment.read'),
     asyncHandler(ctrl.getAppointment),
   );
   r.patch(
     `${apptBase}/:appointmentId`,
     validate({ params: appointmentIdParamSchema, body: updateAppointmentBodySchema }),
-    ...org,
+    ...orgOp,
     authorizeOrg('farm.appointment.update'),
     asyncHandler(ctrl.updateAppointment),
   );
   r.delete(
     `${apptBase}/:appointmentId`,
     validate({ params: appointmentIdParamSchema }),
-    ...org,
+    ...orgOp,
     authorizeOrg('farm.appointment.delete'),
     asyncHandler(ctrl.deleteAppointment),
   );
@@ -289,7 +314,7 @@ export function createPoultryOpsRouter(c: Container): Router {
   r.get(
     caseBase,
     validate({ params: flockScopeParamSchema, query: listCasesQuerySchema }),
-    ...flock,
+    ...flockOp,
     authorizeOrg('farm.case.read'),
     withPoultryFlock,
     asyncHandler(ctrl.listCases),
@@ -297,7 +322,7 @@ export function createPoultryOpsRouter(c: Container): Router {
   r.get(
     `${caseBase}/summary`,
     validate({ params: flockScopeParamSchema }),
-    ...flock,
+    ...flockOp,
     authorizeOrg('farm.case.read'),
     withPoultryFlock,
     asyncHandler(ctrl.caseSummary),
@@ -305,7 +330,7 @@ export function createPoultryOpsRouter(c: Container): Router {
   r.post(
     caseBase,
     validate({ params: flockScopeParamSchema, body: createCaseBodySchema }),
-    ...flock,
+    ...flockOp,
     authorizeOrg('farm.case.create'),
     withPoultryFlock,
     asyncHandler(ctrl.createCase),
@@ -313,7 +338,7 @@ export function createPoultryOpsRouter(c: Container): Router {
   r.get(
     `${caseBase}/:caseId`,
     validate({ params: caseIdParamSchema }),
-    ...flock,
+    ...flockOp,
     authorizeOrg('farm.case.read'),
     withPoultryFlock,
     asyncHandler(ctrl.getCase),
@@ -321,7 +346,7 @@ export function createPoultryOpsRouter(c: Container): Router {
   r.patch(
     `${caseBase}/:caseId`,
     validate({ params: caseIdParamSchema, body: updateCaseBodySchema }),
-    ...flock,
+    ...flockOp,
     authorizeOrg('farm.case.update'),
     withPoultryFlock,
     asyncHandler(ctrl.updateCase),
@@ -329,7 +354,7 @@ export function createPoultryOpsRouter(c: Container): Router {
   r.delete(
     `${caseBase}/:caseId`,
     validate({ params: caseIdParamSchema }),
-    ...flock,
+    ...flockOp,
     authorizeOrg('farm.case.delete'),
     withPoultryFlock,
     asyncHandler(ctrl.deleteCase),
@@ -337,7 +362,7 @@ export function createPoultryOpsRouter(c: Container): Router {
   r.post(
     `${caseBase}/:caseId/image/upload-url`,
     validate({ params: caseIdParamSchema, body: imageUploadUrlBodySchema }),
-    ...flock,
+    ...flockOp,
     authorizeOrg('farm.case.update'),
     withPoultryFlock,
     asyncHandler(ctrl.requestCaseImageUploadUrl),
@@ -345,10 +370,55 @@ export function createPoultryOpsRouter(c: Container): Router {
   r.post(
     `${caseBase}/:caseId/image`,
     validate({ params: caseIdParamSchema, body: registerImageBodySchema }),
-    ...flock,
+    ...flockOp,
     authorizeOrg('farm.case.update'),
     withPoultryFlock,
     asyncHandler(ctrl.registerCaseImage),
+  );
+
+  // --- subscription (owner / assigned supervisor / admin) ------------
+  // Deliberately NOT subscription-gated — these are exactly the routes that
+  // must keep working while the subscription is EXPIRED/NOT_STARTED (reading
+  // status, requesting renewal, and the admin/supervisor actions that fix it).
+  const subscriptionBase = '/:organizationId/farm/subscription-renewals';
+  r.get(
+    subscriptionBase,
+    validate({ params: organizationParamSchema, query: listRenewalRequestsQuerySchema }),
+    ...org,
+    authorizeOrg('farm.subscription.read', { allowInactiveForOwner: true }),
+    asyncHandler(ctrl.listSubscriptionRenewals),
+  );
+  r.post(
+    subscriptionBase,
+    validate({ params: organizationParamSchema, body: createRenewalRequestBodySchema }),
+    ...org,
+    authorizeOrg('farm.subscription.read', { allowInactiveForOwner: true }),
+    asyncHandler(ctrl.createSubscriptionRenewal),
+  );
+  // `excludeOwner: true` — the subscription period is Admin/Supervisor
+  // territory by design (spec §4/§9): the farm owner must never be able to
+  // grant themselves a subscription, even though the OWNER override would
+  // otherwise satisfy any org-scoped permission check.
+  r.post(
+    '/:organizationId/farm/subscription',
+    validate({ params: organizationParamSchema, body: setSubscriptionBodySchema }),
+    ...org,
+    authorizeOrg('farm.subscription.manage', { excludeOwner: true }),
+    asyncHandler(ctrl.setSubscription),
+  );
+  r.post(
+    `${subscriptionBase}/:requestId/approve`,
+    validate({ params: renewalRequestParamSchema, body: approveRenewalBodySchema }),
+    ...org,
+    authorizeOrg('farm.subscription.manage', { excludeOwner: true }),
+    asyncHandler(ctrl.approveSubscriptionRenewal),
+  );
+  r.post(
+    `${subscriptionBase}/:requestId/reject`,
+    validate({ params: renewalRequestParamSchema, body: rejectRenewalBodySchema }),
+    ...org,
+    authorizeOrg('farm.subscription.manage', { excludeOwner: true }),
+    asyncHandler(ctrl.rejectSubscriptionRenewal),
   );
 
   return r;

@@ -148,6 +148,22 @@ export class AuthorizationService {
     });
   }
 
+  /**
+   * Trader status is pure status — no role component (unlike veterinarian),
+   * since the Poultry Markets spec never asked for a granted role.
+   */
+  isApprovedTrader(principal: Pick<AuthPrincipal, 'traderStatus'>): boolean {
+    return principal.traderStatus === 'APPROVED';
+  }
+
+  /** Gate for trader-only market capabilities (create/manage offers). */
+  assertApprovedTrader(principal: Pick<AuthPrincipal, 'traderStatus'>): void {
+    if (this.isApprovedTrader(principal)) return;
+    throw new ForbiddenError('This action requires an approved trader account', {
+      code: ErrorCode.TRADER_APPROVAL_REQUIRED,
+    });
+  }
+
   // --- organization-scoped ------------------------------------------
 
   private orgOrThrow(): OrganizationAuthzDeps {

@@ -1,5 +1,6 @@
 import type { Knex } from 'knex';
 import {
+  computeFarmSubscriptionStatus,
   emptyOrganizationProfile,
   rowToOrganization,
   type Organization,
@@ -12,6 +13,11 @@ import {
 } from '../domain/organization.types.js';
 
 const TABLE = 'organizations';
+
+function toDateOnly(v: string | Date | null): string | null {
+  if (v === null) return null;
+  return v instanceof Date ? v.toISOString().slice(0, 10) : v.slice(0, 10);
+}
 
 const DETAIL_TABLE: Record<OrganizationType, string> = {
   CLINIC: 'clinic_details',
@@ -120,8 +126,20 @@ export class OrganizationRepository {
     const details: OrganizationWithDetails['details'] = {};
     if (org.type === 'FARM') {
       const row = (await this.conn(trx)('farm_details').where({ organization_id: id }).first()) as
-        { join_code: string } | undefined;
-      if (row) details.joinCode = row.join_code;
+        | {
+            join_code: string;
+            subscription_start_date: string | Date | null;
+            subscription_end_date: string | Date | null;
+          }
+        | undefined;
+      if (row) {
+        details.joinCode = row.join_code;
+        const startDate = toDateOnly(row.subscription_start_date);
+        const endDate = toDateOnly(row.subscription_end_date);
+        details.subscriptionStartDate = startDate;
+        details.subscriptionEndDate = endDate;
+        details.subscriptionStatus = computeFarmSubscriptionStatus(startDate, endDate);
+      }
     } else {
       const row = await this.findProfileRow(org.type, id, trx);
       const profile = rowToProfile(row);

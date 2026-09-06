@@ -207,13 +207,13 @@ describe('farm profile + expenses', () => {
         address: 'Babil',
         capacity: 10000,
         establishedOn: '2024-01-01',
-        farmCategory: 'BROILER',
+        poultryProductionType: 'BROILER',
       });
     expect(upd.status).toBe(200);
     expect(upd.body.data).toMatchObject({
       address: 'Babil',
       capacity: 10000,
-      farmCategory: 'BROILER',
+      poultryProductionType: 'BROILER',
     });
 
     const get = await request(app)

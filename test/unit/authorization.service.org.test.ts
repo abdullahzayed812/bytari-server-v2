@@ -12,6 +12,7 @@ function principal(overrides: Partial<AuthPrincipal> = {}): AuthPrincipal {
     email: 'u1@test',
     status: 'ACTIVE',
     veterinarianStatus: 'APPROVED',
+    traderStatus: 'NOT_REGISTERED',
     roleKeys: ['VETERINARIAN'],
     sessionId: null,
     ...overrides,

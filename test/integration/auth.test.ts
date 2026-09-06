@@ -142,7 +142,7 @@ describe('GET /users/:id', () => {
     const res = await request(app).get(`/api/v1/users/${u.id}`).set(bearer(viewer.accessToken));
     expect(res.status).toBe(200);
     expect(Object.keys(res.body.data).sort()).toEqual(
-      ['firstName', 'id', 'lastName', 'veterinarianStatus'].sort(),
+      ['firstName', 'id', 'lastName', 'veterinarianStatus', 'traderStatus'].sort(),
     );
   });
 });

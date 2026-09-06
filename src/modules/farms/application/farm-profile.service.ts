@@ -9,7 +9,7 @@ import type { AuditService } from '../../audit/audit.service.js';
 import {
   PoultryOpsAuditAction,
   PoultryOpsAuditEntity,
-  type FarmCategory,
+  type PoultryProductionType,
 } from '../domain/poultry-ops.constants.js';
 import {
   emptyFarmProfile,
@@ -70,10 +70,15 @@ export class FarmProfileService {
         row.established_on instanceof Date
           ? row.established_on.toISOString().slice(0, 10)
           : (row.established_on ?? null),
-      farmCategory: (row.farm_category as FarmCategory | null) ?? null,
+      poultryProductionType: (row.poultry_production_type as PoultryProductionType | null) ?? null,
       contactName: row.contact_name,
       contactPhone: row.contact_phone,
       contactEmail: row.contact_email,
+      farmSpecies: (row.farm_species as FarmProfile['farmSpecies']) ?? null,
+      currentSheepCount: row.current_sheep_count === null ? null : Number(row.current_sheep_count),
+      currentCattleCount: row.current_cattle_count === null ? null : Number(row.current_cattle_count),
+      sheepProductionType: row.sheep_production_type,
+      cattleProductionType: row.cattle_production_type,
     };
   }
 
@@ -92,10 +97,15 @@ export class FarmProfileService {
           capacity: patch.capacity,
           currentBirdCount: patch.currentBirdCount,
           establishedOn: patch.establishedOn,
-          farmCategory: patch.farmCategory,
+          poultryProductionType: patch.poultryProductionType,
           contactName: patch.contactName,
           contactPhone: patch.contactPhone,
           contactEmail: patch.contactEmail,
+          farmSpecies: patch.farmSpecies,
+          currentSheepCount: patch.currentSheepCount,
+          currentCattleCount: patch.currentCattleCount,
+          sheepProductionType: patch.sheepProductionType,
+          cattleProductionType: patch.cattleProductionType,
         },
         tx,
       );

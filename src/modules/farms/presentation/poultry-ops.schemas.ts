@@ -3,7 +3,6 @@ import { paginationQuerySchema } from '../../../shared/http/pagination.js';
 import {
   FARM_APPOINTMENT_CATEGORIES,
   FARM_APPOINTMENT_STATUSES,
-  FARM_CATEGORIES,
   FARM_EXPENSE_CATEGORIES,
   POULTRY_ACTIVITY_LEVELS,
   POULTRY_APPETITE_LEVELS,
@@ -11,6 +10,7 @@ import {
   POULTRY_CASE_STATUSES,
   POULTRY_HEALTH_EVENT_KINDS,
   POULTRY_HEALTH_EVENT_STATUSES,
+  POULTRY_PRODUCTION_TYPES,
 } from '../domain/poultry-ops.constants.js';
 
 // --- shared pieces --------------------------------------------------
@@ -43,7 +43,7 @@ export const updateFarmProfileBodySchema = z
     capacity: count.nullable().optional(),
     currentBirdCount: count.nullable().optional(),
     establishedOn: pastOrToday.nullable().optional(),
-    farmCategory: z.enum(FARM_CATEGORIES).nullable().optional(),
+    poultryProductionType: z.enum(POULTRY_PRODUCTION_TYPES).nullable().optional(),
     contactName: shortText.max(160).nullable().optional(),
     contactPhone: z.string().trim().min(3).max(40).nullable().optional(),
     contactEmail: z.string().trim().max(255).email().nullable().optional(),

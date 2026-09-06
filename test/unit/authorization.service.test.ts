@@ -22,6 +22,7 @@ function principal(overrides: Partial<AuthPrincipal> = {}): AuthPrincipal {
     email: 'u1@test',
     status: 'ACTIVE',
     veterinarianStatus: 'NOT_APPLIED',
+    traderStatus: 'NOT_REGISTERED',
     roleKeys: ['PET_OWNER'],
     sessionId: null,
     ...overrides,
@@ -71,5 +72,19 @@ describe('AuthorizationService', () => {
     const svc = makeService([]);
     const p = principal({ roleKeys: ['PET_OWNER'], veterinarianStatus: 'APPROVED' });
     expect(svc.isApprovedVeterinarian(p)).toBe(false);
+  });
+
+  it('trader gating: pure status, no role component (unlike veterinarian)', () => {
+    const svc = makeService([]);
+    const pending = principal({ traderStatus: 'PENDING' });
+    expect(svc.isApprovedTrader(pending)).toBe(false);
+    expect(() => svc.assertApprovedTrader(pending)).toThrow(AppError);
+
+    const suspended = principal({ traderStatus: 'SUSPENDED' });
+    expect(svc.isApprovedTrader(suspended)).toBe(false);
+
+    const approved = principal({ traderStatus: 'APPROVED' });
+    expect(svc.isApprovedTrader(approved)).toBe(true);
+    expect(() => svc.assertApprovedTrader(approved)).not.toThrow();
   });
 });

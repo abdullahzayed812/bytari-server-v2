@@ -42,6 +42,17 @@ export const ORG_PERMISSION_KEYS = [
   'farm.poultry.create',
   'farm.poultry.update',
   'farm.poultry.delete',
+  // --- Sheep Farms & Cattle Farms (mirrors farm.poultry.* — the batch entity
+  // is the only genuinely species-specific permission; daily_record/expense/
+  // health_event/appointment/case/subscription below are already shared) ---
+  'farm.sheep_batch.read',
+  'farm.sheep_batch.create',
+  'farm.sheep_batch.update',
+  'farm.sheep_batch.delete',
+  'farm.cattle_batch.read',
+  'farm.cattle_batch.create',
+  'farm.cattle_batch.update',
+  'farm.cattle_batch.delete',
   // --- Poultry Farm operations (Poultry Farms module) — FARM organizations ---
   // The Farm Details screen: daily records + weekly/batch summaries, expenses,
   // treatments & vaccinations, appointments, individual cases. The farm-profile
@@ -67,6 +78,14 @@ export const ORG_PERMISSION_KEYS = [
   'farm.case.create',
   'farm.case.update',
   'farm.case.delete',
+  // --- Farm subscription (Poultry Farm Approval & Subscription module) ---
+  // Subscription dates live on `farm_details`, computed to a status
+  // server-side. `read` is granted like every other `farm.*.read` key;
+  // `manage` (set dates directly, approve/reject renewal requests) is granted
+  // to NOBODY by default — reachable only via the OWNER override or an
+  // explicit per-membership SUPERVISOR grant (the "Responsible Supervisor").
+  'farm.subscription.read',
+  'farm.subscription.manage',
   // --- Veterinary store products (Phase 10) — VETERINARY_STORE organizations ---
   // Stock changes are `product.inventory.adjust`, NOT `product.update` — a
   // controlled operation, never a free-form field edit.
@@ -126,6 +145,14 @@ export const ORG_PERMISSION_DEFINITIONS: Record<OrgPermissionKey, string> = {
   'farm.poultry.create': 'Register a poultry flock for this farm',
   'farm.poultry.update': 'Update this farm’s poultry flocks',
   'farm.poultry.delete': 'Delete this farm’s poultry flocks',
+  'farm.sheep_batch.read': 'View this farm’s sheep batches',
+  'farm.sheep_batch.create': 'Register a sheep batch for this farm',
+  'farm.sheep_batch.update': 'Update this farm’s sheep batches',
+  'farm.sheep_batch.delete': 'Delete this farm’s sheep batches',
+  'farm.cattle_batch.read': 'View this farm’s cattle batches',
+  'farm.cattle_batch.create': 'Register a cattle batch for this farm',
+  'farm.cattle_batch.update': 'Update this farm’s cattle batches',
+  'farm.cattle_batch.delete': 'Delete this farm’s cattle batches',
   'farm.daily_record.read': 'View a poultry batch’s daily records and weekly summary',
   'farm.daily_record.create': 'Add a daily record for a poultry batch',
   'farm.daily_record.update': 'Update a poultry batch’s daily record',
@@ -146,6 +173,9 @@ export const ORG_PERMISSION_DEFINITIONS: Record<OrgPermissionKey, string> = {
   'farm.case.create': 'Open an individual case for this farm',
   'farm.case.update': 'Update this farm’s individual cases',
   'farm.case.delete': 'Delete this farm’s individual cases',
+  'farm.subscription.read': 'View this farm’s subscription period and renewal requests',
+  'farm.subscription.manage':
+    'Set this farm’s subscription period and approve/reject its renewal requests',
   'product.read': 'View this veterinary store’s products',
   'product.create': 'Add a product to this veterinary store',
   'product.update': 'Update this veterinary store’s products (profile fields, not stock)',
@@ -186,6 +216,15 @@ export const ORG_ROLE_PERMISSIONS: Record<OrgRoleKey, OrgPermissionKey[]> = {
     'farm.poultry.create',
     'farm.poultry.update',
     'farm.poultry.delete',
+    // Sheep Farms & Cattle Farms — mirrors the poultry flock grant above.
+    'farm.sheep_batch.read',
+    'farm.sheep_batch.create',
+    'farm.sheep_batch.update',
+    'farm.sheep_batch.delete',
+    'farm.cattle_batch.read',
+    'farm.cattle_batch.create',
+    'farm.cattle_batch.update',
+    'farm.cattle_batch.delete',
     // Poultry Farm operations — the farm veterinarian runs day-to-day
     // operations on the Farm Details screen.
     'farm.daily_record.read',
@@ -208,6 +247,7 @@ export const ORG_ROLE_PERMISSIONS: Record<OrgRoleKey, OrgPermissionKey[]> = {
     'farm.case.create',
     'farm.case.update',
     'farm.case.delete',
+    'farm.subscription.read',
   ],
   // Phase 6: farm STAFF (employees) can view poultry data; write access to
   // poultry stays with veterinarians / the owner / an assigned supervisor.
@@ -218,11 +258,14 @@ export const ORG_ROLE_PERMISSIONS: Record<OrgRoleKey, OrgPermissionKey[]> = {
   STAFF: [
     'organization.read',
     'farm.poultry.read',
+    'farm.sheep_batch.read',
+    'farm.cattle_batch.read',
     'farm.daily_record.read',
     'farm.expense.read',
     'farm.health_event.read',
     'farm.appointment.read',
     'farm.case.read',
+    'farm.subscription.read',
     'product.read',
   ],
 };

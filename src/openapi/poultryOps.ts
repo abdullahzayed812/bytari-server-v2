@@ -74,7 +74,7 @@ const schemas: Obj = {
       capacity: { type: 'integer', nullable: true },
       currentBirdCount: { type: 'integer', nullable: true },
       establishedOn: { ...dateStr, nullable: true },
-      farmCategory: {
+      poultryProductionType: {
         type: 'string',
         nullable: true,
         enum: ['BROILER', 'LAYER', 'MIXED', 'BREEDER', 'HATCHERY', 'OTHER'],
@@ -93,7 +93,7 @@ const schemas: Obj = {
       capacity: { type: 'integer', minimum: 0, nullable: true },
       currentBirdCount: { type: 'integer', minimum: 0, nullable: true },
       establishedOn: { ...dateStr, nullable: true },
-      farmCategory: {
+      poultryProductionType: {
         type: 'string',
         nullable: true,
         enum: ['BROILER', 'LAYER', 'MIXED', 'BREEDER', 'HATCHERY', 'OTHER'],
@@ -277,6 +277,43 @@ const schemas: Obj = {
       recovered: { type: 'integer' },
       underTreatment: { type: 'integer' },
     },
+  },
+  FarmSubscriptionRenewalRequest: {
+    type: 'object',
+    properties: {
+      id: uuid,
+      organizationId: uuid,
+      requestedByUserId: uuid,
+      status: { type: 'string', enum: ['PENDING', 'APPROVED', 'REJECTED'] },
+      note: { type: 'string', nullable: true },
+      previousSubscriptionEndDate: { ...dateStr, nullable: true },
+      newSubscriptionStartDate: { ...dateStr, nullable: true },
+      newSubscriptionEndDate: { ...dateStr, nullable: true },
+      decidedBy: { ...uuid, nullable: true },
+      decidedAt: { type: 'string', format: 'date-time', nullable: true },
+      decisionReason: { type: 'string', nullable: true },
+      createdAt: { type: 'string', format: 'date-time' },
+      updatedAt: { type: 'string', format: 'date-time' },
+    },
+  },
+  CreateRenewalRequestRequest: {
+    type: 'object',
+    properties: { note: { type: 'string', nullable: true } },
+  },
+  SetSubscriptionRequest: {
+    type: 'object',
+    required: ['startDate', 'endDate'],
+    properties: { startDate: dateStr, endDate: dateStr },
+  },
+  ApproveRenewalRequest: {
+    type: 'object',
+    required: ['startDate', 'endDate'],
+    properties: { startDate: dateStr, endDate: dateStr },
+  },
+  RejectRenewalRequest: {
+    type: 'object',
+    required: ['reason'],
+    properties: { reason: { type: 'string', minLength: 3 } },
   },
 };
 
@@ -546,6 +583,95 @@ const paths: Obj = {
       responses: {
         200: ok('Summary', dataOf({ $ref: '#/components/schemas/PoultryCaseSummary' })),
         ...errs(400, 401, 403, 404),
+      },
+    },
+  },
+  '/organizations/{organizationId}/farm/subscription': {
+    parameters: [orgIdParam],
+    post: {
+      tags: T,
+      summary:
+        'Set the farm subscription period directly — farm.subscription.manage ' +
+        '(owner override / assigned supervisor / admin)',
+      security: bearer,
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': { schema: { $ref: '#/components/schemas/SetSubscriptionRequest' } },
+        },
+      },
+      responses: { 200: ok('Updated'), ...errs(400, 401, 403, 404, 422) },
+    },
+  },
+  '/organizations/{organizationId}/farm/subscription-renewals': {
+    parameters: [orgIdParam],
+    get: {
+      tags: T,
+      summary:
+        'List this farm’s subscription renewal requests — farm.subscription.read ' +
+        '(owner may read even while not ACTIVE)',
+      security: bearer,
+      parameters: [
+        ...pageParams,
+        { name: 'status', in: 'query', schema: { type: 'string', enum: ['PENDING', 'APPROVED', 'REJECTED'] } },
+      ],
+      responses: {
+        200: ok('Renewal requests', listOf('#/components/schemas/FarmSubscriptionRenewalRequest')),
+        ...errs(400, 401, 403, 404),
+      },
+    },
+    post: {
+      tags: T,
+      summary:
+        'Request a subscription renewal — owner only, subscription must be EXPIRED, ' +
+        'at most one open request at a time',
+      security: bearer,
+      requestBody: {
+        content: {
+          'application/json': {
+            schema: { $ref: '#/components/schemas/CreateRenewalRequestRequest' },
+          },
+        },
+      },
+      responses: {
+        201: ok('Created', dataOf({ $ref: '#/components/schemas/FarmSubscriptionRenewalRequest' })),
+        ...errs(400, 401, 403, 404, 409),
+      },
+    },
+  },
+  '/organizations/{organizationId}/farm/subscription-renewals/{requestId}/approve': {
+    parameters: [orgIdParam, { name: 'requestId', in: 'path', required: true, schema: uuid }],
+    post: {
+      tags: T,
+      summary: 'Approve a renewal request and set the new subscription period — farm.subscription.manage',
+      security: bearer,
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': { schema: { $ref: '#/components/schemas/ApproveRenewalRequest' } },
+        },
+      },
+      responses: {
+        200: ok('Approved', dataOf({ $ref: '#/components/schemas/FarmSubscriptionRenewalRequest' })),
+        ...errs(400, 401, 403, 404, 409, 422),
+      },
+    },
+  },
+  '/organizations/{organizationId}/farm/subscription-renewals/{requestId}/reject': {
+    parameters: [orgIdParam, { name: 'requestId', in: 'path', required: true, schema: uuid }],
+    post: {
+      tags: T,
+      summary: 'Reject a renewal request — farm.subscription.manage',
+      security: bearer,
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': { schema: { $ref: '#/components/schemas/RejectRenewalRequest' } },
+        },
+      },
+      responses: {
+        200: ok('Rejected', dataOf({ $ref: '#/components/schemas/FarmSubscriptionRenewalRequest' })),
+        ...errs(400, 401, 403, 404, 409, 422),
       },
     },
   },

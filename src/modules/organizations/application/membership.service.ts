@@ -79,13 +79,18 @@ export class MembershipService {
 
   async addMember(
     organizationId: string,
-    input: { userId: string; roleKey: string },
+    input: { userId?: string; email?: string; roleKey: string },
     actor: MemberActor,
   ): Promise<OrganizationMembershipSummary> {
     if (!ASSIGNABLE_MEMBER_ROLES.has(input.roleKey)) {
       throw new BadRequestError('Members may only be added as VETERINARIAN or STAFF');
     }
-    const target = await this.users.getById(input.userId);
+    const target = input.userId
+      ? await this.users.getById(input.userId)
+      : await this.users.findByEmail((input.email as string).toLowerCase());
+    if (!target) {
+      throw new NotFoundError('No account exists with that email address');
+    }
     if (target.status !== 'ACTIVE') {
       throw new ConflictError('Cannot add a non-active account as a member');
     }
@@ -96,7 +101,7 @@ export class MembershipService {
       if (!orgRole)
         throw new InternalError(`Seed data missing: organization role "${input.roleKey}"`);
 
-      const existing = await this.memberships.findByUserAndOrg(input.userId, organizationId, tx);
+      const existing = await this.memberships.findByUserAndOrg(target.id, organizationId, tx);
       let id: string;
       if (existing && existing.status === 'ACTIVE') {
         throw new ConflictError('User is already an active member of this organization');
@@ -111,7 +116,7 @@ export class MembershipService {
         const m = await this.memberships.create(
           {
             organizationId,
-            userId: input.userId,
+            userId: target.id,
             organizationRoleId: orgRole.id,
             status: 'ACTIVE',
             addedBy: actor.actorUserId,
@@ -127,7 +132,7 @@ export class MembershipService {
           entityType: AuditEntityType.ORGANIZATION_MEMBERSHIP,
           entityId: id,
           actorUserId: actor.actorUserId,
-          metadata: { organizationId, userId: input.userId, roleKey: input.roleKey },
+          metadata: { organizationId, userId: target.id, roleKey: input.roleKey },
           context: actor.context,
         },
         tx,
@@ -137,7 +142,7 @@ export class MembershipService {
 
     this.events.publish('organization.member.added', {
       organizationId,
-      userId: input.userId,
+      userId: target.id,
       roleKey: input.roleKey,
     });
     return this.hydrate(membershipId, organizationId);

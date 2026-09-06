@@ -10,7 +10,8 @@ import type {
   OrganizationService,
 } from '../../organizations/application/organization.service.js';
 import type { FarmJoinService } from '../application/farm-join.service.js';
-import type { CreateFarmBody, JoinFarmBody } from './farm.schemas.js';
+import type { JoinFarmBody } from './farm.schemas.js';
+import type { CreatePoultryFarmBody } from './poultry-flock.schemas.js';
 
 /** Farm join-code + farm-creation HTTP adapter. No business logic. */
 export class FarmController {
@@ -28,12 +29,13 @@ export class FarmController {
    * organization + `farm_details` + the caller's OWNER membership in one
    * transaction (via `OrganizationService.create`); the org starts `PENDING`.
    */
-  createFarm = async (req: Request, res: Response): Promise<void> => {
-    const body = validatedBody<CreateFarmBody>(req);
-    const details: CreateOrganizationDetails = {};
+  createPoultryFarm = async (req: Request, res: Response): Promise<void> => {
+    const body = validatedBody<CreatePoultryFarmBody>(req);
+    const details: CreateOrganizationDetails = { farm_species: 'POULTRY' };
     if (body.location !== undefined) details.location = body.location;
     if (body.governorate !== undefined) details.governorate = body.governorate;
-    if (body.farmCategory !== undefined) details.farm_category = body.farmCategory;
+    if (body.poultryProductionType !== undefined)
+      details.poultry_production_type = body.poultryProductionType;
     if (body.address != null) details.address = body.address;
     if (body.capacity != null) details.capacity = body.capacity;
     if (body.currentBirdCount != null) details.current_bird_count = body.currentBirdCount;

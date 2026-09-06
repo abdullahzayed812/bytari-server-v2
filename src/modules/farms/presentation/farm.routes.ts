@@ -6,16 +6,17 @@ import { createAuthorizationMiddleware } from '../../authorization/authorization
 import { createOrganizationMiddleware } from '../../organizations/presentation/organization.middleware.js';
 import { FarmController } from './farm.controller.js';
 import { PoultryController } from './poultry.controller.js';
-import { createFarmMiddleware } from './farm.middleware.js';
+import { createFarmSubscriptionMiddleware } from './farm.middleware.js';
+import { createPoultryFlockMiddleware } from './poultry-flock.middleware.js';
+import { joinFarmBodySchema } from './farm.schemas.js';
 import {
-  createFarmBodySchema,
+  createPoultryFarmBodySchema,
   createPoultryFlockBodySchema,
   flockParamSchema,
-  joinFarmBodySchema,
   listPoultryFlocksQuerySchema,
   organizationPoultryParamSchema,
   updatePoultryFlockBodySchema,
-} from './farm.schemas.js';
+} from './poultry-flock.schemas.js';
 
 /**
  * Farm-specific routes, mounted at `/organizations` alongside the Phase 3
@@ -36,7 +37,13 @@ export function createFarmRouter(c: Container): Router {
     organizations: c.organizationRepository,
     authz: c.authorizationService,
   });
-  const { withPoultryFlock } = createFarmMiddleware({ flocks: c.poultryFlockRepository });
+  const { requireActiveFarmSubscription } = createFarmSubscriptionMiddleware({
+    subscriptions: c.farmSubscriptionRenewalRepository,
+    authz: c.authorizationService,
+  });
+  const { withPoultryFlock } = createPoultryFlockMiddleware({
+    flocks: c.poultryFlockRepository,
+  });
 
   const r = Router();
   r.use(c.authenticate);
@@ -45,7 +52,11 @@ export function createFarmRouter(c: Container): Router {
   // Any ACTIVE user (a Pet Owner included) creates their own farm; the org is
   // created PENDING and the caller becomes its OWNER. No `authorizeOrg` — there
   // is no organization yet; `OrganizationService.create` runs the create policy.
-  r.post('/farms', validate({ body: createFarmBodySchema }), asyncHandler(farmCtrl.createFarm));
+  r.post(
+    '/farms',
+    validate({ body: createPoultryFarmBodySchema }),
+    asyncHandler(farmCtrl.createPoultryFarm),
+  );
 
   // --- Farm-ID join flow ---------------------------------------
   r.post(
@@ -71,12 +82,15 @@ export function createFarmRouter(c: Container): Router {
   );
 
   // --- poultry flocks -----------------------------------------
+  // Every route here requires an ACTIVE subscription (spec: no farm operation
+  // while EXPIRED/NOT_STARTED) — an ADMIN bypasses, same as `authorizeOrg`.
   const flocksBase = '/:organizationId/poultry/flocks';
   r.get(
     flocksBase,
     validate({ params: organizationPoultryParamSchema, query: listPoultryFlocksQuerySchema }),
     withOrganization,
     authorizeOrg('farm.poultry.read'),
+    requireActiveFarmSubscription,
     asyncHandler(poultryCtrl.listFlocks),
   );
   r.post(
@@ -84,6 +98,7 @@ export function createFarmRouter(c: Container): Router {
     validate({ params: organizationPoultryParamSchema, body: createPoultryFlockBodySchema }),
     withOrganization,
     authorizeOrg('farm.poultry.create'),
+    requireActiveFarmSubscription,
     asyncHandler(poultryCtrl.createFlock),
   );
   r.get(
@@ -91,6 +106,7 @@ export function createFarmRouter(c: Container): Router {
     validate({ params: flockParamSchema }),
     withOrganization,
     authorizeOrg('farm.poultry.read'),
+    requireActiveFarmSubscription,
     withPoultryFlock,
     asyncHandler(poultryCtrl.getFlock),
   );
@@ -99,6 +115,7 @@ export function createFarmRouter(c: Container): Router {
     validate({ params: flockParamSchema, body: updatePoultryFlockBodySchema }),
     withOrganization,
     authorizeOrg('farm.poultry.update'),
+    requireActiveFarmSubscription,
     withPoultryFlock,
     asyncHandler(poultryCtrl.updateFlock),
   );
@@ -107,6 +124,7 @@ export function createFarmRouter(c: Container): Router {
     validate({ params: flockParamSchema }),
     withOrganization,
     authorizeOrg('farm.poultry.delete'),
+    requireActiveFarmSubscription,
     withPoultryFlock,
     asyncHandler(poultryCtrl.deleteFlock),
   );

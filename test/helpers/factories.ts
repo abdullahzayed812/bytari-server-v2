@@ -111,6 +111,77 @@ export async function registerRejectedVet(app: Express): Promise<RegisteredUser>
   return vet;
 }
 
+/**
+ * Register a user and set `trader_status = APPROVED` directly (bypasses the
+ * registration/approval workflow). `authenticate` re-reads status per request,
+ * so no re-login is needed. Fast path for tests that need an approved trader
+ * without exercising registration itself.
+ */
+export async function registerApprovedTrader(app: Express): Promise<RegisteredUser> {
+  const trader = await registerUser(app, { email: uniqueEmail('trader') });
+  await getTestDb()('users').where({ id: trader.id }).update({ trader_status: 'APPROVED' });
+  return trader;
+}
+
+export interface TraderRegisterBody {
+  displayName?: string;
+  traderType?: string;
+  governorate?: string;
+  district?: string;
+  phone?: string;
+  whatsapp?: string;
+  bio?: string;
+  termsAccepted?: boolean;
+}
+
+/** `POST /traders/register` — exercises the real submit-or-reapply workflow. */
+export async function submitTraderRegistration(
+  app: Express,
+  token: string,
+  overrides: TraderRegisterBody = {},
+): Promise<{ status: number; body: { data: Record<string, unknown> } }> {
+  const res = await request(app)
+    .post('/api/v1/traders/register')
+    .set(bearer(token))
+    .send({
+      displayName: overrides.displayName ?? 'مزرعة الاختبار',
+      traderType: overrides.traderType ?? 'WHOLESALE',
+      governorate: overrides.governorate ?? 'بغداد',
+      district: overrides.district,
+      phone: overrides.phone ?? '+9647701234567',
+      whatsapp: overrides.whatsapp,
+      bio: overrides.bio,
+      termsAccepted: overrides.termsAccepted ?? true,
+    });
+  return { status: res.status, body: res.body };
+}
+
+/** `POST /admin/traders/:userId/approve`. */
+export async function approveTraderAsAdmin(
+  app: Express,
+  adminToken: string,
+  userId: string,
+): Promise<{ status: number; body: { data: Record<string, unknown> } }> {
+  const res = await request(app)
+    .post(`/api/v1/admin/traders/${userId}/approve`)
+    .set(bearer(adminToken));
+  return { status: res.status, body: res.body };
+}
+
+/** `POST /admin/traders/:userId/reject`. */
+export async function rejectTraderAsAdmin(
+  app: Express,
+  adminToken: string,
+  userId: string,
+  reason = 'missing required details',
+): Promise<{ status: number; body: { data: Record<string, unknown> } }> {
+  const res = await request(app)
+    .post(`/api/v1/admin/traders/${userId}/reject`)
+    .set(bearer(adminToken))
+    .send({ reason });
+  return { status: res.status, body: res.body };
+}
+
 export function bearer(token: string): { Authorization: string } {
   return { Authorization: `Bearer ${token}` };
 }
@@ -122,7 +193,12 @@ export interface TestOrganization {
   type: string;
   status: string;
   ownerUserId: string;
-  details: { joinCode?: string };
+  details: {
+    joinCode?: string;
+    subscriptionStartDate?: string | null;
+    subscriptionEndDate?: string | null;
+    subscriptionStatus?: string;
+  };
 }
 
 export async function createOrganization(
@@ -418,6 +494,19 @@ export async function createFarm(
   if (!org.details?.joinCode) {
     throw new Error(`createFarm: no joinCode in ${JSON.stringify(org)}`);
   }
+  // Day-to-day operations require an ACTIVE subscription (spec: no farm
+  // operation while EXPIRED/NOT_STARTED). Approval and subscription are
+  // separate admin actions in reality; tests that specifically exercise
+  // subscription mechanics override this with `setFarmSubscriptionAsAdmin`.
+  const subscription = await setFarmSubscriptionAsAdmin(app, adminToken, org.id, {
+    startDate: '2020-01-01',
+    endDate: '2099-01-01',
+  });
+  if (subscription.status !== 200) {
+    throw new Error(
+      `createFarm: failed to set default subscription: ${subscription.status} ${JSON.stringify(subscription.body)}`,
+    );
+  }
   return { id: org.id, joinCode: org.details.joinCode, ownerUserId: org.ownerUserId };
 }
 
@@ -428,6 +517,32 @@ export async function joinFarm(
   joinCode: string,
 ): Promise<request.Response> {
   return request(app).post('/api/v1/organizations/join').set(bearer(vetToken)).send({ joinCode });
+}
+
+/** Admin sets a farm's subscription period directly. Returns the raw HTTP response. */
+export async function setFarmSubscriptionAsAdmin(
+  app: Express,
+  adminToken: string,
+  organizationId: string,
+  dates: { startDate: string; endDate: string },
+): Promise<request.Response> {
+  return request(app)
+    .post(`/api/v1/admin/organizations/${organizationId}/subscription`)
+    .set(bearer(adminToken))
+    .send(dates);
+}
+
+/** Farm owner (or an authorized supervisor/admin) requests a subscription renewal. */
+export async function requestFarmRenewal(
+  app: Express,
+  actorToken: string,
+  organizationId: string,
+  input: { note?: string } = {},
+): Promise<request.Response> {
+  return request(app)
+    .post(`/api/v1/organizations/${organizationId}/farm/subscription-renewals`)
+    .set(bearer(actorToken))
+    .send(input);
 }
 
 export interface TestPoultryFlock {
@@ -468,6 +583,176 @@ export async function createPoultryFlock(
   return res.body.data as TestPoultryFlock;
 }
 
+export interface TestSheepFarm {
+  id: string;
+  joinCode: string;
+  ownerUserId: string;
+}
+
+/** Create + admin-approve a SHEEP-species FARM org via the dedicated `/organizations/sheep-farms` endpoint. */
+export async function createSheepFarm(
+  app: Express,
+  ownerToken: string,
+  adminToken: string,
+  input: Partial<{ name: string; location: string; governorate: string; sheepProductionType: string }> = {},
+): Promise<TestSheepFarm> {
+  const res = await request(app)
+    .post('/api/v1/organizations/sheep-farms')
+    .set(bearer(ownerToken))
+    .send({
+      name: input.name ?? `Sheep Farm ${Date.now()}`,
+      location: input.location ?? 'Baqubah',
+      governorate: input.governorate ?? 'ديالى',
+      sheepProductionType: input.sheepProductionType ?? 'MEAT',
+    });
+  if (res.status !== 201) {
+    throw new Error(`createSheepFarm failed: ${res.status} ${JSON.stringify(res.body)}`);
+  }
+  const org = res.body.data as { id: string; ownerUserId: string; details?: { joinCode?: string } };
+  await approveOrganization(app, adminToken, org.id);
+  if (!org.details?.joinCode) {
+    throw new Error(`createSheepFarm: no joinCode in ${JSON.stringify(org)}`);
+  }
+  const subscription = await setFarmSubscriptionAsAdmin(app, adminToken, org.id, {
+    startDate: '2020-01-01',
+    endDate: '2099-01-01',
+  });
+  if (subscription.status !== 200) {
+    throw new Error(
+      `createSheepFarm: failed to set default subscription: ${subscription.status} ${JSON.stringify(subscription.body)}`,
+    );
+  }
+  return { id: org.id, joinCode: org.details.joinCode, ownerUserId: org.ownerUserId };
+}
+
+export interface TestCattleFarm {
+  id: string;
+  joinCode: string;
+  ownerUserId: string;
+}
+
+/** Create + admin-approve a CATTLE-species FARM org via the dedicated `/organizations/cattle-farms` endpoint. */
+export async function createCattleFarm(
+  app: Express,
+  ownerToken: string,
+  adminToken: string,
+  input: Partial<{ name: string; location: string; governorate: string; cattleProductionType: string }> = {},
+): Promise<TestCattleFarm> {
+  const res = await request(app)
+    .post('/api/v1/organizations/cattle-farms')
+    .set(bearer(ownerToken))
+    .send({
+      name: input.name ?? `Cattle Farm ${Date.now()}`,
+      location: input.location ?? 'Baqubah',
+      governorate: input.governorate ?? 'ديالى',
+      cattleProductionType: input.cattleProductionType ?? 'DAIRY',
+    });
+  if (res.status !== 201) {
+    throw new Error(`createCattleFarm failed: ${res.status} ${JSON.stringify(res.body)}`);
+  }
+  const org = res.body.data as { id: string; ownerUserId: string; details?: { joinCode?: string } };
+  await approveOrganization(app, adminToken, org.id);
+  if (!org.details?.joinCode) {
+    throw new Error(`createCattleFarm: no joinCode in ${JSON.stringify(org)}`);
+  }
+  const subscription = await setFarmSubscriptionAsAdmin(app, adminToken, org.id, {
+    startDate: '2020-01-01',
+    endDate: '2099-01-01',
+  });
+  if (subscription.status !== 200) {
+    throw new Error(
+      `createCattleFarm: failed to set default subscription: ${subscription.status} ${JSON.stringify(subscription.body)}`,
+    );
+  }
+  return { id: org.id, joinCode: org.details.joinCode, ownerUserId: org.ownerUserId };
+}
+
+export interface TestSheepBatch {
+  id: string;
+  organizationId: string;
+  name: string;
+  headCount: number;
+  status: string;
+}
+
+/** Register a sheep batch for a farm. */
+export async function createSheepBatch(
+  app: Express,
+  actorToken: string,
+  organizationId: string,
+  body: Partial<{
+    name: string;
+    breed: string;
+    headCount: number;
+    lambCount: number;
+    maleCount: number;
+    femaleCount: number;
+    arrivalDate: string;
+    notes: string;
+  }> = {},
+): Promise<TestSheepBatch> {
+  const res = await request(app)
+    .post(`/api/v1/organizations/${organizationId}/sheep/batches`)
+    .set(bearer(actorToken))
+    .send({
+      name: body.name ?? `Batch ${Date.now()}`,
+      headCount: body.headCount ?? 150,
+      arrivalDate: body.arrivalDate ?? '2026-02-01',
+      ...(body.breed !== undefined ? { breed: body.breed } : {}),
+      ...(body.lambCount !== undefined ? { lambCount: body.lambCount } : {}),
+      ...(body.maleCount !== undefined ? { maleCount: body.maleCount } : {}),
+      ...(body.femaleCount !== undefined ? { femaleCount: body.femaleCount } : {}),
+      ...(body.notes !== undefined ? { notes: body.notes } : {}),
+    });
+  if (res.status !== 201) {
+    throw new Error(`createSheepBatch failed: ${res.status} ${JSON.stringify(res.body)}`);
+  }
+  return res.body.data as TestSheepBatch;
+}
+
+export interface TestCattleBatch {
+  id: string;
+  organizationId: string;
+  name: string;
+  headCount: number;
+  status: string;
+}
+
+/** Register a cattle batch for a farm. */
+export async function createCattleBatch(
+  app: Express,
+  actorToken: string,
+  organizationId: string,
+  body: Partial<{
+    name: string;
+    breed: string;
+    headCount: number;
+    calfCount: number;
+    bullCount: number;
+    cowCount: number;
+    arrivalDate: string;
+    notes: string;
+  }> = {},
+): Promise<TestCattleBatch> {
+  const res = await request(app)
+    .post(`/api/v1/organizations/${organizationId}/cattle/batches`)
+    .set(bearer(actorToken))
+    .send({
+      name: body.name ?? `Batch ${Date.now()}`,
+      headCount: body.headCount ?? 60,
+      arrivalDate: body.arrivalDate ?? '2026-02-01',
+      ...(body.breed !== undefined ? { breed: body.breed } : {}),
+      ...(body.calfCount !== undefined ? { calfCount: body.calfCount } : {}),
+      ...(body.bullCount !== undefined ? { bullCount: body.bullCount } : {}),
+      ...(body.cowCount !== undefined ? { cowCount: body.cowCount } : {}),
+      ...(body.notes !== undefined ? { notes: body.notes } : {}),
+    });
+  if (res.status !== 201) {
+    throw new Error(`createCattleBatch failed: ${res.status} ${JSON.stringify(res.body)}`);
+  }
+  return res.body.data as TestCattleBatch;
+}
+
 // --- Phase 7: animal lifecycle publications ------------------
 
 /** Assign an ACTIVE system-supervisor domain to a user (admin action). */
@@ -475,7 +760,15 @@ export async function assignSystemSupervisor(
   app: Express,
   adminToken: string,
   userId: string,
-  domain: 'ANIMAL' | 'CLINIC' | 'STORE' | 'CONTENT' | 'CONSULTATION' | 'INQUIRY' | 'ADVERTISEMENT',
+  domain:
+    | 'ANIMAL'
+    | 'CLINIC'
+    | 'STORE'
+    | 'CONTENT'
+    | 'CONSULTATION'
+    | 'INQUIRY'
+    | 'ADVERTISEMENT'
+    | 'MARKET',
 ): Promise<{ id: string }> {
   const res = await request(app)
     .post('/api/v1/admin/supervisors')

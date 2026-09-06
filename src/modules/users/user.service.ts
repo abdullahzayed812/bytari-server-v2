@@ -14,6 +14,7 @@ import type {
   CreateUserData,
   ListUsersFilter,
   PublicUser,
+  TraderStatus,
   User,
   UserStatus,
   VeterinarianStatus,
@@ -179,6 +180,11 @@ export class UserService {
     trx: Knex.Transaction,
   ): Promise<User> {
     return this.users.update(id, { veterinarianStatus: status }, trx);
+  }
+
+  /** Apply a trader-status transition. Used by the trader workflow inside its own trx. */
+  applyTraderStatus(id: string, status: TraderStatus, trx: Knex.Transaction): Promise<User> {
+    return this.users.update(id, { traderStatus: status }, trx);
   }
 
   // --- avatar (presigned direct-to-storage upload) -----------------

@@ -60,12 +60,12 @@ const pageParams = [
 const birdTypeEnum = ['CHICKEN', 'DUCK', 'TURKEY', 'QUAIL', 'GOOSE', 'OTHER'];
 const flockStatusEnum = ['ACTIVE', 'CLOSED'];
 
-const farmCategoryEnum = ['BROILER', 'LAYER', 'MIXED', 'BREEDER', 'HATCHERY', 'OTHER'];
+const poultryProductionTypeEnum = ['BROILER', 'LAYER', 'MIXED', 'BREEDER', 'HATCHERY', 'OTHER'];
 
 const schemas: Obj = {
   CreateFarmRequest: {
     type: 'object',
-    required: ['name', 'location', 'governorate', 'farmCategory'],
+    required: ['name', 'location', 'governorate', 'poultryProductionType'],
     description:
       'The "Add Poultry Farm" form. The user never picks an organization type; the backend ' +
       'creates a FARM organization + `farm_details` + the caller’s OWNER membership in one ' +
@@ -74,7 +74,7 @@ const schemas: Obj = {
       name: { type: 'string', minLength: 1, maxLength: 160 },
       location: { type: 'string', minLength: 1, maxLength: 200, description: 'Short display area' },
       governorate: { type: 'string', minLength: 1, maxLength: 120 },
-      farmCategory: { type: 'string', enum: farmCategoryEnum, description: 'Production type' },
+      poultryProductionType: { type: 'string', enum: poultryProductionTypeEnum, description: 'Production type' },
       description: { type: 'string', maxLength: 2000, nullable: true },
       address: { type: 'string', maxLength: 500, nullable: true },
       capacity: { type: 'integer', minimum: 0, nullable: true },

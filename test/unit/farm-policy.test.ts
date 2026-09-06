@@ -58,18 +58,3 @@ describe('FarmPolicy.resolveJoinAction', () => {
     }
   });
 });
-
-describe('FarmPolicy.assertFlockMutable', () => {
-  it('accepts an ACTIVE flock', () => {
-    expect(() => FarmPolicy.assertFlockMutable({ status: 'ACTIVE' })).not.toThrow();
-  });
-  it('rejects a CLOSED flock with 409 POULTRY_FLOCK_NOT_ACTIVE', () => {
-    try {
-      FarmPolicy.assertFlockMutable({ status: 'CLOSED' });
-      throw new Error('expected throw');
-    } catch (err) {
-      expect((err as AppError).statusCode).toBe(409);
-      expect((err as AppError).code).toBe('POULTRY_FLOCK_NOT_ACTIVE');
-    }
-  });
-});

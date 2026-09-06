@@ -4,6 +4,15 @@ export type UserStatus = (typeof USER_STATUSES)[number];
 export const VETERINARIAN_STATUSES = ['NOT_APPLIED', 'PENDING', 'APPROVED', 'REJECTED'] as const;
 export type VeterinarianStatus = (typeof VETERINARIAN_STATUSES)[number];
 
+export const TRADER_STATUSES = [
+  'NOT_REGISTERED',
+  'PENDING',
+  'APPROVED',
+  'REJECTED',
+  'SUSPENDED',
+] as const;
+export type TraderStatus = (typeof TRADER_STATUSES)[number];
+
 export const GENDERS = ['MALE', 'FEMALE'] as const;
 export type Gender = (typeof GENDERS)[number];
 
@@ -22,6 +31,7 @@ export interface User {
   avatarKey: string | null;
   status: UserStatus;
   veterinarianStatus: VeterinarianStatus;
+  traderStatus: TraderStatus;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -38,6 +48,7 @@ export interface PublicUser {
   avatarKey: string | null;
   status: UserStatus;
   veterinarianStatus: VeterinarianStatus;
+  traderStatus: TraderStatus;
   createdAt: string;
   updatedAt: string;
 }
@@ -57,6 +68,7 @@ export interface UserSummary {
   firstName: string;
   lastName: string;
   veterinarianStatus: VeterinarianStatus;
+  traderStatus: TraderStatus;
 }
 
 export interface CreateUserData {
@@ -78,6 +90,7 @@ export interface UpdateUserData {
   avatarKey?: string | null;
   status?: UserStatus;
   veterinarianStatus?: VeterinarianStatus;
+  traderStatus?: TraderStatus;
   passwordHash?: string;
 }
 
@@ -102,6 +115,7 @@ export interface UserRow {
   avatar_key: string | null;
   status: string;
   veterinarian_status: string;
+  trader_status: string;
   created_at: Date;
   updated_at: Date;
 }

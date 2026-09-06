@@ -91,6 +91,54 @@ describe('organization memberships', () => {
     expect(dup.status).toBe(409);
   });
 
+  it('adds a member by email instead of userId', async () => {
+    const admin = await registerAdmin(app);
+    const owner = await registerApprovedVet(app);
+    const staff = await registerUser(app);
+    const org = await createActiveOrganization(app, owner.accessToken, admin.accessToken, {
+      type: 'FARM',
+    });
+    const res = await request(app)
+      .post(`/api/v1/organizations/${org.id}/members`)
+      .set(bearer(owner.accessToken))
+      .send({ email: staff.email.toUpperCase(), role: 'STAFF' });
+    expect(res.status).toBe(201);
+    expect(res.body.data).toMatchObject({ userId: staff.id, roleKey: 'STAFF' });
+  });
+
+  it('adding by an email with no matching account is a 404', async () => {
+    const admin = await registerAdmin(app);
+    const owner = await registerApprovedVet(app);
+    const org = await createActiveOrganization(app, owner.accessToken, admin.accessToken, {
+      type: 'FARM',
+    });
+    const res = await request(app)
+      .post(`/api/v1/organizations/${org.id}/members`)
+      .set(bearer(owner.accessToken))
+      .send({ email: 'nobody-with-this-email@example.test', role: 'STAFF' });
+    expect(res.status).toBe(404);
+  });
+
+  it('rejects a member-add body with both userId and email, or neither', async () => {
+    const admin = await registerAdmin(app);
+    const owner = await registerApprovedVet(app);
+    const staff = await registerUser(app);
+    const org = await createActiveOrganization(app, owner.accessToken, admin.accessToken, {
+      type: 'FARM',
+    });
+    const both = await request(app)
+      .post(`/api/v1/organizations/${org.id}/members`)
+      .set(bearer(owner.accessToken))
+      .send({ userId: staff.id, email: staff.email, role: 'STAFF' });
+    expect(both.status).toBe(422);
+
+    const neither = await request(app)
+      .post(`/api/v1/organizations/${org.id}/members`)
+      .set(bearer(owner.accessToken))
+      .send({ role: 'STAFF' });
+    expect(neither.status).toBe(422);
+  });
+
   it('adding a member as VETERINARIAN requires an approved veterinarian', async () => {
     const admin = await registerAdmin(app);
     const owner = await registerApprovedVet(app);

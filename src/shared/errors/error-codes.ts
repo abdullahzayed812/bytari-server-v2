@@ -62,6 +62,28 @@ export const ErrorCode = {
   /** A daily record already exists for that flock + calendar day. */
   POULTRY_DAILY_RECORD_DUPLICATE_DATE: 'POULTRY_DAILY_RECORD_DUPLICATE_DATE',
 
+  // --- Sheep & Cattle Farms ---
+  /** The sheep batch is CLOSED — updates are refused. */
+  SHEEP_BATCH_NOT_ACTIVE: 'SHEEP_BATCH_NOT_ACTIVE',
+  /** A daily record already exists for that sheep batch + calendar day. */
+  SHEEP_DAILY_RECORD_DUPLICATE_DATE: 'SHEEP_DAILY_RECORD_DUPLICATE_DATE',
+  /** The cattle batch is CLOSED — updates are refused. */
+  CATTLE_BATCH_NOT_ACTIVE: 'CATTLE_BATCH_NOT_ACTIVE',
+  /** A daily record already exists for that cattle batch + calendar day. */
+  CATTLE_DAILY_RECORD_DUPLICATE_DATE: 'CATTLE_DAILY_RECORD_DUPLICATE_DATE',
+
+  // --- Farm subscription (Poultry Farm Approval & Subscription module) ---
+  /** Subscription dates are missing/invalid (end not after start). */
+  INVALID_SUBSCRIPTION_DATES: 'INVALID_SUBSCRIPTION_DATES',
+  /** A renewal request requires the subscription to currently be EXPIRED. */
+  SUBSCRIPTION_NOT_EXPIRED: 'SUBSCRIPTION_NOT_EXPIRED',
+  /** An open (PENDING) renewal request already exists for this farm. */
+  RENEWAL_REQUEST_ALREADY_PENDING: 'RENEWAL_REQUEST_ALREADY_PENDING',
+  /** Approve/reject attempted on a renewal request that is not PENDING. */
+  RENEWAL_REQUEST_NOT_PENDING: 'RENEWAL_REQUEST_NOT_PENDING',
+  /** Farm operations are restricted — the subscription is EXPIRED or NOT_STARTED. */
+  FARM_SUBSCRIPTION_NOT_ACTIVE: 'FARM_SUBSCRIPTION_NOT_ACTIVE',
+
   // --- Animal publications / lifecycle (Phase 7) ---
   /** A moderation action was attempted on a publication that is not PENDING. */
   PUBLICATION_NOT_PENDING: 'PUBLICATION_NOT_PENDING',
@@ -93,6 +115,10 @@ export const ErrorCode = {
   // --- Organization directory & engagement (Clinic Details) ---
   /** A gallery upload would exceed the per-organization photo cap. */
   GALLERY_LIMIT_EXCEEDED: 'GALLERY_LIMIT_EXCEEDED',
+
+  // --- Poultry Markets (trader registration / offers / exchange rates) ---
+  /** Market-only action requires an APPROVED trader account. */
+  TRADER_APPROVAL_REQUIRED: 'TRADER_APPROVAL_REQUIRED',
 } as const;
 
 export type ErrorCodeValue = (typeof ErrorCode)[keyof typeof ErrorCode];

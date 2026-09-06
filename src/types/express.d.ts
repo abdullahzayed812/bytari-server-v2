@@ -16,6 +16,7 @@ declare global {
       email: string;
       status: string;
       veterinarianStatus: string;
+      traderStatus: string;
       roleKeys: string[];
       /** Refresh session id from the access token, when present. */
       sessionId: string | null;
@@ -65,6 +66,23 @@ declare global {
     }
 
     /**
+     * Sheep/cattle batch resolved from `:batchId` by the livestock module's
+     * `withSheepBatch`/`withCattleBatch` middleware AFTER `withOrganization` +
+     * `authorizeOrg`. Guaranteed to belong to the URL's farm organization.
+     * NEVER from the body.
+     */
+    interface SheepBatchContext {
+      id: string;
+      status: string;
+      organizationId: string;
+    }
+    interface CattleBatchContext {
+      id: string;
+      status: string;
+      organizationId: string;
+    }
+
+    /**
      * Product resolved from `:productId` by the veterinary-store `withProduct`
      * middleware AFTER `withOrganization` + the VETERINARY_STORE type check +
      * `authorizeOrg`. The product is guaranteed to belong to the URL's store.
@@ -89,6 +107,26 @@ declare global {
       viewerSide: string;
     }
 
+    /**
+     * Poultry-market offer resolved from `:offerId` by the market
+     * `withPoultryOffer` middleware. NEVER derived from the request body.
+     */
+    interface PoultryOfferContext {
+      id: string;
+      status: string;
+      traderUserId: string;
+    }
+
+    /**
+     * Egg-market offer resolved from `:offerId` by the market `withEggOffer`
+     * middleware. NEVER derived from the request body.
+     */
+    interface EggOfferContext {
+      id: string;
+      status: string;
+      traderUserId: string;
+    }
+
     interface Request {
       /** Output of the `validate()` middleware, when present. */
       validated?: {
@@ -109,10 +147,18 @@ declare global {
       veterinaryAnimal?: VeterinaryAnimalContext;
       /** Populated by `withPoultryFlock`. Use `requirePoultryFlock(req)` to access it. */
       poultryFlock?: PoultryFlockContext;
+      /** Populated by `withSheepBatch`. Use `requireSheepBatch(req)` to access it. */
+      sheepBatch?: SheepBatchContext;
+      /** Populated by `withCattleBatch`. Use `requireCattleBatch(req)` to access it. */
+      cattleBatch?: CattleBatchContext;
       /** Populated by `withProduct`. Use `requireProduct(req)` to access it. */
       product?: ProductContext;
       /** Populated by `withConversation`. Use `requireConversation(req)` to access it. */
       conversation?: ConversationContext;
+      /** Populated by `withPoultryOffer`. Use `requirePoultryOffer(req)` to access it. */
+      poultryOffer?: PoultryOfferContext;
+      /** Populated by `withEggOffer`. Use `requireEggOffer(req)` to access it. */
+      eggOffer?: EggOfferContext;
     }
   }
 }

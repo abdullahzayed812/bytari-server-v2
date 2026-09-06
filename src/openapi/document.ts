@@ -14,6 +14,9 @@ import { advertisementsOpenApi } from './advertisements.js';
 import { tipsOpenApi } from './tips.js';
 import { newsOpenApi } from './news.js';
 import { poultryOpsOpenApi } from './poultryOps.js';
+import { sheepOpsOpenApi } from './sheepOps.js';
+import { cattleOpsOpenApi } from './cattleOps.js';
+import { poultryMarketOpenApi } from './poultryMarket.js';
 import { phase17OpenApi } from './phase17.js';
 
 /**
@@ -91,6 +94,9 @@ export function buildOpenApiDocument(version: string): OpenApiDocument {
       ...tipsOpenApi.tags,
       ...newsOpenApi.tags,
       ...poultryOpsOpenApi.tags,
+      ...sheepOpsOpenApi.tags,
+      ...cattleOpsOpenApi.tags,
+      ...poultryMarketOpenApi.tags,
       ...phase17OpenApi.tags,
     ],
     paths: {
@@ -110,6 +116,9 @@ export function buildOpenApiDocument(version: string): OpenApiDocument {
       ...tipsOpenApi.paths,
       ...newsOpenApi.paths,
       ...poultryOpsOpenApi.paths,
+      ...sheepOpsOpenApi.paths,
+      ...cattleOpsOpenApi.paths,
+      ...poultryMarketOpenApi.paths,
       ...phase17OpenApi.paths,
       '/health': {
         get: {
@@ -173,6 +182,9 @@ export function buildOpenApiDocument(version: string): OpenApiDocument {
         ...tipsOpenApi.schemas,
         ...newsOpenApi.schemas,
         ...poultryOpsOpenApi.schemas,
+        ...sheepOpsOpenApi.schemas,
+        ...cattleOpsOpenApi.schemas,
+        ...poultryMarketOpenApi.schemas,
         ...phase17OpenApi.schemas,
       },
       responses: {

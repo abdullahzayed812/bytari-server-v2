@@ -1,7 +1,6 @@
 import type {
   FarmAppointmentCategory,
   FarmAppointmentStatus,
-  FarmCategory,
   FarmExpenseCategory,
   PoultryActivity,
   PoultryAppetite,
@@ -9,6 +8,7 @@ import type {
   PoultryCaseStatus,
   PoultryHealthEventKind,
   PoultryHealthEventStatus,
+  PoultryProductionType,
 } from './poultry-ops.constants.js';
 
 /**
@@ -44,10 +44,22 @@ export interface FarmProfile {
   capacity: number | null;
   currentBirdCount: number | null;
   establishedOn: string | null;
-  farmCategory: FarmCategory | null;
+  poultryProductionType: PoultryProductionType | null;
   contactName: string | null;
   contactPhone: string | null;
   contactEmail: string | null;
+  /**
+   * Species discriminator — additive for Sheep/Cattle Farms (`server/src/
+   * modules/livestock/`). `null` on legacy poultry rows created before this
+   * column existed; the poultry create flow always sets `'POULTRY'` going
+   * forward, sheep/cattle set `'SHEEP'`/`'CATTLE'`. `'MIXED'` is set when an
+   * owner adds a batch of the other species to an existing farm.
+   */
+  farmSpecies: 'POULTRY' | 'SHEEP' | 'CATTLE' | 'MIXED' | null;
+  currentSheepCount: number | null;
+  currentCattleCount: number | null;
+  sheepProductionType: string | null;
+  cattleProductionType: string | null;
 }
 
 export const emptyFarmProfile: FarmProfile = {
@@ -58,10 +70,15 @@ export const emptyFarmProfile: FarmProfile = {
   capacity: null,
   currentBirdCount: null,
   establishedOn: null,
-  farmCategory: null,
+  poultryProductionType: null,
   contactName: null,
   contactPhone: null,
   contactEmail: null,
+  farmSpecies: null,
+  currentSheepCount: null,
+  currentCattleCount: null,
+  sheepProductionType: null,
+  cattleProductionType: null,
 };
 
 export interface FarmProfileRow {
@@ -74,11 +91,16 @@ export interface FarmProfileRow {
   capacity: number | string | null;
   current_bird_count: number | string | null;
   established_on: string | Date | null;
-  farm_category: string | null;
+  poultry_production_type: string | null;
   contact_name: string | null;
   contact_phone: string | null;
   contact_email: string | null;
   join_code: string;
+  farm_species: string | null;
+  current_sheep_count: number | string | null;
+  current_cattle_count: number | string | null;
+  sheep_production_type: string | null;
+  cattle_production_type: string | null;
 }
 
 export interface UpdateFarmProfileInput {
@@ -88,10 +110,15 @@ export interface UpdateFarmProfileInput {
   capacity?: number | null;
   currentBirdCount?: number | null;
   establishedOn?: string | null;
-  farmCategory?: FarmCategory | null;
+  poultryProductionType?: PoultryProductionType | null;
   contactName?: string | null;
   contactPhone?: string | null;
   contactEmail?: string | null;
+  farmSpecies?: 'POULTRY' | 'SHEEP' | 'CATTLE' | 'MIXED' | null;
+  currentSheepCount?: number | null;
+  currentCattleCount?: number | null;
+  sheepProductionType?: string | null;
+  cattleProductionType?: string | null;
 }
 
 // =====================================================================

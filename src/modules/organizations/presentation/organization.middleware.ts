@@ -18,9 +18,23 @@ export interface OrganizationMiddleware {
   withOrganization: RequestHandler;
   /**
    * Require an org-scoped `permission` for the resolved organization. For
-   * non-ADMIN callers the organization must also be ACTIVE (spec §33).
+   * non-ADMIN callers the organization must also be ACTIVE (spec §33) — UNLESS
+   * `opts.allowInactiveForOwner` is set and the caller is the organization's
+   * owner (e.g. a farm creator must be able to read their own PENDING farm).
+   * The permission check itself is unchanged either way; only the ACTIVE gate
+   * is relaxed, and only for the owner.
+   *
+   * `opts.excludeOwner` does the opposite for a specific permission: it denies
+   * the organization's OWNER even though the owner-override in
+   * `AuthorizationService.assertInOrganization` would otherwise let any owner
+   * through. Use it for actions that must stay outside the owner's control by
+   * design (e.g. a farm's subscription period — only an Admin or an explicitly
+   * assigned Supervisor may set it, never the farm owner themselves).
    */
-  authorizeOrg: (permission: string) => RequestHandler;
+  authorizeOrg: (
+    permission: string,
+    opts?: { allowInactiveForOwner?: boolean; excludeOwner?: boolean },
+  ) => RequestHandler;
 }
 
 /** Narrow `req.organization` inside a controller that runs after `withOrganization`. */
@@ -48,17 +62,27 @@ export function createOrganizationMiddleware(deps: {
     next();
   });
 
-  const authorizeOrg = (permission: string): RequestHandler =>
+  const authorizeOrg = (
+    permission: string,
+    opts?: { allowInactiveForOwner?: boolean; excludeOwner?: boolean },
+  ): RequestHandler =>
     asyncHandler(async (req, _res, next) => {
       const principal = requireAuth(req);
       const org = requireOrganization(req);
       const isAdmin = deps.authz.isAdmin(principal);
+      const isOwner = principal.userId === org.ownerUserId;
+      const isOwnerAllowedInactive = opts?.allowInactiveForOwner === true && isOwner;
 
-      if (!isAdmin && org.status !== 'ACTIVE') {
+      if (!isAdmin && !isOwnerAllowedInactive && org.status !== 'ACTIVE') {
         throw new ForbiddenError(
           `Organization is ${org.status.toLowerCase()} — operations are restricted`,
           { code: ErrorCode.ORGANIZATION_NOT_ACTIVE },
         );
+      }
+      if (opts?.excludeOwner === true && !isAdmin && isOwner) {
+        throw new ForbiddenError('The organization owner cannot perform this action', {
+          code: ErrorCode.PERMISSION_DENIED,
+        });
       }
 
       await deps.authz.assertInOrganization(principal, permission, org.id);

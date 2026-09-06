@@ -9,9 +9,17 @@ import { requireOrganization } from '../../organizations/presentation/organizati
 import type { FarmAppointmentService } from '../application/farm-appointment.service.js';
 import type { FarmExpenseService } from '../application/farm-expense.service.js';
 import type { FarmProfileService } from '../application/farm-profile.service.js';
+import type { FarmSubscriptionService } from '../application/farm-subscription.service.js';
 import type { PoultryCaseService } from '../application/poultry-case.service.js';
 import type { PoultryDailyRecordService } from '../application/poultry-daily-record.service.js';
 import type { PoultryHealthEventService } from '../application/poultry-health-event.service.js';
+import type {
+  ApproveRenewalBody,
+  CreateRenewalRequestBody,
+  ListRenewalRequestsQuery,
+  RejectRenewalBody,
+  SetSubscriptionBody,
+} from './farm-subscription.schemas.js';
 import type {
   CreateAppointmentBody,
   CreateCaseBody,
@@ -43,6 +51,7 @@ export class PoultryOpsController {
     private readonly healthEvents: PoultryHealthEventService,
     private readonly appointments: FarmAppointmentService,
     private readonly cases: PoultryCaseService,
+    private readonly subscription: FarmSubscriptionService,
   ) {}
 
   private actor(req: Request): { actorUserId: string; context: AuditContextResult } {
@@ -327,6 +336,56 @@ export class PoultryOpsController {
         caseId,
         this.actor(req),
         body,
+      ),
+    );
+  };
+
+  // --- subscription (owner / assigned supervisor / admin) ------------
+
+  listSubscriptionRenewals = async (req: Request, res: Response): Promise<void> => {
+    const q = validatedQuery<ListRenewalRequestsQuery>(req);
+    const { items, total } = await this.subscription.listRenewalRequests(this.orgId(req), {
+      page: q.page,
+      pageSize: q.pageSize,
+      status: q.status,
+    });
+    sendSuccess(res, items, 200, pageMeta(q.page, q.pageSize, total));
+  };
+
+  createSubscriptionRenewal = async (req: Request, res: Response): Promise<void> => {
+    const body = validatedBody<CreateRenewalRequestBody>(req);
+    sendSuccess(
+      res,
+      await this.subscription.requestRenewal(requireOrganization(req), body, this.actor(req)),
+      StatusCodes.CREATED,
+    );
+  };
+
+  setSubscription = async (req: Request, res: Response): Promise<void> => {
+    const body = validatedBody<SetSubscriptionBody>(req);
+    await this.subscription.setSubscription(this.orgId(req), body, this.actor(req));
+    sendSuccess(res, { updated: true });
+  };
+
+  approveSubscriptionRenewal = async (req: Request, res: Response): Promise<void> => {
+    const { requestId } = validatedParams<{ requestId: string }>(req);
+    const body = validatedBody<ApproveRenewalBody>(req);
+    sendSuccess(
+      res,
+      await this.subscription.approveRenewal(this.orgId(req), requestId, body, this.actor(req)),
+    );
+  };
+
+  rejectSubscriptionRenewal = async (req: Request, res: Response): Promise<void> => {
+    const { requestId } = validatedParams<{ requestId: string }>(req);
+    const body = validatedBody<RejectRenewalBody>(req);
+    sendSuccess(
+      res,
+      await this.subscription.rejectRenewal(
+        this.orgId(req),
+        requestId,
+        body.reason,
+        this.actor(req),
       ),
     );
   };

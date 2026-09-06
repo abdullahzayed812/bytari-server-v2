@@ -5,12 +5,15 @@ import { closeTestDb, ensureSchema, getTestDb, resetDb } from '../helpers/db.js'
 import {
   approveOrganization,
   bearer,
+  createFarm,
   createOrganization,
   registerAdmin,
   registerApprovedVet,
   registerPendingVet,
   registerRejectedVet,
   registerUser,
+  requestFarmRenewal,
+  setFarmSubscriptionAsAdmin,
 } from '../helpers/factories.js';
 
 const { app } = buildTestApp();
@@ -249,5 +252,93 @@ describe('organization lifecycle (admin)', () => {
     const ids = (res.body.data as Array<{ id: string }>).map((o) => o.id);
     expect(ids).toContain(b.id);
     expect(ids).not.toContain(a.id);
+  });
+});
+
+describe('admin Poultry Farms management list', () => {
+  it('lists FARM organizations with owner, subscription dates/status and an open-renewal flag', async () => {
+    const admin = await registerAdmin(app);
+    const owner = await registerApprovedVet(app);
+    const farm = await createFarm(app, owner.accessToken, admin.accessToken, { name: 'Listed Farm' });
+    await setFarmSubscriptionAsAdmin(app, admin.accessToken, farm.id, {
+      startDate: '2020-01-01',
+      endDate: '2020-06-01',
+    });
+    await requestFarmRenewal(app, owner.accessToken, farm.id);
+
+    const res = await request(app)
+      .get('/api/v1/admin/organizations/farms')
+      .set(bearer(admin.accessToken));
+    expect(res.status).toBe(200);
+    const row = (res.body.data as Array<Record<string, unknown>>).find(
+      (r) => r.organizationId === farm.id,
+    );
+    expect(row).toBeDefined();
+    expect(row?.ownerUserId).toBe(owner.id);
+    expect(row?.subscriptionEndDate).toBe('2020-06-01');
+    expect(row?.hasOpenRenewalRequest).toBe(true);
+  });
+
+  it('supports filtering by subscriptionStatus', async () => {
+    const admin = await registerAdmin(app);
+    const owner = await registerApprovedVet(app);
+    const expiredFarm = await createFarm(app, owner.accessToken, admin.accessToken, {
+      name: 'Expired Farm',
+    });
+    await setFarmSubscriptionAsAdmin(app, admin.accessToken, expiredFarm.id, {
+      startDate: '2020-01-01',
+      endDate: '2020-06-01',
+    });
+    const activeFarm = await createFarm(app, owner.accessToken, admin.accessToken, {
+      name: 'Active Farm',
+    });
+    await setFarmSubscriptionAsAdmin(app, admin.accessToken, activeFarm.id, {
+      startDate: '2026-01-01',
+      endDate: '2099-01-01',
+    });
+
+    const res = await request(app)
+      .get('/api/v1/admin/organizations/farms')
+      .query({ subscriptionStatus: 'EXPIRED' })
+      .set(bearer(admin.accessToken));
+    const ids = (res.body.data as Array<{ organizationId: string }>).map((r) => r.organizationId);
+    expect(ids).toContain(expiredFarm.id);
+    expect(ids).not.toContain(activeFarm.id);
+  });
+
+  it('lists a farm’s subscription renewal requests', async () => {
+    const admin = await registerAdmin(app);
+    const owner = await registerApprovedVet(app);
+    const farm = await createFarm(app, owner.accessToken, admin.accessToken);
+    await setFarmSubscriptionAsAdmin(app, admin.accessToken, farm.id, {
+      startDate: '2020-01-01',
+      endDate: '2020-06-01',
+    });
+    await requestFarmRenewal(app, owner.accessToken, farm.id);
+
+    const res = await request(app)
+      .get(`/api/v1/admin/organizations/${farm.id}/subscription-renewals`)
+      .set(bearer(admin.accessToken));
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0].status).toBe('PENDING');
+  });
+
+  it('requires organization.admin.read / organization.admin.subscription — a plain user is blocked', async () => {
+    const admin = await registerAdmin(app);
+    const owner = await registerApprovedVet(app);
+    const stranger = await registerUser(app);
+    const farm = await createFarm(app, owner.accessToken, admin.accessToken);
+
+    const list = await request(app)
+      .get('/api/v1/admin/organizations/farms')
+      .set(bearer(stranger.accessToken));
+    expect(list.status).toBe(403);
+
+    const set = await setFarmSubscriptionAsAdmin(app, stranger.accessToken, farm.id, {
+      startDate: '2026-01-01',
+      endDate: '2099-01-01',
+    });
+    expect(set.status).toBe(403);
   });
 });

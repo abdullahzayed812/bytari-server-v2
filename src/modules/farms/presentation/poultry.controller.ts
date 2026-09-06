@@ -7,12 +7,12 @@ import { auditContextFromRequest, type AuditContextResult } from '../../audit/au
 import { requireAuth } from '../../auth/authenticate.middleware.js';
 import { requireOrganization } from '../../organizations/presentation/organization.middleware.js';
 import type { PoultryFlockService } from '../application/poultry-flock.service.js';
-import { requirePoultryFlock } from './farm.middleware.js';
+import { requirePoultryFlock } from './poultry-flock.middleware.js';
 import type {
   CreatePoultryFlockBody,
   ListPoultryFlocksQuery,
   UpdatePoultryFlockBody,
-} from './farm.schemas.js';
+} from './poultry-flock.schemas.js';
 
 /** Poultry flock HTTP adapter. No business logic. */
 export class PoultryController {

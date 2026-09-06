@@ -31,6 +31,7 @@ describe('GET /users/:id — authenticated name summary', () => {
       firstName: 'Mona',
       lastName: 'Adel',
       veterinarianStatus: 'NOT_APPLIED',
+      traderStatus: 'NOT_REGISTERED',
     });
     // never leak sensitive / internal fields
     for (const field of [

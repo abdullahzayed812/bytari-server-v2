@@ -47,6 +47,7 @@ export function createSupportRealtime(container: Container): SupportRealtimeWiri
       email: user.email,
       status: user.status,
       veterinarianStatus: user.veterinarianStatus,
+      traderStatus: user.traderStatus,
       roleKeys: await container.roleRepository.getRoleKeysForUser(user.id),
       sessionId: null,
     };
