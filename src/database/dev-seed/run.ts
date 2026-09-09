@@ -115,7 +115,13 @@ export async function runDevSeed(knex: Knex, deps: RunDevSeedDeps = {}): Promise
   const { membershipService, membershipRepository, organizationSupervisorService } = container;
   const { animalService, veterinaryAccessService, medicalRecordService, vaccinationService } =
     container;
-  const { poultryFlockService, productService, contentService, passwordService } = container;
+  const {
+    poultryFlockService,
+    productService,
+    petStoreAdminService,
+    contentService,
+    passwordService,
+  } = container;
   const { poultryDailyRecordService, farmExpenseService, poultryHealthEventService } = container;
   const { farmAppointmentService, poultryCaseService, farmProfileService } = container;
   const { tipService, newsService } = container;
@@ -418,6 +424,7 @@ export async function runDevSeed(knex: Knex, deps: RunDevSeedDeps = {}): Promise
   await seedClinicCareForMax();
   await seedFarmPoultry();
   await seedStoreProducts();
+  await seedPetOwnerStoreCatalog();
   await seedWelcomeArticle();
   await seedAdvertisements();
   await seedTips();
@@ -653,11 +660,150 @@ export async function runDevSeed(knex: Knex, deps: RunDevSeedDeps = {}): Promise
     ];
 
     for (const p of products) {
-      const existing = await knex('products')
+      const existing = await knex('veterinary_store_products')
         .where({ organization_id: storeId, name: p.name })
         .first();
       if (existing) continue;
       await productService.create(storeRef, p, actor);
+    }
+  }
+
+  async function seedPetOwnerStoreCatalog(): Promise<void> {
+    const actor = { actorUserId: adminId, context: SEED_CONTEXT };
+
+    const categories: {
+      slug: string;
+      name: string;
+      showOnHome?: boolean;
+      sortOrder: number;
+    }[] = [
+      { slug: 'pets', name: 'حيوانات أليفة', showOnHome: true, sortOrder: 1 },
+      { slug: 'livestock', name: 'أغنام وأبقار', showOnHome: true, sortOrder: 2 },
+      { slug: 'poultry', name: 'طيور ودواجن', showOnHome: true, sortOrder: 3 },
+      { slug: 'food', name: 'أطعمة', sortOrder: 4 },
+      { slug: 'supplements', name: 'مكملات غذائية', sortOrder: 5 },
+      { slug: 'grooming', name: 'منتجات العناية', sortOrder: 6 },
+      { slug: 'hygiene', name: 'نظافة', sortOrder: 7 },
+      { slug: 'toys', name: 'ألعاب', sortOrder: 8 },
+      { slug: 'accessories', name: 'إكسسوارات', sortOrder: 9 },
+    ];
+    const categoryIdBySlug: Record<string, string> = {};
+    for (const c of categories) {
+      const existing = await knex('pet_owner_store_categories').where({ slug: c.slug }).first();
+      if (existing) {
+        categoryIdBySlug[c.slug] = existing.id as string;
+        continue;
+      }
+      const created = await petStoreAdminService.createCategory(actor, c);
+      categoryIdBySlug[c.slug] = created.id;
+    }
+
+    const products: {
+      name: string;
+      categorySlug: string;
+      price: string;
+      stockQuantity: number;
+      description: string;
+      attributes?: Record<string, string>;
+    }[] = [
+      {
+        name: 'طعام جاف للكلاب',
+        categorySlug: 'food',
+        price: '85.00',
+        stockQuantity: 60,
+        description: 'بريميوم — لتر — ٢٠ كجم. غذاء متكامل للكلاب البالغة.',
+        attributes: { الوزن: '20 كجم', 'الفئة العمرية': 'بالغة', النوع: 'لحوم السلمون' },
+      },
+      {
+        name: 'طعام رطب للقطط',
+        categorySlug: 'food',
+        price: '12.00',
+        stockQuantity: 120,
+        description: 'علبة ٤٠٠ جم بنكهة الدجاج.',
+      },
+      {
+        name: 'ماء شرب نقي للحيوانات',
+        categorySlug: 'hygiene',
+        price: '45.00',
+        stockQuantity: 40,
+        description: 'مياه معدنية طبيعية — ١ لتر.',
+      },
+      {
+        name: 'رمل للقطط',
+        categorySlug: 'hygiene',
+        price: '28.00',
+        stockQuantity: 75,
+        description: 'رمل متكتل خالٍ من الغبار — ١٠ كجم.',
+      },
+      {
+        name: 'كرة مطاطية للكلاب',
+        categorySlug: 'toys',
+        price: '15.00',
+        stockQuantity: 90,
+        description: 'كرة مطاطية متينة للمضغ واللعب.',
+      },
+      {
+        name: 'حبل قطني للكلاب',
+        categorySlug: 'toys',
+        price: '18.00',
+        stockQuantity: 65,
+        description: 'حبل قطني مضفور لتنظيف الأسنان.',
+      },
+      {
+        name: 'حقيبة نقل الحيوانات',
+        categorySlug: 'accessories',
+        price: '120.00',
+        stockQuantity: 20,
+        description: 'حقيبة نقل مريحة وآمنة مع تهوية جيدة.',
+      },
+      {
+        name: 'فيتامينات ومكملات للقطط',
+        categorySlug: 'supplements',
+        price: '35.00',
+        stockQuantity: 50,
+        description: 'مكمل يومي لدعم المناعة والحيوية.',
+      },
+      {
+        name: 'أعواد مضغ للكلاب',
+        categorySlug: 'supplements',
+        price: '25.00',
+        stockQuantity: 80,
+        description: 'أعواد مضغ بالدجاج الطبيعي.',
+      },
+      {
+        name: 'شامبو الحيوانات الأليفة',
+        categorySlug: 'grooming',
+        price: '45.00',
+        stockQuantity: 55,
+        description: 'للقطط الحساسة — ٢٥٠ مل.',
+      },
+      {
+        name: 'مقص العناية بالفراء',
+        categorySlug: 'grooming',
+        price: '38.00',
+        stockQuantity: 30,
+        description: 'مقص آمن لتشذيب فراء الحيوانات.',
+      },
+      {
+        name: 'علف مركّز للأغنام والأبقار',
+        categorySlug: 'livestock',
+        price: '95.00',
+        stockQuantity: 40,
+        description: 'علف مركّز عالي البروتين — كيس ٢٥ كجم.',
+      },
+    ];
+
+    for (const p of products) {
+      const existing = await knex('pet_owner_store_products').where({ name: p.name }).first();
+      if (existing) continue;
+      await petStoreAdminService.createProduct(actor, {
+        categoryId: categoryIdBySlug[p.categorySlug] ?? null,
+        name: p.name,
+        description: p.description,
+        price: p.price,
+        stockQuantity: p.stockQuantity,
+        attributes: p.attributes ?? null,
+      });
     }
   }
 

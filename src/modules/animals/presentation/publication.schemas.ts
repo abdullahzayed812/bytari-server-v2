@@ -108,6 +108,13 @@ export const moderationPublicationsQuerySchema = paginationQuerySchema.extend({
 });
 export type ModerationPublicationsQuery = z.infer<typeof moderationPublicationsQuerySchema>;
 
+/** "My listings" — the caller's own publications of every status. */
+export const listMinePublicationsQuerySchema = paginationQuerySchema.extend({
+  kind: z.enum(PUBLICATION_KINDS).optional(),
+  status: z.enum(PUBLICATION_STATUSES).optional(),
+});
+export type ListMinePublicationsQuery = z.infer<typeof listMinePublicationsQuerySchema>;
+
 // --- moderation: reject -----------------------------------
 
 export const rejectPublicationBodySchema = z.object({

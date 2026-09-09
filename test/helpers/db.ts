@@ -44,6 +44,10 @@ export function ensureSchema(): Promise<void> {
 export async function resetDb(): Promise<void> {
   const knex = getTestDb();
   await knex.raw('TRUNCATE TABLE users RESTART IDENTITY CASCADE');
+  // `pet_owner_store_categories` is a standalone catalogue table with no FK to
+  // `users`, so the cascade above never reaches it — truncate it explicitly so
+  // fixed-slug category fixtures start from a clean slate every test.
+  await knex.raw('TRUNCATE TABLE pet_owner_store_categories RESTART IDENTITY CASCADE');
   await knex.raw('DELETE FROM role_permissions');
   await knex.raw('DELETE FROM organization_role_permissions');
   await seedCatalogues(knex);

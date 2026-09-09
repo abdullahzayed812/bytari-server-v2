@@ -35,6 +35,7 @@ export function createChatMiddleware(deps: {
       type: conversation.type,
       organizationId: conversation.organizationId,
       viewerSide: side,
+      status: conversation.status,
     };
     next();
   });

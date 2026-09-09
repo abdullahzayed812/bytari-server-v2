@@ -80,12 +80,21 @@ export class ChatService {
     userId: string,
     conversation: Conversation,
   ): Promise<ConversationSide | null> {
+    if (conversation.type === 'PET_OWNER_VETERINARIAN') {
+      // A direct 1:1 marketplace deal — both sides have an explicit participant
+      // row; no org / membership involved.
+      if (userId === conversation.petOwnerUserId) return 'PET_OWNER';
+      if (userId === conversation.veterinarianUserId) return 'VETERINARIAN';
+      return null;
+    }
     if (conversation.type === 'PET_OWNER_CLINIC') {
       if (userId === conversation.petOwnerUserId) return 'PET_OWNER';
+      if (!conversation.organizationId) return null;
       const m = await this.memberships.findByUserAndOrg(userId, conversation.organizationId);
       return m?.status === 'ACTIVE' ? 'CLINIC' : null;
     }
     // FARM_OWNER_MEMBER
+    if (!conversation.organizationId) return null;
     const org = await this.organizations.findById(conversation.organizationId);
     if (org && userId === org.ownerUserId) return 'FARM_OWNER';
     if (userId === conversation.memberUserId) {
@@ -350,6 +359,172 @@ export class ChatService {
     };
   }
 
+  // --- marketplace deal conversations (PET_OWNER_VETERINARIAN) --------
+  //
+  // Created / driven by the `vet-services` module. A direct 1:1 chat between a
+  // Pet Owner and a Veterinarian, optionally pinned to a service engagement
+  // (an offer or a listing-request). "Chat immediately" (before any engagement
+  // is accepted) and "on accept" both funnel through `getOrCreateDeal`.
+
+  async getOrCreateDeal(
+    actor: ChatActor,
+    params: {
+      petOwnerUserId: string;
+      veterinarianUserId: string;
+      subjectType?: 'VET_SERVICE_OFFER' | 'VET_SERVICE_LISTING_REQUEST' | null;
+      subjectId?: string | null;
+    },
+  ): Promise<{ conversation: ConversationDTO; created: boolean }> {
+    const { petOwnerUserId, veterinarianUserId } = params;
+    if (petOwnerUserId === veterinarianUserId) {
+      throw new BadRequestError('A deal conversation needs two distinct users');
+    }
+    if (actor.actorUserId !== petOwnerUserId && actor.actorUserId !== veterinarianUserId) {
+      throw new ForbiddenError('Only the two deal participants can open this conversation');
+    }
+
+    const existing = await this.conversations.findPetOwnerVeterinarian(
+      petOwnerUserId,
+      veterinarianUserId,
+    );
+    if (existing) {
+      if (params.subjectType && params.subjectId && !existing.subjectType) {
+        await this.db.transaction((tx) =>
+          this.conversations.setSubject(
+            existing.id,
+            params.subjectType as string,
+            params.subjectId as string,
+            tx,
+          ),
+        );
+      }
+      const fresh = (await this.conversations.findById(existing.id)) ?? existing;
+      const side = await this.assertAccess(actor.actorUserId, fresh);
+      return { conversation: await this.decorate(actor.actorUserId, fresh, side), created: false };
+    }
+
+    let conversation: Conversation;
+    try {
+      conversation = await this.db.transaction(async (tx) => {
+        const created = await this.conversations.create(
+          {
+            type: 'PET_OWNER_VETERINARIAN',
+            organizationId: null,
+            petOwnerUserId,
+            memberUserId: null,
+            veterinarianUserId,
+            subjectType: params.subjectType ?? null,
+            subjectId: params.subjectId ?? null,
+            createdByUserId: actor.actorUserId,
+          },
+          tx,
+        );
+        await this.conversations.addParticipants(
+          [
+            { conversationId: created.id, userId: petOwnerUserId, role: 'PET_OWNER' },
+            { conversationId: created.id, userId: veterinarianUserId, role: 'VETERINARIAN' },
+          ],
+          tx,
+        );
+        await this.audit.record(
+          {
+            action: AuditAction.CONVERSATION_CREATED,
+            entityType: AuditEntityType.CONVERSATION,
+            entityId: created.id,
+            actorUserId: actor.actorUserId,
+            metadata: { conversationId: created.id, type: 'PET_OWNER_VETERINARIAN' },
+            context: actor.context,
+          },
+          tx,
+        );
+        return created;
+      });
+    } catch (err) {
+      if (isUniqueViolation(err)) {
+        const raced = await this.conversations.findPetOwnerVeterinarian(
+          petOwnerUserId,
+          veterinarianUserId,
+        );
+        if (raced) {
+          const side = await this.assertAccess(actor.actorUserId, raced);
+          return {
+            conversation: await this.decorate(actor.actorUserId, raced, side),
+            created: false,
+          };
+        }
+      }
+      throw err;
+    }
+
+    this.events.publish('chat.conversation.created', {
+      conversationId: conversation.id,
+      organizationId: null,
+      type: conversation.type,
+      participantUserIds: [petOwnerUserId, veterinarianUserId],
+    });
+    const side = await this.assertAccess(actor.actorUserId, conversation);
+    return {
+      conversation: await this.decorate(actor.actorUserId, conversation, side),
+      created: true,
+    };
+  }
+
+  /** Pin an accepted engagement onto the pair's conversation (idempotent). */
+  async pinDealSubject(
+    conversationId: string,
+    subjectType: 'VET_SERVICE_OFFER' | 'VET_SERVICE_LISTING_REQUEST',
+    subjectId: string,
+  ): Promise<void> {
+    await this.db.transaction((tx) =>
+      this.conversations.setSubject(conversationId, subjectType, subjectId, tx),
+    );
+  }
+
+  /**
+   * Set the job status of a deal conversation. `COMPLETED` ("إنهاء الطلب") is
+   * driven by the `vet-services` engagement; `CLOSED` ("إيقاف المحادثة") is a
+   * plain chat action available to either participant.
+   */
+  async setDealStatus(
+    actor: ChatActor,
+    conversationId: string,
+    status: 'COMPLETED' | 'CLOSED',
+  ): Promise<ConversationDTO> {
+    const conversation = await this.load(conversationId);
+    if (conversation.type !== 'PET_OWNER_VETERINARIAN') {
+      throw new BadRequestError('Only a marketplace deal conversation has a job status');
+    }
+    const side = await this.assertAccess(actor.actorUserId, conversation);
+    const updated = await this.db.transaction(async (tx) => {
+      const c = await this.conversations.setStatus(conversationId, status, tx);
+      await this.audit.record(
+        {
+          action: AuditAction.CONVERSATION_STATUS_CHANGED,
+          entityType: AuditEntityType.CONVERSATION,
+          entityId: conversationId,
+          actorUserId: actor.actorUserId,
+          metadata: { conversationId, statusChangedTo: status },
+          context: actor.context,
+        },
+        tx,
+      );
+      return c;
+    });
+    return this.decorate(actor.actorUserId, updated, side);
+  }
+
+  async getDealBySubject(
+    userId: string,
+    subjectType: string,
+    subjectId: string,
+  ): Promise<ConversationDTO | null> {
+    const conversation = await this.conversations.findBySubject(subjectType, subjectId);
+    if (!conversation) return null;
+    const side = await this.resolveSide(userId, conversation);
+    if (!side) return null;
+    return this.decorate(userId, conversation, side);
+  }
+
   // --- reads -----------------------------------------------------------
 
   async listConversations(
@@ -416,11 +591,21 @@ export class ChatService {
     const conversation = await this.load(conversationId);
     const side = await this.assertAccess(actor.actorUserId, conversation);
 
-    const org = await this.organizations.findById(conversation.organizationId);
-    if (!org || org.status !== 'ACTIVE') {
-      throw new ForbiddenError('The organization is not active — messaging is disabled', {
-        code: ErrorCode.ORGANIZATION_NOT_ACTIVE,
-      });
+    if (conversation.type === 'PET_OWNER_VETERINARIAN') {
+      if (conversation.status === 'CLOSED') {
+        throw new ForbiddenError('This conversation has been closed — messaging is disabled', {
+          code: ErrorCode.CONVERSATION_CLOSED,
+        });
+      }
+    } else {
+      const org = conversation.organizationId
+        ? await this.organizations.findById(conversation.organizationId)
+        : null;
+      if (!org || org.status !== 'ACTIVE') {
+        throw new ForbiddenError('The organization is not active — messaging is disabled', {
+          code: ErrorCode.ORGANIZATION_NOT_ACTIVE,
+        });
+      }
     }
 
     const now = new Date();
@@ -524,16 +709,26 @@ export class ChatService {
     side: ConversationSide,
     unreadCount: number | null,
   ): ConversationDTO {
-    const counterpartUserId =
-      conversation.type === 'PET_OWNER_CLINIC'
-        ? conversation.petOwnerUserId
-        : conversation.memberUserId;
+    let counterpartUserId: string | null;
+    if (conversation.type === 'PET_OWNER_CLINIC') {
+      counterpartUserId = conversation.petOwnerUserId;
+    } else if (conversation.type === 'PET_OWNER_VETERINARIAN') {
+      counterpartUserId =
+        side === 'PET_OWNER'
+          ? conversation.veterinarianUserId
+          : conversation.petOwnerUserId;
+    } else {
+      counterpartUserId = conversation.memberUserId;
+    }
     return {
       id: conversation.id,
       type: conversation.type,
       organizationId: conversation.organizationId,
       counterpartUserId,
       viewerSide: side,
+      subjectType: conversation.subjectType,
+      subjectId: conversation.subjectId,
+      status: conversation.status,
       lastMessageAt: conversation.lastMessageAt,
       unreadCount,
       createdAt: conversation.createdAt,

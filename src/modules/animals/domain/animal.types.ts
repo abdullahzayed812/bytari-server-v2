@@ -114,6 +114,16 @@ export interface ListAnimalsFilter {
   search?: string;
 }
 
+/** Admin/oversight animal listing — any owner's animals, plus an owner filter. */
+export interface ListAdminAnimalsFilter extends ListAnimalsFilter {
+  ownerUserId?: string;
+}
+
+/** Admin projection — an animal plus its current owner's name for the queue. */
+export interface AdminAnimalDTO extends AnimalDTO {
+  ownerName: string | null;
+}
+
 // --- rows -------------------------------------------------------
 
 export interface AnimalRow {

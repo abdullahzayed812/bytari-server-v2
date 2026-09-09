@@ -6,6 +6,7 @@ import {
   type AnimalPublicationRow,
   type AnimalPublicationWithAnimal,
   type ListPublicationsFilter,
+  type MinePublicationsFilter,
   type PublicListFilter,
 } from '../domain/publication.types.js';
 
@@ -235,6 +236,37 @@ export class AnimalPublicationRepository {
 
     const rows: JoinedRow[] = await base()
       .orderBy('p.reviewed_at', 'desc')
+      .limit(filter.pageSize)
+      .offset((filter.page - 1) * filter.pageSize)
+      .select('p.*', ...ANIMAL_JOIN_COLUMNS);
+
+    return { items: rows.map(toWithAnimal), total };
+  }
+
+  /**
+   * "My listings" — the caller's own publications of EVERY status, joined with
+   * the animal summary. `createdByUserId` comes from the authenticated session,
+   * never the request body.
+   */
+  async listMineWithAnimal(
+    createdByUserId: string,
+    filter: MinePublicationsFilter,
+    trx?: Knex.Transaction,
+  ): Promise<{ items: AnimalPublicationWithAnimal[]; total: number }> {
+    const base = (): Knex.QueryBuilder => {
+      const qb = this.conn(trx)(`${TABLE} as p`)
+        .join('animals as a', 'a.id', 'p.animal_id')
+        .where('p.created_by_user_id', createdByUserId);
+      if (filter.kind) qb.andWhere('p.kind', filter.kind);
+      if (filter.status) qb.andWhere('p.status', filter.status);
+      return qb;
+    };
+
+    const countRow = await base().count<{ count: string }>({ count: '*' }).first();
+    const total = Number(countRow?.count ?? 0);
+
+    const rows: JoinedRow[] = await base()
+      .orderBy('p.created_at', 'desc')
       .limit(filter.pageSize)
       .offset((filter.page - 1) * filter.pageSize)
       .select('p.*', ...ANIMAL_JOIN_COLUMNS);

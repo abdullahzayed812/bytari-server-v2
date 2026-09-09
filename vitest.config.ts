@@ -14,5 +14,12 @@ export default defineConfig({
     },
     // Integration tests share a DB connection; keep them serial.
     fileParallelism: false,
+    // `resetDb()` runs `TRUNCATE ... CASCADE` over the whole schema in a
+    // `beforeEach`; on a slow/fsync-bound disk that grows past the 10s default
+    // as the schema does. Give hooks headroom so the reset is never the flake.
+    // The same disk makes each HTTP round-trip ~3s, so multi-request integration
+    // tests need more than the 5s per-test default too.
+    hookTimeout: 45_000,
+    testTimeout: 30_000,
   },
 });

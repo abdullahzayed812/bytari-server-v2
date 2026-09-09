@@ -4,7 +4,7 @@
  * independently.
  */
 
-export const THREAD_KINDS = ['CONSULTATION', 'INQUIRY'] as const;
+export const THREAD_KINDS = ['CONSULTATION', 'INQUIRY', 'SUPPORT'] as const;
 export type ThreadKind = (typeof THREAD_KINDS)[number];
 
 export const THREAD_STATUSES = ['OPEN', 'CLOSED'] as const;
@@ -43,7 +43,20 @@ export const INQUIRY_PERMISSION_KEYS = [
   'inquiry.admin.read',
 ] as const;
 
+/**
+ * Support messages ("تواصل معنا"). Same thread kernel as CONSULTATION / INQUIRY;
+ * creation is authentication-only (ANY signed-in user, no eligibility gate).
+ * RESPONDER access = ADMIN override or an ACTIVE SUPPORT system-supervisor.
+ */
+export const SUPPORT_PERMISSION_KEYS = [
+  'support.create',
+  'support.read',
+  'support.respond',
+  'support.close',
+  'support.admin.read',
+] as const;
+
 export const AI_PERMISSION_KEYS = ['ai.settings.manage'] as const;
 
-export const AI_SETTING_KEYS = ['CONSULTATION_AI', 'INQUIRY_AI'] as const;
+export const AI_SETTING_KEYS = ['CONSULTATION_AI', 'INQUIRY_AI', 'SUPPORT_AI'] as const;
 export type AiSettingKey = (typeof AI_SETTING_KEYS)[number];

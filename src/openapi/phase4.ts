@@ -76,6 +76,16 @@ const schemas: Obj = {
       updatedAt: { type: 'string', format: 'date-time' },
     },
   },
+  AdminAnimal: {
+    allOf: [
+      { $ref: '#/components/schemas/Animal' },
+      {
+        type: 'object',
+        properties: { ownerName: { type: 'string', nullable: true } },
+      },
+    ],
+    description: 'Animal + the current owner’s display name — the admin oversight row.',
+  },
   OwnershipRecord: {
     type: 'object',
     description: 'One interval in an animal’s ownership history. Append-only.',
@@ -518,6 +528,53 @@ const paths: Obj = {
       },
     },
   },
+
+  '/admin/animals': {
+    get: {
+      tags: ['Admin · Animals'],
+      summary: 'List EVERY user’s animals — animal.read (ADMIN or ANIMAL supervisor)',
+      description:
+        'Oversight listing, never owner-scoped. Each row carries `currentOwnerUserId` + ' +
+        '`ownerName`. Optional `ownerUserId` narrows to one owner.',
+      security: bearer,
+      parameters: [
+        { name: 'page', in: 'query', schema: { type: 'integer' } },
+        { name: 'pageSize', in: 'query', schema: { type: 'integer' } },
+        {
+          name: 'status',
+          in: 'query',
+          schema: { type: 'string', enum: ['ACTIVE', 'DEACTIVATED'] },
+        },
+        { name: 'species', in: 'query', schema: { type: 'string' } },
+        { name: 'search', in: 'query', schema: { type: 'string' } },
+        { name: 'ownerUserId', in: 'query', schema: { type: 'string', format: 'uuid' } },
+      ],
+      responses: {
+        '200': ok('Paginated animals with owner', {
+          type: 'object',
+          properties: {
+            data: { type: 'array', items: { $ref: '#/components/schemas/AdminAnimal' } },
+            meta: { type: 'object' },
+          },
+        }),
+        ...errs(401, 403, 422),
+      },
+    },
+  },
+  '/admin/animals/{animalId}': {
+    delete: {
+      tags: ['Admin · Animals'],
+      summary: 'Soft-delete a user’s animal — animal.delete (ADMIN override)',
+      description:
+        'Sets `status = DEACTIVATED`. Ownership + medical history are preserved. Idempotent.',
+      security: bearer,
+      parameters: [animalIdParam],
+      responses: {
+        '200': ok('Deactivated', dataOf({ $ref: '#/components/schemas/Animal' })),
+        ...errs(401, 403, 404),
+      },
+    },
+  },
 };
 
 const tags = [
@@ -525,6 +582,10 @@ const tags = [
   {
     name: 'Animals · Ownership',
     description: 'Ownership transfer and complete ownership history',
+  },
+  {
+    name: 'Admin · Animals',
+    description: 'Admin / ANIMAL-supervisor oversight of user animals (list all, soft-delete)',
   },
 ];
 

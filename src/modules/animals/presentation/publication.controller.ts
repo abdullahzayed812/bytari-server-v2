@@ -14,6 +14,7 @@ import { requireAnimal } from './animal.middleware.js';
 import type {
   CreateInteractionBody,
   CreatePublicationBody,
+  ListMinePublicationsQuery,
   PublicPublicationsQuery,
 } from './publication.schemas.js';
 
@@ -87,6 +88,28 @@ export class PublicationController {
   getPublic = async (req: Request, res: Response): Promise<void> => {
     const { publicationId } = validatedParams<{ publicationId: string }>(req);
     sendSuccess(res, await this.publications.getPublic(publicationId));
+  };
+
+  // --- "My listings" (the caller's own, every status) + delete ---
+
+  /** `GET /animal-publications/mine` — the authenticated user's own listings. */
+  listMine = async (req: Request, res: Response): Promise<void> => {
+    const userId = requireAuth(req).userId;
+    const q = validatedQuery<ListMinePublicationsQuery>(req);
+    const { items, total } = await this.publications.listMine(userId, {
+      page: q.page,
+      pageSize: q.pageSize,
+      kind: q.kind,
+      status: q.status,
+    });
+    sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
+  };
+
+  /** `DELETE /animal-publications/:publicationId` — owner / ADMIN / ANIMAL supervisor (route-guarded). */
+  remove = async (req: Request, res: Response): Promise<void> => {
+    const { publicationId } = validatedParams<{ publicationId: string }>(req);
+    await this.publications.deletePublication(publicationId, this.actor(req));
+    sendSuccess(res, { success: true });
   };
 
   // --- viewer interactions: "طلب التبني" / "طلب تزاوج" / "ابلاغ عن مشاهدة" ---

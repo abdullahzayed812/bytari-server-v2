@@ -148,6 +148,28 @@ export interface PublicListFilter {
   search?: string;
 }
 
+/** "My listings" — the caller's own publications of every status. */
+export interface MinePublicationsFilter {
+  page: number;
+  pageSize: number;
+  kind?: PublicationKind;
+  status?: PublicationStatus;
+}
+
+/**
+ * "My listings" projection — the caller's own publication joined with the
+ * animal summary, plus the moderation state the public projection omits
+ * (`status` / `rejectionReason`) so the owner can see PENDING / REJECTED
+ * listings and why one was rejected.
+ */
+export interface MyPublicationDTO extends PublicPublicationDTO {
+  animalId: string;
+  status: PublicationStatus;
+  rejectionReason: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // --- interactions ("طلب التبني" / "طلب تزاوج" / "ابلاغ عن مشاهدة") -----
 
 export interface PublicationInteraction {
@@ -250,6 +272,17 @@ export function rowToPublication(row: AnimalPublicationRow): AnimalPublication {
 
 export function toPublicationDTO(p: AnimalPublication): AnimalPublicationDTO {
   return { ...p };
+}
+
+export function toMyPublicationDTO(p: AnimalPublicationWithAnimal): MyPublicationDTO {
+  return {
+    ...toPublicPublicationDTO(p),
+    animalId: p.animalId,
+    status: p.status,
+    rejectionReason: p.rejectionReason,
+    createdAt: p.createdAt,
+    updatedAt: p.updatedAt,
+  };
 }
 
 export function toPublicPublicationDTO(p: AnimalPublicationWithAnimal): PublicPublicationDTO {

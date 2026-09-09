@@ -12,10 +12,13 @@ const T_CONV = 'conversations';
 const T_PART = 'conversation_participants';
 
 export interface CreateConversationData {
-  type: 'PET_OWNER_CLINIC' | 'FARM_OWNER_MEMBER';
-  organizationId: string;
+  type: 'PET_OWNER_CLINIC' | 'FARM_OWNER_MEMBER' | 'PET_OWNER_VETERINARIAN';
+  organizationId: string | null;
   petOwnerUserId: string | null;
   memberUserId: string | null;
+  veterinarianUserId?: string | null;
+  subjectType?: 'VET_SERVICE_OFFER' | 'VET_SERVICE_LISTING_REQUEST' | null;
+  subjectId?: string | null;
   createdByUserId: string;
 }
 
@@ -86,10 +89,63 @@ export class ConversationRepository {
         organization_id: data.organizationId,
         pet_owner_user_id: data.petOwnerUserId,
         member_user_id: data.memberUserId,
+        veterinarian_user_id: data.veterinarianUserId ?? null,
+        subject_type: data.subjectType ?? null,
+        subject_id: data.subjectId ?? null,
         created_by_user_id: data.createdByUserId,
       })
       .returning('*')) as ConversationRow[];
     if (!row) throw new Error('conversation insert returned no row');
+    return rowToConversation(row);
+  }
+
+  async findPetOwnerVeterinarian(
+    petOwnerUserId: string,
+    veterinarianUserId: string,
+    trx?: Knex.Transaction,
+  ): Promise<Conversation | null> {
+    const row = await this.conn(trx)<ConversationRow>(T_CONV)
+      .where({
+        type: 'PET_OWNER_VETERINARIAN',
+        pet_owner_user_id: petOwnerUserId,
+        veterinarian_user_id: veterinarianUserId,
+      })
+      .first();
+    return row ? rowToConversation(row) : null;
+  }
+
+  async findBySubject(
+    subjectType: string,
+    subjectId: string,
+    trx?: Knex.Transaction,
+  ): Promise<Conversation | null> {
+    const row = await this.conn(trx)<ConversationRow>(T_CONV)
+      .where({ subject_type: subjectType, subject_id: subjectId })
+      .first();
+    return row ? rowToConversation(row) : null;
+  }
+
+  async setSubject(
+    conversationId: string,
+    subjectType: string,
+    subjectId: string,
+    trx: Knex.Transaction,
+  ): Promise<void> {
+    await trx(T_CONV)
+      .where({ id: conversationId })
+      .update({ subject_type: subjectType, subject_id: subjectId, updated_at: trx.fn.now() });
+  }
+
+  async setStatus(
+    conversationId: string,
+    status: 'OPEN' | 'COMPLETED' | 'CLOSED',
+    trx: Knex.Transaction,
+  ): Promise<Conversation> {
+    const [row] = (await trx(T_CONV)
+      .where({ id: conversationId })
+      .update({ status, updated_at: trx.fn.now() })
+      .returning('*')) as ConversationRow[];
+    if (!row) throw new Error('conversation not found on setStatus');
     return rowToConversation(row);
   }
 

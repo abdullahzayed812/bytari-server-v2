@@ -594,7 +594,12 @@ export async function createSheepFarm(
   app: Express,
   ownerToken: string,
   adminToken: string,
-  input: Partial<{ name: string; location: string; governorate: string; sheepProductionType: string }> = {},
+  input: Partial<{
+    name: string;
+    location: string;
+    governorate: string;
+    sheepProductionType: string;
+  }> = {},
 ): Promise<TestSheepFarm> {
   const res = await request(app)
     .post('/api/v1/organizations/sheep-farms')
@@ -636,7 +641,12 @@ export async function createCattleFarm(
   app: Express,
   ownerToken: string,
   adminToken: string,
-  input: Partial<{ name: string; location: string; governorate: string; cattleProductionType: string }> = {},
+  input: Partial<{
+    name: string;
+    location: string;
+    governorate: string;
+    cattleProductionType: string;
+  }> = {},
 ): Promise<TestCattleFarm> {
   const res = await request(app)
     .post('/api/v1/organizations/cattle-farms')
@@ -767,8 +777,11 @@ export async function assignSystemSupervisor(
     | 'CONTENT'
     | 'CONSULTATION'
     | 'INQUIRY'
+    | 'SUPPORT'
+    | 'VET_SERVICE'
     | 'ADVERTISEMENT'
-    | 'MARKET',
+    | 'MARKET'
+    | 'PET_OWNER_STORE',
 ): Promise<{ id: string }> {
   const res = await request(app)
     .post('/api/v1/admin/supervisors')
@@ -1055,11 +1068,30 @@ export async function createInquiry(
   return request(app).post('/api/v1/inquiries').set(bearer(actorToken)).send({ body });
 }
 
+/** "تواصل معنا" — any signed-in user sends a support message to the administration. */
+export async function createSupportMessage(
+  app: Express,
+  actorToken: string,
+  body: string,
+): Promise<request.Response> {
+  return request(app).post('/api/v1/support-messages').set(bearer(actorToken)).send({ body });
+}
+
+/** Register a plain user (NOT a vet) and give them the SUPPORT supervisor domain. */
+export async function registerSupportMessageSupervisor(
+  app: Express,
+  adminToken: string,
+): Promise<RegisteredUser> {
+  const sup = await registerUser(app, { email: uniqueEmail('supportsup') });
+  await assignSystemSupervisor(app, adminToken, sup.id, 'SUPPORT');
+  return sup;
+}
+
 /** `base` is 'consultations' | 'inquiries'. */
 export async function sendThreadMessage(
   app: Express,
   actorToken: string,
-  base: 'consultations' | 'inquiries',
+  base: 'consultations' | 'inquiries' | 'support-messages',
   threadId: string,
   body: string,
 ): Promise<request.Response> {
@@ -1072,7 +1104,7 @@ export async function sendThreadMessage(
 export async function listThreadMessages(
   app: Express,
   actorToken: string,
-  base: 'consultations' | 'inquiries',
+  base: 'consultations' | 'inquiries' | 'support-messages',
   threadId: string,
   query: Record<string, string | number> = {},
 ): Promise<request.Response> {
@@ -1085,7 +1117,7 @@ export async function listThreadMessages(
 export async function closeThread(
   app: Express,
   actorToken: string,
-  base: 'consultations' | 'inquiries',
+  base: 'consultations' | 'inquiries' | 'support-messages',
   threadId: string,
 ): Promise<request.Response> {
   return request(app).post(`/api/v1/${base}/${threadId}/close`).set(bearer(actorToken));
@@ -1094,7 +1126,7 @@ export async function closeThread(
 export async function blockThreadSender(
   app: Express,
   actorToken: string,
-  base: 'consultations' | 'inquiries',
+  base: 'consultations' | 'inquiries' | 'support-messages',
   threadId: string,
   block: boolean,
 ): Promise<request.Response> {
@@ -1448,4 +1480,110 @@ export async function uploadTipCover(
     .post(`/api/v1/admin/tips/${tipId}/cover`)
     .set(bearer(actorToken))
     .send({ storageKey, mimeType: input.mimeType });
+}
+
+// --- Pet Owners Store -------------------------------------------------
+
+/** `POST /admin/pet-owner-store/categories` — create a store category. */
+export async function createPetStoreCategory(
+  app: Express,
+  actorToken: string,
+  overrides: Partial<{
+    slug: string;
+    name: string;
+    showOnHome: boolean;
+    sortOrder: number;
+    status: string;
+  }> = {},
+): Promise<{ id: string; slug: string }> {
+  const slug = overrides.slug ?? `cat-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+  const res = await request(app)
+    .post('/api/v1/admin/pet-owner-store/categories')
+    .set(bearer(actorToken))
+    .send({
+      slug,
+      name: overrides.name ?? 'أطعمة',
+      showOnHome: overrides.showOnHome,
+      sortOrder: overrides.sortOrder,
+      status: overrides.status,
+    });
+  if (res.status !== 201) {
+    throw new Error(`createPetStoreCategory failed: ${res.status} ${JSON.stringify(res.body)}`);
+  }
+  return { id: res.body.data.id as string, slug: res.body.data.slug as string };
+}
+
+/** `POST /admin/pet-owner-store/products` — create a store product. */
+export async function createPetStoreProduct(
+  app: Express,
+  actorToken: string,
+  overrides: Partial<{
+    categoryId: string | null;
+    name: string;
+    description: string;
+    price: string;
+    stockQuantity: number;
+    attributes: Record<string, string> | null;
+    status: string;
+  }> = {},
+): Promise<{ id: string; name: string; price: string }> {
+  const res = await request(app)
+    .post('/api/v1/admin/pet-owner-store/products')
+    .set(bearer(actorToken))
+    .send({
+      categoryId: overrides.categoryId,
+      name: overrides.name ?? 'طعام جاف للكلاب',
+      description: overrides.description ?? 'غذاء متكامل للكلاب البالغة.',
+      price: overrides.price ?? '85.00',
+      stockQuantity: overrides.stockQuantity ?? 40,
+      attributes: overrides.attributes,
+      status: overrides.status,
+    });
+  if (res.status !== 201) {
+    throw new Error(`createPetStoreProduct failed: ${res.status} ${JSON.stringify(res.body)}`);
+  }
+  return {
+    id: res.body.data.id as string,
+    name: res.body.data.name as string,
+    price: res.body.data.price as string,
+  };
+}
+
+/** Add one product to the caller's cart. */
+export async function addToPetStoreCart(
+  app: Express,
+  token: string,
+  productId: string,
+  quantity = 1,
+): Promise<request.Response> {
+  return request(app)
+    .post('/api/v1/pet-owner-store/cart/items')
+    .set(bearer(token))
+    .send({ productId, quantity });
+}
+
+/** Place an order from the caller's cart (Cash on Delivery). */
+export async function checkoutPetStoreCart(
+  app: Express,
+  token: string,
+  overrides: Partial<{
+    paymentMethod: string;
+    recipientName: string;
+    recipientPhone: string;
+    city: string;
+    addressLine: string;
+    note: string;
+  }> = {},
+): Promise<request.Response> {
+  return request(app)
+    .post('/api/v1/pet-owner-store/orders')
+    .set(bearer(token))
+    .send({
+      paymentMethod: overrides.paymentMethod ?? 'COD',
+      recipientName: overrides.recipientName ?? 'أحمد محمد',
+      recipientPhone: overrides.recipientPhone ?? '0551234567',
+      city: overrides.city ?? 'الرياض',
+      addressLine: overrides.addressLine ?? 'حي الياسمين، شارع رقم 15، منزل 28',
+      note: overrides.note,
+    });
 }

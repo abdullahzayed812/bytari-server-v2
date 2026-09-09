@@ -74,6 +74,21 @@ export const PERMISSION_KEYS = [
   'inquiry.respond',
   'inquiry.close',
   'inquiry.admin.read',
+  // Support messages ("تواصل معنا" / contact the administration). Any signed-in
+  // user creates one; RESPONDER access is the ADMIN override or an ACTIVE
+  // SUPPORT system-supervisor domain assignment. `support.create` is reserved —
+  // creation is authentication-only (no eligibility gate, unlike inquiries).
+  'support.create',
+  'support.read',
+  'support.respond',
+  'support.close',
+  'support.admin.read',
+  // Veterinary Services marketplace — service LISTINGS + pet-owner REQUESTS
+  // require approval before becoming public. Held by ADMIN (override) or an
+  // ACTIVE VET_SERVICE system-supervisor. Granted to NO base role.
+  'vet_service.read',
+  'vet_service.approve',
+  'vet_service.reject',
   // Admin-only: enable/disable AI responses for consultations / inquiries.
   'ai.settings.manage',
   // Phase 14 — content management (articles / books / magazines). Public reads
@@ -110,6 +125,13 @@ export const PERMISSION_KEYS = [
   'market.offer.admin.read',
   'market.offer.admin.delete',
   'market.rate.manage',
+  // Pet Owners Store — a platform-run consumer storefront. Consumer browse /
+  // cart / checkout / order-history are authentication-only (no key). These
+  // gate management, held by ADMIN (override) or a PET_OWNER_STORE
+  // system-supervisor (see SUPERVISOR_DOMAIN_PERMISSIONS). Granted to NO base role.
+  'pet_store.product.manage',
+  'pet_store.category.manage',
+  'pet_store.order.manage',
 ] as const;
 export type PermissionKey = (typeof PERMISSION_KEYS)[number];
 
@@ -120,8 +142,11 @@ export const SUPERVISOR_DOMAINS = [
   'CONTENT',
   'CONSULTATION',
   'INQUIRY',
+  'SUPPORT',
+  'VET_SERVICE',
   'ADVERTISEMENT',
   'MARKET',
+  'PET_OWNER_STORE',
 ] as const;
 export type SupervisorDomain = (typeof SUPERVISOR_DOMAINS)[number];
 
@@ -194,6 +219,14 @@ export const PERMISSION_DEFINITIONS: Record<PermissionKey, string> = {
   'inquiry.respond': 'Post a response message on an inquiry',
   'inquiry.close': 'Close an inquiry',
   'inquiry.admin.read': 'List and view any inquiry (system-wide)',
+  'support.create': 'Create a support message (reserved — creation is authentication-only)',
+  'support.read': 'Read a support message as a responder (supervisor / admin oversight)',
+  'support.respond': 'Post a response message on a support message',
+  'support.close': 'Close a support message',
+  'support.admin.read': 'List and view any support message (system-wide)',
+  'vet_service.read': 'View pending vet-service listings / requests for moderation',
+  'vet_service.approve': 'Approve a pending vet-service listing / pet-owner request',
+  'vet_service.reject': 'Reject a pending vet-service listing / pet-owner request',
   'ai.settings.manage': 'Enable or disable AI responses for consultations / inquiries',
   'content.read': 'List and view content in any state (DRAFT / ARCHIVED included)',
   'content.create': 'Create content items (articles / books / magazines)',
@@ -213,6 +246,10 @@ export const PERMISSION_DEFINITIONS: Record<PermissionKey, string> = {
   'market.offer.admin.read': 'List and view any poultry/egg market offer (system-wide)',
   'market.offer.admin.delete': 'Delete any poultry/egg market offer (moderation)',
   'market.rate.manage': 'Enter/update the poultry and egg exchange-rate boards',
+  'pet_store.product.manage':
+    'Create, update, deactivate and manage images for Pet Owners Store products',
+  'pet_store.category.manage': 'Create, update and delete Pet Owners Store product categories',
+  'pet_store.order.manage': 'List and view any Pet Owners Store order and update its status',
 };
 
 /**
@@ -246,6 +283,13 @@ export const SUPERVISOR_DOMAIN_PERMISSIONS: Record<SupervisorDomain, readonly Pe
     'consultation.admin.read',
   ],
   INQUIRY: ['inquiry.read', 'inquiry.respond', 'inquiry.close', 'inquiry.admin.read'],
+  // The responsible Support supervisor ("مسؤول الدعم"): full responder +
+  // oversight rights for "تواصل معنا" support messages ONLY.
+  SUPPORT: ['support.read', 'support.respond', 'support.close', 'support.admin.read'],
+  // The "authorized specialist supervisor" for the Veterinary Services
+  // marketplace: reviews (approve / reject) service listings + pet-owner
+  // requests. Does NOT gain access to the private deal conversations.
+  VET_SERVICE: ['vet_service.read', 'vet_service.approve', 'vet_service.reject'],
   // The responsible Advertisement supervisor: full campaign + slide management
   // for every placement.
   ADVERTISEMENT: ['advertisement.manage'],
@@ -253,6 +297,13 @@ export const SUPERVISOR_DOMAIN_PERMISSIONS: Record<SupervisorDomain, readonly Pe
   // (governorate-wide data, not per-organization — trader approve/reject/
   // suspend stays ADMIN/MODERATOR-oversight-only, not part of this domain).
   MARKET: ['market.offer.admin.read', 'market.offer.admin.delete', 'market.rate.manage'],
+  // The responsible Pet Owners Store supervisor: full catalogue (products +
+  // categories + images) and order management for the platform storefront.
+  PET_OWNER_STORE: [
+    'pet_store.product.manage',
+    'pet_store.category.manage',
+    'pet_store.order.manage',
+  ],
 };
 
 /**

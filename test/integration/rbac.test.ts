@@ -170,6 +170,8 @@ describe('roles ↔ permissions', () => {
     expect(keys).toContain('advertisement.manage');
     expect(keys).toContain('trader.admin.read');
     expect(keys).toContain('market.rate.manage');
-    expect(keys.length).toBe(62);
+    expect(keys).toContain('pet_store.product.manage');
+    expect(keys).toContain('pet_store.order.manage');
+    expect(keys.length).toBe(65);
   });
 });

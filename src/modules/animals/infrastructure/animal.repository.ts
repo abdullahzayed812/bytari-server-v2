@@ -4,6 +4,7 @@ import {
   rowToAnimal,
   type Animal,
   type AnimalRow,
+  type ListAdminAnimalsFilter,
   type ListAnimalsFilter,
 } from '../domain/animal.types.js';
 
@@ -130,5 +131,60 @@ export class AnimalRepository {
       .select('a.*');
 
     return { items: rows.map(rowToAnimal), total };
+  }
+
+  /**
+   * Every user's animals (admin / ANIMAL-supervisor oversight). Joins the
+   * CURRENT owner (`animal_ownerships.ended_at IS NULL`) + the owner's name.
+   * Never owner-scoped — `filter.ownerUserId` is an optional narrowing.
+   */
+  async listForAdmin(
+    filter: ListAdminAnimalsFilter,
+    trx?: Knex.Transaction,
+  ): Promise<{
+    items: { animal: Animal; ownerUserId: string | null; ownerName: string | null }[];
+    total: number;
+  }> {
+    const apply = (qb: Knex.QueryBuilder): Knex.QueryBuilder => {
+      qb.leftJoin('animal_ownerships as o', function joinCurrent() {
+        this.on('o.animal_id', 'a.id').andOnNull('o.ended_at');
+      }).leftJoin('users as u', 'u.id', 'o.owner_user_id');
+      if (filter.ownerUserId) qb.where('o.owner_user_id', filter.ownerUserId);
+      if (filter.status) qb.where('a.status', filter.status);
+      if (filter.species) qb.where('a.species', filter.species);
+      if (filter.search) {
+        qb.whereRaw('lower(a.name) like ?', [`%${filter.search.toLowerCase()}%`]);
+      }
+      return qb;
+    };
+
+    const countRow = await apply(this.conn(trx)(`${TABLE} as a`))
+      .count<{ count: string }>({ count: '*' })
+      .first();
+    const total = Number(countRow?.count ?? 0);
+
+    const rows: (AnimalRow & {
+      owner_user_id: string | null;
+      owner_first_name: string | null;
+      owner_last_name: string | null;
+    })[] = await apply(this.conn(trx)(`${TABLE} as a`))
+      .orderBy('a.created_at', 'desc')
+      .limit(filter.pageSize)
+      .offset((filter.page - 1) * filter.pageSize)
+      .select(
+        'a.*',
+        'o.owner_user_id as owner_user_id',
+        'u.first_name as owner_first_name',
+        'u.last_name as owner_last_name',
+      );
+
+    return {
+      items: rows.map((r) => ({
+        animal: rowToAnimal(r),
+        ownerUserId: r.owner_user_id,
+        ownerName: [r.owner_first_name, r.owner_last_name].filter(Boolean).join(' ').trim() || null,
+      })),
+      total,
+    };
   }
 }

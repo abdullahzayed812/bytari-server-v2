@@ -46,6 +46,8 @@ import { AnimalOwnershipService } from './modules/animals/application/animal-own
 import { AnimalPublicationService } from './modules/animals/application/animal-publication.service.js';
 import { PublicationInteractionService } from './modules/animals/application/publication-interaction.service.js';
 import { AnimalTransferRequestService } from './modules/animals/application/animal-transfer-request.service.js';
+import { ClinicAppointmentRepository } from './modules/clinic-appointments/infrastructure/clinic-appointment.repository.js';
+import { ClinicAppointmentService } from './modules/clinic-appointments/application/clinic-appointment.service.js';
 import { AnimalClinicAccessRepository } from './modules/veterinary-care/infrastructure/animal-clinic-access.repository.js';
 import { MedicalRecordRepository } from './modules/veterinary-care/infrastructure/medical-record.repository.js';
 import { VaccinationRepository } from './modules/veterinary-care/infrastructure/vaccination.repository.js';
@@ -89,6 +91,14 @@ import { CattleHealthEventService } from './modules/livestock/application/cattle
 import { CattleCaseService } from './modules/livestock/application/cattle-case.service.js';
 import { ProductRepository } from './modules/veterinary-store/infrastructure/product.repository.js';
 import { ProductService } from './modules/veterinary-store/application/product.service.js';
+import { PetStoreCategoryRepository } from './modules/pet-owner-store/infrastructure/category.repository.js';
+import { PetStoreProductRepository } from './modules/pet-owner-store/infrastructure/product.repository.js';
+import { PetStoreCartRepository } from './modules/pet-owner-store/infrastructure/cart.repository.js';
+import { PetStoreOrderRepository } from './modules/pet-owner-store/infrastructure/order.repository.js';
+import { PetStoreCatalogService } from './modules/pet-owner-store/application/pet-owner-store-catalog.service.js';
+import { PetStoreCartService } from './modules/pet-owner-store/application/pet-owner-store-cart.service.js';
+import { PetStoreOrderService } from './modules/pet-owner-store/application/pet-owner-store-order.service.js';
+import { PetStoreAdminService } from './modules/pet-owner-store/application/pet-owner-store-admin.service.js';
 import { TraderRepository } from './modules/poultryMarket/infrastructure/trader.repository.js';
 import { PoultryOfferRepository } from './modules/poultryMarket/infrastructure/poultry-offer.repository.js';
 import { EggOfferRepository } from './modules/poultryMarket/infrastructure/egg-offer.repository.js';
@@ -107,8 +117,20 @@ import { AiSettingsRepository } from './modules/consultations/infrastructure/ai-
 import { AiSettingsService } from './modules/consultations/application/ai-settings.service.js';
 import { SupportThreadService } from './modules/consultations/application/support-thread.service.js';
 import {
+  VetServiceMedia,
+  VetServiceListingRepository,
+  VetServiceRequestRepository,
+  VetServiceOfferRepository,
+  VetServiceListingRequestRepository,
+  VetServiceListingService,
+  VetServiceRequestService,
+  VetServiceOfferService,
+  VetServiceListingRequestService,
+} from './modules/vet-services/index.js';
+import {
   CONSULTATION_CONFIG,
   INQUIRY_CONFIG,
+  SUPPORT_CONFIG,
 } from './modules/consultations/application/thread.config.js';
 import {
   NoopAiResponder,
@@ -218,6 +240,9 @@ export interface Container {
   publicationInteractionService: PublicationInteractionService;
   animalTransferRequestService: AnimalTransferRequestService;
 
+  clinicAppointmentRepository: ClinicAppointmentRepository;
+  clinicAppointmentService: ClinicAppointmentService;
+
   animalClinicAccessRepository: AnimalClinicAccessRepository;
   medicalRecordRepository: MedicalRecordRepository;
   vaccinationRepository: VaccinationRepository;
@@ -266,6 +291,15 @@ export interface Container {
   productRepository: ProductRepository;
   productService: ProductService;
 
+  petStoreCategoryRepository: PetStoreCategoryRepository;
+  petStoreProductRepository: PetStoreProductRepository;
+  petStoreCartRepository: PetStoreCartRepository;
+  petStoreOrderRepository: PetStoreOrderRepository;
+  petStoreCatalogService: PetStoreCatalogService;
+  petStoreCartService: PetStoreCartService;
+  petStoreOrderService: PetStoreOrderService;
+  petStoreAdminService: PetStoreAdminService;
+
   traderRepository: TraderRepository;
   traderService: TraderService;
   poultryOfferRepository: PoultryOfferRepository;
@@ -285,8 +319,20 @@ export interface Container {
   aiSettingsService: AiSettingsService;
   consultationRepository: ThreadRepository;
   inquiryRepository: ThreadRepository;
+  supportRepository: ThreadRepository;
   consultationService: SupportThreadService;
   inquiryService: SupportThreadService;
+  supportService: SupportThreadService;
+
+  vetServiceMedia: VetServiceMedia;
+  vetServiceListingRepository: VetServiceListingRepository;
+  vetServiceRequestRepository: VetServiceRequestRepository;
+  vetServiceOfferRepository: VetServiceOfferRepository;
+  vetServiceListingRequestRepository: VetServiceListingRequestRepository;
+  vetServiceListingService: VetServiceListingService;
+  vetServiceRequestService: VetServiceRequestService;
+  vetServiceOfferService: VetServiceOfferService;
+  vetServiceListingRequestService: VetServiceListingRequestService;
 
   objectStorage: ObjectStorage;
   contentRepository: ContentRepository;
@@ -509,6 +555,19 @@ export function createContainer(deps: ContainerDeps): Container {
     logger,
   );
 
+  // --- clinic appointments (Pet Owner ↔ Clinic booking) ----------
+  const clinicAppointmentRepository = new ClinicAppointmentRepository(db);
+  const clinicAppointmentService = new ClinicAppointmentService(
+    db,
+    clinicAppointmentRepository,
+    animalService,
+    organizationRepository,
+    membershipRepository,
+    auditService,
+    eventBus,
+    logger,
+  );
+
   // --- veterinary care (Phase 5) -----------------------------
   const animalClinicAccessRepository = new AnimalClinicAccessRepository(db);
   const medicalRecordRepository = new MedicalRecordRepository(db);
@@ -710,6 +769,43 @@ export function createContainer(deps: ContainerDeps): Container {
   const productRepository = new ProductRepository(db);
   const productService = new ProductService(db, productRepository, auditService, eventBus, logger);
 
+  // --- Pet Owners Store (platform-run consumer storefront) ----
+  const petStoreCategoryRepository = new PetStoreCategoryRepository(db);
+  const petStoreProductRepository = new PetStoreProductRepository(db);
+  const petStoreCartRepository = new PetStoreCartRepository(db);
+  const petStoreOrderRepository = new PetStoreOrderRepository(db);
+  const petStoreCatalogService = new PetStoreCatalogService(
+    petStoreCategoryRepository,
+    petStoreProductRepository,
+    objectStorage,
+    logger,
+  );
+  const petStoreCartService = new PetStoreCartService(
+    db,
+    petStoreCartRepository,
+    petStoreProductRepository,
+    objectStorage,
+    logger,
+  );
+  const petStoreOrderService = new PetStoreOrderService(
+    db,
+    petStoreOrderRepository,
+    petStoreCartRepository,
+    petStoreProductRepository,
+    auditService,
+    eventBus,
+    logger,
+  );
+  const petStoreAdminService = new PetStoreAdminService(
+    db,
+    petStoreProductRepository,
+    petStoreCategoryRepository,
+    objectStorage,
+    auditService,
+    eventBus,
+    logger,
+  );
+
   // --- Poultry Markets (trader registration / offers / exchange rates) ---
   const traderRepository = new TraderRepository(db);
   const traderService = new TraderService(
@@ -747,7 +843,10 @@ export function createContainer(deps: ContainerDeps): Container {
     logger,
   );
   const poultryMarketStatisticsRepository = new PoultryMarketStatisticsRepository(db);
-  const poultryMarketStatisticsService = new PoultryMarketStatisticsService(poultryMarketStatisticsRepository, logger);
+  const poultryMarketStatisticsService = new PoultryMarketStatisticsService(
+    poultryMarketStatisticsRepository,
+    logger,
+  );
 
   // --- chat & real-time messaging (Phase 12) -----------------
   const conversationRepository = new ConversationRepository(db);
@@ -784,6 +883,11 @@ export function createContainer(deps: ContainerDeps): Container {
     messageTable: 'inquiry_messages',
     hasAnimal: false,
   });
+  const supportRepository = new ThreadRepository(db, {
+    threadTable: 'support_threads',
+    messageTable: 'support_thread_messages',
+    hasAnimal: false,
+  });
   const consultationService = new SupportThreadService(
     db,
     CONSULTATION_CONFIG,
@@ -806,6 +910,65 @@ export function createContainer(deps: ContainerDeps): Container {
     auditService,
     eventBus,
     animalOwnershipRepository,
+    logger,
+  );
+  const supportService = new SupportThreadService(
+    db,
+    SUPPORT_CONFIG,
+    supportRepository,
+    aiSettingsService,
+    aiResponder,
+    authorizationService,
+    auditService,
+    eventBus,
+    animalOwnershipRepository,
+    logger,
+  );
+
+  // --- Veterinary Services marketplace ----------------------
+  const vetServiceMedia = new VetServiceMedia(objectStorage);
+  const vetServiceListingRepository = new VetServiceListingRepository(db);
+  const vetServiceRequestRepository = new VetServiceRequestRepository(db);
+  const vetServiceOfferRepository = new VetServiceOfferRepository(db);
+  const vetServiceListingRequestRepository = new VetServiceListingRequestRepository(db);
+  const vetServiceListingService = new VetServiceListingService(
+    db,
+    vetServiceListingRepository,
+    vetServiceMedia,
+    authorizationService,
+    auditService,
+    eventBus,
+    logger,
+  );
+  const vetServiceRequestService = new VetServiceRequestService(
+    db,
+    vetServiceRequestRepository,
+    vetServiceMedia,
+    authorizationService,
+    auditService,
+    eventBus,
+    logger,
+  );
+  const vetServiceOfferService = new VetServiceOfferService(
+    db,
+    vetServiceOfferRepository,
+    vetServiceRequestService,
+    vetServiceMedia,
+    authorizationService,
+    chatService,
+    auditService,
+    eventBus,
+    logger,
+  );
+  const vetServiceListingRequestService = new VetServiceListingRequestService(
+    db,
+    vetServiceListingRequestRepository,
+    vetServiceListingService,
+    vetServiceMedia,
+    authorizationService,
+    chatService,
+    auditService,
+    eventBus,
     logger,
   );
 
@@ -897,6 +1060,7 @@ export function createContainer(deps: ContainerDeps): Container {
     conversations: conversationRepository,
     consultations: consultationRepository,
     inquiries: inquiryRepository,
+    support: supportRepository,
     memberships: membershipRepository,
     organizations: organizationRepository,
     supervisors: supervisorRepository,
@@ -951,6 +1115,8 @@ export function createContainer(deps: ContainerDeps): Container {
     animalPublicationService,
     publicationInteractionService,
     animalTransferRequestService,
+    clinicAppointmentRepository,
+    clinicAppointmentService,
     animalClinicAccessRepository,
     medicalRecordRepository,
     vaccinationRepository,
@@ -994,6 +1160,14 @@ export function createContainer(deps: ContainerDeps): Container {
     cattleCaseService,
     productRepository,
     productService,
+    petStoreCategoryRepository,
+    petStoreProductRepository,
+    petStoreCartRepository,
+    petStoreOrderRepository,
+    petStoreCatalogService,
+    petStoreCartService,
+    petStoreOrderService,
+    petStoreAdminService,
     traderRepository,
     traderService,
     poultryOfferRepository,
@@ -1011,8 +1185,19 @@ export function createContainer(deps: ContainerDeps): Container {
     aiSettingsService,
     consultationRepository,
     inquiryRepository,
+    supportRepository,
     consultationService,
     inquiryService,
+    supportService,
+    vetServiceMedia,
+    vetServiceListingRepository,
+    vetServiceRequestRepository,
+    vetServiceOfferRepository,
+    vetServiceListingRequestRepository,
+    vetServiceListingService,
+    vetServiceRequestService,
+    vetServiceOfferService,
+    vetServiceListingRequestService,
     objectStorage,
     contentRepository,
     contentFileRepository,

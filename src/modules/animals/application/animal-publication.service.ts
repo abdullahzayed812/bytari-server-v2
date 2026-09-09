@@ -4,17 +4,20 @@ import { ConflictError, NotFoundError } from '../../../shared/errors/app-error.j
 import { ErrorCode } from '../../../shared/errors/error-codes.js';
 import type { EventBus } from '../../../shared/events/index.js';
 import type { ObjectStorage } from '../../../infra/storage/index.js';
-import { AuditEntityType, type AuditContext } from '../../audit/audit.types.js';
+import { AuditAction, AuditEntityType, type AuditContext } from '../../audit/audit.types.js';
 import type { AuditService } from '../../audit/audit.service.js';
 import { PublicationPolicy } from '../domain/publication.policy.js';
 import { PUBLICATION_AUDIT_ACTIONS, PUBLICATION_EVENTS } from '../domain/publication.constants.js';
 import {
+  toMyPublicationDTO,
   toPublicPublicationDTO,
   toPublicationDTO,
   type AnimalPublicationDTO,
   type AnimalPublicationWithAnimal,
   type CreatePublicationInput,
   type ListPublicationsFilter,
+  type MinePublicationsFilter,
+  type MyPublicationDTO,
   type PublicListFilter,
   type PublicPublicationDTO,
 } from '../domain/publication.types.js';
@@ -72,6 +75,14 @@ export class AnimalPublicationService {
     item: AnimalPublicationWithAnimal,
   ): Promise<PublicPublicationDTO> {
     const dto = toPublicPublicationDTO(item);
+    const galleryUrls = await this.resolveGalleryUrls(item.animal.galleryKeys);
+    return { ...dto, animal: { ...dto.animal, galleryUrls } };
+  }
+
+  private async withResolvedGalleryMine(
+    item: AnimalPublicationWithAnimal,
+  ): Promise<MyPublicationDTO> {
+    const dto = toMyPublicationDTO(item);
     const galleryUrls = await this.resolveGalleryUrls(item.animal.galleryKeys);
     return { ...dto, animal: { ...dto.animal, galleryUrls } };
   }
@@ -150,6 +161,61 @@ export class AnimalPublicationService {
     const found = await this.publications.findByIdForAnimal(publicationId, animalId);
     if (!found) throw new NotFoundError('Publication not found');
     return toPublicationDTO(found);
+  }
+
+  /**
+   * "My listings" — the caller's own publications of EVERY status, joined with
+   * the animal summary. `createdByUserId` is the authenticated session's user,
+   * never a client-supplied id.
+   */
+  async listMine(
+    createdByUserId: string,
+    filter: MinePublicationsFilter,
+  ): Promise<{ items: MyPublicationDTO[]; total: number }> {
+    const { items, total } = await this.publications.listMineWithAnimal(createdByUserId, filter);
+    return {
+      items: await Promise.all(items.map((i) => this.withResolvedGalleryMine(i))),
+      total,
+    };
+  }
+
+  /**
+   * Delete a listing. Reachable only after the route's owner-or-moderator gate
+   * (`requirePublicationOwnerOrModerator`): the creator, an ADMIN, or an ACTIVE
+   * ANIMAL system-supervisor. Physical delete — viewer interactions cascade
+   * (`animal_publication_interactions.publication_id ON DELETE CASCADE`).
+   */
+  async deletePublication(publicationId: string, actor: PublicationActor): Promise<void> {
+    const existing = await this.publications.findById(publicationId);
+    if (!existing) throw new NotFoundError('Publication not found');
+
+    await this.db.transaction(async (tx) => {
+      const removed = await this.publications.deleteById(publicationId, tx);
+      if (removed === 0) throw new NotFoundError('Publication not found');
+      await this.audit.record(
+        {
+          action: AuditAction.ANIMAL_PUBLICATION_DELETED,
+          entityType: AuditEntityType.ANIMAL_PUBLICATION,
+          entityId: publicationId,
+          actorUserId: actor.actorUserId,
+          metadata: {
+            animalId: existing.animalId,
+            publicationId,
+            kind: existing.kind,
+            status: existing.status,
+            byOwner: existing.createdByUserId === actor.actorUserId,
+          },
+          context: actor.context,
+        },
+        tx,
+      );
+    });
+
+    this.events.publish('animal.publication.deleted', {
+      publicationId,
+      animalId: existing.animalId,
+      kind: existing.kind,
+    });
   }
 
   // --- moderation (ADMIN / ANIMAL system supervisor) ------------

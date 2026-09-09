@@ -9,11 +9,13 @@ export { type AiResponderPort, NoopAiResponder } from './application/ai-responde
 export {
   CONSULTATION_CONFIG,
   INQUIRY_CONFIG,
+  SUPPORT_CONFIG,
   type ThreadKindConfig,
 } from './application/thread.config.js';
 export {
   createConsultationRouter,
   createInquiryRouter,
+  createSupportMessageRouter,
   createSupportAdminRouter,
 } from './presentation/thread.routes.js';
 export { createSupportRealtime, type SupportRealtimeWiring } from './realtime/support-realtime.js';

@@ -14,7 +14,7 @@ export { AnimalService } from './application/animal.service.js';
 export { AnimalOwnershipService } from './application/animal-ownership.service.js';
 export { AnimalPublicationService } from './application/animal-publication.service.js';
 export { AnimalTransferRequestService } from './application/animal-transfer-request.service.js';
-export { createAnimalRouter } from './presentation/animal.routes.js';
+export { createAnimalRouter, createAdminAnimalRouter } from './presentation/animal.routes.js';
 export {
   createAnimalPublicationRouter,
   createPublicPublicationRouter,

@@ -2,7 +2,7 @@ import type { RequestHandler } from 'express';
 import { Router } from 'express';
 import { NotFoundError } from '../../../shared/errors/app-error.js';
 import { asyncHandler } from '../../../shared/http/async-handler.js';
-import { validate } from '../../../shared/http/validate.js';
+import { validate, validatedParams } from '../../../shared/http/validate.js';
 import type { Container } from '../../../container.js';
 import { requireAuth } from '../../auth/authenticate.middleware.js';
 import { AdminPublicationController } from './admin-publication.controller.js';
@@ -13,6 +13,7 @@ import {
   createInteractionBodySchema,
   createPublicationBodySchema,
   listAnimalPublicationsQuerySchema,
+  listMinePublicationsQuerySchema,
   moderationPublicationsQuerySchema,
   publicPublicationsQuerySchema,
   publicationIdParamSchema,
@@ -86,22 +87,51 @@ export function createAnimalPublicationRouter(c: Container): Router {
 }
 
 /**
- * `/animal-publications*` — authenticated public browse. APPROVED publications
- * only; the DTO carries no owner PII or moderation metadata.
+ * `/animal-publications*` — authenticated browse + "my listings" + delete.
+ * The `/` browse and `/:publicationId` detail are APPROVED-only with no owner
+ * PII; `/mine` returns the CALLER's own listings of every status (owner id from
+ * the session, never the body); `DELETE /:publicationId` is the creator, an
+ * ADMIN, or an ACTIVE ANIMAL system-supervisor.
  */
 export function createPublicPublicationRouter(c: Container): Router {
   const ctrl = new PublicationController(
     c.animalPublicationService,
     c.publicationInteractionService,
   );
+
+  /**
+   * MUST run after `authenticate`. Resolves `:publicationId` and allows the
+   * request through only for the listing's creator, an ADMIN, or an ACTIVE
+   * ANIMAL system-supervisor. A non-owned publication is hidden with `404`
+   * (the same resource-hiding rule the owner-create route uses).
+   */
+  const ownerOrModerator: RequestHandler = asyncHandler(async (req, _res, next) => {
+    const principal = requireAuth(req);
+    const { publicationId } = validatedParams<{ publicationId: string }>(req);
+    const ctx = await c.animalPublicationService.loadOwnershipContext(publicationId);
+    if (!ctx) throw new NotFoundError('Publication not found');
+    if (ctx.createdByUserId === principal.userId) return next();
+    if (await c.authorizationService.isSystemSupervisorFor(principal, 'ANIMAL')) return next();
+    throw new NotFoundError('Publication not found');
+  });
+
   const r = Router();
   r.use(c.authenticate);
+
+  // `/mine` BEFORE `/:publicationId` — same ordering rule as `/users/me`.
+  r.get('/mine', validate({ query: listMinePublicationsQuerySchema }), asyncHandler(ctrl.listMine));
 
   r.get('/', validate({ query: publicPublicationsQuerySchema }), asyncHandler(ctrl.listPublic));
   r.get(
     '/:publicationId',
     validate({ params: publicationIdParamSchema }),
     asyncHandler(ctrl.getPublic),
+  );
+  r.delete(
+    '/:publicationId',
+    validate({ params: publicationIdParamSchema }),
+    ownerOrModerator,
+    asyncHandler(ctrl.remove),
   );
   // "طلب التبني" / "طلب تزاوج" / "ابلاغ عن مشاهدة" — any authenticated user
   // except the listing's own owner (enforced in the service).

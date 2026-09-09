@@ -12,6 +12,13 @@ export interface ThreadKindConfig {
   aiSettingKey: AiSettingKey;
   /** Actor eligible to CREATE: 'ANY_USER' (pet owner) | 'APPROVED_VET'. */
   createEligibility: 'ANY_USER' | 'APPROVED_VET';
+  /**
+   * Whether a domain supervisor must ALSO be an approved veterinarian to hold
+   * RESPONDER access (true for the clinical CONSULTATION / INQUIRY kinds;
+   * false for SUPPORT — an app-support agent is not a vet). ADMIN is always
+   * exempt.
+   */
+  responderRequiresApprovedVet: boolean;
   perms: { read: string; respond: string; close: string; adminRead: string };
   auditActions: { created: string; closed: string; blocked: string; unblocked: string };
   events: {
@@ -22,7 +29,7 @@ export interface ThreadKindConfig {
     unblocked: string;
   };
   /** Public field name for the parent id in message DTOs. */
-  parentIdField: 'consultationId' | 'inquiryId';
+  parentIdField: 'consultationId' | 'inquiryId' | 'supportId';
   room: (id: string) => string;
 }
 
@@ -33,6 +40,7 @@ export const CONSULTATION_CONFIG: ThreadKindConfig = {
   hasAnimal: true,
   aiSettingKey: 'CONSULTATION_AI',
   createEligibility: 'ANY_USER',
+  responderRequiresApprovedVet: true,
   perms: {
     read: 'consultation.read',
     respond: 'consultation.respond',
@@ -63,6 +71,7 @@ export const INQUIRY_CONFIG: ThreadKindConfig = {
   hasAnimal: false,
   aiSettingKey: 'INQUIRY_AI',
   createEligibility: 'APPROVED_VET',
+  responderRequiresApprovedVet: true,
   perms: {
     read: 'inquiry.read',
     respond: 'inquiry.respond',
@@ -84,4 +93,40 @@ export const INQUIRY_CONFIG: ThreadKindConfig = {
   },
   parentIdField: 'inquiryId',
   room: rooms.inquiry,
+};
+
+/**
+ * "تواصل معنا" — a support message to the administration. Same kernel as an
+ * inquiry (no animal), but creation is open to ANY signed-in user and the
+ * responder side is the SUPPORT system-supervisor domain (or ADMIN).
+ */
+export const SUPPORT_CONFIG: ThreadKindConfig = {
+  kind: 'SUPPORT',
+  threadTable: 'support_threads',
+  messageTable: 'support_thread_messages',
+  hasAnimal: false,
+  aiSettingKey: 'SUPPORT_AI',
+  createEligibility: 'ANY_USER',
+  responderRequiresApprovedVet: false,
+  perms: {
+    read: 'support.read',
+    respond: 'support.respond',
+    close: 'support.close',
+    adminRead: 'support.admin.read',
+  },
+  auditActions: {
+    created: AuditAction.SUPPORT_MESSAGE_CREATED,
+    closed: AuditAction.SUPPORT_MESSAGE_CLOSED,
+    blocked: AuditAction.SUPPORT_MESSAGE_SENDER_BLOCKED,
+    unblocked: AuditAction.SUPPORT_MESSAGE_SENDER_UNBLOCKED,
+  },
+  events: {
+    created: 'support.created',
+    message: 'support.message.created',
+    closed: 'support.closed',
+    blocked: 'support.sender_blocked',
+    unblocked: 'support.sender_unblocked',
+  },
+  parentIdField: 'supportId',
+  room: rooms.support,
 };

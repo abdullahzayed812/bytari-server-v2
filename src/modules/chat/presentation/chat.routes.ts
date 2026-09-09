@@ -65,6 +65,12 @@ export function createChatRouter(c: Container): Router {
     withConversation,
     asyncHandler(ctrl.markRead),
   );
+  r.post(
+    '/:conversationId/close',
+    validate({ params: conversationIdParamSchema }),
+    withConversation,
+    asyncHandler(ctrl.closeConversation),
+  );
 
   return r;
 }

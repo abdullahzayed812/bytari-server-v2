@@ -11,7 +11,10 @@ import { createSelfUsersRouter } from '../modules/users/self-users.routes.js';
 import { createVeterinarianRouters } from '../modules/veterinarians/veterinarian.routes.js';
 import { createOrganizationRouter } from '../modules/organizations/presentation/organization.routes.js';
 import { createAdminOrganizationRouter } from '../modules/organizations/presentation/admin-organization.routes.js';
-import { createAnimalRouter } from '../modules/animals/presentation/animal.routes.js';
+import {
+  createAnimalRouter,
+  createAdminAnimalRouter,
+} from '../modules/animals/presentation/animal.routes.js';
 import {
   createAdminAnimalPublicationRouter,
   createAnimalPublicationRouter,
@@ -23,9 +26,17 @@ import {
   createClinicalVeterinaryRouter,
   createOwnerMedicalRouter,
 } from '../modules/veterinary-care/index.js';
+import {
+  createClinicAppointmentRouter,
+  createOrgClinicAppointmentRouter,
+} from '../modules/clinic-appointments/index.js';
 import { createFarmRouter, createPoultryOpsRouter } from '../modules/farms/index.js';
 import { createSheepBatchRouter, createCattleBatchRouter } from '../modules/livestock/index.js';
 import { createVeterinaryStoreRouter } from '../modules/veterinary-store/index.js';
+import {
+  createPetOwnerStoreRouter,
+  createAdminPetOwnerStoreRouter,
+} from '../modules/pet-owner-store/index.js';
 import {
   createTraderRouters,
   createPoultryOfferRouters,
@@ -41,8 +52,13 @@ import {
 import {
   createConsultationRouter,
   createInquiryRouter,
+  createSupportMessageRouter,
   createSupportAdminRouter,
 } from '../modules/consultations/index.js';
+import {
+  createVetServiceRouter,
+  createAdminVetServiceRouter,
+} from '../modules/vet-services/index.js';
 import {
   createContentRouter,
   createContentCategoryRouter,
@@ -106,6 +122,15 @@ export function createApiRouter(c: Container): Router {
   router.use('/organizations', createClinicalVeterinaryRouter(c));
   router.use('/animals', createOwnerMedicalRouter(c));
 
+  // --- Clinic appointments: Pet Owner ↔ Clinic booking ---------
+  // `POST /organizations/:organizationId/clinic-appointments` books a visit
+  // (authentication + pet ownership only). The Pet Owner's own list / details /
+  // cancel / reschedule-response live at `/clinic-appointments`. The clinic
+  // (future Clinic Dashboard) reads and decides under
+  // `/organizations/:organizationId/clinic-appointments*` (org-permissioned).
+  router.use('/organizations', createOrgClinicAppointmentRouter(c));
+  router.use('/clinic-appointments', createClinicAppointmentRouter(c));
+
   // --- Phase 6: farms & poultry --------------------------------
   // Farm-ID join flow + poultry CRUD extend `/organizations/...`; the farm
   // organization itself (create / approve / members / supervisors) is Phase 3.
@@ -134,6 +159,12 @@ export function createApiRouter(c: Container): Router {
   // the store organization itself (create / approve / members) is Phase 3.
   router.use('/organizations', createVeterinaryStoreRouter(c));
 
+  // --- Pet Owners Store: platform-run consumer storefront ----
+  // Dedicated `pet_owner_store_*` tables. Consumer browse / cart / checkout /
+  // order history need only authentication; management lives under
+  // `/admin/pet-owner-store` (permissioned).
+  router.use('/pet-owner-store', createPetOwnerStoreRouter(c));
+
   // --- Poultry Markets: trader registration / offers / exchange rates ---
   // Trader status is a per-USER concept, not per-organization — every route
   // here is mounted at the top level, no `:organizationId` in any path.
@@ -161,6 +192,15 @@ export function createApiRouter(c: Container): Router {
   // (`consultation:<id>` / `inquiry:<id>`) is wired in `server.ts`.
   router.use('/consultations', createConsultationRouter(c));
   router.use('/inquiries', createInquiryRouter(c));
+  // "تواصل معنا" — any signed-in user sends a support message to the
+  // administration (no recipient); ADMIN or a SUPPORT system-supervisor replies.
+  router.use('/support-messages', createSupportMessageRouter(c));
+
+  // --- Veterinary Services marketplace ("الخدمات") ----------
+  // Vet-published service listings + pet-owner service requests (both moderated:
+  // PENDING → APPROVED / REJECTED), offers / listing-requests, and the
+  // PET_OWNER_VETERINARIAN deal conversations (chat module, extended additively).
+  router.use('/vet-services', createVetServiceRouter(c));
 
   // --- Phase 14: content management --------------------------
   // Public reads of PUBLISHED content; admin/supervisor management under
@@ -192,11 +232,14 @@ export function createApiRouter(c: Container): Router {
   router.use('/admin/poultry-offers', poultryOffers.admin);
   router.use('/admin/egg-offers', eggOffers.admin);
   router.use('/admin/animal-publications', createAdminAnimalPublicationRouter(c));
+  router.use('/admin', createAdminVetServiceRouter(c));
+  router.use('/admin/animals', createAdminAnimalRouter(c));
   router.use('/admin', createSupportAdminRouter(c));
   router.use('/admin', createAdminContentRouter(c));
   router.use('/admin/tips', createAdminTipRouter(c));
   router.use('/admin/news', createAdminNewsRouter(c));
   router.use('/admin/ads', createAdminAdRouter(c));
+  router.use('/admin/pet-owner-store', createAdminPetOwnerStoreRouter(c));
   router.use('/admin/notifications', createAdminNotificationRouter(c));
   router.use('/admin/audit-logs', createAdminAuditRouter(c));
 

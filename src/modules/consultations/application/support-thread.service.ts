@@ -79,12 +79,14 @@ export class SupportThreadService {
   ): Promise<ThreadSide | null> {
     if (thread.createdByUserId === principal.userId) return 'CREATOR';
     if (await this.authz.can(principal, this.cfg.perms.read)) {
-      // ADMIN always; a domain supervisor must ALSO be an approved veterinarian
-      // (docs 05 §5.18–5.19). The check is live, so revoking a supervisor's vet
-      // approval removes their responder access immediately.
-      if (this.authz.isAdmin(principal) || this.authz.isApprovedVeterinarian(principal)) {
-        return 'RESPONDER';
-      }
+      // ADMIN always. For CONSULTATION / INQUIRY a domain supervisor must ALSO
+      // be an approved veterinarian (docs 05 §5.18–5.19); SUPPORT is app-support,
+      // not a clinical context, so its supervisor need not be a vet. Both checks
+      // are live — revoking the assignment (or vet approval) removes access
+      // immediately.
+      if (this.authz.isAdmin(principal)) return 'RESPONDER';
+      if (!this.cfg.responderRequiresApprovedVet) return 'RESPONDER';
+      if (this.authz.isApprovedVeterinarian(principal)) return 'RESPONDER';
     }
     return null;
   }

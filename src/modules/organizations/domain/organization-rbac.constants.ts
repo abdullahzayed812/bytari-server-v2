@@ -94,6 +94,13 @@ export const ORG_PERMISSION_KEYS = [
   'product.update',
   'product.delete',
   'product.inventory.adjust',
+  // --- Clinic appointments (Pet Owner ↔ Clinic booking) — CLINIC organizations ---
+  // The Pet Owner books via authentication + pet-ownership only (no org
+  // permission, like `animal.create`). These gate the future Clinic Dashboard:
+  // `read` to view incoming requests, `manage` to accept / reject / propose a
+  // reschedule / update status / complete.
+  'clinic.appointment.read',
+  'clinic.appointment.manage',
 ] as const;
 export type OrgPermissionKey = (typeof ORG_PERMISSION_KEYS)[number];
 
@@ -181,6 +188,9 @@ export const ORG_PERMISSION_DEFINITIONS: Record<OrgPermissionKey, string> = {
   'product.update': 'Update this veterinary store’s products (profile fields, not stock)',
   'product.delete': 'Deactivate (soft-delete) this veterinary store’s products',
   'product.inventory.adjust': 'Adjust a product’s stock quantity',
+  'clinic.appointment.read': 'View appointment requests booked with this clinic',
+  'clinic.appointment.manage':
+    'Accept, reject, reschedule, complete or update the status of this clinic’s appointments',
 };
 
 /**
@@ -248,6 +258,10 @@ export const ORG_ROLE_PERMISSIONS: Record<OrgRoleKey, OrgPermissionKey[]> = {
     'farm.case.update',
     'farm.case.delete',
     'farm.subscription.read',
+    // Clinic appointments — a clinic veterinarian runs the appointment desk on
+    // the future Clinic Dashboard.
+    'clinic.appointment.read',
+    'clinic.appointment.manage',
   ],
   // Phase 6: farm STAFF (employees) can view poultry data; write access to
   // poultry stays with veterinarians / the owner / an assigned supervisor.
@@ -267,6 +281,7 @@ export const ORG_ROLE_PERMISSIONS: Record<OrgRoleKey, OrgPermissionKey[]> = {
     'farm.case.read',
     'farm.subscription.read',
     'product.read',
+    'clinic.appointment.read',
   ],
 };
 

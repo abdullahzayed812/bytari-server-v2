@@ -19,6 +19,11 @@ export const createInquiryBodySchema = z
   .object({ body: z.string().trim().min(1).max(MESSAGE_BODY_MAX) })
   .strict();
 
+/** "تواصل معنا" — a support message. Body only; no animal, no recipient. */
+export const createSupportBodySchema = z
+  .object({ body: z.string().trim().min(1).max(MESSAGE_BODY_MAX) })
+  .strict();
+
 export const sendThreadMessageBodySchema = z
   .object({ body: z.string().trim().min(1).max(MESSAGE_BODY_MAX) })
   .strict();
@@ -45,6 +50,7 @@ export const updateAiSettingsBodySchema = z
 
 export type CreateConsultationBody = z.infer<typeof createConsultationBodySchema>;
 export type CreateInquiryBody = z.infer<typeof createInquiryBodySchema>;
+export type CreateSupportBody = z.infer<typeof createSupportBodySchema>;
 export type SendThreadMessageBody = z.infer<typeof sendThreadMessageBodySchema>;
 export type ListThreadsQuery = z.infer<typeof listThreadsQuerySchema>;
 export type ListAdminThreadsQuery = z.infer<typeof listAdminThreadsQuerySchema>;

@@ -132,6 +132,12 @@ const schemas: Obj = {
     properties: { body: { type: 'string', minLength: 1, maxLength: 4000 } },
     additionalProperties: false,
   },
+  CreateSupportMessageRequest: {
+    type: 'object',
+    required: ['body'],
+    properties: { body: { type: 'string', minLength: 1, maxLength: 4000 } },
+    additionalProperties: false,
+  },
   SendThreadMessageRequest: {
     type: 'object',
     required: ['body'],
@@ -287,7 +293,12 @@ function threadPaths(base: string, tag: string, createRef: string): Obj {
 }
 
 function adminThreadPaths(base: string): Obj {
-  const perm = base === 'consultations' ? 'consultation.admin.read' : 'inquiry.admin.read';
+  const perm =
+    base === 'consultations'
+      ? 'consultation.admin.read'
+      : base === 'inquiries'
+        ? 'inquiry.admin.read'
+        : 'support.admin.read';
   return {
     [`/admin/${base}`]: {
       get: {
@@ -324,8 +335,14 @@ const paths: Obj = {
     '#/components/schemas/CreateConsultationRequest',
   ),
   ...threadPaths('inquiries', 'Inquiries', '#/components/schemas/CreateInquiryRequest'),
+  ...threadPaths(
+    'support-messages',
+    'Support Messages',
+    '#/components/schemas/CreateSupportMessageRequest',
+  ),
   ...adminThreadPaths('consultations'),
   ...adminThreadPaths('inquiries'),
+  ...adminThreadPaths('support-messages'),
   '/admin/ai-settings': {
     get: {
       tags: ['Consultations & Inquiries · Admin'],
@@ -362,6 +379,10 @@ const paths: Obj = {
 const tags = [
   { name: 'Consultations', description: 'Pet Owner → general veterinary consultation threads' },
   { name: 'Inquiries', description: 'Approved Veterinarian → general inquiry threads' },
+  {
+    name: 'Support Messages',
+    description: 'Any signed-in user → the administration ("تواصل معنا"); ADMIN / SUPPORT supervisor replies',
+  },
   {
     name: 'Consultations & Inquiries · Admin',
     description: 'System-wide listing + AI-enablement flags',

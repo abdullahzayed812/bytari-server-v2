@@ -11,7 +11,7 @@ import type { SupportThreadService } from '../application/support-thread.service
  */
 export class ThreadRealtimeAuthorizer implements RealtimeAuthorizer {
   constructor(
-    private readonly roomKind: 'consultation' | 'inquiry',
+    private readonly roomKind: 'consultation' | 'inquiry' | 'support',
     private readonly service: SupportThreadService,
     private readonly buildPrincipal: (userId: string) => Promise<AuthPrincipal | null>,
   ) {}

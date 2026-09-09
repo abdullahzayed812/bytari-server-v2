@@ -6,7 +6,7 @@ import {
   type ProductRow,
 } from '../domain/store.types.js';
 
-const TABLE = 'products';
+const TABLE = 'veterinary_store_products';
 
 export interface CreateProductData {
   organizationId: string;

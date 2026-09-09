@@ -1,5 +1,7 @@
 import type {
   ConversationSide,
+  ConversationStatus,
+  ConversationSubjectType,
   ConversationType,
   MessageType,
   ParticipantRole,
@@ -10,9 +12,17 @@ import type {
 export interface Conversation {
   id: string;
   type: ConversationType;
-  organizationId: string;
+  /** `null` for a PET_OWNER_VETERINARIAN marketplace deal. */
+  organizationId: string | null;
   petOwnerUserId: string | null;
   memberUserId: string | null;
+  /** Set for PET_OWNER_VETERINARIAN only. */
+  veterinarianUserId: string | null;
+  /** Pinned vet-service engagement (PET_OWNER_VETERINARIAN only). */
+  subjectType: ConversationSubjectType | null;
+  subjectId: string | null;
+  /** Job lifecycle (`OPEN` for org conversations, always). */
+  status: ConversationStatus;
   createdByUserId: string | null;
   lastMessageAt: string | null;
   createdAt: string;
@@ -43,11 +53,15 @@ export interface Message {
 export interface ConversationDTO {
   id: string;
   type: ConversationType;
-  organizationId: string;
-  /** The individual counterpart on the "personal" side (pet owner / farm member). */
+  organizationId: string | null;
+  /** The individual counterpart on the "personal" side (pet owner / farm member / vet). */
   counterpartUserId: string | null;
   /** The caller's resolved side for this conversation. */
   viewerSide: ConversationSide;
+  /** Pinned vet-service engagement (PET_OWNER_VETERINARIAN only). */
+  subjectType: ConversationSubjectType | null;
+  subjectId: string | null;
+  status: ConversationStatus;
   lastMessageAt: string | null;
   /** `null` when read state is not tracked for the caller (dynamic clinic side). */
   unreadCount: number | null;
@@ -71,9 +85,13 @@ export interface MessageDTO {
 export interface ConversationRow {
   id: string;
   type: string;
-  organization_id: string;
+  organization_id: string | null;
   pet_owner_user_id: string | null;
   member_user_id: string | null;
+  veterinarian_user_id: string | null;
+  subject_type: string | null;
+  subject_id: string | null;
+  status: string;
   created_by_user_id: string | null;
   last_message_at: Date | null;
   created_at: Date;
@@ -106,6 +124,10 @@ export function rowToConversation(row: ConversationRow): Conversation {
     organizationId: row.organization_id,
     petOwnerUserId: row.pet_owner_user_id,
     memberUserId: row.member_user_id,
+    veterinarianUserId: row.veterinarian_user_id,
+    subjectType: (row.subject_type as ConversationSubjectType | null) ?? null,
+    subjectId: row.subject_id,
+    status: (row.status as ConversationStatus | undefined) ?? 'OPEN',
     createdByUserId: row.created_by_user_id,
     lastMessageAt: row.last_message_at ? row.last_message_at.toISOString() : null,
     createdAt: row.created_at.toISOString(),

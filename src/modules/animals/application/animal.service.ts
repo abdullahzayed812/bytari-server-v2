@@ -14,8 +14,10 @@ import type { AuditService } from '../../audit/audit.service.js';
 import { AnimalPolicy } from '../domain/animal.policy.js';
 import {
   toAnimalDTO,
+  type AdminAnimalDTO,
   type AnimalDTO,
   type CreateAnimalInput,
+  type ListAdminAnimalsFilter,
   type ListAnimalsFilter,
   type UpdateAnimalInput,
 } from '../domain/animal.types.js';
@@ -140,6 +142,23 @@ export class AnimalService {
       items.map(async (a) =>
         toAnimalDTO(a, ownerUserId, await this.resolveGalleryUrls(a.galleryKeys)),
       ),
+    );
+    return { items: dtos, total };
+  }
+
+  /**
+   * Admin / ANIMAL-supervisor oversight listing — every user's animals, with
+   * the current owner's name. Never owner-scoped.
+   */
+  async listForAdmin(
+    filter: ListAdminAnimalsFilter,
+  ): Promise<{ items: AdminAnimalDTO[]; total: number }> {
+    const { items, total } = await this.animals.listForAdmin(filter);
+    const dtos = await Promise.all(
+      items.map(async ({ animal, ownerUserId, ownerName }) => ({
+        ...toAnimalDTO(animal, ownerUserId, await this.resolveGalleryUrls(animal.galleryKeys)),
+        ownerName,
+      })),
     );
     return { items: dtos, total };
   }

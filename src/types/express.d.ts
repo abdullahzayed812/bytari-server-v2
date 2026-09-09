@@ -103,8 +103,9 @@ declare global {
     interface ConversationContext {
       id: string;
       type: string;
-      organizationId: string;
+      organizationId: string | null;
       viewerSide: string;
+      status: string;
     }
 
     /**

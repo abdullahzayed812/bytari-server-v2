@@ -119,6 +119,24 @@ export const ErrorCode = {
   // --- Poultry Markets (trader registration / offers / exchange rates) ---
   /** Market-only action requires an APPROVED trader account. */
   TRADER_APPROVAL_REQUIRED: 'TRADER_APPROVAL_REQUIRED',
+
+  // --- Clinic appointments (Pet Owner ↔ Clinic booking) ---
+  /** A lifecycle action was attempted from a status that does not allow it. */
+  CLINIC_APPOINTMENT_INVALID_TRANSITION: 'CLINIC_APPOINTMENT_INVALID_TRANSITION',
+  /** The requested / proposed appointment date-time is not in the future. */
+  CLINIC_APPOINTMENT_IN_PAST: 'CLINIC_APPOINTMENT_IN_PAST',
+
+  // --- Veterinary Services marketplace ---
+  /** Moderation transition attempted on a listing / request that is not PENDING. */
+  VET_SERVICE_NOT_PENDING: 'VET_SERVICE_NOT_PENDING',
+  /** Accept / reject attempted on an offer / listing-request that is not PENDING. */
+  VET_SERVICE_ENGAGEMENT_NOT_PENDING: 'VET_SERVICE_ENGAGEMENT_NOT_PENDING',
+  /** Offer / request submitted against a listing / request that is not APPROVED + open. */
+  VET_SERVICE_NOT_OPEN: 'VET_SERVICE_NOT_OPEN',
+  /** An uploaded image storage key is missing / oversized / wrong type / wrong prefix. */
+  VET_SERVICE_IMAGE_INVALID: 'VET_SERVICE_IMAGE_INVALID',
+  /** A message was sent to a CLOSED marketplace deal conversation. */
+  CONVERSATION_CLOSED: 'CONVERSATION_CLOSED',
 } as const;
 
 export type ErrorCodeValue = (typeof ErrorCode)[keyof typeof ErrorCode];

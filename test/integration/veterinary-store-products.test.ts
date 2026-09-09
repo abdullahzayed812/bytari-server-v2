@@ -83,7 +83,7 @@ describe('veterinary store products — CRUD', () => {
     expect(del.status).toBe(200);
     expect(del.body.data.status).toBe('INACTIVE');
     // soft-delete: the row is still there
-    expect(await getTestDb()('products').where({ id })).toHaveLength(1);
+    expect(await getTestDb()('veterinary_store_products').where({ id })).toHaveLength(1);
 
     // deactivation is idempotent
     const del2 = await request(app).delete(pPath(store.id, id)).set(bearer(owner.accessToken));
@@ -193,7 +193,7 @@ describe('veterinary store products — organization type gate', () => {
       name: 'Clinic',
     });
     await expect(
-      getTestDb()('products').insert({
+      getTestDb()('veterinary_store_products').insert({
         organization_id: clinic.id,
         organization_type: 'VETERINARY_STORE',
         name: 'illegal',
@@ -310,7 +310,9 @@ describe('veterinary store products — cross-store IDOR', () => {
     expect(deleteUnderB.status).toBe(404);
 
     // Store A's product is untouched
-    const row = (await getTestDb()('products').where({ id: prodA.id }).first()) as {
+    const row = (await getTestDb()('veterinary_store_products')
+      .where({ id: prodA.id })
+      .first()) as {
       name: string;
       status: string;
     };
@@ -359,7 +361,7 @@ describe('veterinary store products — inventory', () => {
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('INSUFFICIENT_STOCK');
 
-    const row = (await getTestDb()('products').where({ id: prod.id }).first()) as {
+    const row = (await getTestDb()('veterinary_store_products').where({ id: prod.id }).first()) as {
       stock_quantity: number;
     };
     expect(Number(row.stock_quantity)).toBe(3);

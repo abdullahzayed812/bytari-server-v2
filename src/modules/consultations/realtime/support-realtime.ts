@@ -17,16 +17,19 @@ export interface SupportRealtimeWiring {
 interface MessagePayload {
   consultationId?: string;
   inquiryId?: string;
+  supportId?: string;
   messageId: string;
   source: string;
 }
 interface ThreadIdPayload {
   consultationId?: string;
   inquiryId?: string;
+  supportId?: string;
 }
 interface CreatedPayload {
   consultationId?: string;
   inquiryId?: string;
+  supportId?: string;
   createdByUserId: string;
 }
 
@@ -63,16 +66,29 @@ export function createSupportRealtime(container: Container): SupportRealtimeWiri
         'inquiry',
         new ThreadRealtimeAuthorizer('inquiry', container.inquiryService, buildPrincipal),
       );
+      composite.register(
+        'support',
+        new ThreadRealtimeAuthorizer('support', container.supportService, buildPrincipal),
+      );
     },
 
     registerBridgeRoutes(bridge): void {
-      const roomFor = (p: { consultationId?: string; inquiryId?: string }): string | null => {
+      const roomFor = (p: {
+        consultationId?: string;
+        inquiryId?: string;
+        supportId?: string;
+      }): string | null => {
         if (p.consultationId) return rooms.consultation(p.consultationId);
         if (p.inquiryId) return rooms.inquiry(p.inquiryId);
+        if (p.supportId) return rooms.support(p.supportId);
         return null;
       };
 
-      for (const name of ['consultation.message.created', 'inquiry.message.created']) {
+      for (const name of [
+        'consultation.message.created',
+        'inquiry.message.created',
+        'support.message.created',
+      ]) {
         bridge.route<MessagePayload>(name, (event) => {
           const room = roomFor(event.payload);
           return room ? { toRoom: room, event: { type: name, data: event.payload } } : null;
@@ -81,17 +97,20 @@ export function createSupportRealtime(container: Container): SupportRealtimeWiri
       for (const name of [
         'consultation.closed',
         'inquiry.closed',
+        'support.closed',
         'consultation.sender_blocked',
         'inquiry.sender_blocked',
+        'support.sender_blocked',
         'consultation.sender_unblocked',
         'inquiry.sender_unblocked',
+        'support.sender_unblocked',
       ]) {
         bridge.route<ThreadIdPayload>(name, (event) => {
           const room = roomFor(event.payload);
           return room ? { toRoom: room, event: { type: name, data: event.payload } } : null;
         });
       }
-      for (const name of ['consultation.created', 'inquiry.created']) {
+      for (const name of ['consultation.created', 'inquiry.created', 'support.created']) {
         bridge.route<CreatedPayload>(name, (event) => ({
           toUserId: event.payload.createdByUserId,
           event: {
@@ -101,6 +120,7 @@ export function createSupportRealtime(container: Container): SupportRealtimeWiri
                 ? { consultationId: event.payload.consultationId }
                 : {}),
               ...(event.payload.inquiryId ? { inquiryId: event.payload.inquiryId } : {}),
+              ...(event.payload.supportId ? { supportId: event.payload.supportId } : {}),
             },
           },
         }));

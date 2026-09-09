@@ -18,6 +18,9 @@ import { sheepOpsOpenApi } from './sheepOps.js';
 import { cattleOpsOpenApi } from './cattleOps.js';
 import { poultryMarketOpenApi } from './poultryMarket.js';
 import { phase17OpenApi } from './phase17.js';
+import { petOwnerStoreOpenApi } from './petOwnerStore.js';
+import { clinicAppointmentsOpenApi } from './clinicAppointments.js';
+import { vetServicesOpenApi } from './vetServices.js';
 
 /**
  * OpenAPI 3.1 document. Assembled from a small base (health endpoints) plus
@@ -98,6 +101,9 @@ export function buildOpenApiDocument(version: string): OpenApiDocument {
       ...cattleOpsOpenApi.tags,
       ...poultryMarketOpenApi.tags,
       ...phase17OpenApi.tags,
+      ...petOwnerStoreOpenApi.tags,
+      ...clinicAppointmentsOpenApi.tags,
+      ...vetServicesOpenApi.tags,
     ],
     paths: {
       ...phase2OpenApi.paths,
@@ -120,6 +126,9 @@ export function buildOpenApiDocument(version: string): OpenApiDocument {
       ...cattleOpsOpenApi.paths,
       ...poultryMarketOpenApi.paths,
       ...phase17OpenApi.paths,
+      ...petOwnerStoreOpenApi.paths,
+      ...clinicAppointmentsOpenApi.paths,
+      ...vetServicesOpenApi.paths,
       '/health': {
         get: {
           tags: ['Health'],
@@ -186,6 +195,9 @@ export function buildOpenApiDocument(version: string): OpenApiDocument {
         ...cattleOpsOpenApi.schemas,
         ...poultryMarketOpenApi.schemas,
         ...phase17OpenApi.schemas,
+        ...petOwnerStoreOpenApi.schemas,
+        ...clinicAppointmentsOpenApi.schemas,
+        ...vetServicesOpenApi.schemas,
       },
       responses: {
         NotFound: {

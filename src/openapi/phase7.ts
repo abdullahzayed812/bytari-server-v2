@@ -140,6 +140,25 @@ const schemas: Obj = {
       animal: animalSummary,
     },
   },
+  MyAnimalPublication: {
+    type: 'object',
+    description:
+      'The caller’s own listing — the public projection PLUS `status` / `rejectionReason` / ' +
+      '`animalId` so the owner can see and act on PENDING / REJECTED listings.',
+    properties: {
+      id: uuid,
+      animalId: uuid,
+      kind: { type: 'string', enum: kindEnum },
+      status: { type: 'string', enum: statusEnum },
+      rejectionReason: { type: 'string', nullable: true },
+      note: { type: 'string', nullable: true },
+      publishedAt: { type: 'string', format: 'date-time' },
+      createdAt: { type: 'string', format: 'date-time' },
+      updatedAt: { type: 'string', format: 'date-time' },
+      ...listingFields,
+      animal: animalSummary,
+    },
+  },
   CreateAnimalPublicationRequest: {
     description:
       'Owner-only. `status`, `reviewedBy`, `reviewedAt` etc. are server-controlled. The field set ' +
@@ -314,6 +333,31 @@ const paths: Obj = {
       },
     },
   },
+  '/animal-publications/mine': {
+    get: {
+      tags: ['Animals · Publications'],
+      summary: 'The caller’s own listings — every status (PENDING / APPROVED / REJECTED)',
+      description:
+        'Scoped to the authenticated user (`created_by_user_id` from the session, never the ' +
+        'request body). Includes `status` + `rejectionReason` so the owner can see and act on ' +
+        'their PENDING / REJECTED listings. Joined with the animal summary, same shape as the ' +
+        'public browse plus the moderation fields.',
+      security: bearer,
+      parameters: [
+        ...pageParams,
+        { name: 'kind', in: 'query', schema: { type: 'string', enum: kindEnum } },
+        {
+          name: 'status',
+          in: 'query',
+          schema: { type: 'string', enum: ['PENDING', 'APPROVED', 'REJECTED'] },
+        },
+      ],
+      responses: {
+        '200': ok('Paginated own publications', listOf('#/components/schemas/MyAnimalPublication')),
+        ...errs(401, 422),
+      },
+    },
+  },
   '/animal-publications/{publicationId}': {
     get: {
       tags: ['Animals · Publications'],
@@ -325,6 +369,23 @@ const paths: Obj = {
         '200': ok(
           'Approved publication',
           dataOf({ $ref: '#/components/schemas/PublicAnimalPublication' }),
+        ),
+        ...errs(401, 404),
+      },
+    },
+    delete: {
+      tags: ['Animals · Publications'],
+      summary: 'Delete a listing — its creator, an ADMIN, or an ACTIVE ANIMAL supervisor',
+      description:
+        'Ownership is derived from the session. A non-owner without the ANIMAL supervisor ' +
+        'domain / ADMIN gets 404 (resource hiding). Physical delete — viewer interactions ' +
+        'cascade.',
+      security: bearer,
+      parameters: [publicationIdParam],
+      responses: {
+        '200': ok(
+          'Deleted',
+          dataOf({ type: 'object', properties: { success: { type: 'boolean' } } }),
         ),
         ...errs(401, 404),
       },

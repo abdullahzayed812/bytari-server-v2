@@ -90,4 +90,10 @@ export class ChatController {
     const { messageId } = validatedParams<{ messageId: string }>(req);
     sendSuccess(res, await this.chat.deleteMessage(this.actor(req), messageId));
   };
+
+  /** POST /conversations/:conversationId/close — "إيقاف المحادثة" (deal chats only). */
+  closeConversation = async (req: Request, res: Response): Promise<void> => {
+    const conversation = requireConversation(req);
+    sendSuccess(res, await this.chat.setDealStatus(this.actor(req), conversation.id, 'CLOSED'));
+  };
 }

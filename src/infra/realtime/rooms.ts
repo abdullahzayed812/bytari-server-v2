@@ -13,6 +13,8 @@ export const rooms = {
   consultation: (consultationId: string): string => `consultation:${consultationId}`,
   /** An inquiry thread. */
   inquiry: (inquiryId: string): string => `inquiry:${inquiryId}`,
+  /** A support-message thread ("تواصل معنا"). */
+  support: (supportId: string): string => `support:${supportId}`,
   /** The single content-management activity feed (Admin / Content Supervisor). */
   contentFeed: (): string => `content:feed`,
 } as const;

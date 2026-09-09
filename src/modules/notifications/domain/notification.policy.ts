@@ -11,6 +11,7 @@ export interface NotificationPolicyDeps {
   conversations: ConversationRepository;
   consultations: ThreadRepository;
   inquiries: ThreadRepository;
+  support: ThreadRepository;
   memberships: MembershipRepository;
   organizations: OrganizationRepository;
   supervisors: SupervisorRepository;
@@ -69,6 +70,67 @@ const COPY: Record<NotificationType, { title: string; body: string }> = {
     body: 'There is a new message on an inquiry.',
   },
   INQUIRY_CLOSED: { title: 'Inquiry closed', body: 'Your inquiry has been closed.' },
+  SUPPORT_CREATED: { title: 'New support message', body: 'A new support message was submitted.' },
+  SUPPORT_MESSAGE_RECEIVED: {
+    title: 'New support reply',
+    body: 'There is a new message on a support request.',
+  },
+  SUPPORT_CLOSED: {
+    title: 'Support request closed',
+    body: 'Your support request has been closed.',
+  },
+  VET_SERVICE_LISTING_SUBMITTED: {
+    title: 'New service listing to review',
+    body: 'A veterinarian submitted a service listing for approval.',
+  },
+  VET_SERVICE_LISTING_APPROVED: {
+    title: 'Service listing approved',
+    body: 'Your service listing is now public.',
+  },
+  VET_SERVICE_LISTING_REJECTED: {
+    title: 'Service listing rejected',
+    body: 'Your service listing needs changes before it can be published.',
+  },
+  VET_SERVICE_REQUEST_SUBMITTED: {
+    title: 'New service request to review',
+    body: 'A pet owner submitted a service request for approval.',
+  },
+  VET_SERVICE_REQUEST_APPROVED: {
+    title: 'Service request approved',
+    body: 'Your service request is now public.',
+  },
+  VET_SERVICE_REQUEST_REJECTED: {
+    title: 'Service request rejected',
+    body: 'Your service request needs changes before it can be published.',
+  },
+  VET_SERVICE_OFFER_RECEIVED: {
+    title: 'New offer on your request',
+    body: 'A veterinarian submitted an offer on your service request.',
+  },
+  VET_SERVICE_OFFER_ACCEPTED: {
+    title: 'Your offer was accepted',
+    body: 'The pet owner accepted your offer — a conversation is open.',
+  },
+  VET_SERVICE_OFFER_REJECTED: {
+    title: 'Your offer was declined',
+    body: 'The pet owner chose a different offer.',
+  },
+  VET_SERVICE_LISTING_REQUEST_RECEIVED: {
+    title: 'New request on your service',
+    body: 'A pet owner requested your service listing.',
+  },
+  VET_SERVICE_LISTING_REQUEST_ACCEPTED: {
+    title: 'Your request was accepted',
+    body: 'The veterinarian accepted your request — a conversation is open.',
+  },
+  VET_SERVICE_LISTING_REQUEST_REJECTED: {
+    title: 'Your request was declined',
+    body: 'The veterinarian declined your service request.',
+  },
+  VET_SERVICE_DEAL_COMPLETED: {
+    title: 'Service completed',
+    body: 'The service has been marked as completed.',
+  },
   CONTENT_PUBLISHED: { title: 'New content published', body: 'New content is available.' },
   ADMIN_ANNOUNCEMENT: { title: 'Announcement', body: 'You have a new announcement.' },
   PUBLICATION_ADOPTION_REQUESTED: {
@@ -94,6 +156,30 @@ const COPY: Record<NotificationType, { title: string; body: string }> = {
   TRANSFER_REQUEST_REJECTED: {
     title: 'Transfer request declined',
     body: 'Your ownership transfer request was declined.',
+  },
+  CLINIC_APPOINTMENT_REQUESTED: {
+    title: 'New appointment request',
+    body: 'A pet owner has requested an appointment.',
+  },
+  CLINIC_APPOINTMENT_CONFIRMED: {
+    title: 'Appointment confirmed',
+    body: 'The clinic confirmed your appointment.',
+  },
+  CLINIC_APPOINTMENT_REJECTED: {
+    title: 'Appointment declined',
+    body: 'The clinic declined your appointment request.',
+  },
+  CLINIC_APPOINTMENT_RESCHEDULE_PROPOSED: {
+    title: 'New appointment time proposed',
+    body: 'The clinic proposed a different date/time for your appointment.',
+  },
+  CLINIC_APPOINTMENT_CANCELLED: {
+    title: 'Appointment cancelled',
+    body: 'An appointment was cancelled.',
+  },
+  CLINIC_APPOINTMENT_COMPLETED: {
+    title: 'Appointment completed',
+    body: 'Your appointment has been marked as completed.',
   },
 };
 
@@ -186,6 +272,13 @@ export class NotificationPolicy {
       case 'inquiry.closed':
         return this.threadClosed('INQUIRY', 'INQUIRY_CLOSED', p);
 
+      case 'support.created':
+        return this.threadCreated('SUPPORT', 'SUPPORT_CREATED', p);
+      case 'support.message.created':
+        return this.threadMessage('SUPPORT', 'SUPPORT_MESSAGE_RECEIVED', p);
+      case 'support.closed':
+        return this.threadClosed('SUPPORT', 'SUPPORT_CLOSED', p);
+
       case 'animal.publication.interaction.created':
         return this.publicationInteraction(p);
 
@@ -210,6 +303,115 @@ export class NotificationPolicy {
           entityId: str(p.requestId),
           key: `${event.name}:${str(p.requestId)}`,
         });
+
+      // --- clinic appointments (Pet Owner ↔ Clinic booking) ---
+      case 'clinic.appointment.requested':
+        return this.clinicAppointmentToClinic('CLINIC_APPOINTMENT_REQUESTED', event.name, p);
+      case 'clinic.appointment.reschedule_accepted':
+      case 'clinic.appointment.reschedule_declined':
+        return this.clinicAppointmentToClinic('CLINIC_APPOINTMENT_CONFIRMED', event.name, p);
+      case 'clinic.appointment.cancelled':
+        // The pet owner cancelled → tell the clinic; the clinic cancelled →
+        // tell the pet owner.
+        return str(p.actorUserId) === str(p.petOwnerUserId)
+          ? this.clinicAppointmentToClinic('CLINIC_APPOINTMENT_CANCELLED', event.name, p)
+          : this.clinicAppointmentToOwner('CLINIC_APPOINTMENT_CANCELLED', event.name, p);
+      case 'clinic.appointment.confirmed':
+        return this.clinicAppointmentToOwner('CLINIC_APPOINTMENT_CONFIRMED', event.name, p);
+      case 'clinic.appointment.rejected':
+        return this.clinicAppointmentToOwner('CLINIC_APPOINTMENT_REJECTED', event.name, p);
+      case 'clinic.appointment.reschedule_proposed':
+        return this.clinicAppointmentToOwner(
+          'CLINIC_APPOINTMENT_RESCHEDULE_PROPOSED',
+          event.name,
+          p,
+        );
+      case 'clinic.appointment.completed':
+        return this.clinicAppointmentToOwner('CLINIC_APPOINTMENT_COMPLETED', event.name, p);
+
+      // --- Veterinary Services marketplace ---
+      case 'vet_service.listing.submitted':
+        return this.vetServiceToSupervisors(
+          'VET_SERVICE_LISTING_SUBMITTED',
+          event.name,
+          str(p.listingId),
+          'VET_SERVICE_LISTING',
+          str(p.veterinarianUserId),
+        );
+      case 'vet_service.request.submitted':
+        return this.vetServiceToSupervisors(
+          'VET_SERVICE_REQUEST_SUBMITTED',
+          event.name,
+          str(p.requestId),
+          'VET_SERVICE_REQUEST',
+          str(p.petOwnerUserId),
+        );
+      case 'vet_service.listing.approved':
+        return this.vetServiceToUser('VET_SERVICE_LISTING_APPROVED', event.name, p, {
+          userId: str(p.veterinarianUserId),
+          entityType: 'VET_SERVICE_LISTING',
+          entityId: str(p.listingId),
+        });
+      case 'vet_service.listing.rejected':
+        return this.vetServiceToUser('VET_SERVICE_LISTING_REJECTED', event.name, p, {
+          userId: str(p.veterinarianUserId),
+          entityType: 'VET_SERVICE_LISTING',
+          entityId: str(p.listingId),
+        });
+      case 'vet_service.request.approved':
+        return this.vetServiceToUser('VET_SERVICE_REQUEST_APPROVED', event.name, p, {
+          userId: str(p.petOwnerUserId),
+          entityType: 'VET_SERVICE_REQUEST',
+          entityId: str(p.requestId),
+        });
+      case 'vet_service.request.rejected':
+        return this.vetServiceToUser('VET_SERVICE_REQUEST_REJECTED', event.name, p, {
+          userId: str(p.petOwnerUserId),
+          entityType: 'VET_SERVICE_REQUEST',
+          entityId: str(p.requestId),
+        });
+      case 'vet_service.offer.received':
+        return this.vetServiceToUser('VET_SERVICE_OFFER_RECEIVED', event.name, p, {
+          userId: str(p.petOwnerUserId),
+          actorUserId: str(p.veterinarianUserId),
+          entityType: 'VET_SERVICE_OFFER',
+          entityId: str(p.offerId),
+        });
+      case 'vet_service.offer.accepted':
+        return this.vetServiceToUser('VET_SERVICE_OFFER_ACCEPTED', event.name, p, {
+          userId: str(p.veterinarianUserId),
+          actorUserId: str(p.petOwnerUserId),
+          entityType: 'VET_SERVICE_OFFER',
+          entityId: str(p.offerId),
+        });
+      case 'vet_service.offer.rejected':
+        return this.vetServiceToUser('VET_SERVICE_OFFER_REJECTED', event.name, p, {
+          userId: str(p.veterinarianUserId),
+          entityType: 'VET_SERVICE_OFFER',
+          entityId: str(p.offerId),
+        });
+      case 'vet_service.listing_request.received':
+        return this.vetServiceToUser('VET_SERVICE_LISTING_REQUEST_RECEIVED', event.name, p, {
+          userId: str(p.veterinarianUserId),
+          actorUserId: str(p.petOwnerUserId),
+          entityType: 'VET_SERVICE_LISTING_REQUEST',
+          entityId: str(p.listingRequestId),
+        });
+      case 'vet_service.listing_request.accepted':
+        return this.vetServiceToUser('VET_SERVICE_LISTING_REQUEST_ACCEPTED', event.name, p, {
+          userId: str(p.petOwnerUserId),
+          actorUserId: str(p.veterinarianUserId),
+          entityType: 'VET_SERVICE_LISTING_REQUEST',
+          entityId: str(p.listingRequestId),
+        });
+      case 'vet_service.listing_request.rejected':
+        return this.vetServiceToUser('VET_SERVICE_LISTING_REQUEST_REJECTED', event.name, p, {
+          userId: str(p.petOwnerUserId),
+          entityType: 'VET_SERVICE_LISTING_REQUEST',
+          entityId: str(p.listingRequestId),
+        });
+      case 'vet_service.deal.completed':
+        return this.vetServiceDealCompleted(event.name, p);
 
       default:
         return [];
@@ -288,12 +490,19 @@ export class NotificationPolicy {
     if (!conv) return [];
 
     const recipients = new Set<string>();
-    if (conv.type === 'FARM_OWNER_MEMBER') {
-      const org = await this.deps.organizations.findById(conv.organizationId);
+    if (conv.type === 'PET_OWNER_VETERINARIAN') {
+      // Direct 1:1 marketplace deal — the other participant.
+      for (const id of [conv.petOwnerUserId, conv.veterinarianUserId]) {
+        if (id && id !== sender) recipients.add(id);
+      }
+    } else if (conv.type === 'FARM_OWNER_MEMBER') {
+      const org = conv.organizationId
+        ? await this.deps.organizations.findById(conv.organizationId)
+        : null;
       for (const id of [org?.ownerUserId, conv.memberUserId]) {
         if (id && id !== sender) recipients.add(id);
       }
-    } else {
+    } else if (conv.organizationId) {
       // PET_OWNER_CLINIC
       if (sender === conv.petOwnerUserId) {
         const { items } = await this.deps.memberships.listForOrg(conv.organizationId, {
@@ -352,7 +561,12 @@ export class NotificationPolicy {
     type: NotificationType,
     p: P,
   ): Promise<NotificationSpec[]> {
-    const repo = domain === 'CONSULTATION' ? this.deps.consultations : this.deps.inquiries;
+    const repo =
+      domain === 'CONSULTATION'
+        ? this.deps.consultations
+        : domain === 'INQUIRY'
+          ? this.deps.inquiries
+          : this.deps.support;
     const idField = `${domain.toLowerCase()}Id`;
     const threadId = str(p[idField]);
     const messageId = str(p.messageId);
@@ -420,12 +634,79 @@ export class NotificationPolicy {
     ];
   }
 
+  /**
+   * "حجز موعد" — notify the CLINIC side (every ACTIVE member of the clinic
+   * organization, minus the actor) about a pet-owner-driven change.
+   */
+  private async clinicAppointmentToClinic(
+    type: NotificationType,
+    eventName: string,
+    p: P,
+  ): Promise<NotificationSpec[]> {
+    const organizationId = str(p.organizationId);
+    const appointmentId = str(p.appointmentId);
+    const actor = str(p.actorUserId);
+    if (!organizationId || !appointmentId) return [];
+
+    const { items } = await this.deps.memberships.listForOrg(organizationId, {
+      page: 1,
+      pageSize: RECIPIENT_FANOUT_CAP,
+      status: 'ACTIVE',
+    });
+    const key = `${eventName}:${appointmentId}`;
+    return items
+      .filter((m) => m.userId !== actor)
+      .map((m) =>
+        this.spec(
+          type,
+          m.userId,
+          { organizationId, appointmentId },
+          {
+            actorUserId: actor || null,
+            entityType: 'CLINIC_APPOINTMENT',
+            entityId: appointmentId,
+            sourceEventKey: key,
+          },
+        ),
+      );
+  }
+
+  /** Notify the PET OWNER about a clinic-driven appointment decision. */
+  private clinicAppointmentToOwner(
+    type: NotificationType,
+    eventName: string,
+    p: P,
+  ): NotificationSpec[] {
+    const owner = str(p.petOwnerUserId);
+    const appointmentId = str(p.appointmentId);
+    const actor = str(p.actorUserId);
+    if (!owner || !appointmentId || owner === actor) return [];
+    return [
+      this.spec(
+        type,
+        owner,
+        { organizationId: str(p.organizationId), appointmentId },
+        {
+          actorUserId: actor || null,
+          entityType: 'CLINIC_APPOINTMENT',
+          entityId: appointmentId,
+          sourceEventKey: `${eventName}:${appointmentId}`,
+        },
+      ),
+    ];
+  }
+
   private async threadClosed(
     domain: string,
     type: NotificationType,
     p: P,
   ): Promise<NotificationSpec[]> {
-    const repo = domain === 'CONSULTATION' ? this.deps.consultations : this.deps.inquiries;
+    const repo =
+      domain === 'CONSULTATION'
+        ? this.deps.consultations
+        : domain === 'INQUIRY'
+          ? this.deps.inquiries
+          : this.deps.support;
     const idField = `${domain.toLowerCase()}Id`;
     const threadId = str(p[idField]);
     const thread = await repo.findById(threadId);
@@ -442,6 +723,76 @@ export class NotificationPolicy {
         },
       ),
     ];
+  }
+
+  // --- Veterinary Services marketplace ---------------------------
+
+  /** A new listing / request submission → the VET_SERVICE moderators. */
+  private async vetServiceToSupervisors(
+    type: NotificationType,
+    eventName: string,
+    entityId: string,
+    entityType: string,
+    excludeUserId: string,
+  ): Promise<NotificationSpec[]> {
+    if (!entityId) return [];
+    const supIds = await this.activeSupervisorUserIds('VET_SERVICE');
+    return supIds
+      .filter((id) => id !== excludeUserId)
+      .map((uid) =>
+        this.spec(
+          type,
+          uid,
+          { entityId },
+          { entityType, entityId, sourceEventKey: `${eventName}:${entityId}` },
+        ),
+      );
+  }
+
+  private vetServiceToUser(
+    type: NotificationType,
+    eventName: string,
+    p: P,
+    opts: { userId: string; actorUserId?: string; entityType: string; entityId: string },
+  ): NotificationSpec[] {
+    if (!opts.userId || !opts.entityId) return [];
+    if (opts.actorUserId && opts.actorUserId === opts.userId) return [];
+    return [
+      this.spec(
+        type,
+        opts.userId,
+        { entityId: opts.entityId, ...(str(p.conversationId) ? { conversationId: str(p.conversationId) } : {}) },
+        {
+          actorUserId: opts.actorUserId ?? null,
+          entityType: opts.entityType,
+          entityId: opts.entityId,
+          sourceEventKey: `${eventName}:${opts.entityId}`,
+        },
+      ),
+    ];
+  }
+
+  /** "إنهاء الطلب" — notify the party that did NOT complete it. */
+  private vetServiceDealCompleted(eventName: string, p: P): NotificationSpec[] {
+    const actor = str(p.actorUserId);
+    const subjectId = str(p.subjectId);
+    if (!subjectId) return [];
+    const recipients = [str(p.petOwnerUserId), str(p.veterinarianUserId)].filter(
+      (id) => id && id !== actor,
+    );
+    return recipients.map((uid) =>
+      this.spec(
+        'VET_SERVICE_DEAL_COMPLETED',
+        uid,
+        { entityId: subjectId, subjectType: str(p.subjectType) },
+        {
+          actorUserId: actor || null,
+          entityType: str(p.subjectType) || 'VET_SERVICE_DEAL',
+          entityId: subjectId,
+          sourceEventKey: `${eventName}:${subjectId}`,
+        },
+      ),
+    );
   }
 }
 

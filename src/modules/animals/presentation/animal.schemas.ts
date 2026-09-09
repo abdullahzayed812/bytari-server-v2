@@ -90,3 +90,9 @@ export const listAnimalsQuerySchema = paginationQuerySchema.extend({
   search: z.string().trim().min(1).max(120).optional(),
 });
 export type ListAnimalsQuery = z.infer<typeof listAnimalsQuerySchema>;
+
+/** Admin animal listing — every owner's animals, with an optional owner filter. */
+export const listAdminAnimalsQuerySchema = listAnimalsQuerySchema.extend({
+  ownerUserId: z.string().uuid().optional(),
+});
+export type ListAdminAnimalsQuery = z.infer<typeof listAdminAnimalsQuerySchema>;

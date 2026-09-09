@@ -2,12 +2,14 @@ import { Router } from 'express';
 import { asyncHandler } from '../../../shared/http/async-handler.js';
 import { validate } from '../../../shared/http/validate.js';
 import type { Container } from '../../../container.js';
+import { AdminAnimalController } from './admin-animal.controller.js';
 import { AnimalController } from './animal.controller.js';
 import { animalIdParamSchema, createAnimalMiddleware } from './animal.middleware.js';
 import {
   animalGalleryUploadUrlBodySchema,
   createAnimalBodySchema,
   finalizeAnimalGalleryBodySchema,
+  listAdminAnimalsQuerySchema,
   listAnimalsQuerySchema,
   removeAnimalGalleryImageQuerySchema,
   updateAnimalBodySchema,
@@ -84,6 +86,34 @@ export function createAnimalRouter(c: Container): Router {
     withAnimal,
     authorizeAnimalWrite(),
     asyncHandler(ctrl.removeGalleryImage),
+  );
+
+  return r;
+}
+
+/**
+ * `/admin/animals*` — admin / ANIMAL-supervisor oversight of user animals.
+ * `GET /` (list every owner's animals) needs `animal.read`; `DELETE /:animalId`
+ * (soft-delete) needs `animal.delete` (held only by ADMIN via the override —
+ * grant it to the ANIMAL supervisor domain to widen).
+ */
+export function createAdminAnimalRouter(c: Container): Router {
+  const ctrl = new AdminAnimalController(c.animalService);
+  const { authorize } = c.authorization;
+  const r = Router();
+  r.use(c.authenticate);
+
+  r.get(
+    '/',
+    authorize('animal.read'),
+    validate({ query: listAdminAnimalsQuerySchema }),
+    asyncHandler(ctrl.list),
+  );
+  r.delete(
+    '/:animalId',
+    authorize('animal.delete'),
+    validate({ params: animalIdParamSchema }),
+    asyncHandler(ctrl.deactivate),
   );
 
   return r;

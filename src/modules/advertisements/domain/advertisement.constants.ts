@@ -31,6 +31,8 @@ export const AD_PLACEMENTS = [
   'CLINICS',
   'VETERINARY_OFFICES',
   'VETERINARY_STORES',
+  // Pet Owners Store — the promotional banner slot on the store home screen.
+  'PET_OWNER_STORE',
   'CONSULTATIONS',
   'COURSES',
   'SEMINARS',

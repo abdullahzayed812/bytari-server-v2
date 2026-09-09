@@ -2,12 +2,13 @@ import { Router } from 'express';
 import { asyncHandler } from '../../../shared/http/async-handler.js';
 import { validate } from '../../../shared/http/validate.js';
 import type { Container } from '../../../container.js';
-import { CONSULTATION_CONFIG, INQUIRY_CONFIG } from '../application/thread.config.js';
+import { CONSULTATION_CONFIG, INQUIRY_CONFIG, SUPPORT_CONFIG } from '../application/thread.config.js';
 import { AiSettingsController } from './ai-settings.controller.js';
 import { ThreadController } from './thread.controller.js';
 import {
   createConsultationBodySchema,
   createInquiryBodySchema,
+  createSupportBodySchema,
   listAdminThreadsQuerySchema,
   listMessagesQuerySchema,
   listThreadsQuerySchema,
@@ -27,7 +28,10 @@ import {
 function threadRouter(
   c: Container,
   ctrl: ThreadController,
-  createBodySchema: typeof createConsultationBodySchema | typeof createInquiryBodySchema,
+  createBodySchema:
+    | typeof createConsultationBodySchema
+    | typeof createInquiryBodySchema
+    | typeof createSupportBodySchema,
 ): Router {
   const r = Router();
   r.use(c.authenticate);
@@ -72,11 +76,21 @@ export function createInquiryRouter(c: Container): Router {
   );
 }
 
+/** `/support-messages*` — "تواصل معنا": any signed-in user contacts the administration. */
+export function createSupportMessageRouter(c: Container): Router {
+  return threadRouter(
+    c,
+    new ThreadController(c.supportService, SUPPORT_CONFIG),
+    createSupportBodySchema,
+  );
+}
+
 /** `/admin/consultations`, `/admin/inquiries`, `/admin/ai-settings`. */
 export function createSupportAdminRouter(c: Container): Router {
   const { authorize } = c.authorization;
   const consultations = new ThreadController(c.consultationService, CONSULTATION_CONFIG);
   const inquiries = new ThreadController(c.inquiryService, INQUIRY_CONFIG);
+  const support = new ThreadController(c.supportService, SUPPORT_CONFIG);
   const ai = new AiSettingsController(c.aiSettingsService);
 
   const r = Router();
@@ -105,6 +119,18 @@ export function createSupportAdminRouter(c: Container): Router {
     authorize('inquiry.admin.read'),
     validate({ params: threadIdParamSchema }),
     asyncHandler(inquiries.get),
+  );
+  r.get(
+    '/support-messages',
+    authorize('support.admin.read'),
+    validate({ query: listAdminThreadsQuerySchema }),
+    asyncHandler(support.listAdmin),
+  );
+  r.get(
+    '/support-messages/:threadId',
+    authorize('support.admin.read'),
+    validate({ params: threadIdParamSchema }),
+    asyncHandler(support.get),
   );
 
   r.get('/ai-settings', authorize('ai.settings.manage'), asyncHandler(ai.get));
