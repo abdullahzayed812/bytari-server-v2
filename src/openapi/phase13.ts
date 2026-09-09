@@ -80,7 +80,7 @@ const schemas: Obj = {
       },
       senderBlocked: {
         type: 'boolean',
-        description: 'The creator has been muted (thread stays OPEN).',
+        description: 'The creator has been muted by a responder (thread stays OPEN).',
       },
       aiResponded: { type: 'boolean' },
       lastMessageAt: { type: 'string', format: 'date-time', nullable: true },

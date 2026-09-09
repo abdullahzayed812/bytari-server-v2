@@ -175,4 +175,24 @@ export class ThreadRepository {
 
     return { items: rows.map(rowToThreadMessage), total };
   }
+
+  /**
+   * The most recent `limit` messages, returned oldest-first. Used to build the
+   * AI responder's context so a long thread still includes the latest turn
+   * (plain `listMessages` paginates from the OLDEST message).
+   */
+  async recentMessages(
+    threadId: string,
+    limit: number,
+    trx?: Knex.Transaction,
+  ): Promise<ThreadMessage[]> {
+    const rows: ThreadMessageRow[] = await this.conn(trx)<ThreadMessageRow>(this.cfg.messageTable)
+      .where('thread_id', threadId)
+      .orderBy([
+        { column: 'created_at', order: 'desc' },
+        { column: 'id', order: 'desc' },
+      ])
+      .limit(limit);
+    return rows.reverse().map(rowToThreadMessage);
+  }
 }

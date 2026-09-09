@@ -48,6 +48,10 @@ export async function resetDb(): Promise<void> {
   // `users`, so the cascade above never reaches it — truncate it explicitly so
   // fixed-slug category fixtures start from a clean slate every test.
   await knex.raw('TRUNCATE TABLE pet_owner_store_categories RESTART IDENTITY CASCADE');
+  // `ai_settings` has no FK to `users` (so `TRUNCATE users CASCADE` misses it) and
+  // no per-test reset of its own — without this an AI-enable in one suite leaks
+  // into every later suite that creates a consultation / inquiry.
+  await knex('ai_settings').update({ enabled: false });
   await knex.raw('DELETE FROM role_permissions');
   await knex.raw('DELETE FROM organization_role_permissions');
   await seedCatalogues(knex);

@@ -136,6 +136,7 @@ import {
   NoopAiResponder,
   type AiResponderPort,
 } from './modules/consultations/application/ai-responder.port.js';
+import { RorkAiResponder } from './modules/consultations/infrastructure/rork-ai-responder.js';
 import { createObjectStorage, type ObjectStorage } from './infra/storage/index.js';
 import { ContentRepository } from './modules/content/infrastructure/content.repository.js';
 import { ContentFileRepository } from './modules/content/infrastructure/content-file.repository.js';
@@ -172,8 +173,9 @@ export interface ContainerDeps {
   logger: Logger;
   eventBus?: EventBus;
   /**
-   * AI reply generator for consultations / inquiries. Phase 13 has no real
-   * provider — defaults to {@link NoopAiResponder}. Tests inject a stub.
+   * AI reply generator for consultations / inquiries. Defaults to
+   * {@link RorkAiResponder} when `config.ai.enabled` (the keyless toolkit
+   * proxy), else {@link NoopAiResponder}. Tests inject a stub.
    */
   aiResponder?: AiResponderPort;
   /**
@@ -872,7 +874,14 @@ export function createContainer(deps: ContainerDeps): Container {
     eventBus,
     logger,
   );
-  const aiResponder: AiResponderPort = deps.aiResponder ?? new NoopAiResponder();
+  const aiResponder: AiResponderPort =
+    deps.aiResponder ??
+    (config.ai.enabled
+      ? new RorkAiResponder(
+          { url: config.ai.toolkitUrl, timeoutMs: config.ai.toolkitTimeoutMs },
+          logger,
+        )
+      : new NoopAiResponder());
   const consultationRepository = new ThreadRepository(db, {
     threadTable: 'consultations',
     messageTable: 'consultation_messages',

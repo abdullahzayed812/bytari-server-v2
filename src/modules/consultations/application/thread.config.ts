@@ -19,6 +19,14 @@ export interface ThreadKindConfig {
    * exempt.
    */
   responderRequiresApprovedVet: boolean;
+  /**
+   * Whether a newly created thread of this kind gets an automatic AI reply
+   * (when the matching `ai_settings` flag is also on). `true` for the clinical
+   * CONSULTATION / INQUIRY kinds; `false` for SUPPORT ("تواصل معنا"), which is
+   * human-only. The thread is always OPEN and freely writable by the creator —
+   * only CLOSE (or a manual sender block) stops them.
+   */
+  aiAutoRespond: boolean;
   perms: { read: string; respond: string; close: string; adminRead: string };
   auditActions: { created: string; closed: string; blocked: string; unblocked: string };
   events: {
@@ -41,6 +49,7 @@ export const CONSULTATION_CONFIG: ThreadKindConfig = {
   aiSettingKey: 'CONSULTATION_AI',
   createEligibility: 'ANY_USER',
   responderRequiresApprovedVet: true,
+  aiAutoRespond: true,
   perms: {
     read: 'consultation.read',
     respond: 'consultation.respond',
@@ -72,6 +81,7 @@ export const INQUIRY_CONFIG: ThreadKindConfig = {
   aiSettingKey: 'INQUIRY_AI',
   createEligibility: 'APPROVED_VET',
   responderRequiresApprovedVet: true,
+  aiAutoRespond: true,
   perms: {
     read: 'inquiry.read',
     respond: 'inquiry.respond',
@@ -108,6 +118,8 @@ export const SUPPORT_CONFIG: ThreadKindConfig = {
   aiSettingKey: 'SUPPORT_AI',
   createEligibility: 'ANY_USER',
   responderRequiresApprovedVet: false,
+  // "تواصل معنا" is human-only — no automatic AI reply.
+  aiAutoRespond: false,
   perms: {
     read: 'support.read',
     respond: 'support.respond',

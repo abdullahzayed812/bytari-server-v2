@@ -82,6 +82,7 @@ describe('consultations — creation & creator flow', () => {
       .set(bearer(owner.accessToken));
     expect(get.status).toBe(200);
 
+    // the thread is open by default — the creator may keep posting
     const msg = await sendThreadMessage(
       app,
       owner.accessToken,
@@ -349,17 +350,16 @@ describe('consultations — lifecycle', () => {
 });
 
 describe('consultations — AI response flow', () => {
-  it('AI disabled → no AI message and the responder is never called', async () => {
+  it('AI disabled → no AI message on creation or on a follow-up; the responder is never called', async () => {
     const owner = await registerUser(app);
     const c = await createConsultation(app, owner.accessToken, 'q');
     const id = c.body.data.id as string;
+    await sendThreadMessage(app, owner.accessToken, 'consultations', id, 'still wondering');
     await tick();
 
     expect(ai.calls).toBe(0);
     const list = await listThreadMessages(app, owner.accessToken, 'consultations', id);
-    expect(list.body.data).toHaveLength(1);
-    expect(list.body.data[0].source).toBe('USER');
-    expect(events).toEqual(['consultation.created']);
+    expect(list.body.data.map((m: { source: string }) => m.source)).toEqual(['USER', 'USER']);
   });
 
   it('AI enabled → an AI message is generated through the abstraction, after commit', async () => {
@@ -386,6 +386,49 @@ describe('consultations — AI response flow', () => {
     expect(events).toEqual(
       expect.arrayContaining(['consultation.created', 'consultation.message.created']),
     );
+  });
+
+  it('AI enabled → replies to every creator follow-up, not just the first message', async () => {
+    const admin = await registerAdmin(app);
+    await setAiSettings(app, admin.accessToken, { consultationAiEnabled: true });
+
+    const owner = await registerUser(app);
+    const c = await createConsultation(app, owner.accessToken, 'my dog is limping');
+    const id = c.body.data.id as string;
+    expect(ai.calls).toBe(1);
+
+    const f1 = await sendThreadMessage(app, owner.accessToken, 'consultations', id, 'still limping');
+    expect(f1.status).toBe(201);
+    const f2 = await sendThreadMessage(app, owner.accessToken, 'consultations', id, 'and not eating');
+    expect(f2.status).toBe(201);
+    expect(ai.calls).toBe(3);
+
+    const list = await listThreadMessages(app, owner.accessToken, 'consultations', id);
+    expect(list.body.data.map((m: { source: string }) => m.source)).toEqual([
+      'USER',
+      'AI',
+      'USER',
+      'AI',
+      'USER',
+      'AI',
+    ]);
+  });
+
+  it('AI enabled → never replies to a responder (supervisor / admin) message', async () => {
+    const admin = await registerAdmin(app);
+    await setAiSettings(app, admin.accessToken, { consultationAiEnabled: true });
+
+    const owner = await registerUser(app);
+    const c = await createConsultation(app, owner.accessToken, 'q');
+    const id = c.body.data.id as string;
+    expect(ai.calls).toBe(1); // the creation only
+
+    const reply = await sendThreadMessage(app, admin.accessToken, 'consultations', id, 'admin here');
+    expect(reply.status).toBe(201);
+    expect(ai.calls).toBe(1); // unchanged — no AI turn after a responder
+
+    const list = await listThreadMessages(app, owner.accessToken, 'consultations', id);
+    expect(list.body.data.map((m: { source: string }) => m.source)).toEqual(['USER', 'AI', 'ADMIN']);
   });
 
   it('AI failure does not corrupt the consultation (thread + first message still there)', async () => {

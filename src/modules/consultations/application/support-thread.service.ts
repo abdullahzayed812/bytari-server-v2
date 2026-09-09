@@ -37,6 +37,9 @@ const AUDIT_ENTITY: Record<string, string> = {
   INQUIRY: AuditEntityType.INQUIRY,
 };
 
+/** How many trailing messages of a thread are sent to the AI as context. */
+const AI_CONTEXT_MESSAGE_LIMIT = 50;
+
 /**
  * The Consultation / Inquiry use cases. One instance per kind (see
  * {@link ThreadKindConfig}). Authorization:
@@ -179,8 +182,16 @@ export class SupportThreadService {
    * If AI is enabled for this kind, ask the abstraction for a reply and persist
    * it as an `AI` message in its own transaction. A provider error is logged
    * and swallowed — the original thread must stay intact.
+   *
+   * Called after EVERY creator message (thread creation and each follow-up),
+   * never after a responder message — so the AI keeps the conversation going
+   * for as long as the flag is on.
    */
   private async maybeAiRespond(threadId: string): Promise<void> {
+    // Automatic AI replies apply to CONSULTATION / INQUIRY only — SUPPORT is
+    // human-only.
+    if (!this.cfg.aiAutoRespond) return;
+
     let enabled = false;
     try {
       enabled = await this.aiSettings.isEnabled(this.cfg.aiSettingKey);
@@ -192,7 +203,7 @@ export class SupportThreadService {
 
     let reply: string | null;
     try {
-      const { items } = await this.repo.listMessages(threadId, { page: 1, pageSize: 100 });
+      const items = await this.repo.recentMessages(threadId, AI_CONTEXT_MESSAGE_LIMIT);
       reply = await this.aiResponder.generate({
         kind: this.cfg.kind,
         threadId,
@@ -294,6 +305,14 @@ export class SupportThreadService {
       messageId: message.id,
       source,
     });
+
+    // Let the AI reply to this follow-up too — same rules as on creation
+    // (flag + setting checked inside; after commit; errors swallowed). Only for
+    // the creator's messages, never a responder's.
+    if (source === 'USER') {
+      await this.maybeAiRespond(thread.id);
+    }
+
     return toThreadMessageDTO(message);
   }
 

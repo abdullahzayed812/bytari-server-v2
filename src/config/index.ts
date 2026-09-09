@@ -128,6 +128,15 @@ const envSchema = z
     EMAIL_PASS: z.string().optional(),
     // Display "From" address. Defaults to EMAIL_USER when unset.
     EMAIL_FROM: z.string().optional(),
+
+    // --- AI responder for Consultations / Inquiries --------------------
+    // Backend-only. The endpoint below is a keyless public proxy; there is no
+    // secret to configure. Per-kind on/off still lives in `ai_settings`
+    // (admin-managed) — this only controls WHICH provider the backend calls.
+    // Set AI_TOOLKIT_ENABLED=false to force the no-op provider regardless.
+    AI_TOOLKIT_ENABLED: booleanFromString.default('true'),
+    AI_TOOLKIT_URL: z.string().url().default('https://toolkit.rork.com/text/llm/'),
+    AI_TOOLKIT_TIMEOUT_MS: z.coerce.number().int().positive().max(120_000).default(20_000),
   })
   .superRefine((env, ctx) => {
     // Firebase: if any single credential field is provided, the whole set must be.
@@ -262,6 +271,13 @@ const envSchema = z
             from: env.EMAIL_FROM ?? (env.EMAIL_USER as string),
           }
         : null,
+      ai: {
+        // `enabled` only picks the provider; the per-kind `ai_settings` flags
+        // still gate whether a reply is actually generated.
+        enabled: env.AI_TOOLKIT_ENABLED,
+        toolkitUrl: env.AI_TOOLKIT_URL,
+        toolkitTimeoutMs: env.AI_TOOLKIT_TIMEOUT_MS,
+      },
       auth: {
         jwt: {
           accessSecret: isSet(env.JWT_ACCESS_SECRET) ? env.JWT_ACCESS_SECRET : null,
@@ -300,6 +316,7 @@ export type RealtimeConfig = AppConfig['realtime'];
 export type FirebaseConfig = NonNullable<AppConfig['firebase']>;
 export type R2Config = NonNullable<AppConfig['storage']['r2']>;
 export type EmailConfig = NonNullable<AppConfig['email']>;
+export type AiConfig = AppConfig['ai'];
 export type AuthConfig = AppConfig['auth'];
 
 let cached: AppConfig | undefined;

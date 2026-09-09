@@ -27,6 +27,8 @@
     "db:status": "tsx src/database/migrate.ts status",
     "db:seed": "tsx src/database/migrate.ts seed",
     "db:seed:dev": "tsx src/database/dev-seed/run.ts",
+    "db:reset": "tsx src/database/migrate.ts reset",
+    "db:reset:dev": "tsx src/database/migrate.ts reset && tsx src/database/dev-seed/run.ts",
     "db:migrate:prod": "node dist/database/migrate.js latest",
     "db:seed:prod": "node dist/database/migrate.js seed",
     "db:migrate:make": "tsx ./node_modules/knex/bin/cli.js --knexfile knexfile.ts migrate:make -x ts --stub src/database/stubs/migration.stub",

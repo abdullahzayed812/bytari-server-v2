@@ -7,6 +7,10 @@ export { SupportThreadService } from './application/support-thread.service.js';
 export { AiSettingsService } from './application/ai-settings.service.js';
 export { type AiResponderPort, NoopAiResponder } from './application/ai-responder.port.js';
 export {
+  RorkAiResponder,
+  type RorkAiResponderOptions,
+} from './infrastructure/rork-ai-responder.js';
+export {
   CONSULTATION_CONFIG,
   INQUIRY_CONFIG,
   SUPPORT_CONFIG,
