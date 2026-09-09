@@ -80,7 +80,11 @@ describe('POST /organizations/farms — Add Poultry Farm', () => {
     const mine = await request(app).get('/api/v1/organizations').set(bearer(user.accessToken));
     expect(mine.status).toBe(200);
     expect(mine.body.data.map((o: { id: string }) => o.id)).toContain(created.body.data.id);
-    expect(mine.body.data[0]).toMatchObject({ type: 'FARM', myRole: 'OWNER' });
+    expect(mine.body.data[0]).toMatchObject({
+      type: 'FARM',
+      myRole: 'OWNER',
+      farmSpecies: 'POULTRY',
+    });
   });
 
   it('after admin approval the OWNER can read the farm profile (fields round-trip)', async () => {
@@ -93,11 +97,13 @@ describe('POST /organizations/farms — Add Poultry Farm', () => {
       .expect(201);
     const orgId = created.body.data.id as string;
 
-    // a PENDING farm is not yet operable by the non-admin OWNER (platform rule)
+    // the OWNER may READ their own farm's profile even while it is PENDING
+    // (poultry-ops.routes.ts — `allowInactiveForOwner: true`, read-only, no
+    // subscription gate). Operations remain gated until ACTIVE.
     const early = await request(app)
       .get(`/api/v1/organizations/${orgId}/farm/profile`)
       .set(bearer(user.accessToken));
-    expect(early.status).toBe(403);
+    expect(early.status).toBe(200);
 
     await approveOrganization(app, admin.accessToken, orgId);
 

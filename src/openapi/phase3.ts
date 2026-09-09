@@ -727,6 +727,14 @@ const paths: Obj = {
           in: 'query',
           schema: { type: 'string', enum: ['NOT_STARTED', 'ACTIVE', 'EXPIRED'] },
         },
+        {
+          name: 'speciesGroup',
+          in: 'query',
+          description:
+            "LIVESTOCK → farm_species IN ('SHEEP','CATTLE'); POULTRY → everything else " +
+            '(POULTRY, MIXED, legacy null-species). Clean partition — no request orphaned.',
+          schema: { type: 'string', enum: ['POULTRY', 'LIVESTOCK'] },
+        },
       ],
       responses: { '200': ok('Farms'), ...errs(401, 403) },
     },

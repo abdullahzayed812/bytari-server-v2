@@ -5,8 +5,10 @@ import { closeTestDb, ensureSchema, getTestDb, resetDb } from '../helpers/db.js'
 import {
   approveOrganization,
   bearer,
+  createCattleFarm,
   createFarm,
   createOrganization,
+  createSheepFarm,
   registerAdmin,
   registerApprovedVet,
   registerPendingVet,
@@ -322,6 +324,39 @@ describe('admin Poultry Farms management list', () => {
     expect(res.status).toBe(200);
     expect(res.body.data).toHaveLength(1);
     expect(res.body.data[0].status).toBe('PENDING');
+  });
+
+  it('speciesGroup splits the list into poultry vs sheep/cattle', async () => {
+    const admin = await registerAdmin(app);
+    const owner = await registerApprovedVet(app);
+    const poultry = await createFarm(app, owner.accessToken, admin.accessToken, { name: 'P Farm' });
+    const sheep = await createSheepFarm(app, owner.accessToken, admin.accessToken, {
+      name: 'S Farm',
+    });
+    const cattle = await createCattleFarm(app, owner.accessToken, admin.accessToken, {
+      name: 'C Farm',
+    });
+
+    const idsFor = async (speciesGroup?: string): Promise<string[]> => {
+      const res = await request(app)
+        .get('/api/v1/admin/organizations/farms')
+        .query(speciesGroup ? { speciesGroup } : {})
+        .set(bearer(admin.accessToken));
+      expect(res.status).toBe(200);
+      return (res.body.data as Array<{ organizationId: string }>).map((r) => r.organizationId);
+    };
+
+    const poultryIds = await idsFor('POULTRY');
+    expect(poultryIds).toContain(poultry.id);
+    expect(poultryIds).not.toContain(sheep.id);
+    expect(poultryIds).not.toContain(cattle.id);
+
+    const livestockIds = await idsFor('LIVESTOCK');
+    expect(livestockIds).toEqual(expect.arrayContaining([sheep.id, cattle.id]));
+    expect(livestockIds).not.toContain(poultry.id);
+
+    const allIds = await idsFor();
+    expect(allIds).toEqual(expect.arrayContaining([poultry.id, sheep.id, cattle.id]));
   });
 
   it('requires organization.admin.read / organization.admin.subscription — a plain user is blocked', async () => {

@@ -121,6 +121,7 @@ export class AdminOrganizationController {
       pageSize: q.pageSize,
       status: q.status,
       subscriptionStatus: q.subscriptionStatus,
+      speciesGroup: q.speciesGroup,
     });
     sendSuccess(res, items, 200, pageMeta(q.page, q.pageSize, total));
   };

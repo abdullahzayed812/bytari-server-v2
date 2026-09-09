@@ -45,6 +45,13 @@ export type ListRenewalRequestsQuery = z.infer<typeof listRenewalRequestsQuerySc
 export const adminListFarmsQuerySchema = paginationQuerySchema.extend({
   status: z.enum(['PENDING', 'ACTIVE', 'REJECTED', 'SUSPENDED', 'DEACTIVATED']).optional(),
   subscriptionStatus: z.enum(['NOT_STARTED', 'ACTIVE', 'EXPIRED']).optional(),
+  /**
+   * Narrow the list to one species family so the admin can review poultry and
+   * livestock farm requests separately. `LIVESTOCK` = `farm_species IN
+   * ('SHEEP','CATTLE')`; `POULTRY` = everything else (`POULTRY`, `MIXED`, and
+   * legacy null-species farms) — a clean partition so no request is orphaned.
+   */
+  speciesGroup: z.enum(['POULTRY', 'LIVESTOCK']).optional(),
 });
 export type AdminListFarmsQuery = z.infer<typeof adminListFarmsQuerySchema>;
 

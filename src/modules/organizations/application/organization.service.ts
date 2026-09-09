@@ -672,13 +672,37 @@ export class OrganizationService {
     return this.attachMedia(withDetails);
   }
 
-  /** Organizations the user is an ACTIVE member of, with their org role in each. */
-  async listMine(userId: string): Promise<Array<Organization & { myRole: string }>> {
+  /**
+   * Organizations the user is an ACTIVE member of, with their org role in each.
+   * FARM rows also carry `farmSpecies` (`POULTRY` | `SHEEP` | `CATTLE` | `MIXED`
+   * | `null`) so the species-specific farm landings can filter without an extra
+   * request per farm. Always `null` for non-FARM types.
+   */
+  async listMine(
+    userId: string,
+  ): Promise<Array<Organization & { myRole: string; farmSpecies: string | null }>> {
     const memberships = await this.memberships.listActiveOrganizationsForUser(userId);
     if (memberships.length === 0) return [];
     const roleByOrg = new Map(memberships.map((m) => [m.organizationId, m.roleKey]));
     const orgs = await this.organizations.findManyByIds([...roleByOrg.keys()]);
-    return orgs.map((o) => ({ ...o, myRole: roleByOrg.get(o.id) ?? 'STAFF' }));
+
+    const farmIds = orgs.filter((o) => o.type === 'FARM').map((o) => o.id);
+    const speciesByOrg = new Map<string, string | null>();
+    if (farmIds.length > 0) {
+      const rows = (await this.db('farm_details')
+        .whereIn('organization_id', farmIds)
+        .select('organization_id', 'farm_species')) as Array<{
+        organization_id: string;
+        farm_species: string | null;
+      }>;
+      for (const r of rows) speciesByOrg.set(r.organization_id, r.farm_species);
+    }
+
+    return orgs.map((o) => ({
+      ...o,
+      myRole: roleByOrg.get(o.id) ?? 'STAFF',
+      farmSpecies: o.type === 'FARM' ? (speciesByOrg.get(o.id) ?? null) : null,
+    }));
   }
 
   async approve(id: string, actor: OrgActor): Promise<Organization> {

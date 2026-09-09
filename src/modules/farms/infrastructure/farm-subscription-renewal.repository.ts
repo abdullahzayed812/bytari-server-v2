@@ -33,6 +33,8 @@ export interface AdminFarmListItem {
   subscriptionStatus: 'NOT_STARTED' | 'ACTIVE' | 'EXPIRED';
   hasOpenRenewalRequest: boolean;
   supervisors: Array<{ userId: string; name: string }>;
+  /** `POULTRY` | `SHEEP` | `CATTLE` | `MIXED` | `null` (legacy farms). */
+  farmSpecies: string | null;
 }
 
 export interface ListFarmsForAdminFilter {
@@ -41,6 +43,8 @@ export interface ListFarmsForAdminFilter {
   status?: string;
   /** Filters on the DERIVED subscription status (date comparison, not a stored column). */
   subscriptionStatus?: 'NOT_STARTED' | 'ACTIVE' | 'EXPIRED';
+  /** `POULTRY` → `farm_species = 'POULTRY'`; `LIVESTOCK` → `farm_species IN ('SHEEP','CATTLE')`. */
+  speciesGroup?: 'POULTRY' | 'LIVESTOCK';
 }
 
 function dateOnly(v: string | Date | null): string | null {
@@ -193,6 +197,16 @@ export class FarmSubscriptionRenewalRepository {
         .join('users as u', 'u.id', 'o.owner_user_id')
         .where('o.type', 'FARM');
       if (filter.status) qb.where('o.status', filter.status);
+      // Clean partition so no farm request is ever unreviewable: LIVESTOCK is
+      // exactly SHEEP/CATTLE; POULTRY is everything else (POULTRY, MIXED, and
+      // legacy null-species farms created before the column existed).
+      if (filter.speciesGroup === 'LIVESTOCK') {
+        qb.whereIn('d.farm_species', ['SHEEP', 'CATTLE']);
+      } else if (filter.speciesGroup === 'POULTRY') {
+        qb.where((b) => {
+          b.whereNull('d.farm_species').orWhereNotIn('d.farm_species', ['SHEEP', 'CATTLE']);
+        });
+      }
       if (filter.subscriptionStatus === 'NOT_STARTED') {
         qb.where((b) => {
           b.whereNull('d.subscription_start_date').orWhereNull('d.subscription_end_date');
@@ -225,6 +239,7 @@ export class FarmSubscriptionRenewalRepository {
         'u.last_name as owner_last_name',
         'd.subscription_start_date as subscription_start_date',
         'd.subscription_end_date as subscription_end_date',
+        'd.farm_species as farm_species',
       )
       .orderBy('o.created_at', 'desc')
       .limit(filter.pageSize)
@@ -240,6 +255,7 @@ export class FarmSubscriptionRenewalRepository {
       owner_last_name: string;
       subscription_start_date: string | Date | null;
       subscription_end_date: string | Date | null;
+      farm_species: string | null;
     }>;
 
     const orgIds = rows.map((r) => r.organization_id);
@@ -265,6 +281,7 @@ export class FarmSubscriptionRenewalRepository {
         subscriptionStatus: computeFarmSubscriptionStatus(subscriptionStartDate, subscriptionEndDate),
         hasOpenRenewalRequest: openRequestOrgIds.has(r.organization_id),
         supervisors: supervisorsByOrg.get(r.organization_id) ?? [],
+        farmSpecies: r.farm_species,
       };
     });
 
