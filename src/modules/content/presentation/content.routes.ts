@@ -6,14 +6,18 @@ import { CategoryController } from './category.controller.js';
 import { ContentController } from './content.controller.js';
 import { createContentAuthz } from './content.middleware.js';
 import {
+  addCommentBodySchema,
   categoryIdParamSchema,
+  contentCommentParamSchema,
   contentFileParamSchema,
   contentIdParamSchema,
   createCategoryBodySchema,
   createContentBodySchema,
   listAdminContentQuerySchema,
+  listCommentsQuerySchema,
   listPublicContentQuerySchema,
   registerFileBodySchema,
+  submitRatingBodySchema,
   updateCategoryBodySchema,
   updateContentBodySchema,
   uploadUrlBodySchema,
@@ -21,7 +25,9 @@ import {
 
 /**
  * Public content — authenticated users, PUBLISHED & not-deleted only. Draft /
- * archived / deleted items are invisible here (404 by id).
+ * archived / deleted items are invisible here (404 by id). Bookmark / like /
+ * comment / rating toggles are auth + self only (no permission key) —
+ * mirrors `tip.routes.ts` exactly.
  */
 export function createContentRouter(c: Container): Router {
   const ctrl = new ContentController(c.contentService);
@@ -35,6 +41,43 @@ export function createContentRouter(c: Container): Router {
     validate({ params: contentFileParamSchema }),
     asyncHandler(ctrl.downloadPublic),
   );
+
+  r.post('/:contentId/bookmark', validate({ params: contentIdParamSchema }), asyncHandler(ctrl.bookmark));
+  r.delete(
+    '/:contentId/bookmark',
+    validate({ params: contentIdParamSchema }),
+    asyncHandler(ctrl.unbookmark),
+  );
+  r.post('/:contentId/like', validate({ params: contentIdParamSchema }), asyncHandler(ctrl.like));
+  r.delete('/:contentId/like', validate({ params: contentIdParamSchema }), asyncHandler(ctrl.unlike));
+
+  r.get(
+    '/:contentId/comments',
+    validate({ params: contentIdParamSchema, query: listCommentsQuerySchema }),
+    asyncHandler(ctrl.listComments),
+  );
+  r.post(
+    '/:contentId/comments',
+    validate({ params: contentIdParamSchema, body: addCommentBodySchema }),
+    asyncHandler(ctrl.addComment),
+  );
+  r.delete(
+    '/:contentId/comments/:commentId',
+    validate({ params: contentCommentParamSchema }),
+    asyncHandler(ctrl.deleteComment),
+  );
+
+  r.get(
+    '/:contentId/rating',
+    validate({ params: contentIdParamSchema }),
+    asyncHandler(ctrl.getRating),
+  );
+  r.put(
+    '/:contentId/rating',
+    validate({ params: contentIdParamSchema, body: submitRatingBodySchema }),
+    asyncHandler(ctrl.submitRating),
+  );
+
   return r;
 }
 

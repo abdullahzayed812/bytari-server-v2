@@ -1,6 +1,9 @@
-export * from './domain/store.constants.js';
-export * from './domain/store.types.js';
-export { StorePolicy } from './domain/store.policy.js';
-export { ProductRepository } from './infrastructure/product.repository.js';
-export { ProductService } from './application/product.service.js';
-export { createVeterinaryStoreRouter, createPublicProductRouter } from './presentation/store.routes.js';
+export * from './domain/veterinary-store-product.constants.js';
+export * from './domain/veterinary-store-product.types.js';
+export { VeterinaryStoreProductPolicy } from './domain/veterinary-store-product.policy.js';
+export { VeterinaryStoreProductRepository } from './infrastructure/veterinary-store-product.repository.js';
+export { VeterinaryStoreProductService } from './application/veterinary-store-product.service.js';
+export {
+  createVeterinaryStoreProductRouter,
+  createPublicVeterinaryStoreProductRouter,
+} from './presentation/veterinary-store-product.routes.js';

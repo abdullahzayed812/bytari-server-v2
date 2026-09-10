@@ -1,6 +1,6 @@
 import type { Knex } from 'knex';
 import type { Logger } from 'pino';
-import { BadRequestError, NotFoundError } from '../../../shared/errors/app-error.js';
+import { BadRequestError, ForbiddenError, NotFoundError } from '../../../shared/errors/app-error.js';
 import { ErrorCode } from '../../../shared/errors/error-codes.js';
 import type { EventBus } from '../../../shared/events/index.js';
 import { AuditAction, AuditEntityType, type AuditContext } from '../../audit/audit.types.js';
@@ -17,12 +17,17 @@ import {
   toPublicFileDTO,
   type Category,
   type Content,
+  type ContentCommentDTO,
   type ContentDTO,
   type ContentFile,
+  type ContentRatingAggregate,
   type ListContentFilter,
 } from '../domain/content.types.js';
 import type { CategoryRepository } from '../infrastructure/category.repository.js';
+import type { ContentCommentRepository } from '../infrastructure/content-comment.repository.js';
+import type { ContentEngagementRepository } from '../infrastructure/content-engagement.repository.js';
 import type { ContentFileRepository } from '../infrastructure/content-file.repository.js';
+import type { ContentRatingRepository } from '../infrastructure/content-rating.repository.js';
 import type { ContentRepository } from '../infrastructure/content.repository.js';
 
 export interface ContentActor {
@@ -36,6 +41,10 @@ export interface CreateContentInput {
   description?: string | null;
   body?: string | null;
   authorName?: string | null;
+  /** Book-only; ignored (stored as-is, but meaningless) for ARTICLE/MAGAZINE. */
+  language?: string | null;
+  pageCount?: number | null;
+  publishYear?: number | null;
   categoryIds?: string[];
 }
 
@@ -44,6 +53,9 @@ export interface UpdateContentInput {
   description?: string | null;
   body?: string | null;
   authorName?: string | null;
+  language?: string | null;
+  pageCount?: number | null;
+  publishYear?: number | null;
   categoryIds?: string[];
 }
 
@@ -75,6 +87,9 @@ export class ContentService {
     private readonly content: ContentRepository,
     private readonly files: ContentFileRepository,
     private readonly categories: CategoryRepository,
+    private readonly engagement: ContentEngagementRepository,
+    private readonly comments: ContentCommentRepository,
+    private readonly ratings: ContentRatingRepository,
     private readonly storage: ObjectStorage,
     private readonly audit: AuditService,
     private readonly events: EventBus,
@@ -100,12 +115,15 @@ export class ContentService {
     }
   }
 
-  private async dto(content: Content, admin: boolean): Promise<ContentDTO> {
-    const [cats, fileList] = await Promise.all([
+  private async dto(content: Content, admin: boolean, viewerId?: string): Promise<ContentDTO> {
+    const [cats, fileList, ratingAgg, isBookmarked, isLiked] = await Promise.all([
       this.content.categoriesFor(content.id),
       this.files.listActiveForContent(content.id),
+      this.ratings.aggregate(content.id),
+      viewerId ? this.engagement.isBookmarked(viewerId, content.id) : Promise.resolve(false),
+      viewerId ? this.engagement.isLiked(viewerId, content.id) : Promise.resolve(false),
     ]);
-    return this.assemble(content, cats, fileList, admin);
+    return this.assemble(content, cats, fileList, admin, ratingAgg, { isBookmarked, isLiked });
   }
 
   private assemble(
@@ -113,6 +131,8 @@ export class ContentService {
     cats: Category[],
     fileList: ContentFile[],
     admin: boolean,
+    rating: ContentRatingAggregate,
+    viewer: { isBookmarked: boolean; isLiked: boolean },
   ): ContentDTO {
     return {
       id: content.id,
@@ -123,6 +143,15 @@ export class ContentService {
       authorName: content.authorName,
       status: content.status,
       publishedAt: content.publishedAt,
+      language: content.language,
+      pageCount: content.pageCount,
+      publishYear: content.publishYear,
+      likeCount: content.likeCount,
+      commentCount: content.commentCount,
+      viewCount: content.viewCount,
+      rating,
+      isBookmarked: viewer.isBookmarked,
+      isLiked: viewer.isLiked,
       categories: cats,
       files: admin ? fileList.map(toAdminFileDTO) : fileList.map(toPublicFileDTO),
       createdByUserId: content.createdByUserId,
@@ -147,6 +176,9 @@ export class ContentService {
           description: input.description ?? null,
           body: input.body ?? null,
           authorName: input.authorName ?? null,
+          language: input.language ?? null,
+          pageCount: input.pageCount ?? null,
+          publishYear: input.publishYear ?? null,
           createdByUserId: actor.actorUserId,
         },
         tx,
@@ -175,7 +207,7 @@ export class ContentService {
       type: content.type,
       status: content.status,
     });
-    return this.dto(content, true);
+    return this.dto(content, true, actor.actorUserId);
   }
 
   async update(actor: ContentActor, id: string, input: UpdateContentInput): Promise<ContentDTO> {
@@ -183,9 +215,9 @@ export class ContentService {
     const categoriesChanged = input.categoryIds !== undefined;
     if (categoriesChanged) await this.assertCategoriesExist(input.categoryIds ?? []);
 
-    const fieldKeys = (['title', 'description', 'body', 'authorName'] as const).filter(
-      (k) => input[k] !== undefined,
-    );
+    const fieldKeys = (
+      ['title', 'description', 'body', 'authorName', 'language', 'pageCount', 'publishYear'] as const
+    ).filter((k) => input[k] !== undefined);
 
     const updated = await this.db.transaction(async (tx) => {
       let next = existing;
@@ -197,6 +229,9 @@ export class ContentService {
             description: input.description,
             body: input.body,
             authorName: input.authorName,
+            language: input.language,
+            pageCount: input.pageCount,
+            publishYear: input.publishYear,
             updatedByUserId: actor.actorUserId,
           },
           tx,
@@ -224,7 +259,7 @@ export class ContentService {
     });
 
     this.events.publish('content.updated', { contentId: id, type: updated.type });
-    return this.dto(updated, true);
+    return this.dto(updated, true, actor.actorUserId);
   }
 
   // --- lifecycle --------------------------------------------
@@ -239,7 +274,7 @@ export class ContentService {
     eventName: string,
   ): Promise<ContentDTO> {
     const existing = await this.load(id);
-    if (!changes) return this.dto(existing, true); // idempotent no-op
+    if (!changes) return this.dto(existing, true, actor.actorUserId); // idempotent no-op
 
     const updated = await this.db.transaction(async (tx) => {
       const next = await this.content.setStatus(id, to, actor.actorUserId, { setPublishedAt }, tx);
@@ -258,7 +293,7 @@ export class ContentService {
     });
 
     this.events.publish(eventName, { contentId: id, type: updated.type, status: to });
-    return this.dto(updated, true);
+    return this.dto(updated, true, actor.actorUserId);
   }
 
   publish(actor: ContentActor, id: string): Promise<ContentDTO> {
@@ -313,43 +348,59 @@ export class ContentService {
       contentId: id,
       type: updated.type,
     });
-    return this.dto(updated, true);
+    return this.dto(updated, true, actor.actorUserId);
   }
 
   // --- reads -----------------------------------------------
 
-  async getAdmin(id: string): Promise<ContentDTO> {
-    return this.dto(await this.load(id), true);
+  async getAdmin(id: string, viewerId?: string): Promise<ContentDTO> {
+    return this.dto(await this.load(id), true, viewerId);
+  }
+
+  /** Shared by listAdmin/listPublic — batches ratings + viewer state (no N+1). */
+  private async assembleMany(
+    items: Content[],
+    admin: boolean,
+    viewerId?: string,
+  ): Promise<ContentDTO[]> {
+    const ids = items.map((c) => c.id);
+    const [fileMap, ratingMap, bookmarkedSet, likedSet] = await Promise.all([
+      this.files.listActiveForContents(ids),
+      this.ratings.aggregateMany(ids),
+      viewerId ? this.engagement.bookmarkedSet(viewerId, ids) : Promise.resolve(new Set<string>()),
+      viewerId ? this.engagement.likedSet(viewerId, ids) : Promise.resolve(new Set<string>()),
+    ]);
+    return Promise.all(
+      items.map(async (c) =>
+        this.assemble(
+          c,
+          await this.content.categoriesFor(c.id),
+          fileMap.get(c.id) ?? [],
+          admin,
+          ratingMap.get(c.id) ?? { average: null, count: 0 },
+          { isBookmarked: bookmarkedSet.has(c.id), isLiked: likedSet.has(c.id) },
+        ),
+      ),
+    );
   }
 
   async listAdmin(filter: ListContentFilter): Promise<{ items: ContentDTO[]; total: number }> {
     const { items, total } = await this.content.list(filter, false);
-    const fileMap = await this.files.listActiveForContents(items.map((c) => c.id));
-    const dtos = await Promise.all(
-      items.map(async (c) =>
-        this.assemble(c, await this.content.categoriesFor(c.id), fileMap.get(c.id) ?? [], true),
-      ),
-    );
-    return { items: dtos, total };
+    return { items: await this.assembleMany(items, true, filter.viewerId), total };
   }
 
-  async getPublic(id: string): Promise<ContentDTO> {
+  async getPublic(id: string, viewerId?: string): Promise<ContentDTO> {
     const c = await this.content.findById(id);
     if (!c || c.status !== 'PUBLISHED' || c.deletedAt !== null) {
       throw new NotFoundError('Content not found');
     }
-    return this.dto(c, false);
+    await this.content.incrementViewCount(id);
+    return this.dto({ ...c, viewCount: c.viewCount + 1 }, false, viewerId);
   }
 
   async listPublic(filter: ListContentFilter): Promise<{ items: ContentDTO[]; total: number }> {
     const { items, total } = await this.content.list(filter, true);
-    const fileMap = await this.files.listActiveForContents(items.map((c) => c.id));
-    const dtos = await Promise.all(
-      items.map(async (c) =>
-        this.assemble(c, await this.content.categoriesFor(c.id), fileMap.get(c.id) ?? [], false),
-      ),
-    );
-    return { items: dtos, total };
+    return { items: await this.assembleMany(items, false, filter.viewerId), total };
   }
 
   // --- files -----------------------------------------------
@@ -511,5 +562,144 @@ export class ContentService {
       expiresIn: DOWNLOAD_URL_TTL_SECONDS,
     });
     return { url, expiresInSeconds: DOWNLOAD_URL_TTL_SECONDS };
+  }
+
+  // --- engagement: bookmarks / likes --------------------------
+  //
+  // Self-service, auth-only (no `content.*` permission needed — any signed-in
+  // user may save/like a PUBLISHED item), mirrors `TipService.setBookmark` /
+  // `setHelpful` exactly, including pairing the like toggle with the
+  // denormalised `contents.like_count` update in the same transaction.
+
+  private async assertPubliclyVisible(contentId: string): Promise<Content> {
+    const c = await this.content.findById(contentId);
+    if (!c || c.status !== 'PUBLISHED' || c.deletedAt !== null) {
+      throw new NotFoundError('Content not found');
+    }
+    return c;
+  }
+
+  async setBookmark(userId: string, contentId: string, bookmarked: boolean): Promise<boolean> {
+    await this.assertPubliclyVisible(contentId);
+    return this.db.transaction(async (tx) => {
+      if (bookmarked) {
+        await this.engagement.addBookmark(userId, contentId, tx);
+        return true;
+      }
+      await this.engagement.removeBookmark(userId, contentId, tx);
+      return false;
+    });
+  }
+
+  private async currentLikeCount(contentId: string, tx: Knex.Transaction): Promise<number> {
+    const c = await this.content.findById(contentId, tx);
+    return c?.likeCount ?? 0;
+  }
+
+  async setLike(
+    userId: string,
+    contentId: string,
+    liked: boolean,
+  ): Promise<{ isLiked: boolean; likeCount: number }> {
+    await this.assertPubliclyVisible(contentId);
+    const likeCount = await this.db.transaction(async (tx) => {
+      if (liked) {
+        const inserted = await this.engagement.addLike(userId, contentId, tx);
+        return inserted
+          ? this.content.adjustLikeCount(contentId, 1, tx)
+          : this.currentLikeCount(contentId, tx);
+      }
+      const removed = await this.engagement.removeLike(userId, contentId, tx);
+      return removed > 0
+        ? this.content.adjustLikeCount(contentId, -1, tx)
+        : this.currentLikeCount(contentId, tx);
+    });
+    return { isLiked: liked, likeCount };
+  }
+
+  // --- engagement: comments ------------------------------------
+
+  private toCommentDTO(c: {
+    id: string;
+    contentId: string;
+    userId: string;
+    body: string;
+    createdAt: string;
+    updatedAt: string;
+    author: { firstName: string; lastName: string };
+  }): ContentCommentDTO {
+    return {
+      id: c.id,
+      contentId: c.contentId,
+      userId: c.userId,
+      authorName: c.author,
+      body: c.body,
+      createdAt: c.createdAt,
+      updatedAt: c.updatedAt,
+    };
+  }
+
+  async listComments(
+    contentId: string,
+    page: number,
+    pageSize: number,
+  ): Promise<{ items: ContentCommentDTO[]; total: number }> {
+    await this.assertPubliclyVisible(contentId);
+    const { items, total } = await this.comments.listForContent(contentId, page, pageSize);
+    return { items: items.map((c) => this.toCommentDTO(c)), total };
+  }
+
+  async addComment(userId: string, contentId: string, body: string): Promise<ContentCommentDTO> {
+    await this.assertPubliclyVisible(contentId);
+    const created = await this.db.transaction(async (tx) => {
+      const comment = await this.comments.create(contentId, userId, body, tx);
+      await this.content.adjustCommentCount(contentId, 1, tx);
+      return comment;
+    });
+    const withAuthor = await this.comments.findByIdWithAuthor(created.id);
+    if (!withAuthor) throw new Error('content comment not found immediately after creation');
+    this.events.publish('content.comment.created', { contentId, commentId: created.id });
+    return this.toCommentDTO(withAuthor);
+  }
+
+  /** Own comment only — no moderation delete for other users' comments yet. */
+  async deleteComment(userId: string, contentId: string, commentId: string): Promise<void> {
+    const comment = await this.comments.findById(commentId);
+    if (!comment || comment.contentId !== contentId || comment.deletedAt !== null) {
+      throw new NotFoundError('Comment not found');
+    }
+    if (comment.userId !== userId) {
+      throw new ForbiddenError('You can only delete your own comment');
+    }
+    await this.db.transaction(async (tx) => {
+      await this.comments.softDelete(commentId, tx);
+      await this.content.adjustCommentCount(contentId, -1, tx);
+    });
+    this.events.publish('content.comment.deleted', { contentId, commentId });
+  }
+
+  // --- engagement: ratings (books) ------------------------------
+
+  async getRating(
+    contentId: string,
+    viewerId?: string,
+  ): Promise<{ aggregate: ContentRatingAggregate; myRating: number | null }> {
+    await this.assertPubliclyVisible(contentId);
+    const [aggregate, own] = await Promise.all([
+      this.ratings.aggregate(contentId),
+      viewerId ? this.ratings.findOwn(contentId, viewerId) : Promise.resolve(null),
+    ]);
+    return { aggregate, myRating: own?.rating ?? null };
+  }
+
+  async submitRating(
+    userId: string,
+    contentId: string,
+    rating: number,
+  ): Promise<ContentRatingAggregate> {
+    await this.assertPubliclyVisible(contentId);
+    await this.ratings.upsert(contentId, userId, rating);
+    this.events.publish('content.rating.submitted', { contentId, userId, rating });
+    return this.ratings.aggregate(contentId);
   }
 }

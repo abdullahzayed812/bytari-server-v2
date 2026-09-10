@@ -22,9 +22,11 @@ import type { Knex } from 'knex';
  * `req.auth` — never from the body.
  *
  * `ai_settings` is a tiny admin-owned key/value flag table (CONSULTATION_AI,
- * INQUIRY_AI). It deliberately has NO FK to `users` so the test-suite's
- * `TRUNCATE users CASCADE` never wipes it; the service upserts and reads
- * default to `false`, so a missing row is harmless.
+ * INQUIRY_AI, SUPPORT_AI — the latter seeded disabled, consolidated here from
+ * `20260922010000_support_messages.ts` since support has no AI responder but
+ * the flag keeps the table uniform / future-proof). It deliberately has NO FK
+ * to `users` so the test-suite's `TRUNCATE users CASCADE` never wipes it; the
+ * service upserts and reads default to `false`, so a missing row is harmless.
  */
 async function createThreadTables(
   knex: Knex,
@@ -109,11 +111,12 @@ export async function up(knex: Knex): Promise<void> {
   });
   await knex.raw(
     `ALTER TABLE ai_settings ADD CONSTRAINT chk_ai_settings_key
-       CHECK (key IN ('CONSULTATION_AI', 'INQUIRY_AI'))`,
+       CHECK (key IN ('CONSULTATION_AI', 'INQUIRY_AI', 'SUPPORT_AI'))`,
   );
   await knex('ai_settings').insert([
     { key: 'CONSULTATION_AI', enabled: false },
     { key: 'INQUIRY_AI', enabled: false },
+    { key: 'SUPPORT_AI', enabled: false },
   ]);
 }
 

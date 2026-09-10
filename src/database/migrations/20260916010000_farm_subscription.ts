@@ -3,8 +3,9 @@ import type { Knex } from 'knex';
 /**
  * Poultry Farm subscription layer — separate from `organizations.status`
  * (the approval state). A FARM's subscription validity is derived server-side
- * from `farm_details.subscription_start_date`/`subscription_end_date` vs
- * `now()` (see `computeFarmSubscriptionStatus` in
+ * from `farm_details.subscription_start_date`/`subscription_end_date`
+ * (consolidated in `20260827010000_organizations.ts`, which owns
+ * `farm_details`) vs `now()` (see `computeFarmSubscriptionStatus` in
  * `src/modules/farms/domain/farm-subscription.types.ts`) — deliberately NOT a
  * stored status column, so there is nothing to drift out of sync.
  *
@@ -14,20 +15,6 @@ import type { Knex } from 'knex';
  * a time, `decided_by`/`decided_at`/`decision_reason` on resolution.
  */
 export async function up(knex: Knex): Promise<void> {
-  await knex.schema.alterTable('farm_details', (t) => {
-    t.date('subscription_start_date').nullable();
-    t.date('subscription_end_date').nullable();
-  });
-  await knex.raw(`
-    ALTER TABLE farm_details
-      ADD CONSTRAINT chk_farm_details_subscription_dates
-      CHECK (
-        subscription_start_date IS NULL
-        OR subscription_end_date IS NULL
-        OR subscription_end_date >= subscription_start_date
-      )
-  `);
-
   await knex.schema.createTable('farm_subscription_renewal_requests', (t) => {
     t.uuid('id').primary().defaultTo(knex.raw('gen_random_uuid()'));
     t.uuid('organization_id')
@@ -71,12 +58,4 @@ export async function up(knex: Knex): Promise<void> {
 
 export async function down(knex: Knex): Promise<void> {
   await knex.schema.dropTableIfExists('farm_subscription_renewal_requests');
-
-  await knex.raw(
-    `ALTER TABLE farm_details DROP CONSTRAINT IF EXISTS chk_farm_details_subscription_dates`,
-  );
-  await knex.schema.alterTable('farm_details', (t) => {
-    t.dropColumn('subscription_start_date');
-    t.dropColumn('subscription_end_date');
-  });
 }

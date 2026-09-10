@@ -30,6 +30,13 @@ export async function up(knex: Knex): Promise<void> {
     t.timestamp('deactivated_at', { useTz: true }).nullable();
     t.timestamp('created_at', { useTz: true }).notNullable().defaultTo(knex.fn.now());
     t.timestamp('updated_at', { useTz: true }).notNullable().defaultTo(knex.fn.now());
+    // Descriptive fields the Lost / Adoption / Mating listing forms need to
+    // collect about the animal itself — properties of the animal, not the
+    // listing, so they stay true across any future listing of it.
+    t.text('color').nullable();
+    t.text('distinguishing_features').nullable();
+    t.text('age_estimate').nullable();
+    t.specificType('gallery_keys', 'text[]').notNullable().defaultTo('{}');
 
     t.index('created_by', 'idx_animals_created_by');
     t.index('status', 'idx_animals_status');
@@ -47,6 +54,11 @@ export async function up(knex: Knex): Promise<void> {
     ALTER TABLE animals
       ADD CONSTRAINT chk_animals_species
       CHECK (species IN ('DOG', 'CAT', 'BIRD', 'RABBIT', 'REPTILE', 'FISH', 'HORSE', 'OTHER'))
+  `);
+  await knex.raw(`
+    ALTER TABLE animals
+      ADD CONSTRAINT chk_animals_age_estimate
+      CHECK (age_estimate IS NULL OR age_estimate IN ('UNDER_1_YEAR', 'ONE_TO_3_YEARS', 'THREE_TO_7_YEARS', 'OVER_7_YEARS'))
   `);
 
   await knex.schema.createTable('animal_ownerships', (t) => {

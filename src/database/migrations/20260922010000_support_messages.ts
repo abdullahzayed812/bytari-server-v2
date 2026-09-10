@@ -11,13 +11,16 @@ import type { Knex } from 'knex';
  *   support_thread_messages  (no animal reference — it is a general support msg)
  *
  * Responder side = ADMIN, or an ACTIVE `SUPPORT` system-supervisor domain
- * assignment (`SUPERVISOR_DOMAIN_PERMISSIONS.SUPPORT`). Message `source`,
+ * assignment (`SUPERVISOR_DOMAIN_PERMISSIONS.SUPPORT` — the `SUPPORT` value
+ * lives in `system_supervisor_assignments.domain`'s CHECK, consolidated in
+ * `20260826050000_system_supervisor_assignments.ts`). Message `source`,
  * OPEN/CLOSED lifecycle and the sender-block mechanism are identical to the
  * other two kinds. Creation is authentication-only (no eligibility gate).
  *
- * Also: extends `system_supervisor_assignments.domain` with `SUPPORT` and
- * `ai_settings.key` with `SUPPORT_AI` (seeded disabled — support has no AI
- * responder, but the flag keeps the table uniform / future-proof).
+ * `ai_settings.key`'s `SUPPORT_AI` row (seeded disabled — support has no AI
+ * responder, but the flag keeps the table uniform / future-proof) is
+ * consolidated in `20260903010000_consultations_inquiries.ts`, which owns
+ * `ai_settings`.
  */
 async function createThreadTables(
   knex: Knex,
@@ -74,61 +77,14 @@ async function createThreadTables(
   );
 }
 
-const DOMAINS_BEFORE = [
-  'ANIMAL',
-  'CLINIC',
-  'STORE',
-  'CONTENT',
-  'CONSULTATION',
-  'INQUIRY',
-  'ADVERTISEMENT',
-  'MARKET',
-  'PET_OWNER_STORE',
-];
-const DOMAINS_AFTER = [...DOMAINS_BEFORE, 'SUPPORT'];
-
 export async function up(knex: Knex): Promise<void> {
   await createThreadTables(knex, {
     thread: 'support_threads',
     message: 'support_thread_messages',
   });
-
-  // --- supervisor domain -------------------------------------------
-  await knex.raw(`ALTER TABLE system_supervisor_assignments DROP CONSTRAINT chk_supervisor_domain`);
-  await knex.raw(`
-    ALTER TABLE system_supervisor_assignments
-      ADD CONSTRAINT chk_supervisor_domain
-      CHECK (domain IN (${DOMAINS_AFTER.map((d) => `'${d}'`).join(', ')}))
-  `);
-
-  // --- ai_settings key -------------------------------------------
-  await knex.raw(`ALTER TABLE ai_settings DROP CONSTRAINT chk_ai_settings_key`);
-  await knex.raw(`
-    ALTER TABLE ai_settings ADD CONSTRAINT chk_ai_settings_key
-      CHECK (key IN ('CONSULTATION_AI', 'INQUIRY_AI', 'SUPPORT_AI'))
-  `);
-  await knex('ai_settings')
-    .insert({ key: 'SUPPORT_AI', enabled: false })
-    .onConflict('key')
-    .ignore();
 }
 
 export async function down(knex: Knex): Promise<void> {
-  await knex('ai_settings').where({ key: 'SUPPORT_AI' }).del();
-  await knex.raw(`ALTER TABLE ai_settings DROP CONSTRAINT chk_ai_settings_key`);
-  await knex.raw(`
-    ALTER TABLE ai_settings ADD CONSTRAINT chk_ai_settings_key
-      CHECK (key IN ('CONSULTATION_AI', 'INQUIRY_AI'))
-  `);
-
-  await knex.raw(`DELETE FROM system_supervisor_assignments WHERE domain = 'SUPPORT'`);
-  await knex.raw(`ALTER TABLE system_supervisor_assignments DROP CONSTRAINT chk_supervisor_domain`);
-  await knex.raw(`
-    ALTER TABLE system_supervisor_assignments
-      ADD CONSTRAINT chk_supervisor_domain
-      CHECK (domain IN (${DOMAINS_BEFORE.map((d) => `'${d}'`).join(', ')}))
-  `);
-
   await knex.schema.dropTableIfExists('support_thread_messages');
   await knex.schema.dropTableIfExists('support_threads');
 }

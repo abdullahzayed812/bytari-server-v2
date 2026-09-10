@@ -7,10 +7,13 @@ import { auditContextFromRequest, type AuditContextResult } from '../../audit/au
 import { requireAuth } from '../../auth/authenticate.middleware.js';
 import type { ContentService } from '../application/content.service.js';
 import type {
+  AddCommentBody,
   CreateContentBody,
   ListAdminContentQuery,
+  ListCommentsQuery,
   ListPublicContentQuery,
   RegisterFileBody,
+  SubmitRatingBody,
   UpdateContentBody,
   UploadUrlBody,
 } from './content.schemas.js';
@@ -32,13 +35,16 @@ export class ContentController {
       type: q.type,
       categoryId: q.categoryId,
       search: q.q,
+      sort: q.sort,
+      bookmarkedOnly: q.bookmarkedOnly,
+      viewerId: requireAuth(req).userId,
     });
     sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
   };
 
   getPublic = async (req: Request, res: Response): Promise<void> => {
     const { contentId } = validatedParams<{ contentId: string }>(req);
-    sendSuccess(res, await this.content.getPublic(contentId));
+    sendSuccess(res, await this.content.getPublic(contentId, requireAuth(req).userId));
   };
 
   downloadPublic = async (req: Request, res: Response): Promise<void> => {
@@ -47,6 +53,68 @@ export class ContentController {
       res,
       await this.content.fileDownloadUrl(contentId, fileId, { requirePublished: true }),
     );
+  };
+
+  // --- engagement: bookmarks / likes -------------------------
+
+  bookmark = async (req: Request, res: Response): Promise<void> => {
+    const { contentId } = validatedParams<{ contentId: string }>(req);
+    await this.content.setBookmark(requireAuth(req).userId, contentId, true);
+    sendSuccess(res, { isBookmarked: true });
+  };
+
+  unbookmark = async (req: Request, res: Response): Promise<void> => {
+    const { contentId } = validatedParams<{ contentId: string }>(req);
+    await this.content.setBookmark(requireAuth(req).userId, contentId, false);
+    sendSuccess(res, { isBookmarked: false });
+  };
+
+  like = async (req: Request, res: Response): Promise<void> => {
+    const { contentId } = validatedParams<{ contentId: string }>(req);
+    sendSuccess(res, await this.content.setLike(requireAuth(req).userId, contentId, true));
+  };
+
+  unlike = async (req: Request, res: Response): Promise<void> => {
+    const { contentId } = validatedParams<{ contentId: string }>(req);
+    sendSuccess(res, await this.content.setLike(requireAuth(req).userId, contentId, false));
+  };
+
+  // --- engagement: comments -----------------------------------
+
+  listComments = async (req: Request, res: Response): Promise<void> => {
+    const { contentId } = validatedParams<{ contentId: string }>(req);
+    const q = validatedQuery<ListCommentsQuery>(req);
+    const { items, total } = await this.content.listComments(contentId, q.page, q.pageSize);
+    sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
+  };
+
+  addComment = async (req: Request, res: Response): Promise<void> => {
+    const { contentId } = validatedParams<{ contentId: string }>(req);
+    const { body } = validatedBody<AddCommentBody>(req);
+    sendSuccess(
+      res,
+      await this.content.addComment(requireAuth(req).userId, contentId, body),
+      StatusCodes.CREATED,
+    );
+  };
+
+  deleteComment = async (req: Request, res: Response): Promise<void> => {
+    const { contentId, commentId } = validatedParams<{ contentId: string; commentId: string }>(req);
+    await this.content.deleteComment(requireAuth(req).userId, contentId, commentId);
+    sendSuccess(res, { deleted: true });
+  };
+
+  // --- engagement: rating (books) -----------------------------
+
+  getRating = async (req: Request, res: Response): Promise<void> => {
+    const { contentId } = validatedParams<{ contentId: string }>(req);
+    sendSuccess(res, await this.content.getRating(contentId, requireAuth(req).userId));
+  };
+
+  submitRating = async (req: Request, res: Response): Promise<void> => {
+    const { contentId } = validatedParams<{ contentId: string }>(req);
+    const { rating } = validatedBody<SubmitRatingBody>(req);
+    sendSuccess(res, await this.content.submitRating(requireAuth(req).userId, contentId, rating));
   };
 
   // --- admin / supervisor -----------------------------------

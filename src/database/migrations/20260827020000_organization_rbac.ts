@@ -10,15 +10,11 @@ import type { Knex } from 'knex';
  * organization_role, plus (for SUPERVISOR members) an explicitly selected set
  * stored per-membership in `organization_supervisor_permissions` (later migration).
  *
- * Also relaxes the global `permissions.key` CHECK from exactly two segments to
- * two-or-more, so global keys like `organization.admin.approve` are allowed.
+ * The global `permissions.key` CHECK (two-or-more dot segments, so keys like
+ * `organization.admin.approve` are allowed) is consolidated in
+ * `20260826020000_rbac.ts`, which owns the `permissions` table.
  */
 export async function up(knex: Knex): Promise<void> {
-  await knex.raw(`ALTER TABLE permissions DROP CONSTRAINT IF EXISTS chk_permissions_key`);
-  await knex.raw(
-    `ALTER TABLE permissions ADD CONSTRAINT chk_permissions_key CHECK (key ~ '^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$')`,
-  );
-
   await knex.schema.createTable('organization_roles', (t) => {
     t.uuid('id').primary().defaultTo(knex.raw('gen_random_uuid()'));
     t.text('key').notNullable().unique();
@@ -64,8 +60,4 @@ export async function down(knex: Knex): Promise<void> {
   await knex.schema.dropTableIfExists('organization_role_permissions');
   await knex.schema.dropTableIfExists('organization_permissions');
   await knex.schema.dropTableIfExists('organization_roles');
-  await knex.raw(`ALTER TABLE permissions DROP CONSTRAINT IF EXISTS chk_permissions_key`);
-  await knex.raw(
-    `ALTER TABLE permissions ADD CONSTRAINT chk_permissions_key CHECK (key ~ '^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$')`,
-  );
 }

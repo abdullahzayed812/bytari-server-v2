@@ -1,23 +1,17 @@
 import type { Knex } from 'knex';
 
 /**
- * Mobile Auth & Registration — veterinarian applications gain a `sub_type`
- * (VETERINARIAN vs STUDENT) and supporting identity documents. Documents are
- * METADATA ONLY (`storage_key`) — the bytes live in Object Storage, uploaded
- * via the same presigned-URL flow as `content_files` (§ ARCHITECTURE.md §7.4).
+ * Mobile Auth & Registration — supporting identity documents for a
+ * veterinarian application (`veterinarian_applications.sub_type`, VETERINARIAN
+ * vs STUDENT, is consolidated in `20260826040000_veterinarian_applications.ts`,
+ * which owns that table). Documents are METADATA ONLY (`storage_key`) — the
+ * bytes live in Object Storage, uploaded via the same presigned-URL flow as
+ * `content_files` (§ ARCHITECTURE.md §7.4).
  *
  * Soft delete (`deleted_at`) keeps re-applications independent: a rejected
  * application's documents stay tied to it, untouched by a later re-apply.
  */
 export async function up(knex: Knex): Promise<void> {
-  await knex.schema.alterTable('veterinarian_applications', (t) => {
-    t.text('sub_type').notNullable().defaultTo('VETERINARIAN');
-  });
-  await knex.raw(
-    `ALTER TABLE veterinarian_applications ADD CONSTRAINT chk_veterinarian_applications_sub_type
-       CHECK (sub_type IN ('VETERINARIAN', 'STUDENT'))`,
-  );
-
   await knex.schema.createTable('veterinarian_application_documents', (t) => {
     t.uuid('id').primary().defaultTo(knex.raw('gen_random_uuid()'));
     t.uuid('application_id')
@@ -59,7 +53,4 @@ export async function up(knex: Knex): Promise<void> {
 
 export async function down(knex: Knex): Promise<void> {
   await knex.schema.dropTableIfExists('veterinarian_application_documents');
-  await knex.schema.alterTable('veterinarian_applications', (t) => {
-    t.dropColumn('sub_type');
-  });
 }

@@ -33,9 +33,13 @@ import {
 import { createFarmRouter, createPoultryOpsRouter } from '../modules/farms/index.js';
 import { createSheepBatchRouter, createCattleBatchRouter } from '../modules/livestock/index.js';
 import {
-  createPublicProductRouter,
-  createVeterinaryStoreRouter,
+  createPublicVeterinaryStoreProductRouter,
+  createVeterinaryStoreProductRouter,
 } from '../modules/veterinary-store/index.js';
+import {
+  createPublicVeterinaryOfficeProductRouter,
+  createVeterinaryOfficeProductRouter,
+} from '../modules/veterinary-office/index.js';
 import {
   createPetOwnerStoreRouter,
   createAdminPetOwnerStoreRouter,
@@ -160,8 +164,10 @@ export function createApiRouter(c: Container): Router {
   // --- Phase 10: veterinary store products --------------------
   // Product CRUD + inventory extend `/organizations/:organizationId/products`;
   // the store organization itself (create / approve / members) is Phase 3.
-  router.use('/organizations', createVeterinaryStoreRouter(c));
-  router.use('/organizations', createPublicProductRouter(c));
+  router.use('/organizations', createVeterinaryStoreProductRouter(c));
+  router.use('/organizations', createPublicVeterinaryStoreProductRouter(c));
+  router.use('/organizations', createVeterinaryOfficeProductRouter(c));
+  router.use('/organizations', createPublicVeterinaryOfficeProductRouter(c));
 
   // --- Pet Owners Store: platform-run consumer storefront ----
   // Dedicated `pet_owner_store_*` tables. Consumer browse / cart / checkout /

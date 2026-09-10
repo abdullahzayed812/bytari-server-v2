@@ -4,11 +4,11 @@ import { buildTestApp } from '../helpers/app.js';
 import { closeTestDb, ensureSchema, getTestDb, resetDb } from '../helpers/db.js';
 import {
   addOrganizationMember,
-  adjustProductStock,
+  adjustVeterinaryStoreProductStock,
   assignOrganizationSupervisor,
   bearer,
   createActiveOrganization,
-  createProduct,
+  createVeterinaryStoreProduct,
   registerAdmin,
   registerApprovedVet,
   registerUser,
@@ -36,7 +36,7 @@ async function setup() {
 }
 
 const pPath = (orgId: string, id?: string): string =>
-  `/api/v1/organizations/${orgId}/products${id ? `/${id}` : ''}`;
+  `/api/v1/organizations/${orgId}/store-products${id ? `/${id}` : ''}`;
 
 describe('veterinary store products — CRUD', () => {
   it('an owner creates, reads, lists, updates and deactivates a product', async () => {
@@ -102,7 +102,7 @@ describe('veterinary store products — CRUD', () => {
       const res = await request(app).post(pPath(store.id)).set(bearer(owner.accessToken)).send(bad);
       expect(res.status).toBe(422);
     }
-    const prod = await createProduct(app, owner.accessToken, store.id);
+    const prod = await createVeterinaryStoreProduct(app, owner.accessToken, store.id);
     const emptyPatch = await request(app)
       .patch(pPath(store.id, prod.id))
       .set(bearer(owner.accessToken))
@@ -112,12 +112,12 @@ describe('veterinary store products — CRUD', () => {
 
   it('supports type / status filters and sorting', async () => {
     const { owner, store } = await setup();
-    await createProduct(app, owner.accessToken, store.id, {
+    await createVeterinaryStoreProduct(app, owner.accessToken, store.id, {
       name: 'B-med',
       productType: 'MEDICINE',
       price: '30.00',
     });
-    await createProduct(app, owner.accessToken, store.id, {
+    await createVeterinaryStoreProduct(app, owner.accessToken, store.id, {
       name: 'A-equip',
       productType: 'EQUIPMENT_SUPPLY',
       price: '10.00',
@@ -144,7 +144,7 @@ describe('veterinary store products — CRUD', () => {
       type: 'VETERINARY_STORE',
       name: 'Other Store',
     });
-    const prod = await createProduct(app, owner.accessToken, store.id, { stockQuantity: 5 });
+    const prod = await createVeterinaryStoreProduct(app, owner.accessToken, store.id, { stockQuantity: 5 });
 
     const res = await request(app)
       .patch(pPath(store.id, prod.id))
@@ -168,10 +168,10 @@ describe('veterinary store products — CRUD', () => {
 });
 
 describe('veterinary store products — organization type gate', () => {
-  it('rejects product operations on non-product-capable organizations with 400', async () => {
+  it('rejects product operations on non-VETERINARY_STORE organizations with 400, including VETERINARY_OFFICE', async () => {
     const admin = await registerAdmin(app);
     const owner = await registerApprovedVet(app);
-    for (const type of ['CLINIC', 'FARM'] as const) {
+    for (const type of ['CLINIC', 'FARM', 'VETERINARY_OFFICE'] as const) {
       const org = await createActiveOrganization(app, owner.accessToken, admin.accessToken, {
         type,
         name: `${type} org`,
@@ -185,7 +185,7 @@ describe('veterinary store products — organization type gate', () => {
     }
   });
 
-  it('a VETERINARY_OFFICE can also own products (Veterinarian Home → المكاتب البيطرية)', async () => {
+  it('a VETERINARY_OFFICE has no /store-products route at all — 400, never leaking into the store catalog', async () => {
     const admin = await registerAdmin(app);
     const owner = await registerApprovedVet(app);
     const office = await createActiveOrganization(app, owner.accessToken, admin.accessToken, {
@@ -196,8 +196,9 @@ describe('veterinary store products — organization type gate', () => {
       .post(pPath(office.id))
       .set(bearer(owner.accessToken))
       .send({ name: 'Antibiotic', productType: 'MEDICINE', price: '25000' });
-    expect(res.status).toBe(201);
-    expect(res.body.data).toMatchObject({ organizationId: office.id, organizationType: 'VETERINARY_OFFICE' });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('ORGANIZATION_TYPE_NOT_SUPPORTED');
+    expect(await getTestDb()('veterinary_store_products').where({ organization_id: office.id })).toHaveLength(0);
   });
 
   it('the database composite FK refuses a product pointing at a non-store organization', async () => {
@@ -221,7 +222,7 @@ describe('veterinary store products — organization type gate', () => {
 describe('veterinary store products — authorization', () => {
   it('a STAFF member can read but not create / update / delete', async () => {
     const { owner, staff, store } = await setup();
-    const prod = await createProduct(app, owner.accessToken, store.id);
+    const prod = await createVeterinaryStoreProduct(app, owner.accessToken, store.id);
 
     const read = await request(app).get(pPath(store.id)).set(bearer(staff.accessToken));
     expect(read.status).toBe(200);
@@ -247,7 +248,7 @@ describe('veterinary store products — authorization', () => {
       userId: supervisor.id,
       permissions: ['product.read', 'product.create'],
     });
-    const prod = await createProduct(app, owner.accessToken, store.id);
+    const prod = await createVeterinaryStoreProduct(app, owner.accessToken, store.id);
 
     const read = await request(app).get(pPath(store.id)).set(bearer(supervisor.accessToken));
     expect(read.status).toBe(200);
@@ -270,7 +271,7 @@ describe('veterinary store products — authorization', () => {
       .set(bearer(supervisor.accessToken));
     expect(del.status).toBe(403);
 
-    const stock = await adjustProductStock(app, supervisor.accessToken, store.id, prod.id, 5);
+    const stock = await adjustVeterinaryStoreProductStock(app, supervisor.accessToken, store.id, prod.id, 5);
     expect(stock.status).toBe(403);
   });
 
@@ -294,7 +295,7 @@ describe('veterinary store products — authorization', () => {
 describe('veterinary store products — cross-store IDOR', () => {
   it('a member of Store B cannot read / patch / delete Store A’s product', async () => {
     const { owner: ownerA, store: storeA } = await setup();
-    const prodA = await createProduct(app, ownerA.accessToken, storeA.id);
+    const prodA = await createVeterinaryStoreProduct(app, ownerA.accessToken, storeA.id);
 
     const admin2 = await registerAdmin(app);
     const ownerB = await registerApprovedVet(app);
@@ -339,18 +340,18 @@ describe('veterinary store products — cross-store IDOR', () => {
 describe('veterinary store products — inventory', () => {
   it('adjusts stock by a signed delta and records the movement in the audit metadata', async () => {
     const { owner, store } = await setup();
-    const prod = await createProduct(app, owner.accessToken, store.id, { stockQuantity: 10 });
+    const prod = await createVeterinaryStoreProduct(app, owner.accessToken, store.id, { stockQuantity: 10 });
 
-    const up = await adjustProductStock(app, owner.accessToken, store.id, prod.id, 15, 'restock');
+    const up = await adjustVeterinaryStoreProductStock(app, owner.accessToken, store.id, prod.id, 15, 'restock');
     expect(up.status).toBe(200);
     expect(up.body.data.stockQuantity).toBe(25);
 
-    const down = await adjustProductStock(app, owner.accessToken, store.id, prod.id, -5);
+    const down = await adjustVeterinaryStoreProductStock(app, owner.accessToken, store.id, prod.id, -5);
     expect(down.status).toBe(200);
     expect(down.body.data.stockQuantity).toBe(20);
 
     const adj = (await getTestDb()('audit_logs')
-      .where({ action: 'PRODUCT_INVENTORY_ADJUSTED', entity_id: prod.id })
+      .where({ action: 'VETERINARY_STORE_PRODUCT_INVENTORY_ADJUSTED', entity_id: prod.id })
       .orderBy('created_at', 'asc')
       .select('actor_user_id', 'metadata')) as Array<{
       actor_user_id: string;
@@ -370,9 +371,9 @@ describe('veterinary store products — inventory', () => {
 
   it('refuses an adjustment that would take stock below zero (409)', async () => {
     const { owner, store } = await setup();
-    const prod = await createProduct(app, owner.accessToken, store.id, { stockQuantity: 3 });
+    const prod = await createVeterinaryStoreProduct(app, owner.accessToken, store.id, { stockQuantity: 3 });
 
-    const res = await adjustProductStock(app, owner.accessToken, store.id, prod.id, -10);
+    const res = await adjustVeterinaryStoreProductStock(app, owner.accessToken, store.id, prod.id, -10);
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('INSUFFICIENT_STOCK');
 
@@ -384,14 +385,14 @@ describe('veterinary store products — inventory', () => {
 
   it('rejects a zero delta with 422', async () => {
     const { owner, store } = await setup();
-    const prod = await createProduct(app, owner.accessToken, store.id);
-    const res = await adjustProductStock(app, owner.accessToken, store.id, prod.id, 0);
+    const prod = await createVeterinaryStoreProduct(app, owner.accessToken, store.id);
+    const res = await adjustVeterinaryStoreProductStock(app, owner.accessToken, store.id, prod.id, 0);
     expect(res.status).toBe(422);
   });
 
   it('a generic PATCH cannot change stock', async () => {
     const { owner, store } = await setup();
-    const prod = await createProduct(app, owner.accessToken, store.id, { stockQuantity: 7 });
+    const prod = await createVeterinaryStoreProduct(app, owner.accessToken, store.id, { stockQuantity: 7 });
     const res = await request(app)
       .patch(pPath(store.id, prod.id))
       .set(bearer(owner.accessToken))
@@ -404,7 +405,7 @@ describe('veterinary store products — inventory', () => {
 describe('veterinary store products — events & audit', () => {
   it('create / update / deactivate write audit with the acting user and IDs', async () => {
     const { owner, store } = await setup();
-    const prod = await createProduct(app, owner.accessToken, store.id);
+    const prod = await createVeterinaryStoreProduct(app, owner.accessToken, store.id);
     await request(app)
       .patch(pPath(store.id, prod.id))
       .set(bearer(owner.accessToken))
@@ -420,9 +421,9 @@ describe('veterinary store products — events & audit', () => {
       metadata: Record<string, unknown>;
     }>;
     expect(rows.map((r) => r.action)).toEqual([
-      'PRODUCT_CREATED',
-      'PRODUCT_UPDATED',
-      'PRODUCT_DEACTIVATED',
+      'VETERINARY_STORE_PRODUCT_CREATED',
+      'VETERINARY_STORE_PRODUCT_UPDATED',
+      'VETERINARY_STORE_PRODUCT_DEACTIVATED',
     ]);
     for (const r of rows) {
       expect(r.actor_user_id).toBe(owner.id);
@@ -444,7 +445,7 @@ describe('veterinary store products — events & audit', () => {
       .send({ name: 'x', productType: 'MEDICINE' });
 
     const cnt = await getTestDb()('audit_logs')
-      .where({ action: 'PRODUCT_CREATED' })
+      .where({ action: 'VETERINARY_STORE_PRODUCT_CREATED' })
       .count<{ count: string }>({ count: '*' })
       .first();
     expect(Number(cnt?.count ?? 0)).toBe(0);

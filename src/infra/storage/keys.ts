@@ -25,6 +25,7 @@ export const StoragePrefix = {
   petOwnerStoreCategories: 'pet-owner-store/categories',
   vetServiceImages: 'vet-services',
   veterinaryStoreProductImages: 'veterinary-store/products',
+  veterinaryOfficeProductImages: 'veterinary-office/products',
   misc: 'misc',
 } as const;
 

@@ -1,4 +1,4 @@
-import type { ContentFileKind, ContentStatus, ContentType } from './content.constants.js';
+import type { ContentFileKind, ContentSort, ContentStatus, ContentType } from './content.constants.js';
 
 // --- internal aggregates -----------------------------------------
 
@@ -11,6 +11,13 @@ export interface Content {
   authorName: string | null;
   status: ContentStatus;
   publishedAt: string | null;
+  /** Book-only; null for ARTICLE/MAGAZINE. */
+  language: string | null;
+  pageCount: number | null;
+  publishYear: number | null;
+  likeCount: number;
+  commentCount: number;
+  viewCount: number;
   createdByUserId: string | null;
   updatedByUserId: string | null;
   deletedAt: string | null;
@@ -69,6 +76,12 @@ export interface PublicContentFileDTO {
   sizeBytes: number;
 }
 
+/** `null` average when a BOOK has no ratings yet; always present (0/null) for non-BOOK types. */
+export interface ContentRatingAggregate {
+  average: number | null;
+  count: number;
+}
+
 export interface ContentDTO {
   id: string;
   type: ContentType;
@@ -78,6 +91,16 @@ export interface ContentDTO {
   authorName: string | null;
   status: ContentStatus;
   publishedAt: string | null;
+  language: string | null;
+  pageCount: number | null;
+  publishYear: number | null;
+  likeCount: number;
+  commentCount: number;
+  viewCount: number;
+  rating: ContentRatingAggregate;
+  /** Present only when the request is authenticated as a specific viewer. */
+  isBookmarked: boolean;
+  isLiked: boolean;
   categories: Category[];
   files: AdminContentFileDTO[] | PublicContentFileDTO[];
   createdByUserId: string | null;
@@ -85,6 +108,81 @@ export interface ContentDTO {
   deletedAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+// --- comments ---------------------------------------------------
+
+export interface ContentComment {
+  id: string;
+  contentId: string;
+  userId: string;
+  body: string;
+  deletedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ContentCommentRow {
+  id: string;
+  content_id: string;
+  user_id: string;
+  body: string;
+  deleted_at: Date | null;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface ContentCommentDTO {
+  id: string;
+  contentId: string;
+  userId: string;
+  authorName: { firstName: string; lastName: string };
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function rowToContentComment(row: ContentCommentRow): ContentComment {
+  return {
+    id: row.id,
+    contentId: row.content_id,
+    userId: row.user_id,
+    body: row.body,
+    deletedAt: row.deleted_at ? row.deleted_at.toISOString() : null,
+    createdAt: row.created_at.toISOString(),
+    updatedAt: row.updated_at.toISOString(),
+  };
+}
+
+// --- ratings ------------------------------------------------------
+
+export interface ContentRating {
+  id: string;
+  contentId: string;
+  userId: string;
+  rating: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ContentRatingRow {
+  id: string;
+  content_id: string;
+  user_id: string;
+  rating: number;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export function rowToContentRating(row: ContentRatingRow): ContentRating {
+  return {
+    id: row.id,
+    contentId: row.content_id,
+    userId: row.user_id,
+    rating: row.rating,
+    createdAt: row.created_at.toISOString(),
+    updatedAt: row.updated_at.toISOString(),
+  };
 }
 
 // --- rows -----------------------------------------------------
@@ -98,6 +196,12 @@ export interface ContentRow {
   author_name: string | null;
   status: string;
   published_at: Date | null;
+  language: string | null;
+  page_count: number | null;
+  publish_year: number | null;
+  like_count: number;
+  comment_count: number;
+  view_count: number;
   created_by_user_id: string | null;
   updated_by_user_id: string | null;
   deleted_at: Date | null;
@@ -141,6 +245,12 @@ export function rowToContent(row: ContentRow): Content {
     authorName: row.author_name,
     status: row.status as ContentStatus,
     publishedAt: row.published_at ? row.published_at.toISOString() : null,
+    language: row.language,
+    pageCount: row.page_count,
+    publishYear: row.publish_year,
+    likeCount: row.like_count,
+    commentCount: row.comment_count,
+    viewCount: row.view_count,
     createdByUserId: row.created_by_user_id,
     updatedByUserId: row.updated_by_user_id,
     deletedAt: row.deleted_at ? row.deleted_at.toISOString() : null,
@@ -212,4 +322,9 @@ export interface ListContentFilter {
   categoryId?: string;
   search?: string;
   includeDeleted?: boolean;
+  sort?: ContentSort;
+  /** Only content the given viewer has bookmarked (requires `viewerId`). */
+  bookmarkedOnly?: boolean;
+  /** The authenticated caller, if any — powers `bookmarkedOnly` + per-item viewer state. */
+  viewerId?: string;
 }

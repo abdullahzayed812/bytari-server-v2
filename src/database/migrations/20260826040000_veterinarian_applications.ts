@@ -18,6 +18,9 @@ export async function up(knex: Knex): Promise<void> {
     t.text('decision_reason').nullable(); // required on rejection
     t.timestamp('created_at', { useTz: true }).notNullable().defaultTo(knex.fn.now());
     t.timestamp('updated_at', { useTz: true }).notNullable().defaultTo(knex.fn.now());
+    // VETERINARIAN vs STUDENT — see `veterinarian_application_documents`
+    // (its own migration), which carries the supporting identity documents.
+    t.text('sub_type').notNullable().defaultTo('VETERINARIAN');
 
     t.index('status', 'idx_vet_applications_status');
     t.index('user_id', 'idx_vet_applications_user');
@@ -28,6 +31,10 @@ export async function up(knex: Knex): Promise<void> {
       ADD CONSTRAINT chk_vet_applications_status
       CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED'))
   `);
+  await knex.raw(
+    `ALTER TABLE veterinarian_applications ADD CONSTRAINT chk_veterinarian_applications_sub_type
+       CHECK (sub_type IN ('VETERINARIAN', 'STUDENT'))`,
+  );
 
   await knex.raw(`
     CREATE UNIQUE INDEX uq_vet_applications_one_pending

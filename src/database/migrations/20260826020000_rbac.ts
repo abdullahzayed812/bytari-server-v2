@@ -31,8 +31,11 @@ export async function up(knex: Knex): Promise<void> {
     t.timestamp('created_at', { useTz: true }).notNullable().defaultTo(knex.fn.now());
     t.timestamp('updated_at', { useTz: true }).notNullable().defaultTo(knex.fn.now());
   });
+  // One or more dot-separated segments (e.g. `product.read`,
+  // `product.inventory.adjust`) — widened from a single dot when
+  // organization RBAC introduced multi-segment keys.
   await knex.raw(
-    `ALTER TABLE permissions ADD CONSTRAINT chk_permissions_key CHECK (key ~ '^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$')`,
+    `ALTER TABLE permissions ADD CONSTRAINT chk_permissions_key CHECK (key ~ '^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$')`,
   );
 
   await knex.schema.createTable('role_permissions', (t) => {

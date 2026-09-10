@@ -1,13 +1,15 @@
 import type { Knex } from 'knex';
 
 /**
- * Phase 7 — Animal lifecycle publications: Lost / Adoption / Mating.
+ * Animal lifecycle publications: Lost / Adoption / Mating.
  *
  * One table with a `kind` discriminator — the three publication types share an
  * identical approval lifecycle (PENDING → APPROVED / REJECTED, docs 05
- * UC-005/006/007) and the spec defines no type-specific fields. A dedicated
- * table per type would be pure duplication (spec §14 asks for a *reusable*
- * lifecycle).
+ * UC-005/006/007). A dedicated table per type would be pure duplication (spec
+ * §14 asks for a *reusable* lifecycle). Per-kind fields (contact info always;
+ * city/health/vaccination for ADOPTION/MATING; lost-date/location for LOST;
+ * `is_sterilized` for ADOPTION only) are gated by the CHECK constraints below
+ * rather than split across per-kind tables.
  *
  * NOT modelled here: animal identity/profile (Phase 4 `animals`), ownership &
  * transfer (Phase 4 `animal_ownerships`), clinic↔animal access (Phase 5
@@ -35,6 +37,25 @@ export async function up(knex: Knex): Promise<void> {
     t.text('rejection_reason').nullable();
     t.timestamp('created_at', { useTz: true }).notNullable().defaultTo(knex.fn.now());
     t.timestamp('updated_at', { useTz: true }).notNullable().defaultTo(knex.fn.now());
+    // Per-listing fields, explicit and purpose-collected — claims made AT
+    // LISTING TIME (e.g. this listing's health status), not a permanent fact
+    // about the animal, so the same animal could be re-listed later with an
+    // updated claim. `contact_name`/`contact_phone` are mandatory for every
+    // listing regardless of kind; the rest are gated by `kind` (see the CHECK
+    // constraints below).
+    t.text('contact_name').notNullable();
+    t.text('contact_phone').notNullable();
+    t.text('city').nullable();
+    t.text('extra_notes').nullable();
+    t.text('health_status').nullable();
+    t.text('vaccination_status').nullable();
+    t.boolean('is_sterilized').nullable();
+    t.date('lost_date').nullable();
+    t.time('lost_time').nullable();
+    t.text('lost_governorate').nullable();
+    t.text('lost_district').nullable();
+    t.text('lost_location_detail').nullable();
+    t.text('health_notes').nullable();
 
     t.index('animal_id', 'idx_animal_publications_animal');
     t.index('created_by_user_id', 'idx_animal_publications_creator');
@@ -73,6 +94,45 @@ export async function up(knex: Knex): Promise<void> {
     CREATE UNIQUE INDEX uq_animal_publications_open
       ON animal_publications (animal_id, kind)
       WHERE status = 'PENDING'
+  `);
+
+  await knex.raw(`
+    ALTER TABLE animal_publications ADD CONSTRAINT chk_animal_publications_health_status
+      CHECK (health_status IS NULL OR health_status IN ('EXCELLENT', 'GOOD', 'FAIR', 'POOR'))
+  `);
+  await knex.raw(`
+    ALTER TABLE animal_publications ADD CONSTRAINT chk_animal_publications_vaccination_status
+      CHECK (vaccination_status IS NULL OR vaccination_status IN ('COMPLETE', 'PARTIAL', 'NONE'))
+  `);
+  // LOST-only fields must stay empty for any other kind.
+  await knex.raw(`
+    ALTER TABLE animal_publications ADD CONSTRAINT chk_animal_publications_lost_only_fields
+      CHECK (
+        kind = 'LOST'
+        OR (lost_date IS NULL AND lost_time IS NULL AND lost_governorate IS NULL
+            AND lost_district IS NULL AND lost_location_detail IS NULL AND health_notes IS NULL)
+      )
+  `);
+  // LOST requires when/where it went missing.
+  await knex.raw(`
+    ALTER TABLE animal_publications ADD CONSTRAINT chk_animal_publications_lost_required_fields
+      CHECK (
+        kind <> 'LOST'
+        OR (lost_date IS NOT NULL AND lost_governorate IS NOT NULL AND lost_district IS NOT NULL)
+      )
+  `);
+  // ADOPTION / MATING require city + the two status fields.
+  await knex.raw(`
+    ALTER TABLE animal_publications ADD CONSTRAINT chk_animal_publications_status_fields_required
+      CHECK (
+        kind = 'LOST'
+        OR (city IS NOT NULL AND health_status IS NOT NULL AND vaccination_status IS NOT NULL)
+      )
+  `);
+  // `is_sterilized` only applies to ADOPTION.
+  await knex.raw(`
+    ALTER TABLE animal_publications ADD CONSTRAINT chk_animal_publications_sterilized_adoption_only
+      CHECK (kind = 'ADOPTION' OR is_sterilized IS NULL)
   `);
 }
 

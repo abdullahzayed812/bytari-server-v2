@@ -898,12 +898,12 @@ export async function approvePublication(
     .set(bearer(moderatorToken));
 }
 
-// --- Phase 10: veterinary store products --------------------
+// --- Phase 10: Veterinary Store / Veterinary Office products (two fully
+// separate catalogs — own table, own route segment, own factory) ----------
 
 export interface TestProduct {
   id: string;
   organizationId: string;
-  organizationType: string;
   name: string;
   productType: string;
   price: string | null;
@@ -913,21 +913,23 @@ export interface TestProduct {
   images: Array<{ id: string; url: string; sortOrder: number }>;
 }
 
-/** Add a product to a VETERINARY_STORE / VETERINARY_OFFICE organization. */
-export async function createProduct(
+type ProductBody = Partial<{
+  name: string;
+  description: string;
+  productType: 'MEDICINE' | 'EQUIPMENT_SUPPLY' | 'SUPPLEMENT' | 'CARE';
+  price: string;
+  stockQuantity: number;
+}>;
+
+/** Add a product to a VETERINARY_STORE organization. */
+export async function createVeterinaryStoreProduct(
   app: Express,
   actorToken: string,
   organizationId: string,
-  body: Partial<{
-    name: string;
-    description: string;
-    productType: 'MEDICINE' | 'EQUIPMENT_SUPPLY' | 'SUPPLEMENT' | 'CARE';
-    price: string;
-    stockQuantity: number;
-  }> = {},
+  body: ProductBody = {},
 ): Promise<TestProduct> {
   const res = await request(app)
-    .post(`/api/v1/organizations/${organizationId}/products`)
+    .post(`/api/v1/organizations/${organizationId}/store-products`)
     .set(bearer(actorToken))
     .send({
       name: body.name ?? `Amoxicillin ${Date.now()}`,
@@ -937,13 +939,36 @@ export async function createProduct(
       ...(body.stockQuantity !== undefined ? { stockQuantity: body.stockQuantity } : {}),
     });
   if (res.status !== 201) {
-    throw new Error(`createProduct failed: ${res.status} ${JSON.stringify(res.body)}`);
+    throw new Error(`createVeterinaryStoreProduct failed: ${res.status} ${JSON.stringify(res.body)}`);
   }
   return res.body.data as TestProduct;
 }
 
-/** Adjust a product's stock by a signed delta. Returns the HTTP response. */
-export async function adjustProductStock(
+/** Add a product to a VETERINARY_OFFICE organization. */
+export async function createVeterinaryOfficeProduct(
+  app: Express,
+  actorToken: string,
+  organizationId: string,
+  body: ProductBody = {},
+): Promise<TestProduct> {
+  const res = await request(app)
+    .post(`/api/v1/organizations/${organizationId}/office-products`)
+    .set(bearer(actorToken))
+    .send({
+      name: body.name ?? `Antibiotic ${Date.now()}`,
+      productType: body.productType ?? 'MEDICINE',
+      ...(body.description !== undefined ? { description: body.description } : {}),
+      ...(body.price !== undefined ? { price: body.price } : {}),
+      ...(body.stockQuantity !== undefined ? { stockQuantity: body.stockQuantity } : {}),
+    });
+  if (res.status !== 201) {
+    throw new Error(`createVeterinaryOfficeProduct failed: ${res.status} ${JSON.stringify(res.body)}`);
+  }
+  return res.body.data as TestProduct;
+}
+
+/** Adjust a Veterinary Store product's stock by a signed delta. Returns the HTTP response. */
+export async function adjustVeterinaryStoreProductStock(
   app: Express,
   actorToken: string,
   organizationId: string,
@@ -952,7 +977,22 @@ export async function adjustProductStock(
   reason?: string,
 ): Promise<request.Response> {
   return request(app)
-    .post(`/api/v1/organizations/${organizationId}/products/${productId}/stock`)
+    .post(`/api/v1/organizations/${organizationId}/store-products/${productId}/stock`)
+    .set(bearer(actorToken))
+    .send({ delta, ...(reason !== undefined ? { reason } : {}) });
+}
+
+/** Adjust a Veterinary Office product's stock by a signed delta. Returns the HTTP response. */
+export async function adjustVeterinaryOfficeProductStock(
+  app: Express,
+  actorToken: string,
+  organizationId: string,
+  productId: string,
+  delta: number,
+  reason?: string,
+): Promise<request.Response> {
+  return request(app)
+    .post(`/api/v1/organizations/${organizationId}/office-products/${productId}/stock`)
     .set(bearer(actorToken))
     .send({ delta, ...(reason !== undefined ? { reason } : {}) });
 }

@@ -9,20 +9,21 @@ import type { Knex } from 'knex';
  * a `FARM` organization at the database level via the same immutable
  * `organization_type` + composite FK pattern `poultry_flocks` uses.
  *
- *   1. `farm_details`   += the Farm Details header profile (image / address /
- *      capacity / establishment date / category). Mirrors how the CLINIC /
- *      OFFICE / STORE directory profiles live on their own `*_details` table.
- *   2. `poultry_flocks` += the batch-summary inputs (batch number, initial
+ * (The Farm Details header profile itself — image / address / capacity /
+ * establishment date / production type — is consolidated into `farm_details`
+ * in `20260827010000_organizations.ts`, which owns that table.)
+ *
+ *   1. `poultry_flocks` += the batch-summary inputs (batch number, initial
  *      count, average weight, an optional target price for the profit estimate,
  *      expected sale date). Current count / age / estimated profit are
  *      DERIVED server-side from these + the daily records — never stored.
- *   3. `poultry_daily_records`  — one row per (flock, calendar day): feed,
+ *   2. `poultry_daily_records`  — one row per (flock, calendar day): feed,
  *      water, appetite, activity, mortality, treatment, expense, weight, notes.
  *      Backs the "البيانات اليومية" list and every "ملخص الأسبوع" aggregate.
- *   4. `farm_expenses`           — "المصاريف" (feed / medicine / water / …).
- *   5. `poultry_health_events`   — "العلاجات واللقاحات" (treatment | vaccination).
- *   6. `farm_appointments`       — "المواعيد".
- *   7. `poultry_cases`           — "الحالات الفردية".
+ *   3. `farm_expenses`           — "المصاريف" (feed / medicine / water / …).
+ *   4. `poultry_health_events`   — "العلاجات واللقاحات" (treatment | vaccination).
+ *   5. `farm_appointments`       — "المواعيد".
+ *   6. `poultry_cases`           — "الحالات الفردية".
  *
  * No new farm-membership / role tables — organization RBAC (Phase 3) governs
  * every route; the new `farm.*` permission keys are additive in
@@ -39,26 +40,7 @@ const FARM_FK = (t: Knex.CreateTableBuilder, name: string): void => {
 };
 
 export async function up(knex: Knex): Promise<void> {
-  // --- 1. farm_details profile ------------------------------------------------
-  await knex.schema.alterTable('farm_details', (t) => {
-    t.text('image_key').nullable();
-    t.text('image_provider').nullable();
-    t.text('address').nullable();
-    t.integer('capacity').nullable();
-    t.date('established_on').nullable();
-    t.text('farm_category').nullable();
-  });
-  await knex.raw(
-    `ALTER TABLE farm_details ADD CONSTRAINT chk_farm_details_capacity
-       CHECK (capacity IS NULL OR capacity >= 0)`,
-  );
-  await knex.raw(
-    `ALTER TABLE farm_details ADD CONSTRAINT chk_farm_details_category
-       CHECK (farm_category IS NULL OR farm_category IN
-         ('BROILER', 'LAYER', 'MIXED', 'BREEDER', 'HATCHERY', 'OTHER'))`,
-  );
-
-  // --- 2. poultry_flocks batch-summary inputs ------------------------------
+  // --- 1. poultry_flocks batch-summary inputs ------------------------------
   await knex.schema.alterTable('poultry_flocks', (t) => {
     t.integer('batch_number').nullable();
     t.integer('initial_bird_count').nullable();
@@ -102,7 +84,7 @@ export async function up(knex: Knex): Promise<void> {
      WHERE numbered.id = f.id
   `);
 
-  // --- 3. poultry_daily_records ------------------------------------------
+  // --- 2. poultry_daily_records ------------------------------------------
   await knex.schema.createTable('poultry_daily_records', (t) => {
     t.uuid('id').primary().defaultTo(knex.raw('gen_random_uuid()'));
     t.uuid('poultry_flock_id')
@@ -149,7 +131,7 @@ export async function up(knex: Knex): Promise<void> {
               AND (average_weight_grams IS NULL OR average_weight_grams >= 0))`,
   );
 
-  // --- 4. farm_expenses -------------------------------------------------
+  // --- 3. farm_expenses -------------------------------------------------
   await knex.schema.createTable('farm_expenses', (t) => {
     t.uuid('id').primary().defaultTo(knex.raw('gen_random_uuid()'));
     FARM_FK(t, 'fk_farm_expenses_farm');
@@ -180,7 +162,7 @@ export async function up(knex: Knex): Promise<void> {
     `ALTER TABLE farm_expenses ADD CONSTRAINT chk_farm_expenses_amount CHECK (amount >= 0)`,
   );
 
-  // --- 5. poultry_health_events --------------------------------------
+  // --- 4. poultry_health_events --------------------------------------
   await knex.schema.createTable('poultry_health_events', (t) => {
     t.uuid('id').primary().defaultTo(knex.raw('gen_random_uuid()'));
     t.uuid('poultry_flock_id')
@@ -222,7 +204,7 @@ export async function up(knex: Knex): Promise<void> {
               AND (coverage_count IS NULL OR coverage_count >= 0))`,
   );
 
-  // --- 6. farm_appointments ----------------------------------------
+  // --- 5. farm_appointments ----------------------------------------
   await knex.schema.createTable('farm_appointments', (t) => {
     t.uuid('id').primary().defaultTo(knex.raw('gen_random_uuid()'));
     FARM_FK(t, 'fk_farm_appointments_farm');
@@ -254,7 +236,7 @@ export async function up(knex: Knex): Promise<void> {
        CHECK (status IN ('UPCOMING', 'DONE', 'CANCELLED'))`,
   );
 
-  // --- 7. poultry_cases ------------------------------------------
+  // --- 6. poultry_cases ------------------------------------------
   await knex.schema.createTable('poultry_cases', (t) => {
     t.uuid('id').primary().defaultTo(knex.raw('gen_random_uuid()'));
     t.uuid('poultry_flock_id')
@@ -317,17 +299,5 @@ export async function down(knex: Knex): Promise<void> {
     t.dropColumn('average_weight_grams');
     t.dropColumn('target_price_per_kg');
     t.dropColumn('expected_sale_date');
-  });
-
-  for (const c of ['chk_farm_details_capacity', 'chk_farm_details_category']) {
-    await knex.raw(`ALTER TABLE farm_details DROP CONSTRAINT IF EXISTS ${c}`);
-  }
-  await knex.schema.alterTable('farm_details', (t) => {
-    t.dropColumn('image_key');
-    t.dropColumn('image_provider');
-    t.dropColumn('address');
-    t.dropColumn('capacity');
-    t.dropColumn('established_on');
-    t.dropColumn('farm_category');
   });
 }

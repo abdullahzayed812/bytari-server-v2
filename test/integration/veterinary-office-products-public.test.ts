@@ -5,7 +5,7 @@ import { closeTestDb, ensureSchema, resetDb } from '../helpers/db.js';
 import {
   bearer,
   createActiveOrganization,
-  createProduct,
+  createVeterinaryOfficeProduct,
   registerAdmin,
   registerApprovedVet,
   registerUser,
@@ -18,9 +18,9 @@ beforeEach(() => resetDb());
 afterAll(() => closeTestDb());
 
 const publicPPath = (orgId: string, id?: string): string =>
-  `/api/v1/organizations/discover/${orgId}/products${id ? `/${id}` : ''}`;
+  `/api/v1/organizations/discover/${orgId}/office-products${id ? `/${id}` : ''}`;
 const pPath = (orgId: string, id?: string): string =>
-  `/api/v1/organizations/${orgId}/products${id ? `/${id}` : ''}`;
+  `/api/v1/organizations/${orgId}/office-products${id ? `/${id}` : ''}`;
 
 async function setupOffice() {
   const admin = await registerAdmin(app);
@@ -35,7 +35,7 @@ async function setupOffice() {
 describe('public product catalog — GET /organizations/discover/:id/products*', () => {
   it('any authenticated user can browse an ACTIVE office’s ACTIVE products', async () => {
     const { owner, office } = await setupOffice();
-    const prod = await createProduct(app, owner.accessToken, office.id, {
+    const prod = await createVeterinaryOfficeProduct(app, owner.accessToken, office.id, {
       name: 'Anti-Peak',
       productType: 'MEDICINE',
       price: '25000',
@@ -56,14 +56,14 @@ describe('public product catalog — GET /organizations/discover/:id/products*',
 
   it('requires authentication', async () => {
     const { owner, office } = await setupOffice();
-    await createProduct(app, owner.accessToken, office.id);
+    await createVeterinaryOfficeProduct(app, owner.accessToken, office.id);
     const res = await request(app).get(publicPPath(office.id));
     expect(res.status).toBe(401);
   });
 
   it('excludes INACTIVE (soft-deleted) products from the public list and 404s the detail', async () => {
     const { owner, office } = await setupOffice();
-    const prod = await createProduct(app, owner.accessToken, office.id);
+    const prod = await createVeterinaryOfficeProduct(app, owner.accessToken, office.id);
     await request(app).delete(pPath(office.id, prod.id)).set(bearer(owner.accessToken));
 
     const stranger = await registerUser(app);
@@ -104,11 +104,11 @@ describe('public product catalog — GET /organizations/discover/:id/products*',
 
   it('filters by type and paginates, same as the management list', async () => {
     const { owner, office } = await setupOffice();
-    await createProduct(app, owner.accessToken, office.id, {
+    await createVeterinaryOfficeProduct(app, owner.accessToken, office.id, {
       name: 'Med A',
       productType: 'MEDICINE',
     });
-    await createProduct(app, owner.accessToken, office.id, {
+    await createVeterinaryOfficeProduct(app, owner.accessToken, office.id, {
       name: 'Care A',
       productType: 'CARE',
     });
@@ -125,7 +125,7 @@ describe('public product catalog — GET /organizations/discover/:id/products*',
 describe('product images', () => {
   it('an owner uploads, registers, and removes a product image; the first becomes primary', async () => {
     const { owner, office } = await setupOffice();
-    const prod = await createProduct(app, owner.accessToken, office.id);
+    const prod = await createVeterinaryOfficeProduct(app, owner.accessToken, office.id);
 
     const upload = await request(app)
       .post(`${pPath(office.id, prod.id)}/images/upload-url`)
@@ -159,7 +159,7 @@ describe('product images', () => {
 
   it('a non-member cannot request an upload URL (403)', async () => {
     const { owner, office } = await setupOffice();
-    const prod = await createProduct(app, owner.accessToken, office.id);
+    const prod = await createVeterinaryOfficeProduct(app, owner.accessToken, office.id);
     const stranger = await registerUser(app);
 
     const res = await request(app)

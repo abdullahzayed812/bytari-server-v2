@@ -4,24 +4,16 @@ import type { Knex } from 'knex';
  * Poultry Markets module — trader registration. A trader profile is a
  * per-USER concept (unique `user_id`), independent of any organization/farm —
  * a user may own zero, one, or several farms and registers as a trader at
- * most once. `users.trader_status` is kept in sync with `trader_profiles.status`
- * (mirrors `users.veterinarian_status` / `veterinarian_applications`) so it can
- * ship cheaply in the session payload.
+ * most once. `users.trader_status` (consolidated in `20260826010000_users.ts`,
+ * which owns `users`) is kept in sync with `trader_profiles.status` (mirrors
+ * `users.veterinarian_status` / `veterinarian_applications`) so it can ship
+ * cheaply in the session payload.
  *
  * Unlike the documents-only veterinarian-application flow, the trader form
  * carries substantive profile fields that get edited in place on reapply —
  * so this is a single mutable row per user, not an applications-history table.
  */
 export async function up(knex: Knex): Promise<void> {
-  await knex.schema.alterTable('users', (t) => {
-    t.text('trader_status').notNullable().defaultTo('NOT_REGISTERED');
-  });
-  await knex.raw(`
-    ALTER TABLE users
-      ADD CONSTRAINT chk_users_trader_status
-      CHECK (trader_status IN ('NOT_REGISTERED', 'PENDING', 'APPROVED', 'REJECTED', 'SUSPENDED'))
-  `);
-
   await knex.schema.createTable('trader_profiles', (t) => {
     t.uuid('id').primary().defaultTo(knex.raw('gen_random_uuid()'));
     t.uuid('user_id').notNullable().unique().references('id').inTable('users').onDelete('CASCADE');
@@ -57,8 +49,4 @@ export async function up(knex: Knex): Promise<void> {
 
 export async function down(knex: Knex): Promise<void> {
   await knex.schema.dropTableIfExists('trader_profiles');
-  await knex.raw(`ALTER TABLE users DROP CONSTRAINT IF EXISTS chk_users_trader_status`);
-  await knex.schema.alterTable('users', (t) => {
-    t.dropColumn('trader_status');
-  });
 }

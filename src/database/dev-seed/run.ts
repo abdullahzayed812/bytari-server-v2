@@ -118,7 +118,8 @@ export async function runDevSeed(knex: Knex, deps: RunDevSeedDeps = {}): Promise
     container;
   const {
     poultryFlockService,
-    productService,
+    veterinaryStoreProductService,
+    veterinaryOfficeProductService,
     petStoreAdminService,
     contentService,
     passwordService,
@@ -437,6 +438,7 @@ export async function runDevSeed(knex: Knex, deps: RunDevSeedDeps = {}): Promise
   await seedOfficeProducts();
   await seedPetOwnerStoreCatalog();
   await seedWelcomeArticle();
+  await seedVeterinaryContent();
   await seedAdvertisements();
   await seedTips();
   await seedNews();
@@ -675,7 +677,7 @@ export async function runDevSeed(knex: Knex, deps: RunDevSeedDeps = {}): Promise
         .where({ organization_id: storeId, name: p.name })
         .first();
       if (existing) continue;
-      await productService.create(storeRef, p, actor);
+      await veterinaryStoreProductService.create(storeRef, p, actor);
     }
   }
 
@@ -727,11 +729,11 @@ export async function runDevSeed(knex: Knex, deps: RunDevSeedDeps = {}): Promise
     ];
 
     for (const p of products) {
-      const existing = await knex('veterinary_store_products')
+      const existing = await knex('veterinary_office_products')
         .where({ organization_id: officeId, name: p.name })
         .first();
       if (existing) continue;
-      await productService.create(officeRef, p, actor);
+      await veterinaryOfficeProductService.create(officeRef, p, actor);
     }
 
     for (const key of ['clinicOwner', 'farmOwner', 'storeOwner'] as const) {
@@ -910,6 +912,105 @@ export async function runDevSeed(knex: Knex, deps: RunDevSeedDeps = {}): Promise
       { status: string } | undefined;
     if (status?.status !== 'PUBLISHED') {
       await contentService.publish(actor, contentId);
+    }
+  }
+
+  /**
+   * Veterinarian Home — Veterinary Magazine (MAGAZINE) & Veterinary Books
+   * (BOOK). No cover / attachment images or PDFs are seeded — there is no
+   * real photography/PDF asset for this content in the repo, and a stand-in
+   * stock image would be fabricated data; the mobile UI already falls back
+   * to a type icon when a cover is absent. An admin can attach real files
+   * later via the content admin screens.
+   *
+   * Only the one article and one book whose full text is unambiguously
+   * legible in the reference screenshots are seeded here — everything else
+   * shown in the reference (other article/book cards, comment counts, like
+   * counts, ratings) was mockup placeholder data, not real content to
+   * reproduce; those start at their genuine zero/empty state and grow from
+   * real admin content + real user engagement.
+   */
+  async function seedVeterinaryContent(): Promise<void> {
+    const actor = { actorUserId: adminId, context: SEED_CONTEXT };
+
+    async function ensureCategory(slug: string, name: string): Promise<string> {
+      const found = (await knex('categories').where({ slug }).whereNull('deleted_at').first()) as
+        { id: string } | undefined;
+      if (found) return found.id;
+      const inserted: Array<{ id: string }> = await knex('categories')
+        .insert({ slug, name, created_by_user_id: adminId })
+        .returning('id');
+      const id = inserted[0]?.id;
+      if (!id) throw new Error(`dev-seed: failed to create category "${slug}"`);
+      return id;
+    }
+
+    // Veterinary Magazine categories (Veterinarian Home → "المجلة البيطرية").
+    await ensureCategory('mag-pets', 'حيوانات أليفة');
+    await ensureCategory('mag-livestock', 'أغنام وأبقار');
+    const magPoultry = await ensureCategory('mag-poultry', 'دواجن');
+    await ensureCategory('mag-diseases', 'أمراض وعلاجات');
+
+    // Veterinary Books categories (Veterinarian Home → "الكتب البيطرية"). Both
+    // taxonomies have "diseases"-flavoured labels but are deliberately
+    // separate category rows (different slugs) — the mobile magazine/books
+    // screens each show only their own fixed chip set, so sharing rows would
+    // risk one domain's admin edit silently relabelling the other's chip.
+    await ensureCategory('book-medicines', 'الأدوية');
+    const bookDiseases = await ensureCategory('book-diseases', 'الأمراض');
+    await ensureCategory('book-care', 'تربية ورعاية');
+    await ensureCategory('book-nutrition', 'التغذية');
+    await ensureCategory('book-surgery', 'الجراحة');
+
+    const articleTitle = 'أهمية التحصينات الدورية في الوقاية من الأمراض الفيروسية';
+    const existingArticle = (await knex('contents')
+      .where({ title: articleTitle, type: 'MAGAZINE' })
+      .first()) as { id: string } | undefined;
+    let articleId = existingArticle?.id;
+    if (!articleId) {
+      const created = await contentService.create(actor, {
+        type: 'MAGAZINE',
+        title: articleTitle,
+        authorName: 'د. سارة محمود · استشارية أمراض الدواجن',
+        body: [
+          'تُعد التحصينات من أهم الإجراءات الوقائية التي تساهم في حماية الدواجن من الأمراض الفيروسية الخطيرة التي قد تؤدي إلى خسائر اقتصادية كبيرة في مشاريع الدواجن.',
+          'يساعد البرنامج التحصيني الصحيح على تعزيز المناعة وتقليل نسبة الإصابة وتحسين الأداء الإنتاجي.',
+          'في هذا المقال نستعرض أهم التحصينات الأساسية وجدول التحصين الموصى به في مزارع الدواجن.',
+        ].join('\n\n'),
+        categoryIds: [magPoultry],
+      });
+      articleId = created.id;
+    }
+    const articleStatus = (await knex('contents').where({ id: articleId }).first()) as
+      { status: string } | undefined;
+    if (articleStatus?.status !== 'PUBLISHED') {
+      await contentService.publish(actor, articleId);
+    }
+
+    const bookTitle = 'طب الحيوانات الداخلي الكلاب والقطط';
+    const existingBook = (await knex('contents')
+      .where({ title: bookTitle, type: 'BOOK' })
+      .first()) as { id: string } | undefined;
+    let bookId = existingBook?.id;
+    if (!bookId) {
+      const created = await contentService.create(actor, {
+        type: 'BOOK',
+        title: bookTitle,
+        description: 'دليل شامل للأطباء البيطريين',
+        body:
+          'يقدم هذا الكتاب دليلاً شاملاً ومفصلاً لأطباء البيطرة حول تشخيص وعلاج أمراض الكلاب والقطط الداخلية، يشمل أحدث المعلومات الطبية والممارسات السريرية المثلى.',
+        authorName: 'د. أحمد محمود الشافعي',
+        language: 'العربية',
+        pageCount: 560,
+        publishYear: 2023,
+        categoryIds: [bookDiseases],
+      });
+      bookId = created.id;
+    }
+    const bookStatus = (await knex('contents').where({ id: bookId }).first()) as
+      { status: string } | undefined;
+    if (bookStatus?.status !== 'PUBLISHED') {
+      await contentService.publish(actor, bookId);
     }
   }
 

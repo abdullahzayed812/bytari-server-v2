@@ -89,8 +89,10 @@ import { CattleBatchService } from './modules/livestock/application/cattle-batch
 import { CattleDailyRecordService } from './modules/livestock/application/cattle-daily-record.service.js';
 import { CattleHealthEventService } from './modules/livestock/application/cattle-health-event.service.js';
 import { CattleCaseService } from './modules/livestock/application/cattle-case.service.js';
-import { ProductRepository } from './modules/veterinary-store/infrastructure/product.repository.js';
-import { ProductService } from './modules/veterinary-store/application/product.service.js';
+import { VeterinaryStoreProductRepository } from './modules/veterinary-store/infrastructure/veterinary-store-product.repository.js';
+import { VeterinaryStoreProductService } from './modules/veterinary-store/application/veterinary-store-product.service.js';
+import { VeterinaryOfficeProductRepository } from './modules/veterinary-office/infrastructure/veterinary-office-product.repository.js';
+import { VeterinaryOfficeProductService } from './modules/veterinary-office/application/veterinary-office-product.service.js';
 import { PetStoreCategoryRepository } from './modules/pet-owner-store/infrastructure/category.repository.js';
 import { PetStoreProductRepository } from './modules/pet-owner-store/infrastructure/product.repository.js';
 import { PetStoreCartRepository } from './modules/pet-owner-store/infrastructure/cart.repository.js';
@@ -141,6 +143,9 @@ import { createObjectStorage, type ObjectStorage } from './infra/storage/index.j
 import { ContentRepository } from './modules/content/infrastructure/content.repository.js';
 import { ContentFileRepository } from './modules/content/infrastructure/content-file.repository.js';
 import { CategoryRepository } from './modules/content/infrastructure/category.repository.js';
+import { ContentEngagementRepository } from './modules/content/infrastructure/content-engagement.repository.js';
+import { ContentCommentRepository } from './modules/content/infrastructure/content-comment.repository.js';
+import { ContentRatingRepository } from './modules/content/infrastructure/content-rating.repository.js';
 import { ContentService } from './modules/content/application/content.service.js';
 import { CategoryService } from './modules/content/application/category.service.js';
 import { TipRepository } from './modules/content/infrastructure/tip.repository.js';
@@ -290,8 +295,10 @@ export interface Container {
   cattleHealthEventService: CattleHealthEventService;
   cattleCaseService: CattleCaseService;
 
-  productRepository: ProductRepository;
-  productService: ProductService;
+  veterinaryStoreProductRepository: VeterinaryStoreProductRepository;
+  veterinaryStoreProductService: VeterinaryStoreProductService;
+  veterinaryOfficeProductRepository: VeterinaryOfficeProductRepository;
+  veterinaryOfficeProductService: VeterinaryOfficeProductService;
 
   petStoreCategoryRepository: PetStoreCategoryRepository;
   petStoreProductRepository: PetStoreProductRepository;
@@ -767,11 +774,25 @@ export function createContainer(deps: ContainerDeps): Container {
     logger,
   );
 
-  // --- veterinary store & products (Phase 10; extended to Veterinary Offices) ---
-  const productRepository = new ProductRepository(db);
-  const productService = new ProductService(
+  // --- Veterinary Store products (Phase 10) — VETERINARY_STORE only, fully
+  // separate from Veterinary Office products below (own table, own service) ---
+  const veterinaryStoreProductRepository = new VeterinaryStoreProductRepository(db);
+  const veterinaryStoreProductService = new VeterinaryStoreProductService(
     db,
-    productRepository,
+    veterinaryStoreProductRepository,
+    organizationRepository,
+    objectStorage,
+    auditService,
+    eventBus,
+    logger,
+  );
+
+  // --- Veterinary Office products — VETERINARY_OFFICE only, fully separate
+  // from Veterinary Store products above (own table, own service) ---
+  const veterinaryOfficeProductRepository = new VeterinaryOfficeProductRepository(db);
+  const veterinaryOfficeProductService = new VeterinaryOfficeProductService(
+    db,
+    veterinaryOfficeProductRepository,
     organizationRepository,
     objectStorage,
     auditService,
@@ -994,11 +1015,17 @@ export function createContainer(deps: ContainerDeps): Container {
   const contentRepository = new ContentRepository(db);
   const contentFileRepository = new ContentFileRepository(db);
   const categoryRepository = new CategoryRepository(db);
+  const contentEngagementRepository = new ContentEngagementRepository(db);
+  const contentCommentRepository = new ContentCommentRepository(db);
+  const contentRatingRepository = new ContentRatingRepository(db);
   const contentService = new ContentService(
     db,
     contentRepository,
     contentFileRepository,
     categoryRepository,
+    contentEngagementRepository,
+    contentCommentRepository,
+    contentRatingRepository,
     objectStorage,
     auditService,
     eventBus,
@@ -1175,8 +1202,10 @@ export function createContainer(deps: ContainerDeps): Container {
     cattleDailyRecordService,
     cattleHealthEventService,
     cattleCaseService,
-    productRepository,
-    productService,
+    veterinaryStoreProductRepository,
+    veterinaryStoreProductService,
+    veterinaryOfficeProductRepository,
+    veterinaryOfficeProductService,
     petStoreCategoryRepository,
     petStoreProductRepository,
     petStoreCartRepository,

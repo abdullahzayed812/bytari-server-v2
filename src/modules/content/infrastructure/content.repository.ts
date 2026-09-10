@@ -19,6 +19,9 @@ export interface CreateContentData {
   description: string | null;
   body: string | null;
   authorName: string | null;
+  language: string | null;
+  pageCount: number | null;
+  publishYear: number | null;
   createdByUserId: string;
 }
 
@@ -27,6 +30,9 @@ export interface UpdateContentData {
   description?: string | null;
   body?: string | null;
   authorName?: string | null;
+  language?: string | null;
+  pageCount?: number | null;
+  publishYear?: number | null;
   updatedByUserId: string;
 }
 
@@ -50,6 +56,9 @@ export class ContentRepository {
         description: data.description,
         body: data.body,
         author_name: data.authorName,
+        language: data.language,
+        page_count: data.pageCount,
+        publish_year: data.publishYear,
         created_by_user_id: data.createdByUserId,
         updated_by_user_id: data.createdByUserId,
       })
@@ -67,10 +76,42 @@ export class ContentRepository {
     if (patch.description !== undefined) dbPatch.description = patch.description;
     if (patch.body !== undefined) dbPatch.body = patch.body;
     if (patch.authorName !== undefined) dbPatch.author_name = patch.authorName;
+    if (patch.language !== undefined) dbPatch.language = patch.language;
+    if (patch.pageCount !== undefined) dbPatch.page_count = patch.pageCount;
+    if (patch.publishYear !== undefined) dbPatch.publish_year = patch.publishYear;
 
     const [row] = (await trx(T).where({ id }).update(dbPatch).returning('*')) as ContentRow[];
     if (!row) throw new Error('content not found on update');
     return rowToContent(row);
+  }
+
+  /**
+   * Adjust the denormalised `like_count` / `comment_count` by a signed delta,
+   * returning the new value. Deliberately does NOT touch `updated_at` — that
+   * reflects an actual content edit, not passive engagement.
+   */
+  async adjustLikeCount(id: string, delta: number, trx: Knex.Transaction): Promise<number> {
+    const [row] = (await trx(T)
+      .where({ id })
+      .update({ like_count: trx.raw('like_count + ?', [delta]) })
+      .returning('like_count')) as Array<{ like_count: number }>;
+    if (!row) throw new Error('content not found on like-count adjust');
+    return row.like_count;
+  }
+
+  async adjustCommentCount(id: string, delta: number, trx: Knex.Transaction): Promise<number> {
+    const [row] = (await trx(T)
+      .where({ id })
+      .update({ comment_count: trx.raw('comment_count + ?', [delta]) })
+      .returning('comment_count')) as Array<{ comment_count: number }>;
+    if (!row) throw new Error('content not found on comment-count adjust');
+    return row.comment_count;
+  }
+
+  async incrementViewCount(id: string, trx?: Knex.Transaction): Promise<void> {
+    await this.conn(trx)(T)
+      .where({ id })
+      .update({ view_count: this.conn(trx).raw('view_count + 1') });
   }
 
   async setStatus(
@@ -129,6 +170,23 @@ export class ContentRepository {
     if (f.search && f.search.trim().length > 0) {
       qb.whereRaw("c.search_vector @@ plainto_tsquery('simple', ?)", [f.search.trim()]);
     }
+    if (f.bookmarkedOnly && f.viewerId) {
+      qb.whereExists((sub) => {
+        sub
+          .select(this.db.raw('1'))
+          .from('content_bookmarks as cb')
+          .whereRaw('cb.content_id = c.id')
+          .where('cb.user_id', f.viewerId as string);
+      });
+    }
+  }
+
+  private orderFor(filter: ListContentFilter, publicOnly: boolean): string {
+    if (filter.sort === 'mostRead') return 'c.view_count desc, c.id desc';
+    if (filter.sort === 'topRated') {
+      return `(select avg(rating) from content_ratings cr where cr.content_id = c.id) desc nulls last, c.id desc`;
+    }
+    return publicOnly ? 'c.published_at desc nulls last, c.id desc' : 'c.created_at desc, c.id desc';
   }
 
   async list(
@@ -145,9 +203,7 @@ export class ContentRepository {
     const rows: ContentRow[] = await this.conn(trx)<ContentRow>(`${T} as c`)
       .modify((qb) => this.applyFilters(qb, filter, publicOnly))
       .select('c.*')
-      .orderByRaw(
-        publicOnly ? 'c.published_at desc nulls last, c.id desc' : 'c.created_at desc, c.id desc',
-      )
+      .orderByRaw(this.orderFor(filter, publicOnly))
       .limit(filter.pageSize)
       .offset((filter.page - 1) * filter.pageSize);
 

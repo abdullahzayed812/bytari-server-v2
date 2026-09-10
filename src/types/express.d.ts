@@ -83,12 +83,25 @@ declare global {
     }
 
     /**
-     * Product resolved from `:productId` by the veterinary-store `withProduct`
-     * middleware AFTER `withOrganization` + the VETERINARY_STORE type check +
-     * `authorizeOrg`. The product is guaranteed to belong to the URL's store.
-     * NEVER from the body.
+     * Product resolved from `:productId` by the Veterinary Store
+     * `withVeterinaryStoreProduct` middleware AFTER `withOrganization` + the
+     * VETERINARY_STORE type check + `authorizeOrg`. The product is guaranteed
+     * to belong to the URL's store. NEVER from the body.
      */
-    interface ProductContext {
+    interface VeterinaryStoreProductContext {
+      id: string;
+      status: string;
+      organizationId: string;
+    }
+
+    /**
+     * Product resolved from `:productId` by the Veterinary Office
+     * `withVeterinaryOfficeProduct` middleware AFTER `withOrganization` + the
+     * VETERINARY_OFFICE type check + `authorizeOrg`. The product is
+     * guaranteed to belong to the URL's office. NEVER from the body. A fully
+     * separate catalog from `VeterinaryStoreProductContext` — never mix them.
+     */
+    interface VeterinaryOfficeProductContext {
       id: string;
       status: string;
       organizationId: string;
@@ -152,8 +165,16 @@ declare global {
       sheepBatch?: SheepBatchContext;
       /** Populated by `withCattleBatch`. Use `requireCattleBatch(req)` to access it. */
       cattleBatch?: CattleBatchContext;
-      /** Populated by `withProduct`. Use `requireProduct(req)` to access it. */
-      product?: ProductContext;
+      /**
+       * Populated by `withVeterinaryStoreProduct`. Use
+       * `requireVeterinaryStoreProduct(req)` to access it.
+       */
+      veterinaryStoreProduct?: VeterinaryStoreProductContext;
+      /**
+       * Populated by `withVeterinaryOfficeProduct`. Use
+       * `requireVeterinaryOfficeProduct(req)` to access it.
+       */
+      veterinaryOfficeProduct?: VeterinaryOfficeProductContext;
       /** Populated by `withConversation`. Use `requireConversation(req)` to access it. */
       conversation?: ConversationContext;
       /** Populated by `withPoultryOffer`. Use `requirePoultryOffer(req)` to access it. */

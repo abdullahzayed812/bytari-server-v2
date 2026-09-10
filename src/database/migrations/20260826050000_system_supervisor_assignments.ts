@@ -1,12 +1,16 @@
 import type { Knex } from 'knex';
 
 /**
- * Phase 2 — System Supervisor foundation.
+ * System Supervisor foundation.
  *
  * An Admin-assigned, domain-scoped supervision responsibility. It is NOT a
  * role — a user keeps their primary global role(s) and additionally holds
  * zero or more supervisor assignments. Organisation-scoped supervisors are a
- * later phase and will live in a separate table.
+ * later phase and live in a separate table.
+ *
+ * `domain` carries every system-wide supervisor domain used across the
+ * platform (consolidated here rather than widened by a chain of later
+ * migrations — new domains only ever add a value to this one CHECK).
  */
 export async function up(knex: Knex): Promise<void> {
   await knex.schema.createTable('system_supervisor_assignments', (t) => {
@@ -25,7 +29,10 @@ export async function up(knex: Knex): Promise<void> {
   await knex.raw(`
     ALTER TABLE system_supervisor_assignments
       ADD CONSTRAINT chk_supervisor_domain
-      CHECK (domain IN ('ANIMAL', 'CLINIC', 'STORE', 'CONTENT', 'CONSULTATION', 'INQUIRY'))
+      CHECK (domain IN (
+        'ANIMAL', 'CLINIC', 'STORE', 'CONTENT', 'CONSULTATION', 'INQUIRY',
+        'SUPPORT', 'ADVERTISEMENT', 'MARKET', 'PET_OWNER_STORE', 'VET_SERVICE'
+      ))
   `);
   await knex.raw(`
     ALTER TABLE system_supervisor_assignments

@@ -17,6 +17,21 @@ export const DESCRIPTION_MAX = 4000;
 export const BODY_MAX = 100_000;
 export const AUTHOR_MAX = 200;
 
+/** Book-only descriptive fields (meaningless for ARTICLE/MAGAZINE, left null). */
+export const LANGUAGE_MAX = 50;
+export const PAGE_COUNT_MAX = 100_000;
+export const PUBLISH_YEAR_MIN = 1900;
+export const PUBLISH_YEAR_MAX = 2100;
+
+export const COMMENT_BODY_MAX = 2000;
+
+export const RATING_MIN = 1;
+export const RATING_MAX = 5;
+
+/** `GET /content` sort options. Default is `latest`. */
+export const CONTENT_SORTS = ['latest', 'mostRead', 'topRated'] as const;
+export type ContentSort = (typeof CONTENT_SORTS)[number];
+
 /** Hard ceiling for any single content file (100 MiB). */
 export const MAX_FILE_BYTES = 100 * 1024 * 1024;
 
