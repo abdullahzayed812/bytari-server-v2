@@ -112,6 +112,7 @@ export async function runDevSeed(knex: Knex, deps: RunDevSeedDeps = {}): Promise
 
   const container: Container = createContainer({ db: knex, config, logger });
   const { authService, userService, veterinarianService, organizationService } = container;
+  const { organizationEngagementService } = container;
   const { membershipService, membershipRepository, organizationSupervisorService } = container;
   const { animalService, veterinaryAccessService, medicalRecordService, vaccinationService } =
     container;
@@ -326,7 +327,14 @@ export async function runDevSeed(knex: Knex, deps: RunDevSeedDeps = {}): Promise
   const DEV_PROFILES: Partial<
     Record<
       DevOrganizationKey,
-      { address: string; latitude: number; longitude: number; phone: string }
+      {
+        address: string;
+        latitude: number;
+        longitude: number;
+        phone: string;
+        whatsapp?: string;
+        workingHours?: string;
+      }
     >
   > = {
     clinic: {
@@ -340,6 +348,8 @@ export async function runDevSeed(knex: Knex, deps: RunDevSeedDeps = {}): Promise
       latitude: 33.3406,
       longitude: 44.3244,
       phone: '+964 780 234 5678',
+      whatsapp: '+964 780 234 5678',
+      workingHours: 'يومياً 8:00 ص - 8:00 م',
     },
     store: {
       address: 'Basra — Al-Ashar',
@@ -424,6 +434,7 @@ export async function runDevSeed(knex: Knex, deps: RunDevSeedDeps = {}): Promise
   await seedClinicCareForMax();
   await seedFarmPoultry();
   await seedStoreProducts();
+  await seedOfficeProducts();
   await seedPetOwnerStoreCatalog();
   await seedWelcomeArticle();
   await seedAdvertisements();
@@ -652,7 +663,7 @@ export async function runDevSeed(knex: Knex, deps: RunDevSeedDeps = {}): Promise
       },
       {
         name: 'Digital Pet Thermometer',
-        productType: 'EQUIPMENT' as const,
+        productType: 'EQUIPMENT_SUPPLY' as const,
         price: '12.50',
         stockQuantity: 15,
         description: 'Fast-read rectal thermometer.',
@@ -665,6 +676,75 @@ export async function runDevSeed(knex: Knex, deps: RunDevSeedDeps = {}): Promise
         .first();
       if (existing) continue;
       await productService.create(storeRef, p, actor);
+    }
+  }
+
+  /** Veterinary Offices product catalog + a couple of reviews (Veterinarian Home → "المكاتب البيطرية"). */
+  async function seedOfficeProducts(): Promise<void> {
+    const officeId = organizationIdsByKey.office;
+    if (!officeId) return;
+
+    const officeRef = { id: officeId, type: 'VETERINARY_OFFICE' as const };
+    const actor = {
+      actorUserId: must(userIdsByKey, 'officeOwner', 'user'),
+      context: SEED_CONTEXT,
+    };
+
+    const products = [
+      {
+        name: 'أنتي بيك',
+        productType: 'MEDICINE' as const,
+        price: '25000',
+        stockQuantity: 30,
+        description:
+          'مضاد حيوي واسع المجال فعال ضد مجموعة كبيرة من البكتيريا المسببة للأمراض في الحيوانات.',
+        subtype: 'مضاد حيوي',
+        weight: '100 جرام',
+        usageInstructions: 'للأغنام، الأبقار، الدواجن',
+        dosage: 'حسب إرشادات الطبيب البيطري',
+        shelfLife: '24 شهر',
+        manufacturer: 'C.Dapet',
+        highlights: ['نتائج سريعة', 'فعالية عالية', 'سهل الاستخدام'],
+      },
+      {
+        name: 'مكمل الكالسيوم',
+        productType: 'SUPPLEMENT' as const,
+        price: '20000',
+        stockQuantity: 50,
+        description: 'مكمل معدني متعدد الاستخدامات لتحسين النمو وصحة العظام.',
+        subtype: 'مكمل معدني',
+        weight: '1 كيلوغرام',
+        usageInstructions: 'للأغنام، الأبقار، الدواجن',
+      },
+      {
+        name: 'محلول مطهر للجروح',
+        productType: 'CARE' as const,
+        price: '28000',
+        stockQuantity: 20,
+        description: 'مطهر عالي الجودة لتحصين إنتاج ومناعة الحيوانات والوقاية من الأمراض البكتيرية.',
+        subtype: 'مطهر ومعقم',
+      },
+    ];
+
+    for (const p of products) {
+      const existing = await knex('veterinary_store_products')
+        .where({ organization_id: officeId, name: p.name })
+        .first();
+      if (existing) continue;
+      await productService.create(officeRef, p, actor);
+    }
+
+    for (const key of ['clinicOwner', 'farmOwner', 'storeOwner'] as const) {
+      const reviewerId = userIdsByKey[key];
+      if (!reviewerId) continue;
+      const existing = await knex('organization_reviews')
+        .where({ organization_id: officeId, user_id: reviewerId })
+        .first();
+      if (existing) continue;
+      await organizationEngagementService.submitReview(officeId, reviewerId, {
+        rating: 5,
+        comment: null,
+      });
     }
   }
 
@@ -899,6 +979,23 @@ export async function runDevSeed(knex: Knex, deps: RunDevSeedDeps = {}): Promise
             title: 'خصومات على الفحص الدوري',
             subtitle: 'لفترة محدودة',
             file: 'banner-3.jpg',
+          },
+        ],
+      },
+      {
+        placement: 'VETERINARIAN_HOME',
+        type: 'CAROUSEL',
+        title: 'حملة الصفحة الرئيسية للطبيب البيطري',
+        slides: [
+          {
+            title: 'شركة بار الجزيرة للتجارة والخدمات البيطرية',
+            subtitle: 'منتجات بيطرية عالية الجودة لصحة حيواناتك',
+            file: 'banner-1.jpg',
+          },
+          {
+            title: 'أدوات ومستلزمات العيادات البيطرية',
+            subtitle: 'توريد مباشر بأسعار تنافسية',
+            file: 'banner-2.jpg',
           },
         ],
       },

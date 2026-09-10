@@ -75,7 +75,9 @@ export class OrganizationController {
       search: q.search,
       near: q.sort === 'nearest' ? { lat: q.lat as number, lng: q.lng as number } : undefined,
     });
-    sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
+    const ratings = await this.engagement.getRatingsForOrganizations(items.map((i) => i.id));
+    const withRatings = items.map((item) => ({ ...item, ...ratings.get(item.id) }));
+    sendSuccess(res, withRatings, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
   };
 
   /**

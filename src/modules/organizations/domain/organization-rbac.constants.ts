@@ -86,7 +86,8 @@ export const ORG_PERMISSION_KEYS = [
   // explicit per-membership SUPERVISOR grant (the "Responsible Supervisor").
   'farm.subscription.read',
   'farm.subscription.manage',
-  // --- Veterinary store products (Phase 10) — VETERINARY_STORE organizations ---
+  // --- Veterinary store products (Phase 10; extended to Veterinary Offices) —
+  // VETERINARY_STORE / VETERINARY_OFFICE organizations ---
   // Stock changes are `product.inventory.adjust`, NOT `product.update` — a
   // controlled operation, never a free-form field edit.
   'product.read',
@@ -183,10 +184,10 @@ export const ORG_PERMISSION_DEFINITIONS: Record<OrgPermissionKey, string> = {
   'farm.subscription.read': 'View this farm’s subscription period and renewal requests',
   'farm.subscription.manage':
     'Set this farm’s subscription period and approve/reject its renewal requests',
-  'product.read': 'View this veterinary store’s products',
-  'product.create': 'Add a product to this veterinary store',
-  'product.update': 'Update this veterinary store’s products (profile fields, not stock)',
-  'product.delete': 'Deactivate (soft-delete) this veterinary store’s products',
+  'product.read': 'View this store/office’s products',
+  'product.create': 'Add a product to this store/office',
+  'product.update': 'Update this store/office’s products (profile fields, not stock)',
+  'product.delete': 'Deactivate (soft-delete) this store/office’s products',
   'product.inventory.adjust': 'Adjust a product’s stock quantity',
   'clinic.appointment.read': 'View appointment requests booked with this clinic',
   'clinic.appointment.manage':

@@ -767,9 +767,17 @@ export function createContainer(deps: ContainerDeps): Container {
     logger,
   );
 
-  // --- veterinary store & products (Phase 10) ----------------
+  // --- veterinary store & products (Phase 10; extended to Veterinary Offices) ---
   const productRepository = new ProductRepository(db);
-  const productService = new ProductService(db, productRepository, auditService, eventBus, logger);
+  const productService = new ProductService(
+    db,
+    productRepository,
+    organizationRepository,
+    objectStorage,
+    auditService,
+    eventBus,
+    logger,
+  );
 
   // --- Pet Owners Store (platform-run consumer storefront) ----
   const petStoreCategoryRepository = new PetStoreCategoryRepository(db);

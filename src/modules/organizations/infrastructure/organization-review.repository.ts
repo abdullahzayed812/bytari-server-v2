@@ -64,6 +64,37 @@ export class OrganizationReviewRepository {
     return { average: count > 0 ? average : null, count };
   }
 
+  /**
+   * Batched counterpart of {@link aggregate} for a page of organizations (the
+   * discover list) — one grouped query instead of one per row. Organizations
+   * with no reviews simply have no entry in the returned map.
+   */
+  async aggregateMany(
+    organizationIds: string[],
+    trx?: Knex.Transaction,
+  ): Promise<Map<string, ReviewAggregate>> {
+    const result = new Map<string, ReviewAggregate>();
+    if (organizationIds.length === 0) return result;
+
+    const rows: { organization_id: string; avg: string | null; count: string }[] = await this.conn(
+      trx,
+    )(TABLE)
+      .whereIn('organization_id', organizationIds)
+      .groupBy('organization_id')
+      .select(
+        'organization_id',
+        this.conn(trx).raw('avg(rating) as avg'),
+        this.conn(trx).raw('count(*) as count'),
+      );
+
+    for (const row of rows) {
+      const count = Number(row.count);
+      const average = row.avg == null ? null : Math.round(Number(row.avg) * 10) / 10;
+      result.set(row.organization_id, { average: count > 0 ? average : null, count });
+    }
+    return result;
+  }
+
   async listForOrg(
     organizationId: string,
     page: number,

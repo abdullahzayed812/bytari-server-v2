@@ -2,14 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { StorePolicy } from '../../src/modules/veterinary-store/domain/store.policy.js';
 import { AppError } from '../../src/shared/errors/app-error.js';
 
-describe('StorePolicy.assertVeterinaryStore', () => {
-  it('accepts a VETERINARY_STORE', () => {
-    expect(() => StorePolicy.assertVeterinaryStore({ type: 'VETERINARY_STORE' })).not.toThrow();
+describe('StorePolicy.assertProductCapable', () => {
+  it('accepts a VETERINARY_STORE or a VETERINARY_OFFICE', () => {
+    expect(() => StorePolicy.assertProductCapable({ type: 'VETERINARY_STORE' })).not.toThrow();
+    expect(() => StorePolicy.assertProductCapable({ type: 'VETERINARY_OFFICE' })).not.toThrow();
   });
   it('rejects every other organization type with 400 ORGANIZATION_TYPE_NOT_SUPPORTED', () => {
-    for (const type of ['CLINIC', 'FARM', 'VETERINARY_OFFICE']) {
+    for (const type of ['CLINIC', 'FARM']) {
       try {
-        StorePolicy.assertVeterinaryStore({ type });
+        StorePolicy.assertProductCapable({ type });
         throw new Error('expected throw');
       } catch (err) {
         expect(err).toBeInstanceOf(AppError);

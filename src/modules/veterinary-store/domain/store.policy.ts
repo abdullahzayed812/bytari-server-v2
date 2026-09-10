@@ -1,21 +1,23 @@
 import { BadRequestError, ConflictError } from '../../../shared/errors/app-error.js';
 import { ErrorCode } from '../../../shared/errors/error-codes.js';
-import { VETERINARY_STORE_ORG_TYPE } from './store.constants.js';
+import { PRODUCT_ORG_TYPES } from './store.constants.js';
 
 /**
- * Veterinary Store / product business rules. Pure — no I/O. Services call these.
+ * Veterinary Store / Veterinary Office product business rules. Pure — no I/O.
+ * Services call these.
  */
 export const StorePolicy = {
   /**
-   * Product management is only available for VETERINARY_STORE organizations
-   * (docs 02 §2.3 — "Veterinary Office is an independent entity from stores").
-   * The type comes from the resolved organization, never the request body.
+   * Product management is only available for VETERINARY_STORE / VETERINARY_OFFICE
+   * organizations. The type comes from the resolved organization, never the
+   * request body.
    */
-  assertVeterinaryStore(org: { type: string }): void {
-    if (org.type !== VETERINARY_STORE_ORG_TYPE) {
-      throw new BadRequestError('Product management is only available for veterinary stores', {
-        code: ErrorCode.ORGANIZATION_TYPE_NOT_SUPPORTED,
-      });
+  assertProductCapable(org: { type: string }): void {
+    if (!(PRODUCT_ORG_TYPES as readonly string[]).includes(org.type)) {
+      throw new BadRequestError(
+        'Product management is only available for veterinary stores and veterinary offices',
+        { code: ErrorCode.ORGANIZATION_TYPE_NOT_SUPPORTED },
+      );
     }
   },
 

@@ -2,7 +2,7 @@ import type { Request, Response } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import { pageMeta } from '../../../shared/http/pagination.js';
 import { sendSuccess } from '../../../shared/http/response.js';
-import { validatedBody, validatedQuery } from '../../../shared/http/validate.js';
+import { validatedBody, validatedParams, validatedQuery } from '../../../shared/http/validate.js';
 import { auditContextFromRequest, type AuditContextResult } from '../../audit/audit-context.js';
 import { requireAuth } from '../../auth/authenticate.middleware.js';
 import { requireOrganization } from '../../organizations/presentation/organization.middleware.js';
@@ -11,7 +11,9 @@ import { requireProduct } from './store.middleware.js';
 import type {
   AdjustStockBody,
   CreateProductBody,
+  FinalizeProductImageBody,
   ListProductsQuery,
+  ProductImageUploadUrlBody,
   UpdateProductBody,
 } from './store.schemas.js';
 
@@ -78,5 +80,26 @@ export class ProductController {
         this.actor(req),
       ),
     );
+  };
+
+  requestImageUploadUrl = async (req: Request, res: Response): Promise<void> => {
+    const org = requireOrganization(req);
+    const product = requireProduct(req);
+    const body = validatedBody<ProductImageUploadUrlBody>(req);
+    sendSuccess(res, await this.products.requestImageUploadUrl(org.id, product.id, body));
+  };
+
+  addImage = async (req: Request, res: Response): Promise<void> => {
+    const org = requireOrganization(req);
+    const product = requireProduct(req);
+    const body = validatedBody<FinalizeProductImageBody>(req);
+    sendSuccess(res, await this.products.addImage(org.id, product.id, this.actor(req), body));
+  };
+
+  removeImage = async (req: Request, res: Response): Promise<void> => {
+    const org = requireOrganization(req);
+    const product = requireProduct(req);
+    const { imageId } = validatedParams<{ imageId: string }>(req);
+    sendSuccess(res, await this.products.removeImage(org.id, product.id, imageId, this.actor(req)));
   };
 }

@@ -64,6 +64,23 @@ export class OrganizationEngagementService {
     return this.reviews.listForOrg(organizationId, page, pageSize);
   }
 
+  /**
+   * Viewer-independent rating aggregates for a page of organizations (the
+   * discover list's cards) — one batched query, not one per row. Missing
+   * entries (no reviews yet) mean `rating: null, reviewsCount: 0`.
+   */
+  async getRatingsForOrganizations(
+    organizationIds: string[],
+  ): Promise<Map<string, { rating: number | null; reviewsCount: number }>> {
+    const aggregates = await this.reviews.aggregateMany(organizationIds);
+    const result = new Map<string, { rating: number | null; reviewsCount: number }>();
+    for (const id of organizationIds) {
+      const agg = aggregates.get(id);
+      result.set(id, { rating: agg?.average ?? null, reviewsCount: agg?.count ?? 0 });
+    }
+    return result;
+  }
+
   /** Viewer-aware summary — `isFollowing` reflects `viewerUserId`'s own state. */
   async getSummary(
     organizationId: string,

@@ -44,6 +44,8 @@ export const AD_PLACEMENTS = [
   // Sheep Farms & Cattle Farms — the combined landing screen's ad slot.
   'SHEEP_FARMS',
   'CATTLE_FARMS',
+  // Veterinarian Home — the vet-mode home screen's ad slot.
+  'VETERINARIAN_HOME',
 ] as const;
 export type AdPlacement = (typeof AD_PLACEMENTS)[number];
 export const DEFAULT_AD_PLACEMENT: AdPlacement = 'HOME';

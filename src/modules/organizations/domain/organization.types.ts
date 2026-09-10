@@ -239,6 +239,14 @@ export interface PublicOrganizationDTO extends OrganizationProfile {
   name: string;
   description: string | null;
   distanceKm: number | null;
+  /**
+   * Aggregate rating — average rounded to 1 decimal, `null` with no reviews
+   * yet. Attached by the controller (a batched lookup across the page, see
+   * `OrganizationEngagementService.getRatingsForOrganizations`) — the service
+   * layer here stays unaware of reviews, same module split as `getPublicOne`.
+   */
+  rating: number | null;
+  reviewsCount: number;
   createdAt: string;
 }
 
@@ -280,6 +288,8 @@ export function toPublicOrganizationDTO(
     tiktokUrl: profile.tiktokUrl,
     galleryUrls: profile.galleryUrls,
     distanceKm,
+    rating: null,
+    reviewsCount: 0,
     createdAt: org.createdAt,
   };
 }

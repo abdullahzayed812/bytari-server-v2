@@ -11,6 +11,20 @@ const priceSchema = z
   .regex(/^\d{1,8}(\.\d{1,2})?$/, 'Expected a non-negative amount like "12.50"');
 const stockSchema = z.coerce.number().int().min(0).max(100_000_000);
 
+/** Short free-text detail fields shown on the product-details screen. */
+const detailFieldSchema = z.string().trim().min(1).max(300);
+const highlightsSchema = z.array(z.string().trim().min(1).max(60)).max(6);
+
+const detailFieldsShape = {
+  subtype: detailFieldSchema.nullable().optional(),
+  weight: detailFieldSchema.nullable().optional(),
+  usageInstructions: detailFieldSchema.nullable().optional(),
+  dosage: detailFieldSchema.nullable().optional(),
+  shelfLife: detailFieldSchema.nullable().optional(),
+  manufacturer: detailFieldSchema.nullable().optional(),
+  highlights: highlightsSchema.optional(),
+};
+
 // --- create / update ------------------------------------------
 
 export const createProductBodySchema = z.object({
@@ -19,6 +33,7 @@ export const createProductBodySchema = z.object({
   productType: z.enum(PRODUCT_TYPES),
   price: priceSchema.nullable().optional(),
   stockQuantity: stockSchema.optional(),
+  ...detailFieldsShape,
 });
 export type CreateProductBody = z.infer<typeof createProductBodySchema>;
 
@@ -29,9 +44,31 @@ export const updateProductBodySchema = z
     productType: z.enum(PRODUCT_TYPES).optional(),
     price: priceSchema.nullable().optional(),
     status: z.enum(PRODUCT_STATUSES).optional(),
+    ...detailFieldsShape,
   })
   .refine((v) => Object.keys(v).length > 0, { message: 'At least one field is required' });
 export type UpdateProductBody = z.infer<typeof updateProductBodySchema>;
+
+// --- images -------------------------------------------------------
+
+export const productImageUploadUrlBodySchema = z.object({
+  filename: z.string().trim().min(1).max(255),
+  mimeType: z.string().trim().min(1).max(100),
+  size: z.number().int().positive(),
+});
+export type ProductImageUploadUrlBody = z.infer<typeof productImageUploadUrlBodySchema>;
+
+export const finalizeProductImageBodySchema = z.object({
+  storageKey: z.string().trim().min(1).max(1000),
+  mimeType: z.string().trim().min(1).max(100),
+});
+export type FinalizeProductImageBody = z.infer<typeof finalizeProductImageBodySchema>;
+
+export const productImageParamSchema = z.object({
+  organizationId: z.string().uuid(),
+  productId: z.string().uuid(),
+  imageId: z.string().uuid(),
+});
 
 // --- inventory --------------------------------------------
 
@@ -64,3 +101,17 @@ export const listProductsQuerySchema = paginationQuerySchema.extend({
   order: z.enum(['asc', 'desc']).optional(),
 });
 export type ListProductsQuery = z.infer<typeof listProductsQuerySchema>;
+
+/** Public catalog browse (`GET /organizations/discover/:organizationId/products`) — no `status`, always ACTIVE. */
+export const publicListProductsQuerySchema = paginationQuerySchema.extend({
+  type: z.enum(PRODUCT_TYPES).optional(),
+  search: z.string().trim().min(1).max(200).optional(),
+  sort: z.enum(['name', 'price', 'createdAt']).optional(),
+  order: z.enum(['asc', 'desc']).optional(),
+});
+export type PublicListProductsQuery = z.infer<typeof publicListProductsQuerySchema>;
+
+export const publicProductParamSchema = z.object({
+  organizationId: z.string().uuid(),
+  productId: z.string().uuid(),
+});

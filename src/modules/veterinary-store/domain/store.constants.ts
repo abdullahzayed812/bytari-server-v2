@@ -1,21 +1,31 @@
 /**
- * Phase 10 — Veterinary Store & Products domain constants.
+ * Phase 10 — Veterinary Store & Products domain constants, later extended to
+ * Veterinary Offices (Veterinarian Home § "المكاتب البيطرية").
  *
- * A Veterinary Store is an Organization of type `VETERINARY_STORE` (Phase 3).
- * This module adds only product management; ownership, membership, roles and
- * organization authorization are reused unchanged.
+ * A product-owning organization is a `VETERINARY_STORE` or `VETERINARY_OFFICE`
+ * (Phase 3). This module adds only product management; ownership, membership,
+ * roles and organization authorization are reused unchanged.
  */
 
-/** The only organization type that can own products (Phase 10 scope). */
-export const VETERINARY_STORE_ORG_TYPE = 'VETERINARY_STORE' as const;
+/** Organization types that can own products. */
+export const PRODUCT_ORG_TYPES = ['VETERINARY_STORE', 'VETERINARY_OFFICE'] as const;
+export type ProductOrgType = (typeof PRODUCT_ORG_TYPES)[number];
 
 /**
- * Confirmed veterinary product types (docs 02 §2.3 / docs 01 §1.7:
- * "Veterinary Medicines / Medical Equipment / Veterinary Supplies"). Text +
- * CHECK, not a catalogue table — extend the CHECK via migration if needed.
+ * Veterinary product categories, matching the Veterinary Offices product
+ * filter chips. Text + CHECK, not a catalogue table — extend the CHECK via
+ * migration if another category is ever needed.
  */
-export const PRODUCT_TYPES = ['MEDICINE', 'EQUIPMENT', 'SUPPLY', 'OTHER'] as const;
+export const PRODUCT_TYPES = ['MEDICINE', 'EQUIPMENT_SUPPLY', 'SUPPLEMENT', 'CARE'] as const;
 export type ProductType = (typeof PRODUCT_TYPES)[number];
+
+/** Product image limits — same shape as the organization gallery / Pet Owners Store seams. */
+export const MAX_PRODUCT_IMAGES = 6;
+export const MAX_PRODUCT_IMAGE_BYTES = 10 * 1024 * 1024;
+export const ALLOWED_PRODUCT_IMAGE_MIME = ['image/png', 'image/jpeg', 'image/webp'] as const;
+export const PRODUCT_IMAGE_UPLOAD_URL_TTL_SECONDS = 900;
+/** Seconds a signed GET URL for a product image stays valid (public-URL setups never use this). */
+export const PRODUCT_IMAGE_URL_TTL_SECONDS = 3600;
 
 /**
  * Product lifecycle. `INACTIVE` is the soft-delete state — products are never

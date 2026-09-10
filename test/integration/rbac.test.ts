@@ -156,7 +156,10 @@ describe('roles ↔ permissions', () => {
     // + 11 Phase-13 (`consultation.*`, `inquiry.*`, `ai.settings.manage`)
     // + 8 Phase-14 `content.*` + 1 Phase-15 `notification.admin.send`
     // + 1 `advertisement.manage` (multi-section advertisement campaigns)
-    // + Poultry Markets module: 4 `trader.admin.*` + 3 `market.*`.
+    // + Poultry Markets module: 4 `trader.admin.*` + 3 `market.*`
+    // + Pet Owners Store: 3 `pet_store.*`
+    // + SUPPORT system-supervisor domain: 5 `support.*`
+    // + Veterinary Services moderation: 3 `vet_service.*`.
     const keys = (perms.body.data as Array<{ key: string }>).map((p) => p.key);
     expect(keys).toContain('user.read');
     expect(keys).toContain('organization.admin.approve');
@@ -172,6 +175,8 @@ describe('roles ↔ permissions', () => {
     expect(keys).toContain('market.rate.manage');
     expect(keys).toContain('pet_store.product.manage');
     expect(keys).toContain('pet_store.order.manage');
-    expect(keys.length).toBe(65);
+    expect(keys).toContain('support.admin.read');
+    expect(keys).toContain('vet_service.approve');
+    expect(keys.length).toBe(73);
   });
 });

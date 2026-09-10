@@ -3,13 +3,17 @@ import {
   rowToProduct,
   type ListProductsFilter,
   type Product,
+  type ProductDetailFieldsInput,
+  type ProductImageRow,
   type ProductRow,
 } from '../domain/store.types.js';
 
 const TABLE = 'veterinary_store_products';
+const IMAGES = 'veterinary_store_product_images';
 
-export interface CreateProductData {
+export interface CreateProductData extends ProductDetailFieldsInput {
   organizationId: string;
+  organizationType: string;
   name: string;
   description: string | null;
   productType: string;
@@ -18,12 +22,13 @@ export interface CreateProductData {
   createdByUserId: string;
 }
 
-export interface UpdateProductData {
+export interface UpdateProductData extends ProductDetailFieldsInput {
   name?: string;
   description?: string | null;
   productType?: string;
   price?: string | null;
   status?: string;
+  primaryImageKey?: string | null;
 }
 
 export class ProductRepository {
@@ -38,7 +43,7 @@ export class ProductRepository {
     return row ? rowToProduct(row) : null;
   }
 
-  /** A product that MUST belong to this store (IDOR guard for `:productId` routes). */
+  /** A product that MUST belong to this organization (IDOR guard for `:productId` routes). */
   async findByIdForOrganization(
     id: string,
     organizationId: string,
@@ -54,12 +59,19 @@ export class ProductRepository {
     const [row] = (await trx(TABLE)
       .insert({
         organization_id: data.organizationId,
-        organization_type: 'VETERINARY_STORE',
+        organization_type: data.organizationType,
         name: data.name,
         description: data.description,
         product_type: data.productType,
         price: data.price,
         stock_quantity: data.stockQuantity,
+        subtype: data.subtype ?? null,
+        weight: data.weight ?? null,
+        usage_instructions: data.usageInstructions ?? null,
+        dosage: data.dosage ?? null,
+        shelf_life: data.shelfLife ?? null,
+        manufacturer: data.manufacturer ?? null,
+        highlights: data.highlights ?? [],
         created_by_user_id: data.createdByUserId,
       })
       .returning('*')) as ProductRow[];
@@ -74,6 +86,14 @@ export class ProductRepository {
     if (patch.productType !== undefined) dbPatch.product_type = patch.productType;
     if (patch.price !== undefined) dbPatch.price = patch.price;
     if (patch.status !== undefined) dbPatch.status = patch.status;
+    if (patch.subtype !== undefined) dbPatch.subtype = patch.subtype;
+    if (patch.weight !== undefined) dbPatch.weight = patch.weight;
+    if (patch.usageInstructions !== undefined) dbPatch.usage_instructions = patch.usageInstructions;
+    if (patch.dosage !== undefined) dbPatch.dosage = patch.dosage;
+    if (patch.shelfLife !== undefined) dbPatch.shelf_life = patch.shelfLife;
+    if (patch.manufacturer !== undefined) dbPatch.manufacturer = patch.manufacturer;
+    if (patch.highlights !== undefined) dbPatch.highlights = patch.highlights;
+    if (patch.primaryImageKey !== undefined) dbPatch.primary_image_key = patch.primaryImageKey;
 
     const [row] = (await trx(TABLE).where({ id }).update(dbPatch).returning('*')) as ProductRow[];
     if (!row) throw new Error('product not found after update');
@@ -121,5 +141,52 @@ export class ProductRepository {
       .offset((filter.page - 1) * filter.pageSize);
 
     return { items: rows.map(rowToProduct), total };
+  }
+
+  // --- images -------------------------------------------------------
+
+  async listImages(productId: string, trx?: Knex.Transaction): Promise<ProductImageRow[]> {
+    return this.conn(trx)<ProductImageRow>(IMAGES)
+      .where({ product_id: productId })
+      .orderBy([
+        { column: 'sort_order', order: 'asc' },
+        { column: 'created_at', order: 'asc' },
+      ]);
+  }
+
+  async addImage(
+    productId: string,
+    imageKey: string,
+    sortOrder: number,
+    trx: Knex.Transaction,
+  ): Promise<ProductImageRow> {
+    const [row] = (await trx(IMAGES)
+      .insert({ product_id: productId, image_key: imageKey, sort_order: sortOrder })
+      .returning('*')) as ProductImageRow[];
+    if (!row) throw new Error('product image insert did not return a row');
+    return row;
+  }
+
+  async findImage(
+    productId: string,
+    imageId: string,
+    trx?: Knex.Transaction,
+  ): Promise<ProductImageRow | null> {
+    const row = await this.conn(trx)<ProductImageRow>(IMAGES)
+      .where({ id: imageId, product_id: productId })
+      .first();
+    return row ?? null;
+  }
+
+  async deleteImage(imageId: string, trx: Knex.Transaction): Promise<void> {
+    await trx(IMAGES).where({ id: imageId }).delete();
+  }
+
+  async nextImageSortOrder(productId: string, trx: Knex.Transaction): Promise<number> {
+    const row = await trx(IMAGES)
+      .where({ product_id: productId })
+      .max<{ max: number | null }>({ max: 'sort_order' })
+      .first();
+    return (row?.max ?? -1) + 1;
   }
 }

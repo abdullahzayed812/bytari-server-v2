@@ -1,10 +1,9 @@
 import type { Request, RequestHandler } from 'express';
-import { BadRequestError, NotFoundError } from '../../../shared/errors/app-error.js';
-import { ErrorCode } from '../../../shared/errors/error-codes.js';
+import { NotFoundError } from '../../../shared/errors/app-error.js';
 import { asyncHandler } from '../../../shared/http/async-handler.js';
 import { validatedParams } from '../../../shared/http/validate.js';
 import { requireOrganization } from '../../organizations/presentation/organization.middleware.js';
-import { VETERINARY_STORE_ORG_TYPE } from '../domain/store.constants.js';
+import { StorePolicy } from '../domain/store.policy.js';
 import type { ProductRepository } from '../infrastructure/product.repository.js';
 
 /** Narrow `req.product` inside a controller that runs after `withProduct`. */
@@ -15,25 +14,22 @@ export function requireProduct(req: Request): Express.ProductContext {
 
 /**
  * MUST run after `withOrganization`. Rejects any organization that is not a
- * VETERINARY_STORE (`400`) — product management is store-only (docs 02 §2.3;
- * a Veterinary Office is an independent entity). The type comes from the
- * resolved organization, never the request body.
+ * VETERINARY_STORE / VETERINARY_OFFICE (`400`) — product management is
+ * store-and-office-only. The type comes from the resolved organization, never
+ * the request body.
  */
-export const withVeterinaryStore: RequestHandler = asyncHandler((req, _res, next) => {
+export const withProductOrganization: RequestHandler = asyncHandler((req, _res, next) => {
   const org = requireOrganization(req);
-  if (org.type !== VETERINARY_STORE_ORG_TYPE) {
-    throw new BadRequestError('Product management is only available for veterinary stores', {
-      code: ErrorCode.ORGANIZATION_TYPE_NOT_SUPPORTED,
-    });
-  }
+  StorePolicy.assertProductCapable(org);
   next();
 });
 
 /**
- * MUST run after `withOrganization` + `withVeterinaryStore` + `authorizeOrg`.
- * Resolves `:productId` scoped to the URL's store → `req.product`. A product id
- * that does not belong to this store returns `404` (cross-store isolation —
- * Store A cannot probe Store B's product ids).
+ * MUST run after `withOrganization` + `withProductOrganization` + `authorizeOrg`.
+ * Resolves `:productId` scoped to the URL's organization → `req.product`. A
+ * product id that does not belong to this organization returns `404`
+ * (cross-tenant isolation — Store/Office A cannot probe Store/Office B's
+ * product ids).
  */
 export function createStoreMiddleware(deps: { products: ProductRepository }): {
   withProduct: RequestHandler;

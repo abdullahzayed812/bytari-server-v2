@@ -131,6 +131,12 @@ const schemas: Obj = {
         nullable: true,
         description: 'Only set when `sort=nearest`',
       },
+      rating: {
+        type: 'number',
+        nullable: true,
+        description: 'Average rating rounded to 1 decimal, null with no reviews yet',
+      },
+      reviewsCount: { type: 'integer' },
       createdAt: { type: 'string', format: 'date-time' },
     },
   },

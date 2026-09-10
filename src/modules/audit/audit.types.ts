@@ -95,11 +95,12 @@ export const AuditAction = {
   /** Owner deletes their own listing, or an ADMIN / ANIMAL supervisor removes one. */
   ANIMAL_PUBLICATION_DELETED: 'ANIMAL_PUBLICATION_DELETED',
 
-  // --- Veterinary store & products (Phase 10) ---
+  // --- Veterinary store & products (Phase 10; extended to Veterinary Offices) ---
   PRODUCT_CREATED: 'PRODUCT_CREATED',
   PRODUCT_UPDATED: 'PRODUCT_UPDATED',
   PRODUCT_DEACTIVATED: 'PRODUCT_DEACTIVATED',
   PRODUCT_INVENTORY_ADJUSTED: 'PRODUCT_INVENTORY_ADJUSTED',
+  PRODUCT_IMAGE_UPDATED: 'PRODUCT_IMAGE_UPDATED',
 
   // --- Pet Owners Store (platform-run consumer storefront) ---
   PET_STORE_PRODUCT_CREATED: 'PET_STORE_PRODUCT_CREATED',

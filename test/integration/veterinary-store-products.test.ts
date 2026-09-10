@@ -75,9 +75,9 @@ describe('veterinary store products — CRUD', () => {
     const upd = await request(app)
       .patch(pPath(store.id, id))
       .set(bearer(owner.accessToken))
-      .send({ price: '17.50', productType: 'SUPPLY' });
+      .send({ price: '17.50', productType: 'EQUIPMENT_SUPPLY' });
     expect(upd.status).toBe(200);
-    expect(upd.body.data).toMatchObject({ price: '17.50', productType: 'SUPPLY' });
+    expect(upd.body.data).toMatchObject({ price: '17.50', productType: 'EQUIPMENT_SUPPLY' });
 
     const del = await request(app).delete(pPath(store.id, id)).set(bearer(owner.accessToken));
     expect(del.status).toBe(200);
@@ -119,7 +119,7 @@ describe('veterinary store products — CRUD', () => {
     });
     await createProduct(app, owner.accessToken, store.id, {
       name: 'A-equip',
-      productType: 'EQUIPMENT',
+      productType: 'EQUIPMENT_SUPPLY',
       price: '10.00',
     });
 
@@ -168,10 +168,10 @@ describe('veterinary store products — CRUD', () => {
 });
 
 describe('veterinary store products — organization type gate', () => {
-  it('rejects product operations on non-store organizations with 400', async () => {
+  it('rejects product operations on non-product-capable organizations with 400', async () => {
     const admin = await registerAdmin(app);
     const owner = await registerApprovedVet(app);
-    for (const type of ['CLINIC', 'FARM', 'VETERINARY_OFFICE'] as const) {
+    for (const type of ['CLINIC', 'FARM'] as const) {
       const org = await createActiveOrganization(app, owner.accessToken, admin.accessToken, {
         type,
         name: `${type} org`,
@@ -183,6 +183,21 @@ describe('veterinary store products — organization type gate', () => {
       expect(res.status).toBe(400);
       expect(res.body.error.code).toBe('ORGANIZATION_TYPE_NOT_SUPPORTED');
     }
+  });
+
+  it('a VETERINARY_OFFICE can also own products (Veterinarian Home → المكاتب البيطرية)', async () => {
+    const admin = await registerAdmin(app);
+    const owner = await registerApprovedVet(app);
+    const office = await createActiveOrganization(app, owner.accessToken, admin.accessToken, {
+      type: 'VETERINARY_OFFICE',
+      name: 'Al Rahma Office',
+    });
+    const res = await request(app)
+      .post(pPath(office.id))
+      .set(bearer(owner.accessToken))
+      .send({ name: 'Antibiotic', productType: 'MEDICINE', price: '25000' });
+    expect(res.status).toBe(201);
+    expect(res.body.data).toMatchObject({ organizationId: office.id, organizationType: 'VETERINARY_OFFICE' });
   });
 
   it('the database composite FK refuses a product pointing at a non-store organization', async () => {
@@ -240,7 +255,7 @@ describe('veterinary store products — authorization', () => {
     const create = await request(app)
       .post(pPath(store.id))
       .set(bearer(supervisor.accessToken))
-      .send({ name: 'Sup product', productType: 'EQUIPMENT' });
+      .send({ name: 'Sup product', productType: 'EQUIPMENT_SUPPLY' });
     expect(create.status).toBe(201);
 
     // NOT assigned: product.update / product.delete / product.inventory.adjust
@@ -271,7 +286,7 @@ describe('veterinary store products — authorization', () => {
     const res = await request(app)
       .post(pPath(store.id))
       .set(bearer(admin.accessToken))
-      .send({ name: 'Admin product', productType: 'OTHER' });
+      .send({ name: 'Admin product', productType: 'CARE' });
     expect(res.status).toBe(201);
   });
 });
@@ -416,15 +431,15 @@ describe('veterinary store products — events & audit', () => {
     }
   });
 
-  it('a failed create (non-store org) writes no audit', async () => {
+  it('a failed create (non-product-capable org) writes no audit', async () => {
     const admin = await registerAdmin(app);
     const owner = await registerApprovedVet(app);
-    const office = await createActiveOrganization(app, owner.accessToken, admin.accessToken, {
-      type: 'VETERINARY_OFFICE',
-      name: 'Office',
+    const clinic = await createActiveOrganization(app, owner.accessToken, admin.accessToken, {
+      type: 'CLINIC',
+      name: 'Clinic',
     });
     await request(app)
-      .post(pPath(office.id))
+      .post(pPath(clinic.id))
       .set(bearer(owner.accessToken))
       .send({ name: 'x', productType: 'MEDICINE' });
 

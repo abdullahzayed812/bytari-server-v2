@@ -903,14 +903,17 @@ export async function approvePublication(
 export interface TestProduct {
   id: string;
   organizationId: string;
+  organizationType: string;
   name: string;
   productType: string;
   price: string | null;
   stockQuantity: number;
   status: string;
+  primaryImageUrl: string | null;
+  images: Array<{ id: string; url: string; sortOrder: number }>;
 }
 
-/** Add a product to a VETERINARY_STORE organization. */
+/** Add a product to a VETERINARY_STORE / VETERINARY_OFFICE organization. */
 export async function createProduct(
   app: Express,
   actorToken: string,
@@ -918,7 +921,7 @@ export async function createProduct(
   body: Partial<{
     name: string;
     description: string;
-    productType: 'MEDICINE' | 'EQUIPMENT' | 'SUPPLY' | 'OTHER';
+    productType: 'MEDICINE' | 'EQUIPMENT_SUPPLY' | 'SUPPLEMENT' | 'CARE';
     price: string;
     stockQuantity: number;
   }> = {},
