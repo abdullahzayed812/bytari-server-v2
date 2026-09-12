@@ -23,6 +23,8 @@ export const StoragePrefix = {
   eggOfferImages: 'market/egg-offers',
   petOwnerStoreProducts: 'pet-owner-store/products',
   petOwnerStoreCategories: 'pet-owner-store/categories',
+  veterinarianStoreProducts: 'veterinarian-store/products',
+  veterinarianStoreCategories: 'veterinarian-store/categories',
   vetServiceImages: 'vet-services',
   veterinaryStoreProductImages: 'veterinary-store/products',
   veterinaryOfficeProductImages: 'veterinary-office/products',

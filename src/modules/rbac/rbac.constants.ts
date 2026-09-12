@@ -132,6 +132,15 @@ export const PERMISSION_KEYS = [
   'pet_store.product.manage',
   'pet_store.category.manage',
   'pet_store.order.manage',
+  // Veterinarian Store — a platform-run consumer storefront for
+  // Veterinarian-mode users, mirroring Pet Owners Store but with its own
+  // dedicated tables/catalogue. Consumer browse / cart / checkout /
+  // order-history are authentication-only (no key). These gate management,
+  // held by ADMIN (override) or a VETERINARIAN_STORE system-supervisor (see
+  // SUPERVISOR_DOMAIN_PERMISSIONS). Granted to NO base role.
+  'veterinarian_store.product.manage',
+  'veterinarian_store.category.manage',
+  'veterinarian_store.order.manage',
 ] as const;
 export type PermissionKey = (typeof PERMISSION_KEYS)[number];
 
@@ -147,6 +156,7 @@ export const SUPERVISOR_DOMAINS = [
   'ADVERTISEMENT',
   'MARKET',
   'PET_OWNER_STORE',
+  'VETERINARIAN_STORE',
 ] as const;
 export type SupervisorDomain = (typeof SUPERVISOR_DOMAINS)[number];
 
@@ -250,6 +260,12 @@ export const PERMISSION_DEFINITIONS: Record<PermissionKey, string> = {
     'Create, update, deactivate and manage images for Pet Owners Store products',
   'pet_store.category.manage': 'Create, update and delete Pet Owners Store product categories',
   'pet_store.order.manage': 'List and view any Pet Owners Store order and update its status',
+  'veterinarian_store.product.manage':
+    'Create, update, deactivate and manage images for Veterinarian Store products',
+  'veterinarian_store.category.manage':
+    'Create, update and delete Veterinarian Store product categories',
+  'veterinarian_store.order.manage':
+    'List and view any Veterinarian Store order and update its status',
 };
 
 /**
@@ -303,6 +319,14 @@ export const SUPERVISOR_DOMAIN_PERMISSIONS: Record<SupervisorDomain, readonly Pe
     'pet_store.product.manage',
     'pet_store.category.manage',
     'pet_store.order.manage',
+  ],
+  // The responsible Veterinarian Store supervisor: full catalogue (products +
+  // categories + images) and order management for the Veterinarian-mode
+  // platform storefront.
+  VETERINARIAN_STORE: [
+    'veterinarian_store.product.manage',
+    'veterinarian_store.category.manage',
+    'veterinarian_store.order.manage',
   ],
 };
 

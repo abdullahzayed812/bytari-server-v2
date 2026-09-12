@@ -19,6 +19,7 @@ import { cattleOpsOpenApi } from './cattleOps.js';
 import { poultryMarketOpenApi } from './poultryMarket.js';
 import { phase17OpenApi } from './phase17.js';
 import { petOwnerStoreOpenApi } from './petOwnerStore.js';
+import { veterinarianStoreOpenApi } from './veterinarianStore.js';
 import { clinicAppointmentsOpenApi } from './clinicAppointments.js';
 import { vetServicesOpenApi } from './vetServices.js';
 
@@ -102,6 +103,7 @@ export function buildOpenApiDocument(version: string): OpenApiDocument {
       ...poultryMarketOpenApi.tags,
       ...phase17OpenApi.tags,
       ...petOwnerStoreOpenApi.tags,
+      ...veterinarianStoreOpenApi.tags,
       ...clinicAppointmentsOpenApi.tags,
       ...vetServicesOpenApi.tags,
     ],
@@ -127,6 +129,7 @@ export function buildOpenApiDocument(version: string): OpenApiDocument {
       ...poultryMarketOpenApi.paths,
       ...phase17OpenApi.paths,
       ...petOwnerStoreOpenApi.paths,
+      ...veterinarianStoreOpenApi.paths,
       ...clinicAppointmentsOpenApi.paths,
       ...vetServicesOpenApi.paths,
       '/health': {
@@ -196,6 +199,7 @@ export function buildOpenApiDocument(version: string): OpenApiDocument {
         ...poultryMarketOpenApi.schemas,
         ...phase17OpenApi.schemas,
         ...petOwnerStoreOpenApi.schemas,
+        ...veterinarianStoreOpenApi.schemas,
         ...clinicAppointmentsOpenApi.schemas,
         ...vetServicesOpenApi.schemas,
       },

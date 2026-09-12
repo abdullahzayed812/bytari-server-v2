@@ -121,6 +121,7 @@ export async function runDevSeed(knex: Knex, deps: RunDevSeedDeps = {}): Promise
     veterinaryStoreProductService,
     veterinaryOfficeProductService,
     petStoreAdminService,
+    vetStoreAdminService,
     contentService,
     passwordService,
   } = container;
@@ -437,6 +438,7 @@ export async function runDevSeed(knex: Knex, deps: RunDevSeedDeps = {}): Promise
   await seedStoreProducts();
   await seedOfficeProducts();
   await seedPetOwnerStoreCatalog();
+  await seedVeterinarianStoreCatalog();
   await seedWelcomeArticle();
   await seedVeterinaryContent();
   await seedAdvertisements();
@@ -879,6 +881,207 @@ export async function runDevSeed(knex: Knex, deps: RunDevSeedDeps = {}): Promise
       const existing = await knex('pet_owner_store_products').where({ name: p.name }).first();
       if (existing) continue;
       await petStoreAdminService.createProduct(actor, {
+        categoryId: categoryIdBySlug[p.categorySlug] ?? null,
+        name: p.name,
+        description: p.description,
+        price: p.price,
+        stockQuantity: p.stockQuantity,
+        attributes: p.attributes ?? null,
+      });
+    }
+  }
+
+  /**
+   * Veterinarian Store — platform-run consumer storefront for Veterinarian
+   * mode. Own `veterinarian_store_*` tables, completely separate from Pet
+   * Owners Store and from the org-scoped Veterinary Store / Veterinary
+   * Office catalogues. Categories/products mirror the reference screenshots
+   * ("المتجر البيطري"): أدوية, معدات طبية, تغذية ومكملات, مستلزمات مختبر.
+   */
+  async function seedVeterinarianStoreCatalog(): Promise<void> {
+    const actor = { actorUserId: adminId, context: SEED_CONTEXT };
+
+    const categories: {
+      slug: string;
+      name: string;
+      showOnHome?: boolean;
+      sortOrder: number;
+    }[] = [
+      { slug: 'medicines', name: 'أدوية', showOnHome: true, sortOrder: 1 },
+      { slug: 'equipment', name: 'معدات طبية', showOnHome: true, sortOrder: 2 },
+      { slug: 'nutrition-supplements', name: 'تغذية ومكملات', showOnHome: true, sortOrder: 3 },
+      { slug: 'lab-supplies', name: 'مستلزمات مختبر', showOnHome: true, sortOrder: 4 },
+    ];
+    const categoryIdBySlug: Record<string, string> = {};
+    for (const c of categories) {
+      const existing = await knex('veterinarian_store_categories').where({ slug: c.slug }).first();
+      if (existing) {
+        categoryIdBySlug[c.slug] = existing.id as string;
+        continue;
+      }
+      const created = await vetStoreAdminService.createCategory(actor, c);
+      categoryIdBySlug[c.slug] = created.id;
+    }
+
+    const products: {
+      name: string;
+      categorySlug: string;
+      price: string;
+      stockQuantity: number;
+      description: string;
+      attributes?: Record<string, string>;
+    }[] = [
+      {
+        name: 'فيت كير مضاد حيوي حيوي',
+        categorySlug: 'medicines',
+        price: '65.00',
+        stockQuantity: 100,
+        description:
+          'مضاد حيوي واسع المجال لعلاج الالتهابات البكتيرية الشائعة في الكلاب والقطط، فعال وآمن وسهل الاستخدام.',
+        attributes: { الثبوت: '100 مل', الحجم: 'سائل', 'الجنس المستهدف': 'كلاب، قطط' },
+      },
+      {
+        name: 'أموكسيسيلين 15%',
+        categorySlug: 'medicines',
+        price: '15000.00',
+        stockQuantity: 50,
+        description: 'مضاد حيوي واسع الطيف لعلاج الالتهابات البكتيرية.',
+        attributes: { التصنيف: 'مضاد حيوي' },
+      },
+      {
+        name: 'إيفرمكتين 1%',
+        categorySlug: 'medicines',
+        price: '12500.00',
+        stockQuantity: 45,
+        description: 'مضاد للطفيليات الداخلية والخارجية.',
+        attributes: { التصنيف: 'مضادات طفيليات' },
+      },
+      {
+        name: 'فيتامين AD3E',
+        categorySlug: 'medicines',
+        price: '8500.00',
+        stockQuantity: 70,
+        description: 'مكمل فيتاميني لدعم النمو والمناعة.',
+        attributes: { التصنيف: 'فيتامينات' },
+      },
+      {
+        name: 'دكساميتازون',
+        categorySlug: 'medicines',
+        price: '10000.00',
+        stockQuantity: 40,
+        description: 'مضاد التهاب قوي المفعول.',
+        attributes: { التصنيف: 'مضاد التهاب' },
+      },
+      {
+        name: 'فلورفينيكول 10%',
+        categorySlug: 'medicines',
+        price: '18000.00',
+        stockQuantity: 35,
+        description: 'مضاد حيوي واسع الطيف للإصابات التنفسية والهضمية.',
+        attributes: { التصنيف: 'مضاد حيوي' },
+      },
+      {
+        name: 'أوكسيتتراسايكلين',
+        categorySlug: 'medicines',
+        price: '14000.00',
+        stockQuantity: 55,
+        description: 'مضاد حيوي شائع الاستخدام في الطب البيطري.',
+        attributes: { التصنيف: 'مضاد حيوي' },
+      },
+      {
+        name: 'لينكوسبكتين',
+        categorySlug: 'medicines',
+        price: '16000.00',
+        stockQuantity: 30,
+        description: 'مضاد حيوي مركب لعلاج الإسهال البكتيري.',
+        attributes: { التصنيف: 'مضاد حيوي' },
+      },
+      {
+        name: 'بيوفوسفان',
+        categorySlug: 'medicines',
+        price: '11000.00',
+        stockQuantity: 60,
+        description: 'مكمل فيتاميني معزز للطاقة والحيوية.',
+        attributes: { التصنيف: 'فيتامينات' },
+      },
+      {
+        name: 'كالم بيت مهدئ',
+        categorySlug: 'medicines',
+        price: '45.00',
+        stockQuantity: 80,
+        description: 'مهدئ خفيف للحيوانات الأليفة أثناء النقل أو الفحص.',
+        attributes: { الثبوت: '10 مل' },
+      },
+      {
+        name: 'سماعة طبية بيطرية',
+        categorySlug: 'equipment',
+        price: '250.00',
+        stockQuantity: 15,
+        description: 'سماعة طبية عالية الحساسية مخصصة للاستخدام البيطري.',
+      },
+      {
+        name: 'ترمومتر رقمي بيطري',
+        categorySlug: 'equipment',
+        price: '80.00',
+        stockQuantity: 25,
+        description: 'ترمومتر رقمي سريع القراءة ومقاوم للماء.',
+      },
+      {
+        name: 'مقص جراحي بيطري',
+        categorySlug: 'equipment',
+        price: '60.00',
+        stockQuantity: 20,
+        description: 'مقص جراحي من الفولاذ المقاوم للصدأ.',
+      },
+      {
+        name: 'جوينت كير مكمل مفاصل',
+        categorySlug: 'nutrition-supplements',
+        price: '85.00',
+        stockQuantity: 40,
+        description: 'مكمل غذائي لدعم صحة المفاصل — عبوة 60 قرص.',
+        attributes: { الثبوت: '60 قرص' },
+      },
+      {
+        name: 'مكمل أوميغا 3 للحيوانات',
+        categorySlug: 'nutrition-supplements',
+        price: '55.00',
+        stockQuantity: 45,
+        description: 'مكمل زيت السمك لدعم صحة الفراء والجلد.',
+      },
+      {
+        name: 'بروبيوتيك للجهاز الهضمي',
+        categorySlug: 'nutrition-supplements',
+        price: '70.00',
+        stockQuantity: 35,
+        description: 'مكمل بروبيوتيك لدعم توازن الجهاز الهضمي.',
+      },
+      {
+        name: 'أنابيب اختبار بيطرية',
+        categorySlug: 'lab-supplies',
+        price: '30.00',
+        stockQuantity: 100,
+        description: 'أنابيب اختبار زجاجية معقمة للاستخدام المخبري.',
+      },
+      {
+        name: 'شرائح فحص الدم السريع',
+        categorySlug: 'lab-supplies',
+        price: '95.00',
+        stockQuantity: 50,
+        description: 'شرائح فحص سريع لمؤشرات الدم الأساسية.',
+      },
+      {
+        name: 'قفازات فحص بيطرية',
+        categorySlug: 'lab-supplies',
+        price: '20.00',
+        stockQuantity: 150,
+        description: 'قفازات فحص طبية غير معقمة — عبوة 100 قطعة.',
+      },
+    ];
+
+    for (const p of products) {
+      const existing = await knex('veterinarian_store_products').where({ name: p.name }).first();
+      if (existing) continue;
+      await vetStoreAdminService.createProduct(actor, {
         categoryId: categoryIdBySlug[p.categorySlug] ?? null,
         name: p.name,
         description: p.description,

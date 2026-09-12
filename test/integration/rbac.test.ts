@@ -177,6 +177,8 @@ describe('roles ↔ permissions', () => {
     expect(keys).toContain('pet_store.order.manage');
     expect(keys).toContain('support.admin.read');
     expect(keys).toContain('vet_service.approve');
-    expect(keys.length).toBe(73);
+    expect(keys).toContain('veterinarian_store.product.manage');
+    expect(keys).toContain('veterinarian_store.order.manage');
+    expect(keys.length).toBe(76);
   });
 });

@@ -31,7 +31,8 @@ export async function up(knex: Knex): Promise<void> {
       ADD CONSTRAINT chk_supervisor_domain
       CHECK (domain IN (
         'ANIMAL', 'CLINIC', 'STORE', 'CONTENT', 'CONSULTATION', 'INQUIRY',
-        'SUPPORT', 'ADVERTISEMENT', 'MARKET', 'PET_OWNER_STORE', 'VET_SERVICE'
+        'SUPPORT', 'ADVERTISEMENT', 'MARKET', 'PET_OWNER_STORE', 'VET_SERVICE',
+        'VETERINARIAN_STORE'
       ))
   `);
   await knex.raw(`

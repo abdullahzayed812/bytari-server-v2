@@ -781,7 +781,8 @@ export async function assignSystemSupervisor(
     | 'VET_SERVICE'
     | 'ADVERTISEMENT'
     | 'MARKET'
-    | 'PET_OWNER_STORE',
+    | 'PET_OWNER_STORE'
+    | 'VETERINARIAN_STORE',
 ): Promise<{ id: string }> {
   const res = await request(app)
     .post('/api/v1/admin/supervisors')
@@ -1624,6 +1625,112 @@ export async function checkoutPetStoreCart(
     .send({
       paymentMethod: overrides.paymentMethod ?? 'COD',
       recipientName: overrides.recipientName ?? 'أحمد محمد',
+      recipientPhone: overrides.recipientPhone ?? '0551234567',
+      city: overrides.city ?? 'الرياض',
+      addressLine: overrides.addressLine ?? 'حي الياسمين، شارع رقم 15، منزل 28',
+      note: overrides.note,
+    });
+}
+
+// --- Veterinarian Store -------------------------------------------------
+
+/** `POST /admin/veterinarian-store/categories` — create a store category. */
+export async function createVetStoreCategory(
+  app: Express,
+  actorToken: string,
+  overrides: Partial<{
+    slug: string;
+    name: string;
+    showOnHome: boolean;
+    sortOrder: number;
+    status: string;
+  }> = {},
+): Promise<{ id: string; slug: string }> {
+  const slug = overrides.slug ?? `vcat-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+  const res = await request(app)
+    .post('/api/v1/admin/veterinarian-store/categories')
+    .set(bearer(actorToken))
+    .send({
+      slug,
+      name: overrides.name ?? 'أدوية',
+      showOnHome: overrides.showOnHome,
+      sortOrder: overrides.sortOrder,
+      status: overrides.status,
+    });
+  if (res.status !== 201) {
+    throw new Error(`createVetStoreCategory failed: ${res.status} ${JSON.stringify(res.body)}`);
+  }
+  return { id: res.body.data.id as string, slug: res.body.data.slug as string };
+}
+
+/** `POST /admin/veterinarian-store/products` — create a store product. */
+export async function createVetStoreProduct(
+  app: Express,
+  actorToken: string,
+  overrides: Partial<{
+    categoryId: string | null;
+    name: string;
+    description: string;
+    price: string;
+    stockQuantity: number;
+    attributes: Record<string, string> | null;
+    status: string;
+  }> = {},
+): Promise<{ id: string; name: string; price: string }> {
+  const res = await request(app)
+    .post('/api/v1/admin/veterinarian-store/products')
+    .set(bearer(actorToken))
+    .send({
+      categoryId: overrides.categoryId,
+      name: overrides.name ?? 'أموكسيسيلين 15%',
+      description: overrides.description ?? 'مضاد حيوي واسع الطيف لعلاج الالتهابات البكتيرية.',
+      price: overrides.price ?? '15000.00',
+      stockQuantity: overrides.stockQuantity ?? 40,
+      attributes: overrides.attributes,
+      status: overrides.status,
+    });
+  if (res.status !== 201) {
+    throw new Error(`createVetStoreProduct failed: ${res.status} ${JSON.stringify(res.body)}`);
+  }
+  return {
+    id: res.body.data.id as string,
+    name: res.body.data.name as string,
+    price: res.body.data.price as string,
+  };
+}
+
+/** Add one product to the caller's cart. */
+export async function addToVetStoreCart(
+  app: Express,
+  token: string,
+  productId: string,
+  quantity = 1,
+): Promise<request.Response> {
+  return request(app)
+    .post('/api/v1/veterinarian-store/cart/items')
+    .set(bearer(token))
+    .send({ productId, quantity });
+}
+
+/** Place an order from the caller's cart (Cash on Delivery). */
+export async function checkoutVetStoreCart(
+  app: Express,
+  token: string,
+  overrides: Partial<{
+    paymentMethod: string;
+    recipientName: string;
+    recipientPhone: string;
+    city: string;
+    addressLine: string;
+    note: string;
+  }> = {},
+): Promise<request.Response> {
+  return request(app)
+    .post('/api/v1/veterinarian-store/orders')
+    .set(bearer(token))
+    .send({
+      paymentMethod: overrides.paymentMethod ?? 'COD',
+      recipientName: overrides.recipientName ?? 'د. أحمد محمد',
       recipientPhone: overrides.recipientPhone ?? '0551234567',
       city: overrides.city ?? 'الرياض',
       addressLine: overrides.addressLine ?? 'حي الياسمين، شارع رقم 15، منزل 28',

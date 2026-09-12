@@ -45,6 +45,10 @@ import {
   createAdminPetOwnerStoreRouter,
 } from '../modules/pet-owner-store/index.js';
 import {
+  createVeterinarianStoreRouter,
+  createAdminVeterinarianStoreRouter,
+} from '../modules/veterinarian-store/index.js';
+import {
   createTraderRouters,
   createPoultryOfferRouters,
   createEggOfferRouters,
@@ -175,6 +179,15 @@ export function createApiRouter(c: Container): Router {
   // `/admin/pet-owner-store` (permissioned).
   router.use('/pet-owner-store', createPetOwnerStoreRouter(c));
 
+  // --- Veterinarian Store: platform-run consumer storefront for
+  // Veterinarian-mode users ----
+  // Dedicated `veterinarian_store_*` tables, completely separate from Pet
+  // Owners Store and from the org-scoped Veterinary Store / Veterinary Office
+  // catalogues. Consumer browse / cart / checkout / order history need only
+  // authentication; management lives under `/admin/veterinarian-store`
+  // (permissioned).
+  router.use('/veterinarian-store', createVeterinarianStoreRouter(c));
+
   // --- Poultry Markets: trader registration / offers / exchange rates ---
   // Trader status is a per-USER concept, not per-organization — every route
   // here is mounted at the top level, no `:organizationId` in any path.
@@ -250,6 +263,7 @@ export function createApiRouter(c: Container): Router {
   router.use('/admin/news', createAdminNewsRouter(c));
   router.use('/admin/ads', createAdminAdRouter(c));
   router.use('/admin/pet-owner-store', createAdminPetOwnerStoreRouter(c));
+  router.use('/admin/veterinarian-store', createAdminVeterinarianStoreRouter(c));
   router.use('/admin/notifications', createAdminNotificationRouter(c));
   router.use('/admin/audit-logs', createAdminAuditRouter(c));
 

@@ -101,6 +101,14 @@ import { PetStoreCatalogService } from './modules/pet-owner-store/application/pe
 import { PetStoreCartService } from './modules/pet-owner-store/application/pet-owner-store-cart.service.js';
 import { PetStoreOrderService } from './modules/pet-owner-store/application/pet-owner-store-order.service.js';
 import { PetStoreAdminService } from './modules/pet-owner-store/application/pet-owner-store-admin.service.js';
+import { VeterinarianStoreCategoryRepository } from './modules/veterinarian-store/infrastructure/category.repository.js';
+import { VeterinarianStoreProductRepository } from './modules/veterinarian-store/infrastructure/product.repository.js';
+import { VeterinarianStoreCartRepository } from './modules/veterinarian-store/infrastructure/cart.repository.js';
+import { VeterinarianStoreOrderRepository } from './modules/veterinarian-store/infrastructure/order.repository.js';
+import { VeterinarianStoreCatalogService } from './modules/veterinarian-store/application/veterinarian-store-catalog.service.js';
+import { VeterinarianStoreCartService } from './modules/veterinarian-store/application/veterinarian-store-cart.service.js';
+import { VeterinarianStoreOrderService } from './modules/veterinarian-store/application/veterinarian-store-order.service.js';
+import { VeterinarianStoreAdminService } from './modules/veterinarian-store/application/veterinarian-store-admin.service.js';
 import { TraderRepository } from './modules/poultryMarket/infrastructure/trader.repository.js';
 import { PoultryOfferRepository } from './modules/poultryMarket/infrastructure/poultry-offer.repository.js';
 import { EggOfferRepository } from './modules/poultryMarket/infrastructure/egg-offer.repository.js';
@@ -308,6 +316,14 @@ export interface Container {
   petStoreCartService: PetStoreCartService;
   petStoreOrderService: PetStoreOrderService;
   petStoreAdminService: PetStoreAdminService;
+  vetStoreCategoryRepository: VeterinarianStoreCategoryRepository;
+  vetStoreProductRepository: VeterinarianStoreProductRepository;
+  vetStoreCartRepository: VeterinarianStoreCartRepository;
+  vetStoreOrderRepository: VeterinarianStoreOrderRepository;
+  vetStoreCatalogService: VeterinarianStoreCatalogService;
+  vetStoreCartService: VeterinarianStoreCartService;
+  vetStoreOrderService: VeterinarianStoreOrderService;
+  vetStoreAdminService: VeterinarianStoreAdminService;
 
   traderRepository: TraderRepository;
   traderService: TraderService;
@@ -837,6 +853,44 @@ export function createContainer(deps: ContainerDeps): Container {
     logger,
   );
 
+  // --- Veterinarian Store (platform-run consumer storefront for
+  // Veterinarian-mode users; own tables, mirrors Pet Owners Store) ----
+  const vetStoreCategoryRepository = new VeterinarianStoreCategoryRepository(db);
+  const vetStoreProductRepository = new VeterinarianStoreProductRepository(db);
+  const vetStoreCartRepository = new VeterinarianStoreCartRepository(db);
+  const vetStoreOrderRepository = new VeterinarianStoreOrderRepository(db);
+  const vetStoreCatalogService = new VeterinarianStoreCatalogService(
+    vetStoreCategoryRepository,
+    vetStoreProductRepository,
+    objectStorage,
+    logger,
+  );
+  const vetStoreCartService = new VeterinarianStoreCartService(
+    db,
+    vetStoreCartRepository,
+    vetStoreProductRepository,
+    objectStorage,
+    logger,
+  );
+  const vetStoreOrderService = new VeterinarianStoreOrderService(
+    db,
+    vetStoreOrderRepository,
+    vetStoreCartRepository,
+    vetStoreProductRepository,
+    auditService,
+    eventBus,
+    logger,
+  );
+  const vetStoreAdminService = new VeterinarianStoreAdminService(
+    db,
+    vetStoreProductRepository,
+    vetStoreCategoryRepository,
+    objectStorage,
+    auditService,
+    eventBus,
+    logger,
+  );
+
   // --- Poultry Markets (trader registration / offers / exchange rates) ---
   const traderRepository = new TraderRepository(db);
   const traderService = new TraderService(
@@ -1214,6 +1268,14 @@ export function createContainer(deps: ContainerDeps): Container {
     petStoreCartService,
     petStoreOrderService,
     petStoreAdminService,
+    vetStoreCategoryRepository,
+    vetStoreProductRepository,
+    vetStoreCartRepository,
+    vetStoreOrderRepository,
+    vetStoreCatalogService,
+    vetStoreCartService,
+    vetStoreOrderService,
+    vetStoreAdminService,
     traderRepository,
     traderService,
     poultryOfferRepository,
