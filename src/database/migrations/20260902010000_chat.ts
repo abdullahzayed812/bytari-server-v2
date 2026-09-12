@@ -16,12 +16,16 @@ import type { Knex } from 'knex';
  *                           the *current* `organizations.owner_user_id` and
  *                           the member side against *current* ACTIVE
  *                           membership.
- *   PET_OWNER_VETERINARIAN  A true 1:1 Pet Owner ↔ Veterinarian conversation
- *                           for the Veterinary Services marketplace, linked to
- *                           a service engagement (an offer or a listing
- *                           request) via `subject_type`/`subject_id`, with a
- *                           job `status`. Has no organization — `organization_id`
- *                           is nullable for exactly this type.
+ *   PET_OWNER_VETERINARIAN  A true 1:1 [any user] ↔ Veterinarian conversation,
+ *                           reused by both the Veterinary Services marketplace
+ *                           and Veterinarian Jobs, linked to an engagement (a
+ *                           service offer / listing request, or a job
+ *                           application) via `subject_type`/`subject_id`, with
+ *                           a job `status`. Has no organization —
+ *                           `organization_id` is nullable for exactly this
+ *                           type. (The "pet owner" column name is historical —
+ *                           every user holds the PET_OWNER base role, so it
+ *                           doubles as "the other party" for Jobs threads.)
  *
  * PET_OWNER_CLINIC / FARM_OWNER_MEMBER are anchored to an organization
  * (`organization_id`); PET_OWNER_VETERINARIAN is not. There is no free DIRECT
@@ -77,7 +81,7 @@ export async function up(knex: Knex): Promise<void> {
     ALTER TABLE conversations ADD CONSTRAINT chk_conversations_subject
       CHECK (
         (subject_type IS NULL AND subject_id IS NULL) OR
-        (subject_type IN ('VET_SERVICE_OFFER', 'VET_SERVICE_LISTING_REQUEST') AND subject_id IS NOT NULL)
+        (subject_type IN ('VET_SERVICE_OFFER', 'VET_SERVICE_LISTING_REQUEST', 'VET_JOB_APPLICATION') AND subject_id IS NOT NULL)
       )
   `);
   // One conversation per relationship (enforced in the DB, not just the app).

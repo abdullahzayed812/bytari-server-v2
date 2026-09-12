@@ -782,7 +782,9 @@ export async function assignSystemSupervisor(
     | 'ADVERTISEMENT'
     | 'MARKET'
     | 'PET_OWNER_STORE'
-    | 'VETERINARIAN_STORE',
+    | 'VETERINARIAN_STORE'
+    | 'VET_JOBS'
+    | 'VET_COURSES',
 ): Promise<{ id: string }> {
   const res = await request(app)
     .post('/api/v1/admin/supervisors')
@@ -1736,4 +1738,220 @@ export async function checkoutVetStoreCart(
       addressLine: overrides.addressLine ?? 'حي الياسمين، شارع رقم 15، منزل 28',
       note: overrides.note,
     });
+}
+
+// --- Veterinarian Jobs / Careers -----------------------------------
+
+/** `POST /vet-jobs/offers` — any authenticated user; starts PENDING. */
+export async function createVetJobOffer(
+  app: Express,
+  actorToken: string,
+  overrides: Partial<{
+    organizationName: string;
+    title: string;
+    employmentType: string;
+    governorate: string;
+    district: string;
+    salaryAmount: string;
+    contactPhone: string;
+    contactEmail: string;
+    description: string;
+    applicationDeadline: string;
+  }> = {},
+): Promise<{ id: string; title: string }> {
+  const res = await request(app)
+    .post('/api/v1/vet-jobs/offers')
+    .set(bearer(actorToken))
+    .send({
+      organizationName: overrides.organizationName ?? 'مركز الحياة البيطري',
+      title: overrides.title ?? 'طبيب بيطري عام',
+      employmentType: overrides.employmentType ?? 'FULL_TIME',
+      governorate: overrides.governorate ?? 'بغداد',
+      district: overrides.district,
+      salaryAmount: overrides.salaryAmount,
+      contactPhone: overrides.contactPhone ?? '07701234567',
+      contactEmail: overrides.contactEmail,
+      description: overrides.description ?? 'مطلوب طبيب بيطري عام للعمل في عيادتنا.',
+      applicationDeadline: overrides.applicationDeadline,
+    });
+  if (res.status !== 201) {
+    throw new Error(`createVetJobOffer failed: ${res.status} ${JSON.stringify(res.body)}`);
+  }
+  return { id: res.body.data.id as string, title: res.body.data.title as string };
+}
+
+/** `POST /admin/vet-job-offers/:id/approve`. */
+export async function approveVetJobOffer(
+  app: Express,
+  adminToken: string,
+  id: string,
+): Promise<request.Response> {
+  return request(app).post(`/api/v1/admin/vet-job-offers/${id}/approve`).set(bearer(adminToken));
+}
+
+/** `POST /vet-jobs/seekers` — approved veterinarian only; starts PENDING. */
+export async function createVetJobSeekerProfile(
+  app: Express,
+  actorToken: string,
+  overrides: Partial<{
+    specialty: string;
+    governorate: string;
+    phone: string;
+    experienceYears: number;
+  }> = {},
+): Promise<{ id: string }> {
+  const res = await request(app)
+    .post('/api/v1/vet-jobs/seekers')
+    .set(bearer(actorToken))
+    .send({
+      specialty: overrides.specialty ?? 'طب وجراحة الحيوانات الصغيرة',
+      governorate: overrides.governorate ?? 'بغداد',
+      phone: overrides.phone ?? '07709876543',
+      experienceYears: overrides.experienceYears ?? 3,
+    });
+  if (res.status !== 201) {
+    throw new Error(`createVetJobSeekerProfile failed: ${res.status} ${JSON.stringify(res.body)}`);
+  }
+  return { id: res.body.data.id as string };
+}
+
+/** `POST /admin/vet-job-seekers/:id/approve`. */
+export async function approveVetJobSeekerProfile(
+  app: Express,
+  adminToken: string,
+  id: string,
+): Promise<request.Response> {
+  return request(app).post(`/api/v1/admin/vet-job-seekers/${id}/approve`).set(bearer(adminToken));
+}
+
+/** `POST /vet-jobs/offers/:id/applications` — approved veterinarian only. */
+export async function applyToVetJobOffer(
+  app: Express,
+  actorToken: string,
+  jobOfferId: string,
+  overrides: Partial<{ fullName: string; phone: string; coverNote: string }> = {},
+): Promise<request.Response> {
+  return request(app)
+    .post(`/api/v1/vet-jobs/offers/${jobOfferId}/applications`)
+    .set(bearer(actorToken))
+    .send({
+      fullName: overrides.fullName ?? 'د. أحمد علي',
+      phone: overrides.phone ?? '07701112233',
+      coverNote: overrides.coverNote,
+    });
+}
+
+// --- Veterinarian Courses & Seminars -------------------------------
+
+/** `POST /vet-courses` — approved veterinarian only; starts PENDING. */
+export async function createVetCourse(
+  app: Express,
+  actorToken: string,
+  overrides: Partial<{
+    type: string;
+    title: string;
+    organizingBody: string;
+    instructorName: string;
+    startDate: string;
+    endDate: string;
+    locationMode: string;
+    locationDetails: string;
+    capacity: number;
+    price: string;
+    registrationDeadline: string;
+    description: string;
+  }> = {},
+): Promise<{ id: string; title: string }> {
+  const res = await request(app)
+    .post('/api/v1/vet-courses')
+    .set(bearer(actorToken))
+    .send({
+      type: overrides.type ?? 'COURSE',
+      title: overrides.title ?? 'أساسيات التغذية في الحيوانات الأليفة',
+      description: overrides.description ?? 'دورة تدريبية شاملة حول أساسيات التغذية.',
+      organizingBody: overrides.organizingBody ?? 'جمعية الأطباء البيطريين العراقية',
+      instructorName: overrides.instructorName ?? 'د. أحمد علي البياتي',
+      startDate: overrides.startDate ?? '2999-06-15',
+      endDate: overrides.endDate ?? '2999-06-17',
+      locationMode: overrides.locationMode ?? 'ONLINE',
+      locationDetails: overrides.locationDetails ?? 'أونلاين عبر Zoom',
+      capacity: overrides.capacity,
+      price: overrides.price,
+      registrationDeadline: overrides.registrationDeadline,
+    });
+  if (res.status !== 201) {
+    throw new Error(`createVetCourse failed: ${res.status} ${JSON.stringify(res.body)}`);
+  }
+  return { id: res.body.data.id as string, title: res.body.data.title as string };
+}
+
+/** `POST /admin/vet-courses/:id/approve`. */
+export async function approveVetCourse(
+  app: Express,
+  adminToken: string,
+  id: string,
+): Promise<request.Response> {
+  return request(app).post(`/api/v1/admin/vet-courses/${id}/approve`).set(bearer(adminToken));
+}
+
+/** `POST /vet-courses/:id/registrations` — approved veterinarian only. */
+export async function registerForVetCourse(
+  app: Express,
+  actorToken: string,
+  courseId: string,
+  overrides: Partial<{ fullName: string; phone: string; governorate: string; notes: string }> = {},
+): Promise<request.Response> {
+  return request(app)
+    .post(`/api/v1/vet-courses/${courseId}/registrations`)
+    .set(bearer(actorToken))
+    .send({
+      fullName: overrides.fullName ?? 'د. سارة محمد',
+      phone: overrides.phone ?? '07701112244',
+      governorate: overrides.governorate ?? 'بغداد',
+      notes: overrides.notes,
+    });
+}
+
+// --- Veterinary Syndicates / Unions -------------------------------
+
+/** `POST /admin/syndicates` — ADMIN only; a main syndicate (no `parentOrganizationId`) or a branch. */
+export async function createSyndicate(
+  app: Express,
+  adminToken: string,
+  overrides: Partial<{
+    parentOrganizationId: string;
+    name: string;
+    description: string;
+    governorate: string;
+    address: string;
+    phone: string;
+    email: string;
+    website: string;
+    headOfficerName: string;
+    headOfficerTitle: string;
+    termStartYear: number;
+    termEndYear: number;
+  }> = {},
+): Promise<{ id: string; name: string }> {
+  const res = await request(app)
+    .post('/api/v1/admin/syndicates')
+    .set(bearer(adminToken))
+    .send({
+      parentOrganizationId: overrides.parentOrganizationId,
+      name: overrides.name ?? 'نقابة الأطباء البيطريين العراقية',
+      description: overrides.description,
+      governorate: overrides.governorate,
+      address: overrides.address,
+      phone: overrides.phone,
+      email: overrides.email,
+      website: overrides.website,
+      headOfficerName: overrides.headOfficerName,
+      headOfficerTitle: overrides.headOfficerTitle,
+      termStartYear: overrides.termStartYear,
+      termEndYear: overrides.termEndYear,
+    });
+  if (res.status !== 201) {
+    throw new Error(`createSyndicate failed: ${res.status} ${JSON.stringify(res.body)}`);
+  }
+  return { id: res.body.data.id as string, name: res.body.data.name as string };
 }

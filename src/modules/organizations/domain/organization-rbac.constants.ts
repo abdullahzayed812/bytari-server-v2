@@ -102,6 +102,16 @@ export const ORG_PERMISSION_KEYS = [
   // reschedule / update status / complete.
   'clinic.appointment.read',
   'clinic.appointment.manage',
+  // --- Veterinary Syndicates / Unions — SYNDICATE organizations ---
+  // A syndicate (main or subordinate/branch) has NO self-service creation —
+  // an ADMIN creates it directly and becomes its OWNER, then assigns
+  // authorized officers as SUPERVISOR members with a subset of these keys
+  // (the same "assign supervisor + pick permissions" flow every other
+  // organization type already uses).
+  'syndicate.profile.manage',
+  'syndicate.announcement.manage',
+  'syndicate.submission.read',
+  'syndicate.submission.respond',
 ] as const;
 export type OrgPermissionKey = (typeof ORG_PERMISSION_KEYS)[number];
 
@@ -192,6 +202,10 @@ export const ORG_PERMISSION_DEFINITIONS: Record<OrgPermissionKey, string> = {
   'clinic.appointment.read': 'View appointment requests booked with this clinic',
   'clinic.appointment.manage':
     'Accept, reject, reschedule, complete or update the status of this clinic’s appointments',
+  'syndicate.profile.manage': 'Update this syndicate’s profile fields and logo',
+  'syndicate.announcement.manage': 'Create, update and delete this syndicate’s announcements',
+  'syndicate.submission.read': 'View this syndicate’s requests and inquiries',
+  'syndicate.submission.respond': 'Respond to and close this syndicate’s requests and inquiries',
 };
 
 /**

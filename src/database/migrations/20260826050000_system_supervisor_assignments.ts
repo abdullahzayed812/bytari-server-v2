@@ -32,7 +32,7 @@ export async function up(knex: Knex): Promise<void> {
       CHECK (domain IN (
         'ANIMAL', 'CLINIC', 'STORE', 'CONTENT', 'CONSULTATION', 'INQUIRY',
         'SUPPORT', 'ADVERTISEMENT', 'MARKET', 'PET_OWNER_STORE', 'VET_SERVICE',
-        'VETERINARIAN_STORE'
+        'VETERINARIAN_STORE', 'VET_JOBS', 'VET_COURSES'
       ))
   `);
   await knex.raw(`

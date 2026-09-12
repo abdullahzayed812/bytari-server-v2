@@ -141,6 +141,27 @@ export const PERMISSION_KEYS = [
   'veterinarian_store.product.manage',
   'veterinarian_store.category.manage',
   'veterinarian_store.order.manage',
+  // Veterinarian Jobs / Careers — job offers (employer-posted) and job-seeker
+  // profiles are both moderated PENDING → APPROVED/REJECTED, mirroring the
+  // Veterinary Services marketplace. Held by ADMIN (override) or an ACTIVE
+  // VET_JOBS system-supervisor (see SUPERVISOR_DOMAIN_PERMISSIONS). Granted to
+  // NO base role.
+  'vet_job.read',
+  'vet_job.approve',
+  'vet_job.reject',
+  // Veterinarian Courses & Seminars — courses/seminars/workshops are
+  // moderated PENDING → APPROVED/REJECTED, mirroring Veterinarian Jobs. Held
+  // by ADMIN (override) or an ACTIVE VET_COURSES system-supervisor (see
+  // SUPERVISOR_DOMAIN_PERMISSIONS). Granted to NO base role.
+  'vet_course.read',
+  'vet_course.approve',
+  'vet_course.reject',
+  // Veterinary Syndicates / Unions — a syndicate (main or subordinate) is
+  // never self-service; only an ADMIN creates one (it then becomes an
+  // `organizations` row of type SYNDICATE, managed via the existing
+  // organization-scoped `syndicate.*` permissions — see
+  // `organization-rbac.constants.ts`). Granted to NO base role.
+  'syndicate.admin.create',
 ] as const;
 export type PermissionKey = (typeof PERMISSION_KEYS)[number];
 
@@ -157,6 +178,8 @@ export const SUPERVISOR_DOMAINS = [
   'MARKET',
   'PET_OWNER_STORE',
   'VETERINARIAN_STORE',
+  'VET_JOBS',
+  'VET_COURSES',
 ] as const;
 export type SupervisorDomain = (typeof SUPERVISOR_DOMAINS)[number];
 
@@ -266,6 +289,13 @@ export const PERMISSION_DEFINITIONS: Record<PermissionKey, string> = {
     'Create, update and delete Veterinarian Store product categories',
   'veterinarian_store.order.manage':
     'List and view any Veterinarian Store order and update its status',
+  'vet_job.read': 'View pending Veterinarian Jobs offers / seeker profiles for moderation',
+  'vet_job.approve': 'Approve a pending job offer / job-seeker profile',
+  'vet_job.reject': 'Reject a pending job offer / job-seeker profile',
+  'vet_course.read': 'View pending Veterinarian Courses & Seminars submissions for moderation',
+  'vet_course.approve': 'Approve a pending course / seminar / workshop',
+  'vet_course.reject': 'Reject a pending course / seminar / workshop',
+  'syndicate.admin.create': 'Create a main or subordinate veterinary syndicate',
 };
 
 /**
@@ -328,6 +358,14 @@ export const SUPERVISOR_DOMAIN_PERMISSIONS: Record<SupervisorDomain, readonly Pe
     'veterinarian_store.category.manage',
     'veterinarian_store.order.manage',
   ],
+  // The responsible Veterinarian Jobs supervisor: reviews (approve / reject)
+  // job offers + job-seeker profiles. Does NOT gain access to applications or
+  // the private chat threads.
+  VET_JOBS: ['vet_job.read', 'vet_job.approve', 'vet_job.reject'],
+  // The responsible Veterinarian Courses & Seminars supervisor: reviews
+  // (approve / reject) courses/seminars/workshops. Does NOT gain access to
+  // per-course registrations beyond what `vet_course.read` exposes.
+  VET_COURSES: ['vet_course.read', 'vet_course.approve', 'vet_course.reject'],
 };
 
 /**

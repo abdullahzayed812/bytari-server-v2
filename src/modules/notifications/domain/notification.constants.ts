@@ -45,6 +45,15 @@ export const NOTIFICATION_TYPES = [
   'VET_SERVICE_LISTING_REQUEST_ACCEPTED',
   'VET_SERVICE_LISTING_REQUEST_REJECTED',
   'VET_SERVICE_DEAL_COMPLETED',
+  // Veterinarian Courses & Seminars
+  'VET_COURSE_SUBMITTED',
+  'VET_COURSE_APPROVED',
+  'VET_COURSE_REJECTED',
+  'VET_COURSE_REGISTRATION_CONFIRMED',
+  // Veterinary Syndicates / Unions
+  'SYNDICATE_ANNOUNCEMENT_PUBLISHED',
+  'SYNDICATE_SUBMISSION_CREATED',
+  'SYNDICATE_SUBMISSION_RESPONDED',
   // content (catalogue entry only — no automatic broadcast; used by admin sends)
   'CONTENT_PUBLISHED',
   // animal lifecycle publications — viewer interactions

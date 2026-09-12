@@ -22,6 +22,9 @@ import { petOwnerStoreOpenApi } from './petOwnerStore.js';
 import { veterinarianStoreOpenApi } from './veterinarianStore.js';
 import { clinicAppointmentsOpenApi } from './clinicAppointments.js';
 import { vetServicesOpenApi } from './vetServices.js';
+import { vetJobsOpenApi } from './vetJobs.js';
+import { vetCoursesOpenApi } from './vetCourses.js';
+import { syndicatesOpenApi } from './syndicates.js';
 
 /**
  * OpenAPI 3.1 document. Assembled from a small base (health endpoints) plus
@@ -77,7 +80,7 @@ export function buildOpenApiDocument(version: string): OpenApiDocument {
         'Phase 3 adds organizations, memberships and organization-scoped authorization. ' +
         'Phase 4 adds the Animal Core (owner-scoped) with a dedicated ownership history and ownership transfer. ' +
         'Phase 5 adds veterinary care: a CLINIC ↔ animal veterinary-access grant plus clinic-scoped medical records and vaccinations, with owner-facing read-only history. ' +
-        'Phase 6 adds the Farm-ID join-code flow (multi-farm veterinarian membership) and poultry flock management for FARM organizations. Phase 7 adds the animal lifecycle publications (Lost / Adoption / Mating) with a PENDING → APPROVED / REJECTED moderation lifecycle. Phase 8 adds the composed Medical History timeline over the Phase 5 medical records and vaccinations. Phase 10 adds Veterinary Store product management. Phase 12 adds Chat & real-time messaging (Pet Owner ↔ Clinic + Farm Owner ↔ member; relationship-scoped; WebSocket delivery over /realtime). Phase 13 adds Consultations & Inquiries (Pet Owner / Veterinarian support threads answered by the responsible CONSULTATION/INQUIRY system supervisor or Admin; admin AI-enablement flags with a provider seam — no real provider yet). Phase 14 adds Content Management (Articles / Books / Magazines with a DRAFT → PUBLISHED → ARCHIVED lifecycle, publish/archive gated to approved CONTENT supervisors and admins, media via the Object Storage abstraction). Phase 15 adds Notifications & Firebase FCM (in-app notifications as the source of truth, device (FCM) token registration, per-user push preference, EventBus-driven recipient resolution, admin broadcast, realtime notification.created on user:<id>; Firebase service-account details are never exposed). Phase 16 is a production-hardening pass — no new endpoints; it adds a WebSocket connection cap, a database statement timeout, a container health check and an operations runbook. (Phase 9 Appointments and Phase 11 Veterinary Jobs / Doctor Offers were each assessed and deferred — neither is in the confirmed spec.)',
+        'Phase 6 adds the Farm-ID join-code flow (multi-farm veterinarian membership) and poultry flock management for FARM organizations. Phase 7 adds the animal lifecycle publications (Lost / Adoption / Mating) with a PENDING → APPROVED / REJECTED moderation lifecycle. Phase 8 adds the composed Medical History timeline over the Phase 5 medical records and vaccinations. Phase 10 adds Veterinary Store product management. Phase 12 adds Chat & real-time messaging (Pet Owner ↔ Clinic + Farm Owner ↔ member; relationship-scoped; WebSocket delivery over /realtime). Phase 13 adds Consultations & Inquiries (Pet Owner / Veterinarian support threads answered by the responsible CONSULTATION/INQUIRY system supervisor or Admin; admin AI-enablement flags with a provider seam — no real provider yet). Phase 14 adds Content Management (Articles / Books / Magazines with a DRAFT → PUBLISHED → ARCHIVED lifecycle, publish/archive gated to approved CONTENT supervisors and admins, media via the Object Storage abstraction). Phase 15 adds Notifications & Firebase FCM (in-app notifications as the source of truth, device (FCM) token registration, per-user push preference, EventBus-driven recipient resolution, admin broadcast, realtime notification.created on user:<id>; Firebase service-account details are never exposed). Phase 16 is a production-hardening pass — no new endpoints; it adds a WebSocket connection cap, a database statement timeout, a container health check and an operations runbook. Veterinarian Jobs / Careers adds employer-posted job offers and veterinarian "looking for a job" profiles (both PENDING → APPROVED / REJECTED, moderated by VET_JOBS supervisors or Admin), applications decided by the offer\'s poster, and on-accept chat reusing the existing PET_OWNER_VETERINARIAN conversation seam. (Phase 9 Appointments was assessed and deferred — not in the confirmed spec.)',
     },
     servers: [{ url: '/api/v1', description: 'Version 1' }],
     tags: [
@@ -106,6 +109,9 @@ export function buildOpenApiDocument(version: string): OpenApiDocument {
       ...veterinarianStoreOpenApi.tags,
       ...clinicAppointmentsOpenApi.tags,
       ...vetServicesOpenApi.tags,
+      ...vetJobsOpenApi.tags,
+      ...vetCoursesOpenApi.tags,
+      ...syndicatesOpenApi.tags,
     ],
     paths: {
       ...phase2OpenApi.paths,
@@ -132,6 +138,9 @@ export function buildOpenApiDocument(version: string): OpenApiDocument {
       ...veterinarianStoreOpenApi.paths,
       ...clinicAppointmentsOpenApi.paths,
       ...vetServicesOpenApi.paths,
+      ...vetJobsOpenApi.paths,
+      ...vetCoursesOpenApi.paths,
+      ...syndicatesOpenApi.paths,
       '/health': {
         get: {
           tags: ['Health'],
@@ -202,6 +211,9 @@ export function buildOpenApiDocument(version: string): OpenApiDocument {
         ...veterinarianStoreOpenApi.schemas,
         ...clinicAppointmentsOpenApi.schemas,
         ...vetServicesOpenApi.schemas,
+        ...vetJobsOpenApi.schemas,
+        ...vetCoursesOpenApi.schemas,
+        ...syndicatesOpenApi.schemas,
       },
       responses: {
         NotFound: {

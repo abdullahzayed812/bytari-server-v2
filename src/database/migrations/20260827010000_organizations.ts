@@ -48,7 +48,7 @@ export async function up(knex: Knex): Promise<void> {
   await knex.raw(`
     ALTER TABLE organizations
       ADD CONSTRAINT chk_organizations_type
-      CHECK (type IN ('CLINIC', 'FARM', 'VETERINARY_OFFICE', 'VETERINARY_STORE'))
+      CHECK (type IN ('CLINIC', 'FARM', 'VETERINARY_OFFICE', 'VETERINARY_STORE', 'SYNDICATE'))
   `);
   await knex.raw(`
     ALTER TABLE organizations

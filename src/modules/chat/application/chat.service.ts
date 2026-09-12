@@ -12,7 +12,7 @@ import type { AuditService } from '../../audit/audit.service.js';
 import type { MembershipRepository } from '../../organizations/infrastructure/membership.repository.js';
 import type { OrganizationRepository } from '../../organizations/infrastructure/organization.repository.js';
 import type { UserService } from '../../users/user.service.js';
-import type { ConversationSide } from '../domain/chat.constants.js';
+import type { ConversationSide, ConversationSubjectType } from '../domain/chat.constants.js';
 import { ChatPolicy } from '../domain/chat.policy.js';
 import {
   toMessageDTO,
@@ -361,17 +361,18 @@ export class ChatService {
 
   // --- marketplace deal conversations (PET_OWNER_VETERINARIAN) --------
   //
-  // Created / driven by the `vet-services` module. A direct 1:1 chat between a
-  // Pet Owner and a Veterinarian, optionally pinned to a service engagement
-  // (an offer or a listing-request). "Chat immediately" (before any engagement
-  // is accepted) and "on accept" both funnel through `getOrCreateDeal`.
+  // Created / driven by the `vet-services` and `vet-jobs` modules. A direct
+  // 1:1 chat between any user and a Veterinarian, optionally pinned to an
+  // engagement (a service offer, a listing-request, or a job application).
+  // "Chat immediately" (before any engagement is accepted) and "on accept"
+  // both funnel through `getOrCreateDeal`.
 
   async getOrCreateDeal(
     actor: ChatActor,
     params: {
       petOwnerUserId: string;
       veterinarianUserId: string;
-      subjectType?: 'VET_SERVICE_OFFER' | 'VET_SERVICE_LISTING_REQUEST' | null;
+      subjectType?: ConversationSubjectType | null;
       subjectId?: string | null;
     },
   ): Promise<{ conversation: ConversationDTO; created: boolean }> {
@@ -472,7 +473,7 @@ export class ChatService {
   /** Pin an accepted engagement onto the pair's conversation (idempotent). */
   async pinDealSubject(
     conversationId: string,
-    subjectType: 'VET_SERVICE_OFFER' | 'VET_SERVICE_LISTING_REQUEST',
+    subjectType: ConversationSubjectType,
     subjectId: string,
   ): Promise<void> {
     await this.db.transaction((tx) =>

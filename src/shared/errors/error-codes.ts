@@ -137,6 +137,40 @@ export const ErrorCode = {
   VET_SERVICE_IMAGE_INVALID: 'VET_SERVICE_IMAGE_INVALID',
   /** A message was sent to a CLOSED marketplace deal conversation. */
   CONVERSATION_CLOSED: 'CONVERSATION_CLOSED',
+
+  // --- Veterinarian Jobs / Careers ---
+  /** Moderation transition attempted on a job offer / seeker profile that is not PENDING. */
+  VET_JOB_NOT_PENDING: 'VET_JOB_NOT_PENDING',
+  /** A job offer is not APPROVED + open for applications (closed, past deadline, or unapproved). */
+  VET_JOB_NOT_OPEN: 'VET_JOB_NOT_OPEN',
+  /** The caller already has an application on this job offer. */
+  VET_JOB_ALREADY_APPLIED: 'VET_JOB_ALREADY_APPLIED',
+  /** Accept / reject attempted on an application that is not PENDING. */
+  VET_JOB_APPLICATION_NOT_PENDING: 'VET_JOB_APPLICATION_NOT_PENDING',
+  /** An uploaded attachment storage key is missing / oversized / wrong type / wrong prefix. */
+  VET_JOB_ATTACHMENT_INVALID: 'VET_JOB_ATTACHMENT_INVALID',
+
+  // --- Veterinarian Courses & Seminars ---
+  /** Moderation transition attempted on a course / seminar / workshop that is not PENDING. */
+  VET_COURSE_NOT_PENDING: 'VET_COURSE_NOT_PENDING',
+  /** A course is not APPROVED + open for registration (cancelled, past deadline, or unapproved). */
+  VET_COURSE_NOT_OPEN: 'VET_COURSE_NOT_OPEN',
+  /** The caller is already registered for this course. */
+  VET_COURSE_ALREADY_REGISTERED: 'VET_COURSE_ALREADY_REGISTERED',
+  /** The course has reached its registration capacity. */
+  VET_COURSE_CAPACITY_FULL: 'VET_COURSE_CAPACITY_FULL',
+  /** An uploaded cover image storage key is missing / oversized / wrong type / wrong prefix. */
+  VET_COURSE_IMAGE_INVALID: 'VET_COURSE_IMAGE_INVALID',
+
+  // --- Veterinary Syndicates / Unions ---
+  /** A subordinate syndicate's `parentOrganizationId` does not point at a valid main syndicate. */
+  SYNDICATE_PARENT_INVALID: 'SYNDICATE_PARENT_INVALID',
+  /** Moderation-like transition attempted on a submission that is not PENDING / already CLOSED. */
+  SYNDICATE_SUBMISSION_NOT_PENDING: 'SYNDICATE_SUBMISSION_NOT_PENDING',
+  /** An uploaded attachment storage key is missing / oversized / wrong type / wrong prefix. */
+  SYNDICATE_ATTACHMENT_INVALID: 'SYNDICATE_ATTACHMENT_INVALID',
+  /** More than the allowed number of attachments were submitted. */
+  SYNDICATE_TOO_MANY_ATTACHMENTS: 'SYNDICATE_TOO_MANY_ATTACHMENTS',
 } as const;
 
 export type ErrorCodeValue = (typeof ErrorCode)[keyof typeof ErrorCode];

@@ -42,4 +42,17 @@ export class OrganizationFollowRepository {
       .first();
     return Number(row?.count ?? 0);
   }
+
+  /** User ids following this organization — notification fan-out (e.g. a new syndicate announcement). */
+  async listFollowerUserIds(
+    organizationId: string,
+    limit: number,
+    trx?: Knex.Transaction,
+  ): Promise<string[]> {
+    const rows = (await this.conn(trx)(TABLE)
+      .where({ organization_id: organizationId })
+      .limit(limit)
+      .select('user_id')) as { user_id: string }[];
+    return rows.map((r) => r.user_id);
+  }
 }

@@ -179,6 +179,13 @@ describe('roles ↔ permissions', () => {
     expect(keys).toContain('vet_service.approve');
     expect(keys).toContain('veterinarian_store.product.manage');
     expect(keys).toContain('veterinarian_store.order.manage');
-    expect(keys.length).toBe(76);
+    expect(keys).toContain('vet_job.read');
+    expect(keys).toContain('vet_job.approve');
+    expect(keys).toContain('vet_job.reject');
+    expect(keys).toContain('vet_course.read');
+    expect(keys).toContain('vet_course.approve');
+    expect(keys).toContain('vet_course.reject');
+    expect(keys).toContain('syndicate.admin.create');
+    expect(keys.length).toBe(83);
   });
 });

@@ -70,6 +70,9 @@ import {
   createVetServiceRouter,
   createAdminVetServiceRouter,
 } from '../modules/vet-services/index.js';
+import { createVetJobRouter, createAdminVetJobRouter } from '../modules/vet-jobs/index.js';
+import { createVetCourseRouter, createAdminVetCourseRouter } from '../modules/vet-courses/index.js';
+import { createSyndicateRouter, createAdminSyndicateRouter } from '../modules/syndicates/index.js';
 import {
   createContentRouter,
   createContentCategoryRouter,
@@ -225,6 +228,25 @@ export function createApiRouter(c: Container): Router {
   // PET_OWNER_VETERINARIAN deal conversations (chat module, extended additively).
   router.use('/vet-services', createVetServiceRouter(c));
 
+  // --- Veterinarian Jobs / Careers ("الوظائف البيطرية") --------
+  // Employer-posted job offers + veterinarian "looking for a job" profiles
+  // (both moderated: PENDING → APPROVED / REJECTED), applications (decided by
+  // the offer's poster), and on-accept chat — reusing the existing
+  // PET_OWNER_VETERINARIAN deal-conversation seam (chat module, extended
+  // additively via a new `VET_JOB_APPLICATION` subject type only).
+  router.use('/vet-jobs', createVetJobRouter(c));
+
+  // Veterinarian-created courses / seminars / workshops (moderated: PENDING →
+  // APPROVED / REJECTED) and veterinarian registrations against them
+  // (capacity / deadline / at-most-once enforced synchronously).
+  router.use('/vet-courses', createVetCourseRouter(c));
+
+  // Veterinary Syndicates / Unions — a syndicate is an `organizations` row
+  // (type SYNDICATE) reusing the organization-scoped membership/supervisor
+  // RBAC and follow feature; only its profile/announcements/submissions are
+  // new. Creation is ADMIN-only, under `/admin/syndicates`.
+  router.use('/syndicates', createSyndicateRouter(c));
+
   // --- Phase 14: content management --------------------------
   // Public reads of PUBLISHED content; admin/supervisor management under
   // `/admin/content*`. Realtime `content:feed` wired in `server.ts`.
@@ -256,6 +278,9 @@ export function createApiRouter(c: Container): Router {
   router.use('/admin/egg-offers', eggOffers.admin);
   router.use('/admin/animal-publications', createAdminAnimalPublicationRouter(c));
   router.use('/admin', createAdminVetServiceRouter(c));
+  router.use('/admin', createAdminVetJobRouter(c));
+  router.use('/admin', createAdminVetCourseRouter(c));
+  router.use('/admin', createAdminSyndicateRouter(c));
   router.use('/admin/animals', createAdminAnimalRouter(c));
   router.use('/admin', createSupportAdminRouter(c));
   router.use('/admin', createAdminContentRouter(c));

@@ -138,6 +138,31 @@ import {
   VetServiceListingRequestService,
 } from './modules/vet-services/index.js';
 import {
+  VetJobMedia,
+  VetJobOfferRepository,
+  VetJobSeekerProfileRepository,
+  VetJobApplicationRepository,
+  VetJobOfferService,
+  VetJobSeekerProfileService,
+  VetJobApplicationService,
+} from './modules/vet-jobs/index.js';
+import {
+  VetCourseMedia,
+  VetCourseRepository,
+  VetCourseRegistrationRepository,
+  VetCourseService,
+  VetCourseRegistrationService,
+} from './modules/vet-courses/index.js';
+import {
+  SyndicateMedia,
+  SyndicateDetailsRepository,
+  SyndicateAnnouncementRepository,
+  SyndicateSubmissionRepository,
+  SyndicateService,
+  SyndicateAnnouncementService,
+  SyndicateSubmissionService,
+} from './modules/syndicates/index.js';
+import {
   CONSULTATION_CONFIG,
   INQUIRY_CONFIG,
   SUPPORT_CONFIG,
@@ -358,6 +383,25 @@ export interface Container {
   vetServiceRequestService: VetServiceRequestService;
   vetServiceOfferService: VetServiceOfferService;
   vetServiceListingRequestService: VetServiceListingRequestService;
+  vetJobMedia: VetJobMedia;
+  vetJobOfferRepository: VetJobOfferRepository;
+  vetJobSeekerProfileRepository: VetJobSeekerProfileRepository;
+  vetJobApplicationRepository: VetJobApplicationRepository;
+  vetJobOfferService: VetJobOfferService;
+  vetJobSeekerProfileService: VetJobSeekerProfileService;
+  vetJobApplicationService: VetJobApplicationService;
+  vetCourseMedia: VetCourseMedia;
+  vetCourseRepository: VetCourseRepository;
+  vetCourseRegistrationRepository: VetCourseRegistrationRepository;
+  vetCourseService: VetCourseService;
+  vetCourseRegistrationService: VetCourseRegistrationService;
+  syndicateMedia: SyndicateMedia;
+  syndicateDetailsRepository: SyndicateDetailsRepository;
+  syndicateAnnouncementRepository: SyndicateAnnouncementRepository;
+  syndicateSubmissionRepository: SyndicateSubmissionRepository;
+  syndicateService: SyndicateService;
+  syndicateAnnouncementService: SyndicateAnnouncementService;
+  syndicateSubmissionService: SyndicateSubmissionService;
 
   objectStorage: ObjectStorage;
   contentRepository: ContentRepository;
@@ -525,6 +569,44 @@ export function createContainer(deps: ContainerDeps): Container {
     organizationRepository,
     organizationFollowRepository,
     organizationReviewRepository,
+    logger,
+  );
+
+  // --- Veterinary Syndicates / Unions ----------------------------------
+  const syndicateMedia = new SyndicateMedia(objectStorage);
+  const syndicateDetailsRepository = new SyndicateDetailsRepository(db);
+  const syndicateAnnouncementRepository = new SyndicateAnnouncementRepository(db);
+  const syndicateSubmissionRepository = new SyndicateSubmissionRepository(db);
+  const syndicateService = new SyndicateService(
+    db,
+    syndicateDetailsRepository,
+    organizationRepository,
+    membershipRepository,
+    organizationRbacRepository,
+    organizationFollowRepository,
+    authorizationService,
+    syndicateMedia,
+    auditService,
+    eventBus,
+    logger,
+  );
+  const syndicateAnnouncementService = new SyndicateAnnouncementService(
+    db,
+    syndicateAnnouncementRepository,
+    syndicateService,
+    syndicateMedia,
+    auditService,
+    eventBus,
+    logger,
+  );
+  const syndicateSubmissionService = new SyndicateSubmissionService(
+    db,
+    syndicateSubmissionRepository,
+    syndicateService,
+    syndicateMedia,
+    userService,
+    auditService,
+    eventBus,
     logger,
   );
 
@@ -1064,6 +1146,66 @@ export function createContainer(deps: ContainerDeps): Container {
     logger,
   );
 
+  // --- Veterinarian Jobs / Careers -----------------------------------
+  const vetJobMedia = new VetJobMedia(objectStorage);
+  const vetJobOfferRepository = new VetJobOfferRepository(db);
+  const vetJobSeekerProfileRepository = new VetJobSeekerProfileRepository(db);
+  const vetJobApplicationRepository = new VetJobApplicationRepository(db);
+  const vetJobOfferService = new VetJobOfferService(
+    db,
+    vetJobOfferRepository,
+    authorizationService,
+    auditService,
+    eventBus,
+    logger,
+  );
+  const vetJobSeekerProfileService = new VetJobSeekerProfileService(
+    db,
+    vetJobSeekerProfileRepository,
+    vetJobMedia,
+    authorizationService,
+    auditService,
+    eventBus,
+    logger,
+  );
+  const vetJobApplicationService = new VetJobApplicationService(
+    db,
+    vetJobApplicationRepository,
+    vetJobOfferService,
+    vetJobSeekerProfileService,
+    vetJobMedia,
+    authorizationService,
+    chatService,
+    auditService,
+    eventBus,
+    logger,
+  );
+
+  // --- Veterinarian Courses & Seminars --------------------------------
+  const vetCourseMedia = new VetCourseMedia(objectStorage);
+  const vetCourseRepository = new VetCourseRepository(db);
+  const vetCourseRegistrationRepository = new VetCourseRegistrationRepository(db);
+  const vetCourseService = new VetCourseService(
+    db,
+    vetCourseRepository,
+    vetCourseMedia,
+    authorizationService,
+    auditService,
+    eventBus,
+    logger,
+  );
+  const vetCourseRegistrationService = new VetCourseRegistrationService(
+    db,
+    vetCourseRegistrationRepository,
+    vetCourseRepository,
+    vetCourseService,
+    vetCourseMedia,
+    authorizationService,
+    auditService,
+    eventBus,
+    logger,
+  );
+
   // --- content management (Phase 14) ------------------------
   // `objectStorage` was hoisted above (needed earlier by UserService / VeterinarianService).
   const contentRepository = new ContentRepository(db);
@@ -1162,6 +1304,7 @@ export function createContainer(deps: ContainerDeps): Container {
     memberships: membershipRepository,
     organizations: organizationRepository,
     supervisors: supervisorRepository,
+    organizationFollows: organizationFollowRepository,
   });
   const notificationEventHandler = new NotificationEventHandler(
     eventBus,
@@ -1306,6 +1449,25 @@ export function createContainer(deps: ContainerDeps): Container {
     vetServiceRequestService,
     vetServiceOfferService,
     vetServiceListingRequestService,
+    vetJobMedia,
+    vetJobOfferRepository,
+    vetJobSeekerProfileRepository,
+    vetJobApplicationRepository,
+    vetJobOfferService,
+    vetJobSeekerProfileService,
+    vetJobApplicationService,
+    vetCourseMedia,
+    vetCourseRepository,
+    vetCourseRegistrationRepository,
+    vetCourseService,
+    vetCourseRegistrationService,
+    syndicateMedia,
+    syndicateDetailsRepository,
+    syndicateAnnouncementRepository,
+    syndicateSubmissionRepository,
+    syndicateService,
+    syndicateAnnouncementService,
+    syndicateSubmissionService,
     objectStorage,
     contentRepository,
     contentFileRepository,

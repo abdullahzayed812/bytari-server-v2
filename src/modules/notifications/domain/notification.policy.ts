@@ -2,6 +2,7 @@ import type { DomainEvent } from '../../../shared/events/index.js';
 import type { ConversationRepository } from '../../chat/infrastructure/conversation.repository.js';
 import type { ThreadRepository } from '../../consultations/infrastructure/thread.repository.js';
 import type { MembershipRepository } from '../../organizations/infrastructure/membership.repository.js';
+import type { OrganizationFollowRepository } from '../../organizations/infrastructure/organization-follow.repository.js';
 import type { OrganizationRepository } from '../../organizations/infrastructure/organization.repository.js';
 import type { SupervisorRepository } from '../../supervisors/supervisor.repository.js';
 import type { NotificationType } from './notification.constants.js';
@@ -15,6 +16,7 @@ export interface NotificationPolicyDeps {
   memberships: MembershipRepository;
   organizations: OrganizationRepository;
   supervisors: SupervisorRepository;
+  organizationFollows: OrganizationFollowRepository;
 }
 
 /** Fan-out cap for a single domain event (clinic staff / domain supervisors). */
@@ -130,6 +132,34 @@ const COPY: Record<NotificationType, { title: string; body: string }> = {
   VET_SERVICE_DEAL_COMPLETED: {
     title: 'Service completed',
     body: 'The service has been marked as completed.',
+  },
+  VET_COURSE_SUBMITTED: {
+    title: 'New course/seminar to review',
+    body: 'A veterinarian submitted a course or seminar for approval.',
+  },
+  VET_COURSE_APPROVED: {
+    title: 'Course/seminar approved',
+    body: 'Your course/seminar is now public.',
+  },
+  VET_COURSE_REJECTED: {
+    title: 'Course/seminar rejected',
+    body: 'Your course/seminar needs changes before it can be published.',
+  },
+  VET_COURSE_REGISTRATION_CONFIRMED: {
+    title: 'Registration confirmed',
+    body: 'Your registration was confirmed.',
+  },
+  SYNDICATE_ANNOUNCEMENT_PUBLISHED: {
+    title: 'New syndicate announcement',
+    body: 'A syndicate you follow published a new announcement.',
+  },
+  SYNDICATE_SUBMISSION_CREATED: {
+    title: 'New submission to review',
+    body: 'A member submitted a new request or inquiry.',
+  },
+  SYNDICATE_SUBMISSION_RESPONDED: {
+    title: 'Your submission was answered',
+    body: 'The syndicate responded to your request or inquiry.',
   },
   CONTENT_PUBLISHED: { title: 'New content published', body: 'New content is available.' },
   ADMIN_ANNOUNCEMENT: { title: 'Announcement', body: 'You have a new announcement.' },
@@ -412,6 +442,59 @@ export class NotificationPolicy {
         });
       case 'vet_service.deal.completed':
         return this.vetServiceDealCompleted(event.name, p);
+
+      // --- Veterinarian Courses & Seminars ---
+      case 'vet_course.submitted':
+        return this.vetCourseToSupervisors(
+          'VET_COURSE_SUBMITTED',
+          event.name,
+          str(p.courseId),
+          'VET_COURSE',
+          str(p.creatorUserId),
+        );
+      case 'vet_course.approved':
+        return this.vetServiceToUser('VET_COURSE_APPROVED', event.name, p, {
+          userId: str(p.creatorUserId),
+          entityType: 'VET_COURSE',
+          entityId: str(p.courseId),
+        });
+      case 'vet_course.rejected':
+        return this.vetServiceToUser('VET_COURSE_REJECTED', event.name, p, {
+          userId: str(p.creatorUserId),
+          entityType: 'VET_COURSE',
+          entityId: str(p.courseId),
+        });
+      case 'vet_course.registration.created':
+        return this.vetServiceToUser('VET_COURSE_REGISTRATION_CONFIRMED', event.name, p, {
+          userId: str(p.registrantUserId),
+          entityType: 'VET_COURSE',
+          entityId: str(p.courseId),
+        });
+
+      // --- Veterinary Syndicates / Unions ---
+      case 'syndicate.announcement.published':
+        return this.syndicateFollowersToNotify(
+          'SYNDICATE_ANNOUNCEMENT_PUBLISHED',
+          event.name,
+          str(p.organizationId),
+          str(p.announcementId),
+          str(p.actorUserId),
+        );
+      case 'syndicate.submission.created':
+        return this.syndicateOrgMembers(
+          'SYNDICATE_SUBMISSION_CREATED',
+          event.name,
+          str(p.organizationId),
+          str(p.submissionId),
+          str(p.submittedByUserId),
+        );
+      case 'syndicate.submission.responded':
+        return this.vetServiceToUser('SYNDICATE_SUBMISSION_RESPONDED', event.name, p, {
+          userId: str(p.submittedByUserId),
+          actorUserId: str(p.actorUserId),
+          entityType: 'SYNDICATE_SUBMISSION',
+          entityId: str(p.submissionId),
+        });
 
       default:
         return [];
@@ -745,6 +828,90 @@ export class NotificationPolicy {
           uid,
           { entityId },
           { entityType, entityId, sourceEventKey: `${eventName}:${entityId}` },
+        ),
+      );
+  }
+
+  private async vetCourseToSupervisors(
+    type: NotificationType,
+    eventName: string,
+    entityId: string,
+    entityType: string,
+    excludeUserId: string,
+  ): Promise<NotificationSpec[]> {
+    if (!entityId) return [];
+    const supIds = await this.activeSupervisorUserIds('VET_COURSES');
+    return supIds
+      .filter((id) => id !== excludeUserId)
+      .map((uid) =>
+        this.spec(
+          type,
+          uid,
+          { entityId },
+          { entityType, entityId, sourceEventKey: `${eventName}:${entityId}` },
+        ),
+      );
+  }
+
+  /** Notify a syndicate's followers about a new announcement (excludes the poster). */
+  private async syndicateFollowersToNotify(
+    type: NotificationType,
+    eventName: string,
+    organizationId: string,
+    announcementId: string,
+    actorUserId: string,
+  ): Promise<NotificationSpec[]> {
+    if (!organizationId || !announcementId) return [];
+    const followerIds = await this.deps.organizationFollows.listFollowerUserIds(
+      organizationId,
+      RECIPIENT_FANOUT_CAP,
+    );
+    const key = `${eventName}:${announcementId}`;
+    return followerIds
+      .filter((id) => id !== actorUserId)
+      .map((uid) =>
+        this.spec(
+          type,
+          uid,
+          { organizationId, announcementId },
+          {
+            actorUserId: actorUserId || null,
+            entityType: 'SYNDICATE_ANNOUNCEMENT',
+            entityId: announcementId,
+            sourceEventKey: key,
+          },
+        ),
+      );
+  }
+
+  /** Notify a syndicate's ACTIVE members about a new request/inquiry (excludes the submitter). */
+  private async syndicateOrgMembers(
+    type: NotificationType,
+    eventName: string,
+    organizationId: string,
+    submissionId: string,
+    submitterUserId: string,
+  ): Promise<NotificationSpec[]> {
+    if (!organizationId || !submissionId) return [];
+    const { items } = await this.deps.memberships.listForOrg(organizationId, {
+      page: 1,
+      pageSize: RECIPIENT_FANOUT_CAP,
+      status: 'ACTIVE',
+    });
+    const key = `${eventName}:${submissionId}`;
+    return items
+      .filter((m) => m.userId !== submitterUserId)
+      .map((m) =>
+        this.spec(
+          type,
+          m.userId,
+          { organizationId, submissionId },
+          {
+            actorUserId: submitterUserId || null,
+            entityType: 'SYNDICATE_SUBMISSION',
+            entityId: submissionId,
+            sourceEventKey: key,
+          },
         ),
       );
   }

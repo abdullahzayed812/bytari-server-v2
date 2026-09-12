@@ -24,6 +24,11 @@ const DETAIL_TABLE: Record<OrganizationType, string> = {
   FARM: 'farm_details',
   VETERINARY_OFFICE: 'veterinary_office_details',
   VETERINARY_STORE: 'veterinary_store_details',
+  // Not actually routed through here — `syndicate_details` has its own
+  // tailored shape (hierarchy + officer fields, no working-hours/social-links)
+  // and its own repository (`SyndicateDetailsRepository`). Listed only so
+  // this dispatch map stays total over `OrganizationType`.
+  SYNDICATE: 'syndicate_details',
 };
 
 export interface CreateOrganizationData {

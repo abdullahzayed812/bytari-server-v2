@@ -9,8 +9,13 @@ import {
 
 // --- organization ----------------------------------------------------
 
+/**
+ * SYNDICATE is excluded — syndicates are never self-service; only an ADMIN
+ * creates one, via `POST /admin/syndicates`
+ * (`server/src/modules/syndicates/presentation/syndicate.routes.ts`).
+ */
 export const createOrganizationBodySchema = z.object({
-  type: z.enum(ORGANIZATION_TYPES),
+  type: z.enum(ORGANIZATION_TYPES).exclude(['SYNDICATE']),
   name: z.string().trim().min(2).max(160),
   description: z.string().trim().max(2000).optional(),
 });

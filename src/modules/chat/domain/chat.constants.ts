@@ -48,6 +48,7 @@ export type ConversationStatus = (typeof CONVERSATION_STATUSES)[number];
 export const CONVERSATION_SUBJECT_TYPES = [
   'VET_SERVICE_OFFER',
   'VET_SERVICE_LISTING_REQUEST',
+  'VET_JOB_APPLICATION',
 ] as const;
 export type ConversationSubjectType = (typeof CONVERSATION_SUBJECT_TYPES)[number];
 

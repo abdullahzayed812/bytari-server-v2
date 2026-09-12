@@ -1,5 +1,5 @@
 import type { Knex } from 'knex';
-import type { ParticipantRole } from '../domain/chat.constants.js';
+import type { ConversationSubjectType, ParticipantRole } from '../domain/chat.constants.js';
 import {
   rowToConversation,
   type Conversation,
@@ -17,7 +17,7 @@ export interface CreateConversationData {
   petOwnerUserId: string | null;
   memberUserId: string | null;
   veterinarianUserId?: string | null;
-  subjectType?: 'VET_SERVICE_OFFER' | 'VET_SERVICE_LISTING_REQUEST' | null;
+  subjectType?: ConversationSubjectType | null;
   subjectId?: string | null;
   createdByUserId: string;
 }
