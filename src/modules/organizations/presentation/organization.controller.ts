@@ -17,13 +17,16 @@ import type {
   CreateOrganizationBody,
   DiscoverOrganizationsQuery,
   FinalizeGalleryBody,
+  FinalizeLicenseDocumentBody,
   FinalizeLogoBody,
   GalleryUploadUrlBody,
+  LicenseDocumentUploadUrlBody,
   ListMembersQuery,
   ListMyOrganizationsQuery,
   ListReviewsQuery,
   LogoUploadUrlBody,
   RemoveGalleryImageQuery,
+  RemoveLicenseDocumentQuery,
   SubmitReviewBody,
   UpdateMemberBody,
   UpdateOrganizationBody,
@@ -47,7 +50,7 @@ export class OrganizationController {
   create = async (req: Request, res: Response): Promise<void> => {
     const body = validatedBody<CreateOrganizationBody>(req);
     const org = await this.organizations.create(
-      { type: body.type, name: body.name, description: body.description },
+      { type: body.type, name: body.name, description: body.description, profile: body.details },
       this.actor(req),
     );
     sendSuccess(res, org, StatusCodes.CREATED);
@@ -156,6 +159,33 @@ export class OrganizationController {
     sendSuccess(
       res,
       await this.organizations.removeGalleryImage(org.id, this.actor(req), storageKey),
+    );
+  };
+
+  // --- license documents ("صور الترخيص") ------------------------
+
+  requestLicenseDocumentUploadUrl = async (req: Request, res: Response): Promise<void> => {
+    const org = requireOrganization(req);
+    const body = validatedBody<LicenseDocumentUploadUrlBody>(req);
+    sendSuccess(
+      res,
+      await this.organizations.requestLicenseDocumentUploadUrl(org.id, body),
+      StatusCodes.CREATED,
+    );
+  };
+
+  addLicenseDocument = async (req: Request, res: Response): Promise<void> => {
+    const org = requireOrganization(req);
+    const body = validatedBody<FinalizeLicenseDocumentBody>(req);
+    sendSuccess(res, await this.organizations.addLicenseDocument(org.id, this.actor(req), body));
+  };
+
+  removeLicenseDocument = async (req: Request, res: Response): Promise<void> => {
+    const org = requireOrganization(req);
+    const { storageKey } = validatedQuery<RemoveLicenseDocumentQuery>(req);
+    sendSuccess(
+      res,
+      await this.organizations.removeLicenseDocument(org.id, this.actor(req), storageKey),
     );
   };
 

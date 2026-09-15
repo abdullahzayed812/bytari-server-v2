@@ -45,6 +45,15 @@ export function createAdminOrganizationRouter(c: Container): Router {
     asyncHandler(ctrl.listFarms),
   );
 
+  // Cross-organization pending renewal requests — admin dashboard "pending
+  // tasks". A two-segment path, so it can never collide with `/:id`.
+  r.get(
+    '/subscription-renewals/pending',
+    authorize('organization.admin.read'),
+    validate({ query: adminListOrganizationsQuerySchema }),
+    asyncHandler(ctrl.listPendingRenewals),
+  );
+
   r.get(
     '/',
     authorize('organization.admin.read'),

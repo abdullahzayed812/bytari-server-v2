@@ -20,6 +20,17 @@ export type ThreadSide = 'CREATOR' | 'RESPONDER';
 export const MESSAGE_BODY_MAX = 4000;
 
 /**
+ * Image attachments on a CONSULTATION / INQUIRY's initial message (docs 05
+ * §5.18–5.19 follow-up). SUPPORT ("تواصل معنا") does not get this capability —
+ * see `ThreadKindConfig.maxAttachmentImages` (0 for SUPPORT).
+ */
+export const MAX_MESSAGE_IMAGES = 6;
+export const MAX_MESSAGE_IMAGE_BYTES = 10 * 1024 * 1024;
+export const ALLOWED_MESSAGE_IMAGE_MIME = ['image/png', 'image/jpeg', 'image/webp'] as const;
+/** Seconds a signed image URL stays valid (only used when no public base URL is configured). */
+export const MESSAGE_IMAGE_URL_TTL_SECONDS = 3600;
+
+/**
  * Global permission keys (seeded from `rbac.constants.ts`). Thread access is
  * RELATIONSHIP-scoped for the creator; RESPONDER access flows through
  * `AuthorizationService` — ADMIN override, or the CONSULTATION / INQUIRY

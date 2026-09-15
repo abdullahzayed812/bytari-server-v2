@@ -40,6 +40,7 @@ export class VeterinaryOfficeProductController {
       pageSize: q.pageSize,
       status: q.status,
       productType: q.type,
+      hidden: q.hidden,
       search: q.search,
       sort: q.sort,
       order: q.order,

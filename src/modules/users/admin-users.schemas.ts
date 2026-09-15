@@ -13,6 +13,8 @@ export const listUsersQuerySchema = paginationQuerySchema.extend({
   status: z.enum(USER_STATUSES).optional(),
   veterinarianStatus: z.enum(VETERINARIAN_STATUSES).optional(),
   search: z.string().trim().min(1).max(120).optional(),
+  /** Narrow to users holding this global role (e.g. admin-dashboard per-role counts). */
+  role: z.enum(ROLE_KEYS).optional(),
 });
 export type ListUsersQuery = z.infer<typeof listUsersQuerySchema>;
 

@@ -50,6 +50,7 @@ export interface ListOrganizationsFilter {
 /** Patch for a `*_details` profile row — `logoKey` maps to the `logo_key` column. */
 export interface OrganizationProfilePatch {
   address?: string | null;
+  country?: string | null;
   latitude?: number | null;
   longitude?: number | null;
   phone?: string | null;
@@ -58,11 +59,16 @@ export interface OrganizationProfilePatch {
   services?: string[] | null;
   email?: string | null;
   whatsapp?: string | null;
+  websiteUrl?: string | null;
   instagramUrl?: string | null;
   facebookUrl?: string | null;
   tiktokUrl?: string | null;
   /** Full replacement of the gallery array — callers read-modify-write. */
   galleryKeys?: string[];
+  /** CLINIC / VETERINARY_OFFICE only. */
+  licenseNumber?: string | null;
+  /** Full replacement of the license document array — callers read-modify-write. */
+  licenseDocumentKeys?: string[];
 }
 
 export interface DiscoverWithDetailsFilter {
@@ -93,6 +99,7 @@ function rowToProfile(
   }
   return {
     address: row.address,
+    country: row.country ?? null,
     latitude: row.latitude === null ? null : Number(row.latitude),
     longitude: row.longitude === null ? null : Number(row.longitude),
     phone: row.phone,
@@ -102,6 +109,7 @@ function rowToProfile(
     services: row.services ?? [],
     email: row.email,
     whatsapp: row.whatsapp,
+    websiteUrl: row.website_url,
     instagramUrl: row.instagram_url,
     facebookUrl: row.facebook_url,
     tiktokUrl: row.tiktok_url,
@@ -149,6 +157,7 @@ export class OrganizationRepository {
       const row = await this.findProfileRow(org.type, id, trx);
       const profile = rowToProfile(row);
       details.address = profile.address;
+      details.country = profile.country;
       details.latitude = profile.latitude;
       details.longitude = profile.longitude;
       details.phone = profile.phone;
@@ -156,11 +165,20 @@ export class OrganizationRepository {
       details.services = profile.services;
       details.email = profile.email;
       details.whatsapp = profile.whatsapp;
+      details.websiteUrl = profile.websiteUrl;
       details.instagramUrl = profile.instagramUrl;
       details.facebookUrl = profile.facebookUrl;
       details.tiktokUrl = profile.tiktokUrl;
-      // `logoUrl` / `galleryUrls` are resolved by the service (needs
-      // `ObjectStorage`); the raw keys never leave the repository layer.
+      // `logoUrl` / `galleryUrls` / `licenseDocumentUrls` are resolved by the
+      // service (needs `ObjectStorage`); the raw keys never leave the repository layer.
+      if ((org.type === 'VETERINARY_OFFICE' || org.type === 'CLINIC') && row) {
+        const startDate = toDateOnly(row.subscription_start_date ?? null);
+        const endDate = toDateOnly(row.subscription_end_date ?? null);
+        details.subscriptionStartDate = startDate;
+        details.subscriptionEndDate = endDate;
+        details.subscriptionStatus = computeFarmSubscriptionStatus(startDate, endDate);
+        details.licenseNumber = row.license_number ?? null;
+      }
     }
     return { ...org, details };
   }
@@ -185,6 +203,7 @@ export class OrganizationRepository {
   ): Promise<void> {
     const dbPatch: Record<string, unknown> = { updated_at: trx.fn.now() };
     if (patch.address !== undefined) dbPatch.address = patch.address;
+    if (patch.country !== undefined) dbPatch.country = patch.country;
     if (patch.latitude !== undefined) dbPatch.latitude = patch.latitude;
     if (patch.longitude !== undefined) dbPatch.longitude = patch.longitude;
     if (patch.phone !== undefined) dbPatch.phone = patch.phone;
@@ -193,10 +212,13 @@ export class OrganizationRepository {
     if (patch.services !== undefined) dbPatch.services = patch.services;
     if (patch.email !== undefined) dbPatch.email = patch.email;
     if (patch.whatsapp !== undefined) dbPatch.whatsapp = patch.whatsapp;
+    if (patch.websiteUrl !== undefined) dbPatch.website_url = patch.websiteUrl;
     if (patch.instagramUrl !== undefined) dbPatch.instagram_url = patch.instagramUrl;
     if (patch.facebookUrl !== undefined) dbPatch.facebook_url = patch.facebookUrl;
     if (patch.tiktokUrl !== undefined) dbPatch.tiktok_url = patch.tiktokUrl;
     if (patch.galleryKeys !== undefined) dbPatch.gallery_keys = patch.galleryKeys;
+    if (patch.licenseNumber !== undefined) dbPatch.license_number = patch.licenseNumber;
+    if (patch.licenseDocumentKeys !== undefined) dbPatch.license_document_keys = patch.licenseDocumentKeys;
     if (Object.keys(dbPatch).length === 1) return; // nothing but updated_at — no-op
 
     const updated = await trx(DETAIL_TABLE[type])
@@ -235,6 +257,7 @@ export class OrganizationRepository {
     let query = base().select(
       'o.*',
       'd.address as d_address',
+      'd.country as d_country',
       'd.latitude as d_latitude',
       'd.longitude as d_longitude',
       'd.phone as d_phone',
@@ -243,6 +266,7 @@ export class OrganizationRepository {
       'd.services as d_services',
       'd.email as d_email',
       'd.whatsapp as d_whatsapp',
+      'd.website_url as d_website_url',
       'd.instagram_url as d_instagram_url',
       'd.facebook_url as d_facebook_url',
       'd.tiktok_url as d_tiktok_url',
@@ -277,6 +301,7 @@ export class OrganizationRepository {
       .offset((filter.page - 1) * filter.pageSize)) as Array<
       OrganizationRow & {
         d_address: string | null;
+        d_country: string | null;
         d_latitude: number | null;
         d_longitude: number | null;
         d_phone: string | null;
@@ -285,6 +310,7 @@ export class OrganizationRepository {
         d_services: string[] | null;
         d_email: string | null;
         d_whatsapp: string | null;
+        d_website_url: string | null;
         d_instagram_url: string | null;
         d_facebook_url: string | null;
         d_tiktok_url: string | null;
@@ -298,6 +324,7 @@ export class OrganizationRepository {
       profile: rowToProfile({
         organization_id: row.id,
         address: row.d_address,
+        country: row.d_country,
         latitude: row.d_latitude,
         longitude: row.d_longitude,
         phone: row.d_phone,
@@ -306,6 +333,7 @@ export class OrganizationRepository {
         services: row.d_services,
         email: row.d_email,
         whatsapp: row.d_whatsapp,
+        website_url: row.d_website_url,
         instagram_url: row.d_instagram_url,
         facebook_url: row.d_facebook_url,
         tiktok_url: row.d_tiktok_url,

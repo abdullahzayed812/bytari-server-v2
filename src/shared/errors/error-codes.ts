@@ -115,6 +115,8 @@ export const ErrorCode = {
   // --- Organization directory & engagement (Clinic Details) ---
   /** A gallery upload would exceed the per-organization photo cap. */
   GALLERY_LIMIT_EXCEEDED: 'GALLERY_LIMIT_EXCEEDED',
+  /** A license-document upload would exceed the per-organization document cap. */
+  LICENSE_DOCUMENT_LIMIT_EXCEEDED: 'LICENSE_DOCUMENT_LIMIT_EXCEEDED',
 
   // --- Poultry Markets (trader registration / offers / exchange rates) ---
   /** Market-only action requires an APPROVED trader account. */

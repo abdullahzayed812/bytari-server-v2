@@ -82,6 +82,15 @@ export class UserRepository {
             .orWhereRaw('lower(last_name) like ?', [like]);
         });
       }
+      if (filter.role) {
+        qb.whereIn(
+          'id',
+          (trx ?? this.db)('user_roles as ur')
+            .join('roles as r', 'r.id', 'ur.role_id')
+            .where('r.key', filter.role)
+            .select('ur.user_id'),
+        );
+      }
       return qb;
     };
 

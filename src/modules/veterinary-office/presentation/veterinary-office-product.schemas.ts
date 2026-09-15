@@ -49,6 +49,7 @@ export const updateVeterinaryOfficeProductBodySchema = z
     productType: z.enum(VETERINARY_OFFICE_PRODUCT_TYPES).optional(),
     price: priceSchema.nullable().optional(),
     status: z.enum(VETERINARY_OFFICE_PRODUCT_STATUSES).optional(),
+    isHidden: z.boolean().optional(),
     ...detailFieldsShape,
   })
   .refine((v) => Object.keys(v).length > 0, { message: 'At least one field is required' });
@@ -107,6 +108,8 @@ export const veterinaryOfficeProductParamSchema = z.object({
 export const listVeterinaryOfficeProductsQuerySchema = paginationQuerySchema.extend({
   status: z.enum(VETERINARY_OFFICE_PRODUCT_STATUSES).optional(),
   type: z.enum(VETERINARY_OFFICE_PRODUCT_TYPES).optional(),
+  /** Owner-facing "Hidden products" screen (`?hidden=true`). */
+  hidden: z.coerce.boolean().optional(),
   search: z.string().trim().min(1).max(200).optional(),
   sort: z.enum(['name', 'price', 'createdAt']).optional(),
   order: z.enum(['asc', 'desc']).optional(),

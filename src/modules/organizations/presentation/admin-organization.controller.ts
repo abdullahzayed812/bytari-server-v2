@@ -114,6 +114,16 @@ export class AdminOrganizationController {
 
   // --- Poultry Farms management (subscription + renewal requests) ----
 
+  /** Every PENDING subscription renewal request, across every organization — admin dashboard tasks. */
+  listPendingRenewals = async (req: Request, res: Response): Promise<void> => {
+    const q = validatedQuery<AdminListOrganizationsQuery>(req);
+    const { items, total } = await this.farmRenewals.listAllPendingForAdmin({
+      page: q.page,
+      pageSize: q.pageSize,
+    });
+    sendSuccess(res, items, 200, pageMeta(q.page, q.pageSize, total));
+  };
+
   listFarms = async (req: Request, res: Response): Promise<void> => {
     const q = validatedQuery<AdminListFarmsQuery>(req);
     const { items, total } = await this.farmRenewals.listFarmsForAdmin({

@@ -25,6 +25,13 @@ export interface VeterinaryOfficeProduct extends VeterinaryOfficeProductDetailFi
   price: string | null;
   stockQuantity: number;
   status: VeterinaryOfficeProductStatus;
+  /**
+   * "إخفاء/إظهار" — orthogonal to `status`. A hidden product stays ACTIVE (still
+   * owned, still counted), just excluded from the public catalog and the
+   * dashboard's default list. `status = INACTIVE` remains the separate "حذف"
+   * soft-delete state.
+   */
+  isHidden: boolean;
   primaryImageKey: string | null;
   createdByUserId: string | null;
   createdAt: string;
@@ -52,6 +59,7 @@ export interface VeterinaryOfficeProductDTO extends VeterinaryOfficeProductDetai
   price: string | null;
   stockQuantity: number;
   status: VeterinaryOfficeProductStatus;
+  isHidden: boolean;
   primaryImageUrl: string | null;
   images: VeterinaryOfficeProductImageDTO[];
   createdByUserId: string | null;
@@ -86,6 +94,7 @@ export interface UpdateVeterinaryOfficeProductInput extends VeterinaryOfficeProd
   productType?: VeterinaryOfficeProductType;
   price?: string | null;
   status?: VeterinaryOfficeProductStatus;
+  isHidden?: boolean;
 }
 
 export interface ListVeterinaryOfficeProductsFilter {
@@ -96,6 +105,8 @@ export interface ListVeterinaryOfficeProductsFilter {
   search?: string;
   sort?: 'name' | 'price' | 'createdAt';
   order?: 'asc' | 'desc';
+  /** Owner-facing "Hidden products" screen filter. Ignored by the public catalog (always `false`). */
+  hidden?: boolean;
 }
 
 // --- row ---------------------------------------------------------
@@ -110,6 +121,7 @@ export interface VeterinaryOfficeProductRow {
   price: string | null;
   stock_quantity: number | string;
   status: string;
+  is_hidden: boolean;
   subtype: string | null;
   weight: string | null;
   usage_instructions: string | null;
@@ -141,6 +153,7 @@ export function rowToVeterinaryOfficeProduct(row: VeterinaryOfficeProductRow): V
     price: row.price,
     stockQuantity: Number(row.stock_quantity),
     status: row.status as VeterinaryOfficeProductStatus,
+    isHidden: row.is_hidden,
     subtype: row.subtype,
     weight: row.weight,
     usageInstructions: row.usage_instructions,

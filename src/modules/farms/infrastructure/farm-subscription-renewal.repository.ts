@@ -10,6 +10,19 @@ import {
 
 const TABLE = 'farm_subscription_renewal_requests';
 
+/**
+ * `farm_subscription_renewal_requests` is keyed purely by `organization_id` — no farm-specific
+ * column — so it is reused unchanged for VETERINARY_OFFICE / CLINIC subscriptions (Veterinary
+ * Office Dashboard spec §3: reuse the Farm approval/subscription infrastructure rather than
+ * duplicating it). Only the subscription DATES live on a type-specific `*_details` table, so
+ * `setSubscriptionDates`/`getSubscriptionDates` resolve the right one per organization.
+ */
+const SUBSCRIPTION_DETAILS_TABLE: Record<string, string> = {
+  FARM: 'farm_details',
+  VETERINARY_OFFICE: 'veterinary_office_details',
+  CLINIC: 'clinic_details',
+};
+
 export interface CreateRenewalRequestData {
   organizationId: string;
   requestedByUserId: string;
@@ -151,26 +164,38 @@ export class FarmSubscriptionRenewalRepository {
     return { items: rows.map(rowToFarmSubscriptionRenewalRequest), total };
   }
 
-  /** Sets a farm's subscription period directly on `farm_details`. */
+  /** Resolves which `*_details` table holds this organization's subscription dates. */
+  private async detailsTable(organizationId: string, trx?: Knex.Transaction): Promise<string> {
+    const org = await this.conn(trx)('organizations').where({ id: organizationId }).first('type');
+    const table = org && SUBSCRIPTION_DETAILS_TABLE[org.type as string];
+    if (!table) {
+      throw new Error(`Organization ${organizationId} does not support a subscription window`);
+    }
+    return table;
+  }
+
+  /** Sets an organization's subscription period on its type's `*_details` table. */
   async setSubscriptionDates(
     organizationId: string,
     dates: { startDate: string; endDate: string },
     trx: Knex.Transaction,
   ): Promise<void> {
-    const updated = await trx('farm_details').where({ organization_id: organizationId }).update({
+    const table = await this.detailsTable(organizationId, trx);
+    const updated = await trx(table).where({ organization_id: organizationId }).update({
       subscription_start_date: dates.startDate,
       subscription_end_date: dates.endDate,
       updated_at: trx.fn.now(),
     });
-    if (updated === 0) throw new Error(`farm_details row not found: ${organizationId}`);
+    if (updated === 0) throw new Error(`${table} row not found: ${organizationId}`);
   }
 
-  /** Raw subscription dates for a farm — used to compute status / snapshot on request. */
+  /** Raw subscription dates for an organization — used to compute status / snapshot on request. */
   async getSubscriptionDates(
     organizationId: string,
     trx?: Knex.Transaction,
   ): Promise<{ startDate: string | null; endDate: string | null }> {
-    const row = await this.conn(trx)('farm_details')
+    const table = await this.detailsTable(organizationId, trx);
+    const row = await this.conn(trx)(table)
       .where({ organization_id: organizationId })
       .first('subscription_start_date', 'subscription_end_date');
     return {
@@ -286,6 +311,43 @@ export class FarmSubscriptionRenewalRepository {
     });
 
     return { items, total };
+  }
+
+  /**
+   * Every PENDING renewal request across ALL organizations (not scoped to one
+   * org, unlike {@link listForOrganization}) — backs the admin dashboard's
+   * cross-cutting "pending tasks" list. `farm_subscription_renewal_requests`
+   * has no organization-type column, so this reuses unchanged for FARM /
+   * VETERINARY_OFFICE / CLINIC subscription requests alike.
+   */
+  async listAllPendingForAdmin(
+    filter: { page: number; pageSize: number },
+    trx?: Knex.Transaction,
+  ): Promise<{ items: Array<FarmSubscriptionRenewalRequest & { organizationName: string }>; total: number }> {
+    const conn = this.conn(trx);
+    const base = (): Knex.QueryBuilder =>
+      conn(`${TABLE} as req`)
+        .join('organizations as o', 'o.id', 'req.organization_id')
+        .where('req.status', 'PENDING');
+
+    const countRow = await base().count<{ count: string }>({ count: '*' }).first();
+    const total = Number(countRow?.count ?? 0);
+
+    const rows = (await base()
+      .select('req.*', 'o.name as organization_name')
+      .orderBy('req.created_at', 'desc')
+      .limit(filter.pageSize)
+      .offset((filter.page - 1) * filter.pageSize)) as Array<
+      FarmSubscriptionRenewalRequestRow & { organization_name: string }
+    >;
+
+    return {
+      items: rows.map((r) => ({
+        ...rowToFarmSubscriptionRenewalRequest(r),
+        organizationName: r.organization_name,
+      })),
+      total,
+    };
   }
 
   private async findOpenRequestOrgIds(

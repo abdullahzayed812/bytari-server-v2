@@ -19,6 +19,8 @@ export const StoragePrefix = {
   medicalAttachments: 'medical-records',
   veterinarianDocuments: 'veterinarians/documents',
   advertisements: 'advertisements',
+  consultationAttachments: 'consultations/attachments',
+  inquiryAttachments: 'inquiries/attachments',
   poultryOfferImages: 'market/poultry-offers',
   eggOfferImages: 'market/egg-offers',
   petOwnerStoreProducts: 'pet-owner-store/products',
@@ -33,6 +35,8 @@ export const StoragePrefix = {
   syndicateSubmissionAttachments: 'syndicates/submissions',
   veterinaryStoreProductImages: 'veterinary-store/products',
   veterinaryOfficeProductImages: 'veterinary-office/products',
+  organizationBroadcastImages: 'organizations/broadcasts',
+  organizationLicenseDocuments: 'organizations/license-documents',
   misc: 'misc',
 } as const;
 

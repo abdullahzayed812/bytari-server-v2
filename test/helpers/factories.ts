@@ -204,7 +204,12 @@ export interface TestOrganization {
 export async function createOrganization(
   app: Express,
   ownerToken: string,
-  input: { type: string; name?: string; description?: string },
+  input: {
+    type: string;
+    name?: string;
+    description?: string;
+    details?: Record<string, unknown>;
+  },
 ): Promise<TestOrganization> {
   const res = await request(app)
     .post('/api/v1/organizations')

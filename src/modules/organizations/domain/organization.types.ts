@@ -40,6 +40,8 @@ export interface Organization {
  */
 export interface OrganizationProfile {
   address: string | null;
+  /** Free-text — no backend country enum; the mobile client offers a picker over a static list. */
+  country: string | null;
   latitude: number | null;
   longitude: number | null;
   phone: string | null;
@@ -48,6 +50,7 @@ export interface OrganizationProfile {
   services: string[];
   email: string | null;
   whatsapp: string | null;
+  websiteUrl: string | null;
   instagramUrl: string | null;
   facebookUrl: string | null;
   tiktokUrl: string | null;
@@ -57,6 +60,7 @@ export interface OrganizationProfile {
 
 export const emptyOrganizationProfile: OrganizationProfile = {
   address: null,
+  country: null,
   latitude: null,
   longitude: null,
   phone: null,
@@ -65,6 +69,7 @@ export const emptyOrganizationProfile: OrganizationProfile = {
   services: [],
   email: null,
   whatsapp: null,
+  websiteUrl: null,
   instagramUrl: null,
   facebookUrl: null,
   tiktokUrl: null,
@@ -124,10 +129,15 @@ export function rowToOrganizationReview(row: OrganizationReviewRow): Organizatio
 }
 
 /**
- * A FARM's subscription validity — deliberately SEPARATE from
+ * An organization's subscription validity — deliberately SEPARATE from
  * `Organization.status` (the approval state). Computed server-side from the
  * stored dates vs. `now()`, never stored itself, so there is nothing to drift
- * out of sync (§`computeFarmSubscriptionStatus`).
+ * out of sync (§`computeFarmSubscriptionStatus`). Originally FARM-only;
+ * generalized to VETERINARY_OFFICE / CLINIC (Veterinary Office Dashboard spec
+ * §3) — kept its "Farm" name to avoid a risky rename of the working, tested
+ * Farm subsystem (`FarmSubscriptionService` etc. are unchanged and reused
+ * as-is for the other two types, the same "shared name, several tables"
+ * tradeoff already used by `product.*` between Veterinary Store and Office).
  */
 export const FARM_SUBSCRIPTION_STATUSES = ['NOT_STARTED', 'ACTIVE', 'EXPIRED'] as const;
 export type FarmSubscriptionStatus = (typeof FARM_SUBSCRIPTION_STATUSES)[number];
@@ -150,10 +160,19 @@ export function computeFarmSubscriptionStatus(
 export interface OrganizationDetails extends Partial<OrganizationProfile> {
   /** FARM only. */
   joinCode?: string;
-  /** FARM only — subscription period + derived status. */
+  /** FARM / VETERINARY_OFFICE / CLINIC only — subscription period + derived status. */
   subscriptionStartDate?: string | null;
   subscriptionEndDate?: string | null;
   subscriptionStatus?: FarmSubscriptionStatus;
+  /**
+   * CLINIC / VETERINARY_OFFICE only — owner/admin-facing registration
+   * credentials. Deliberately NEVER on {@link OrganizationProfile} /
+   * {@link PublicOrganizationDTO}: reviewed by an admin before approval, not
+   * shown on the public directory.
+   */
+  licenseNumber?: string | null;
+  /** Resolved license document photo URLs (R2 keys resolved server-side). */
+  licenseDocumentUrls?: string[];
 }
 
 export interface OrganizationWithDetails extends Organization {
@@ -205,12 +224,20 @@ export interface ProfileDetailRow {
   services: string[] | null;
   email: string | null;
   whatsapp: string | null;
+  website_url: string | null;
   instagram_url: string | null;
   facebook_url: string | null;
   tiktok_url: string | null;
   gallery_keys: string[] | null;
   created_at: Date;
   updated_at: Date;
+  /** CLINIC / VETERINARY_OFFICE only (not VETERINARY_STORE) — see `20261017010000_org_subscription_generalize`. */
+  subscription_start_date?: string | Date | null;
+  subscription_end_date?: string | Date | null;
+  /** CLINIC / VETERINARY_OFFICE only — see `20261018010000_organization_registration_details`. */
+  country?: string | null;
+  license_number?: string | null;
+  license_document_keys?: string[] | null;
 }
 
 export interface OrganizationMembershipRow {
@@ -276,6 +303,7 @@ export function toPublicOrganizationDTO(
     // Named fields, not `...profile` — a caller passing a richer object (e.g.
     // one that still carries the raw `logoKey`) must not leak it here.
     address: profile.address,
+    country: profile.country,
     latitude: profile.latitude,
     longitude: profile.longitude,
     phone: profile.phone,
@@ -284,6 +312,7 @@ export function toPublicOrganizationDTO(
     services: profile.services,
     email: profile.email,
     whatsapp: profile.whatsapp,
+    websiteUrl: profile.websiteUrl,
     instagramUrl: profile.instagramUrl,
     facebookUrl: profile.facebookUrl,
     tiktokUrl: profile.tiktokUrl,

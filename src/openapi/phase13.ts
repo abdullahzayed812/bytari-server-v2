@@ -107,6 +107,14 @@ const schemas: Obj = {
       },
       source: { type: 'string', enum: ['USER', 'SUPERVISOR', 'ADMIN', 'AI', 'SYSTEM'] },
       body: { type: 'string', nullable: true, description: 'null for a soft-deleted message.' },
+      imageUrls: {
+        type: 'array',
+        items: { type: 'string', format: 'uri' },
+        description:
+          'Resolved image URLs (consultation / inquiry initial message only — always empty ' +
+          'for support messages and for every message but the first). The raw storage key ' +
+          'never leaves the server.',
+      },
       deletedAt: { type: 'string', format: 'date-time', nullable: true },
       createdAt: { type: 'string', format: 'date-time' },
     },
@@ -123,13 +131,27 @@ const schemas: Obj = {
         nullable: true,
         description: 'Optional — must be an animal the caller currently owns.',
       },
+      imageKeys: {
+        type: 'array',
+        items: { type: 'string' },
+        maxItems: 6,
+        description: 'Storage keys from a prior POST /consultations/attachments/upload-url.',
+      },
     },
     additionalProperties: false,
   },
   CreateInquiryRequest: {
     type: 'object',
     required: ['body'],
-    properties: { body: { type: 'string', minLength: 1, maxLength: 4000 } },
+    properties: {
+      body: { type: 'string', minLength: 1, maxLength: 4000 },
+      imageKeys: {
+        type: 'array',
+        items: { type: 'string' },
+        maxItems: 6,
+        description: 'Storage keys from a prior POST /inquiries/attachments/upload-url.',
+      },
+    },
     additionalProperties: false,
   },
   CreateSupportMessageRequest: {
@@ -159,6 +181,26 @@ const schemas: Obj = {
       inquiryAiEnabled: { type: 'boolean' },
     },
     additionalProperties: false,
+  },
+  AttachmentUploadUrlRequest: {
+    type: 'object',
+    required: ['filename', 'mimeType', 'size'],
+    properties: {
+      filename: { type: 'string', minLength: 1, maxLength: 255 },
+      mimeType: { type: 'string' },
+      size: { type: 'integer', minimum: 1 },
+    },
+    additionalProperties: false,
+  },
+  PresignedUpload: {
+    type: 'object',
+    properties: {
+      storageKey: { type: 'string' },
+      uploadUrl: { type: 'string', format: 'uri' },
+      method: { type: 'string', enum: ['PUT'] },
+      headers: { type: 'object' },
+      expiresInSeconds: { type: 'integer' },
+    },
   },
 };
 
@@ -292,6 +334,36 @@ function threadPaths(base: string, tag: string, createRef: string): Obj {
   };
 }
 
+/** Only mounted for consultations / inquiries — support-messages 400s (no attachment capability). */
+function attachmentUploadUrlPath(base: 'consultations' | 'inquiries', tag: string): Obj {
+  return {
+    [`/${base}/attachments/upload-url`]: {
+      post: {
+        tags: [tag],
+        summary: 'Presign an upload URL for an initial-message image',
+        description:
+          'Direct-to-R2 presigned PUT, same convention as advertisements / content. The ' +
+          'returned `storageKey` is then included in `imageKeys` on the create call — there ' +
+          'is no separate per-image registration step.' +
+          (base === 'inquiries' ? ' Requires an APPROVED veterinarian.' : ''),
+        security: bearer,
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/AttachmentUploadUrlRequest' },
+            },
+          },
+        },
+        responses: {
+          '201': ok('Presigned upload', dataOf({ $ref: '#/components/schemas/PresignedUpload' })),
+          ...errs(400, 401, 403, 422),
+        },
+      },
+    },
+  };
+}
+
 function adminThreadPaths(base: string): Obj {
   const perm =
     base === 'consultations'
@@ -340,6 +412,8 @@ const paths: Obj = {
     'Support Messages',
     '#/components/schemas/CreateSupportMessageRequest',
   ),
+  ...attachmentUploadUrlPath('consultations', 'Consultations'),
+  ...attachmentUploadUrlPath('inquiries', 'Inquiries'),
   ...adminThreadPaths('consultations'),
   ...adminThreadPaths('inquiries'),
   ...adminThreadPaths('support-messages'),

@@ -15,15 +15,22 @@ export const ChatPolicy = {
    */
   assertChatOrganizationType(orgType: string): void {
     if (!(CHAT_ORG_TYPES as readonly string[]).includes(orgType)) {
-      throw new BadRequestError('Chat is only available for clinics and farms', {
+      throw new BadRequestError('Chat is only available for clinics, farms and veterinary offices', {
         code: ErrorCode.ORGANIZATION_TYPE_NOT_SUPPORTED,
       });
     }
   },
 
-  /** The clinic side of a Pet Owner ↔ Clinic conversation is the whole clinic, not one vet. */
+  /**
+   * The clinic/office side of a Pet Owner ↔ organization conversation is the whole
+   * organization (any ACTIVE member), not one person — same shape for both types.
+   */
   isClinicType(orgType: string): boolean {
     return orgType === 'CLINIC';
+  },
+
+  isVeterinaryOfficeType(orgType: string): boolean {
+    return orgType === 'VETERINARY_OFFICE';
   },
 
   isFarmType(orgType: string): boolean {

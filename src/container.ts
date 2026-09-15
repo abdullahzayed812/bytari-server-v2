@@ -36,6 +36,7 @@ import { OrganizationService } from './modules/organizations/application/organiz
 import { MembershipService } from './modules/organizations/application/membership.service.js';
 import { OrganizationSupervisorService } from './modules/organizations/application/organization-supervisor.service.js';
 import { OrganizationEngagementService } from './modules/organizations/application/organization-engagement.service.js';
+import { OrganizationBroadcastService } from './modules/organizations/application/organization-broadcast.service.js';
 import { AnimalRepository } from './modules/animals/infrastructure/animal.repository.js';
 import { AnimalOwnershipRepository } from './modules/animals/infrastructure/animal-ownership.repository.js';
 import { AnimalPublicationRepository } from './modules/animals/infrastructure/animal-publication.repository.js';
@@ -93,6 +94,7 @@ import { VeterinaryStoreProductRepository } from './modules/veterinary-store/inf
 import { VeterinaryStoreProductService } from './modules/veterinary-store/application/veterinary-store-product.service.js';
 import { VeterinaryOfficeProductRepository } from './modules/veterinary-office/infrastructure/veterinary-office-product.repository.js';
 import { VeterinaryOfficeProductService } from './modules/veterinary-office/application/veterinary-office-product.service.js';
+import { VeterinaryOfficeDashboardService } from './modules/veterinary-office/application/veterinary-office-dashboard.service.js';
 import { PetStoreCategoryRepository } from './modules/pet-owner-store/infrastructure/category.repository.js';
 import { PetStoreProductRepository } from './modules/pet-owner-store/infrastructure/product.repository.js';
 import { PetStoreCartRepository } from './modules/pet-owner-store/infrastructure/cart.repository.js';
@@ -126,6 +128,7 @@ import { ThreadRepository } from './modules/consultations/infrastructure/thread.
 import { AiSettingsRepository } from './modules/consultations/infrastructure/ai-settings.repository.js';
 import { AiSettingsService } from './modules/consultations/application/ai-settings.service.js';
 import { SupportThreadService } from './modules/consultations/application/support-thread.service.js';
+import { ThreadAttachmentMedia } from './modules/consultations/application/thread-attachment-media.js';
 import {
   VetServiceMedia,
   VetServiceListingRepository,
@@ -172,7 +175,7 @@ import {
   type AiResponderPort,
 } from './modules/consultations/application/ai-responder.port.js';
 import { RorkAiResponder } from './modules/consultations/infrastructure/rork-ai-responder.js';
-import { createObjectStorage, type ObjectStorage } from './infra/storage/index.js';
+import { createObjectStorage, StoragePrefix, type ObjectStorage } from './infra/storage/index.js';
 import { ContentRepository } from './modules/content/infrastructure/content.repository.js';
 import { ContentFileRepository } from './modules/content/infrastructure/content-file.repository.js';
 import { CategoryRepository } from './modules/content/infrastructure/category.repository.js';
@@ -204,6 +207,8 @@ import { PreferenceRepository } from './modules/notifications/infrastructure/pre
 import { NotificationPolicy } from './modules/notifications/domain/notification.policy.js';
 import { NotificationService } from './modules/notifications/application/notification.service.js';
 import { NotificationEventHandler } from './modules/notifications/application/notification-event-handler.js';
+import { AdminDashboardService } from './modules/admin-dashboard/application/admin-dashboard.service.js';
+import { AdminDashboardSeenRepository } from './modules/admin-dashboard/infrastructure/admin-dashboard-seen.repository.js';
 
 export interface ContainerDeps {
   db: Knex;
@@ -268,6 +273,7 @@ export interface Container {
   membershipService: MembershipService;
   organizationSupervisorService: OrganizationSupervisorService;
   organizationEngagementService: OrganizationEngagementService;
+  organizationBroadcastService: OrganizationBroadcastService;
 
   animalRepository: AnimalRepository;
   animalOwnershipRepository: AnimalOwnershipRepository;
@@ -332,6 +338,7 @@ export interface Container {
   veterinaryStoreProductService: VeterinaryStoreProductService;
   veterinaryOfficeProductRepository: VeterinaryOfficeProductRepository;
   veterinaryOfficeProductService: VeterinaryOfficeProductService;
+  veterinaryOfficeDashboardService: VeterinaryOfficeDashboardService;
 
   petStoreCategoryRepository: PetStoreCategoryRepository;
   petStoreProductRepository: PetStoreProductRepository;
@@ -430,6 +437,8 @@ export interface Container {
   notificationPolicy: NotificationPolicy;
   notificationService: NotificationService;
   notificationEventHandler: NotificationEventHandler;
+
+  adminDashboardService: AdminDashboardService;
 
   /** `authenticate` middleware (verifies the access token, loads `req.auth`). */
   authenticate: RequestHandler;
@@ -569,6 +578,13 @@ export function createContainer(deps: ContainerDeps): Container {
     organizationRepository,
     organizationFollowRepository,
     organizationReviewRepository,
+    logger,
+  );
+  const organizationBroadcastService = new OrganizationBroadcastService(
+    organizationRepository,
+    objectStorage,
+    auditService,
+    eventBus,
     logger,
   );
 
@@ -897,6 +913,10 @@ export function createContainer(deps: ContainerDeps): Container {
     eventBus,
     logger,
   );
+  const veterinaryOfficeDashboardService = new VeterinaryOfficeDashboardService(
+    veterinaryOfficeProductRepository,
+    organizationEngagementService,
+  );
 
   // --- Pet Owners Store (platform-run consumer storefront) ----
   const petStoreCategoryRepository = new PetStoreCategoryRepository(db);
@@ -1062,10 +1082,19 @@ export function createContainer(deps: ContainerDeps): Container {
     messageTable: 'support_thread_messages',
     hasAnimal: false,
   });
+  const consultationAttachmentMedia = new ThreadAttachmentMedia(
+    objectStorage,
+    StoragePrefix.consultationAttachments,
+  );
+  const inquiryAttachmentMedia = new ThreadAttachmentMedia(
+    objectStorage,
+    StoragePrefix.inquiryAttachments,
+  );
   const consultationService = new SupportThreadService(
     db,
     CONSULTATION_CONFIG,
     consultationRepository,
+    consultationAttachmentMedia,
     aiSettingsService,
     aiResponder,
     authorizationService,
@@ -1078,6 +1107,7 @@ export function createContainer(deps: ContainerDeps): Container {
     db,
     INQUIRY_CONFIG,
     inquiryRepository,
+    inquiryAttachmentMedia,
     aiSettingsService,
     aiResponder,
     authorizationService,
@@ -1090,6 +1120,7 @@ export function createContainer(deps: ContainerDeps): Container {
     db,
     SUPPORT_CONFIG,
     supportRepository,
+    null,
     aiSettingsService,
     aiResponder,
     authorizationService,
@@ -1314,6 +1345,31 @@ export function createContainer(deps: ContainerDeps): Container {
   );
   notificationEventHandler.start();
 
+  const adminDashboardSeenRepository = new AdminDashboardSeenRepository(db);
+  const adminDashboardService = new AdminDashboardService({
+    seen: adminDashboardSeenRepository,
+    organizations: organizationService,
+    farmSubscriptionRenewals: farmSubscriptionRenewalRepository,
+    animals: animalService,
+    veterinarians: veterinarianService,
+    consultations: consultationRepository,
+    inquiries: inquiryRepository,
+    supportMessages: supportRepository,
+    vetServiceListings: vetServiceListingService,
+    vetServiceRequests: vetServiceRequestService,
+    vetJobOffers: vetJobOfferService,
+    vetJobSeekers: vetJobSeekerProfileService,
+    vetCourses: vetCourseService,
+    content: contentService,
+    advertisements: advertisementService,
+    petOwnerStore: petStoreAdminService,
+    veterinarianStore: vetStoreAdminService,
+    users: userService,
+    supervisors: supervisorService,
+    conversations: conversationRepository,
+    audit: auditService,
+  });
+
   const authenticate = createAuthenticate({
     tokens: tokenService,
     users: userService,
@@ -1346,6 +1402,7 @@ export function createContainer(deps: ContainerDeps): Container {
     membershipService,
     organizationSupervisorService,
     organizationEngagementService,
+    organizationBroadcastService,
     animalRepository,
     animalOwnershipRepository,
     animalPublicationRepository,
@@ -1403,6 +1460,7 @@ export function createContainer(deps: ContainerDeps): Container {
     veterinaryStoreProductService,
     veterinaryOfficeProductRepository,
     veterinaryOfficeProductService,
+    veterinaryOfficeDashboardService,
     petStoreCategoryRepository,
     petStoreProductRepository,
     petStoreCartRepository,
@@ -1494,6 +1552,7 @@ export function createContainer(deps: ContainerDeps): Container {
     notificationPolicy,
     notificationService,
     notificationEventHandler,
+    adminDashboardService,
     authenticate,
     authorization,
   };

@@ -38,6 +38,7 @@ export class AdminUsersController {
       status: q.status,
       veterinarianStatus: q.veterinarianStatus,
       search: q.search,
+      role: q.role,
     });
     sendSuccess(res, items.map(toPublicUser), StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
   };

@@ -9,7 +9,10 @@ import type { SupportThreadService, ThreadActor } from '../application/support-t
 import type { ThreadKindConfig } from '../application/thread.config.js';
 import type { ThreadMessageDTO } from '../domain/thread.types.js';
 import type {
+  AttachmentUploadUrlBody,
   CreateConsultationBody,
+  CreateInquiryBody,
+  CreateSupportBody,
   ListAdminThreadsQuery,
   ListMessagesQuery,
   ListThreadsQuery,
@@ -37,18 +40,29 @@ export class ThreadController {
       senderUserId: m.senderUserId,
       source: m.source,
       body: m.body,
+      imageUrls: m.imageUrls,
       deletedAt: m.deletedAt,
       createdAt: m.createdAt,
     };
   }
 
   create = async (req: Request, res: Response): Promise<void> => {
-    const body = validatedBody<CreateConsultationBody>(req);
+    const body = validatedBody<CreateConsultationBody | CreateInquiryBody | CreateSupportBody>(req);
     const dto = await this.service.create(this.actor(req), {
       body: body.body,
-      animalId: this.cfg.hasAnimal ? (body.animalId ?? null) : null,
+      animalId: this.cfg.hasAnimal && 'animalId' in body ? (body.animalId ?? null) : null,
+      imageKeys: 'imageKeys' in body ? body.imageKeys : undefined,
     });
     sendSuccess(res, dto, StatusCodes.CREATED);
+  };
+
+  requestAttachmentUploadUrl = async (req: Request, res: Response): Promise<void> => {
+    const body = validatedBody<AttachmentUploadUrlBody>(req);
+    sendSuccess(
+      res,
+      await this.service.requestAttachmentUploadUrl(this.actor(req), body),
+      StatusCodes.CREATED,
+    );
   };
 
   listMine = async (req: Request, res: Response): Promise<void> => {

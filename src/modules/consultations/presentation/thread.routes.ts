@@ -6,6 +6,7 @@ import { CONSULTATION_CONFIG, INQUIRY_CONFIG, SUPPORT_CONFIG } from '../applicat
 import { AiSettingsController } from './ai-settings.controller.js';
 import { ThreadController } from './thread.controller.js';
 import {
+  attachmentUploadUrlBodySchema,
   createConsultationBodySchema,
   createInquiryBodySchema,
   createSupportBodySchema,
@@ -38,6 +39,13 @@ function threadRouter(
 
   r.get('/', validate({ query: listThreadsQuerySchema }), asyncHandler(ctrl.listMine));
   r.post('/', validate({ body: createBodySchema }), asyncHandler(ctrl.create));
+  // 400s for SUPPORT (no attachment capability) — the service-level guard keeps
+  // this router uniform across all three kinds like every other route here.
+  r.post(
+    '/attachments/upload-url',
+    validate({ body: attachmentUploadUrlBodySchema }),
+    asyncHandler(ctrl.requestAttachmentUploadUrl),
+  );
   r.get('/:threadId', validate({ params: threadIdParamSchema }), asyncHandler(ctrl.get));
   r.get(
     '/:threadId/messages',

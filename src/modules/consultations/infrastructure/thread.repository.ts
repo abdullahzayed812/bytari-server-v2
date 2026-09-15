@@ -26,6 +26,12 @@ export interface CreateThreadMessageData {
   senderUserId: string | null;
   source: MessageSource;
   body: string;
+  /**
+   * Only ever set for a kind whose message table has an `image_keys` column
+   * (CONSULTATION / INQUIRY). Leave `undefined` for SUPPORT — `support_thread_messages`
+   * has no such column, and `createMessage` only inserts the field when present.
+   */
+  imageKeys?: string[];
 }
 
 /**
@@ -131,13 +137,15 @@ export class ThreadRepository {
     data: CreateThreadMessageData,
     trx: Knex.Transaction,
   ): Promise<ThreadMessage> {
+    const insert: Record<string, unknown> = {
+      thread_id: data.threadId,
+      sender_user_id: data.senderUserId,
+      source: data.source,
+      body: data.body,
+    };
+    if (data.imageKeys !== undefined) insert.image_keys = data.imageKeys;
     const [row] = (await trx(this.cfg.messageTable)
-      .insert({
-        thread_id: data.threadId,
-        sender_user_id: data.senderUserId,
-        source: data.source,
-        body: data.body,
-      })
+      .insert(insert)
       .returning('*')) as ThreadMessageRow[];
     if (!row) throw new Error('message insert returned no row');
     return rowToThreadMessage(row);

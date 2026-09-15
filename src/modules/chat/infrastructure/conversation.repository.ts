@@ -1,5 +1,5 @@
 import type { Knex } from 'knex';
-import type { ConversationSubjectType, ParticipantRole } from '../domain/chat.constants.js';
+import type { ConversationSubjectType, ConversationType, ParticipantRole } from '../domain/chat.constants.js';
 import {
   rowToConversation,
   type Conversation,
@@ -12,7 +12,7 @@ const T_CONV = 'conversations';
 const T_PART = 'conversation_participants';
 
 export interface CreateConversationData {
-  type: 'PET_OWNER_CLINIC' | 'FARM_OWNER_MEMBER' | 'PET_OWNER_VETERINARIAN';
+  type: ConversationType;
   organizationId: string | null;
   petOwnerUserId: string | null;
   memberUserId: string | null;
@@ -60,6 +60,21 @@ export class ConversationRepository {
     const row = await this.conn(trx)<ConversationRow>(T_CONV)
       .where({
         type: 'PET_OWNER_CLINIC',
+        organization_id: organizationId,
+        pet_owner_user_id: petOwnerUserId,
+      })
+      .first();
+    return row ? rowToConversation(row) : null;
+  }
+
+  async findPetOwnerVeterinaryOffice(
+    organizationId: string,
+    petOwnerUserId: string,
+    trx?: Knex.Transaction,
+  ): Promise<Conversation | null> {
+    const row = await this.conn(trx)<ConversationRow>(T_CONV)
+      .where({
+        type: 'PET_OWNER_VETERINARY_OFFICE',
         organization_id: organizationId,
         pet_owner_user_id: petOwnerUserId,
       })
@@ -214,9 +229,11 @@ export class ConversationRepository {
       })
       .select('c.id as id');
 
-    const viaClinicMembership = conn(`${T_CONV} as c`)
+    // Org-side-resolved-live types (no participant row for that side) — CLINIC
+    // and VETERINARY_OFFICE, same shape.
+    const viaOrgMembership = conn(`${T_CONV} as c`)
       .join('organization_memberships as m', 'm.organization_id', 'c.organization_id')
-      .where('c.type', 'PET_OWNER_CLINIC')
+      .whereIn('c.type', ['PET_OWNER_CLINIC', 'PET_OWNER_VETERINARY_OFFICE'])
       .andWhere('m.user_id', userId)
       .andWhere('m.status', 'ACTIVE')
       .modify((qb) => {
@@ -225,7 +242,7 @@ export class ConversationRepository {
       .select('c.id as id');
 
     const idRows: Array<{ id: string }> = await viaParticipant.unionAll(
-      [viaClinicMembership],
+      [viaOrgMembership],
       true,
     );
 
@@ -271,5 +288,24 @@ export class ConversationRepository {
 
     for (const r of rows) result.set(r.conversation_id, Number(r.count));
     return result;
+  }
+
+  /** Admin oversight — every conversation platform-wide, newest activity first. */
+  async listAllForAdmin(
+    filter: { page: number; pageSize: number },
+    trx?: Knex.Transaction,
+  ): Promise<{ items: Conversation[]; total: number }> {
+    const conn = this.conn(trx);
+
+    const countRow = await conn<ConversationRow>(T_CONV).count<{ count: string }>({ count: '*' }).first();
+    const total = Number(countRow?.count ?? 0);
+
+    const rows = (await conn<ConversationRow>(T_CONV)
+      .orderByRaw('last_message_at desc nulls last')
+      .orderBy('created_at', 'desc')
+      .limit(filter.pageSize)
+      .offset((filter.page - 1) * filter.pageSize));
+
+    return { items: rows.map(rowToConversation), total };
   }
 }

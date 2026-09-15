@@ -9,4 +9,5 @@ export {
   createChatMessageRouter,
   createOrgChatRouter,
 } from './presentation/chat.routes.js';
+export { createAdminChatRouter } from './presentation/admin-chat.routes.js';
 export { createChatRealtime, type ChatRealtimeWiring } from './realtime/chat-realtime.js';

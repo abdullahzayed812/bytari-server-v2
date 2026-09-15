@@ -87,11 +87,12 @@ export class ChatService {
       if (userId === conversation.veterinarianUserId) return 'VETERINARIAN';
       return null;
     }
-    if (conversation.type === 'PET_OWNER_CLINIC') {
+    if (conversation.type === 'PET_OWNER_CLINIC' || conversation.type === 'PET_OWNER_VETERINARY_OFFICE') {
       if (userId === conversation.petOwnerUserId) return 'PET_OWNER';
       if (!conversation.organizationId) return null;
       const m = await this.memberships.findByUserAndOrg(userId, conversation.organizationId);
-      return m?.status === 'ACTIVE' ? 'CLINIC' : null;
+      if (m?.status !== 'ACTIVE') return null;
+      return conversation.type === 'PET_OWNER_CLINIC' ? 'CLINIC' : 'VETERINARY_OFFICE';
     }
     // FARM_OWNER_MEMBER
     if (!conversation.organizationId) return null;
@@ -137,28 +138,38 @@ export class ChatService {
       return this.getOrCreatePetOwnerClinic(actor, org.id, petOwnerUserId);
     }
 
+    if (ChatPolicy.isVeterinaryOfficeType(org.type)) {
+      // Same counterpart-resolution rules as a clinic — either party can start
+      // it, the other side is always the pet owner.
+      const petOwnerUserId = await this.resolveClinicCounterpart(actor, org, targetUserId);
+      return this.getOrCreatePetOwnerVeterinaryOffice(actor, org.id, petOwnerUserId);
+    }
+
     const memberUserId = await this.resolveFarmCounterpart(actor, org, targetUserId);
     return this.getOrCreateFarmMember(actor, org, memberUserId);
   }
 
+  /** Shared by CLINIC and VETERINARY_OFFICE — both are Pet Owner ↔ "the whole org" chats. */
   private async resolveClinicCounterpart(
     actor: ChatActor,
     org: ChatOrgRef,
     targetUserId: string | null,
   ): Promise<string> {
     const callerMembership = await this.memberships.findByUserAndOrg(actor.actorUserId, org.id);
-    const callerIsActiveClinicMember = callerMembership?.status === 'ACTIVE';
+    const callerIsActiveOrgMember = callerMembership?.status === 'ACTIVE';
 
-    if (callerIsActiveClinicMember) {
+    if (callerIsActiveOrgMember) {
       if (!targetUserId) {
-        throw new BadRequestError('targetUserId is required when the clinic starts a conversation');
+        throw new BadRequestError(
+          'targetUserId is required when the organization starts a conversation',
+        );
       }
       const target = await this.users.getByIdOrNull(targetUserId);
       if (!target) throw new BadRequestError('Target user not found');
       const targetMembership = await this.memberships.findByUserAndOrg(targetUserId, org.id);
       if (targetMembership?.status === 'ACTIVE') {
         throw new BadRequestError(
-          'A clinic conversation is Pet Owner ↔ Clinic — the target cannot be a clinic member',
+          'This conversation is Pet Owner ↔ organization — the target cannot be a member',
         );
       }
       return targetUserId;
@@ -166,7 +177,7 @@ export class ChatService {
 
     if (targetUserId && targetUserId !== actor.actorUserId) {
       throw new ForbiddenError(
-        'Only a clinic member can open a conversation on behalf of another user',
+        'Only an organization member can open a conversation on behalf of another user',
       );
     }
     return actor.actorUserId;
@@ -257,6 +268,83 @@ export class ChatService {
     } catch (err) {
       if (isUniqueViolation(err)) {
         const raced = await this.conversations.findPetOwnerClinic(organizationId, petOwnerUserId);
+        if (raced) {
+          const side = await this.assertAccess(actor.actorUserId, raced);
+          return {
+            conversation: await this.decorate(actor.actorUserId, raced, side),
+            created: false,
+          };
+        }
+      }
+      throw err;
+    }
+
+    this.events.publish('chat.conversation.created', {
+      conversationId: conversation.id,
+      organizationId,
+      type: conversation.type,
+      participantUserIds: [petOwnerUserId],
+    });
+    const side = await this.assertAccess(actor.actorUserId, conversation);
+    return {
+      conversation: await this.decorate(actor.actorUserId, conversation, side),
+      created: true,
+    };
+  }
+
+  private async getOrCreatePetOwnerVeterinaryOffice(
+    actor: ChatActor,
+    organizationId: string,
+    petOwnerUserId: string,
+  ): Promise<{ conversation: ConversationDTO; created: boolean }> {
+    const existing = await this.conversations.findPetOwnerVeterinaryOffice(
+      organizationId,
+      petOwnerUserId,
+    );
+    if (existing) {
+      const side = await this.assertAccess(actor.actorUserId, existing);
+      return {
+        conversation: await this.decorate(actor.actorUserId, existing, side),
+        created: false,
+      };
+    }
+
+    let conversation: Conversation;
+    try {
+      conversation = await this.db.transaction(async (tx) => {
+        const created = await this.conversations.create(
+          {
+            type: 'PET_OWNER_VETERINARY_OFFICE',
+            organizationId,
+            petOwnerUserId,
+            memberUserId: null,
+            createdByUserId: actor.actorUserId,
+          },
+          tx,
+        );
+        await this.conversations.addParticipants(
+          [{ conversationId: created.id, userId: petOwnerUserId, role: 'PET_OWNER' }],
+          tx,
+        );
+        await this.audit.record(
+          {
+            action: AuditAction.CONVERSATION_CREATED,
+            entityType: AuditEntityType.CONVERSATION,
+            entityId: created.id,
+            actorUserId: actor.actorUserId,
+            metadata: { conversationId: created.id, organizationId, type: 'PET_OWNER_VETERINARY_OFFICE' },
+            context: actor.context,
+          },
+          tx,
+        );
+        return created;
+      });
+    } catch (err) {
+      if (isUniqueViolation(err)) {
+        const raced = await this.conversations.findPetOwnerVeterinaryOffice(
+          organizationId,
+          petOwnerUserId,
+        );
         if (raced) {
           const side = await this.assertAccess(actor.actorUserId, raced);
           return {
@@ -701,7 +789,8 @@ export class ChatService {
   // --- DTO assembly -------------------------------------------------
 
   private unreadFor(side: ConversationSide, count: number | undefined): number | null {
-    if (side === 'CLINIC') return null; // dynamic clinic side has no per-member read state
+    // Dynamic clinic/office side has no per-member read state.
+    if (side === 'CLINIC' || side === 'VETERINARY_OFFICE') return null;
     return count ?? 0;
   }
 
@@ -711,7 +800,7 @@ export class ChatService {
     unreadCount: number | null,
   ): ConversationDTO {
     let counterpartUserId: string | null;
-    if (conversation.type === 'PET_OWNER_CLINIC') {
+    if (conversation.type === 'PET_OWNER_CLINIC' || conversation.type === 'PET_OWNER_VETERINARY_OFFICE') {
       counterpartUserId = conversation.petOwnerUserId;
     } else if (conversation.type === 'PET_OWNER_VETERINARIAN') {
       counterpartUserId =

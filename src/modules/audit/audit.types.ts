@@ -33,6 +33,7 @@ export const AuditAction = {
   ORGANIZATION_DEACTIVATED: 'ORGANIZATION_DEACTIVATED',
   ORGANIZATION_LOGO_UPDATED: 'ORGANIZATION_LOGO_UPDATED',
   ORGANIZATION_GALLERY_UPDATED: 'ORGANIZATION_GALLERY_UPDATED',
+  ORGANIZATION_LICENSE_DOCUMENTS_UPDATED: 'ORGANIZATION_LICENSE_DOCUMENTS_UPDATED',
   ORGANIZATION_MEMBER_ADDED: 'ORGANIZATION_MEMBER_ADDED',
   ORGANIZATION_MEMBER_UPDATED: 'ORGANIZATION_MEMBER_UPDATED',
   ORGANIZATION_MEMBER_REMOVED: 'ORGANIZATION_MEMBER_REMOVED',
@@ -259,6 +260,9 @@ export const AuditAction = {
   EGG_OFFER_CREATED: 'EGG_OFFER_CREATED',
   EGG_OFFER_REMOVED: 'EGG_OFFER_REMOVED',
   MARKET_EXCHANGE_RATES_SAVED: 'MARKET_EXCHANGE_RATES_SAVED',
+
+  // --- Organization → followers broadcast (Veterinary Office Dashboard) ---
+  ORGANIZATION_BROADCAST_SENT: 'ORGANIZATION_BROADCAST_SENT',
 } as const;
 export type AuditActionValue = (typeof AuditAction)[keyof typeof AuditAction];
 
@@ -340,6 +344,8 @@ export interface AuditEntryInput {
 export interface AuditLogRecord {
   id: string;
   actorUserId: string | null;
+  /** `firstName + ' ' + lastName`, trimmed — `null` when there is no actor or the account no longer exists. */
+  actorName: string | null;
   action: string;
   entityType: string;
   entityId: string | null;
@@ -372,4 +378,7 @@ export interface AuditLogRow {
   user_agent: string | null;
   request_id: string | null;
   created_at: Date;
+  /** Only present when `list()` performs the actor-name join — absent on a plain `insert`. */
+  actor_first_name?: string | null;
+  actor_last_name?: string | null;
 }

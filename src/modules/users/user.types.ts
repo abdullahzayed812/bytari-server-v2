@@ -100,6 +100,8 @@ export interface ListUsersFilter {
   status?: UserStatus;
   veterinarianStatus?: VeterinarianStatus;
   search?: string;
+  /** Narrow to users holding this global role key (e.g. `'PET_OWNER'`, `'VETERINARIAN'`). */
+  role?: string;
 }
 
 /** Raw `users` table row (snake_case). */

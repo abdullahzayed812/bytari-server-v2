@@ -143,16 +143,18 @@ export class VeterinaryOfficeProductService {
 
   /**
    * Public catalog browse — any authenticated user. ACTIVE organization +
-   * ACTIVE products only; `filter.status` is ignored (always forced ACTIVE).
+   * ACTIVE, non-hidden products only; `filter.status`/`filter.hidden` are
+   * ignored (always forced ACTIVE / not hidden).
    */
   async listPublic(
     organizationId: string,
-    filter: Omit<ListVeterinaryOfficeProductsFilter, 'status'>,
+    filter: Omit<ListVeterinaryOfficeProductsFilter, 'status' | 'hidden'>,
   ): Promise<{ items: VeterinaryOfficeProductDTO[]; total: number }> {
     await this.assertPubliclyBrowsable(organizationId);
     const { items, total } = await this.products.listForOrganization(organizationId, {
       ...filter,
       status: 'ACTIVE',
+      hidden: false,
     });
     return { items: await Promise.all(items.map((p) => this.toDTO(p))), total };
   }
@@ -161,7 +163,9 @@ export class VeterinaryOfficeProductService {
   async getPublic(organizationId: string, productId: string): Promise<VeterinaryOfficeProductDTO> {
     await this.assertPubliclyBrowsable(organizationId);
     const product = await this.products.findByIdForOrganization(productId, organizationId);
-    if (!product || product.status !== 'ACTIVE') throw new NotFoundError('Product not found');
+    if (!product || product.status !== 'ACTIVE' || product.isHidden) {
+      throw new NotFoundError('Product not found');
+    }
     return this.toDTO(product);
   }
 
@@ -456,6 +460,7 @@ export class VeterinaryOfficeProductService {
       price: p.price,
       stockQuantity: p.stockQuantity,
       status: p.status,
+      isHidden: p.isHidden,
       subtype: p.subtype,
       weight: p.weight,
       usageInstructions: p.usageInstructions,

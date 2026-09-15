@@ -112,6 +112,12 @@ export const ORG_PERMISSION_KEYS = [
   'syndicate.announcement.manage',
   'syndicate.submission.read',
   'syndicate.submission.respond',
+  // --- Organization → followers broadcast (Veterinary Office Dashboard "إرسال
+  // رسالة للمتابعين") — generic across any organization type with followers, so a
+  // future Clinic Dashboard can reuse it without a second broadcast system. Granted
+  // to NOBODY by default (OWNER override only), same as `farm.subscription.manage` —
+  // a mass-send action is sensitive enough to require an explicit supervisor grant. ---
+  'organization.broadcast.send',
 ] as const;
 export type OrgPermissionKey = (typeof ORG_PERMISSION_KEYS)[number];
 
@@ -206,6 +212,7 @@ export const ORG_PERMISSION_DEFINITIONS: Record<OrgPermissionKey, string> = {
   'syndicate.announcement.manage': 'Create, update and delete this syndicate’s announcements',
   'syndicate.submission.read': 'View this syndicate’s requests and inquiries',
   'syndicate.submission.respond': 'Respond to and close this syndicate’s requests and inquiries',
+  'organization.broadcast.send': 'Send a message to everyone following this organization',
 };
 
 /**

@@ -14,13 +14,6 @@ import {
  * creates one, via `POST /admin/syndicates`
  * (`server/src/modules/syndicates/presentation/syndicate.routes.ts`).
  */
-export const createOrganizationBodySchema = z.object({
-  type: z.enum(ORGANIZATION_TYPES).exclude(['SYNDICATE']),
-  name: z.string().trim().min(2).max(160),
-  description: z.string().trim().max(2000).optional(),
-});
-export type CreateOrganizationBody = z.infer<typeof createOrganizationBodySchema>;
-
 const latitude = z.coerce.number().min(-90).max(90);
 const longitude = z.coerce.number().min(-180).max(180);
 /** Trimmed, `''` → `null` (so clearing a field via an empty input just works). */
@@ -28,23 +21,53 @@ const optionalUrl = z.string().trim().max(300).url().nullable().optional();
 const optionalText = (max: number): z.ZodOptional<z.ZodNullable<z.ZodString>> =>
   z.string().trim().min(1).max(max).nullable().optional();
 
+/**
+ * Profile fields shared by create (nested under `details`) and update (flat
+ * body) — CLINIC / VETERINARY_OFFICE / VETERINARY_STORE only
+ * (`OrganizationPolicy.assertHasProfileFields`, enforced in the service).
+ * `licenseNumber` is narrower still — CLINIC / VETERINARY_OFFICE only.
+ */
+const profileFieldsShape = {
+  address: z.string().trim().min(1).max(500).nullable().optional(),
+  country: optionalText(100),
+  phone: z.string().trim().min(3).max(40).nullable().optional(),
+  workingHours: optionalText(200),
+  services: z.array(z.string().trim().min(1).max(60)).max(20).optional(),
+  email: z.string().trim().max(255).email().nullable().optional(),
+  whatsapp: optionalText(40),
+  websiteUrl: optionalUrl,
+  instagramUrl: optionalUrl,
+  facebookUrl: optionalUrl,
+  tiktokUrl: optionalUrl,
+  licenseNumber: optionalText(100),
+};
+
+/**
+ * SYNDICATE is excluded — syndicates are never self-service; only an ADMIN
+ * creates one, via `POST /admin/syndicates`
+ * (`server/src/modules/syndicates/presentation/syndicate.routes.ts`).
+ *
+ * `details` captures the full profile in one submission (registration
+ * screens like "تسجيل العيادة") — the owner cannot `PATCH` or upload
+ * gallery/license-document images until an admin approves the PENDING
+ * organization, so anything not set here would be stuck unset until then.
+ * Ignored server-side for a `type` without a directory profile.
+ */
+export const createOrganizationBodySchema = z.object({
+  type: z.enum(ORGANIZATION_TYPES).exclude(['SYNDICATE']),
+  name: z.string().trim().min(2).max(160),
+  description: z.string().trim().max(2000).optional(),
+  details: z.object(profileFieldsShape).optional(),
+});
+export type CreateOrganizationBody = z.infer<typeof createOrganizationBodySchema>;
+
 export const updateOrganizationBodySchema = z
   .object({
     name: z.string().trim().min(2).max(160).optional(),
     description: z.string().trim().max(2000).nullable().optional(),
-    // Profile fields — CLINIC / VETERINARY_OFFICE / VETERINARY_STORE only
-    // (`OrganizationPolicy.assertHasProfileFields`, enforced in the service).
-    address: z.string().trim().min(1).max(500).nullable().optional(),
-    phone: z.string().trim().min(3).max(40).nullable().optional(),
+    ...profileFieldsShape,
     latitude: latitude.nullable().optional(),
     longitude: longitude.nullable().optional(),
-    workingHours: optionalText(200),
-    services: z.array(z.string().trim().min(1).max(60)).max(20).optional(),
-    email: z.string().trim().max(255).email().nullable().optional(),
-    whatsapp: optionalText(40),
-    instagramUrl: optionalUrl,
-    facebookUrl: optionalUrl,
-    tiktokUrl: optionalUrl,
   })
   .refine((v) => Object.keys(v).length > 0, { message: 'At least one field is required' })
   .refine((v) => (v.latitude == null) === (v.longitude == null), {
@@ -119,6 +142,18 @@ export const removeGalleryImageQuerySchema = z.object({
   storageKey: z.string().trim().min(1).max(1024),
 });
 export type RemoveGalleryImageQuery = z.infer<typeof removeGalleryImageQuerySchema>;
+
+/** Same shape as the logo upload flow — one license document at a time. */
+export const licenseDocumentUploadUrlBodySchema = logoUploadUrlBodySchema;
+export type LicenseDocumentUploadUrlBody = z.infer<typeof licenseDocumentUploadUrlBodySchema>;
+
+export const finalizeLicenseDocumentBodySchema = finalizeLogoBodySchema;
+export type FinalizeLicenseDocumentBody = z.infer<typeof finalizeLicenseDocumentBodySchema>;
+
+export const removeLicenseDocumentQuerySchema = z.object({
+  storageKey: z.string().trim().min(1).max(1024),
+});
+export type RemoveLicenseDocumentQuery = z.infer<typeof removeLicenseDocumentQuerySchema>;
 
 // --- engagement: follow + reviews (Clinic Details) --------------------
 

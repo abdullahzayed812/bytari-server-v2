@@ -22,6 +22,8 @@ export interface ThreadMessage {
   senderUserId: string | null;
   source: MessageSource;
   body: string;
+  /** Storage keys of attached images (CONSULTATION / INQUIRY only — always `[]` for SUPPORT). */
+  imageKeys: string[];
   deletedAt: string | null;
   createdAt: string;
 }
@@ -49,6 +51,8 @@ export interface ThreadMessageDTO {
   source: MessageSource;
   /** `null` for a soft-deleted message. */
   body: string | null;
+  /** Resolved image URLs — the raw storage key never leaves the server. */
+  imageUrls: string[];
   deletedAt: string | null;
   createdAt: string;
 }
@@ -75,6 +79,8 @@ export interface ThreadMessageRow {
   sender_user_id: string | null;
   source: string;
   body: string;
+  /** Absent/`null` for `support_thread_messages`, which has no such column. */
+  image_keys?: string[] | null;
   deleted_at: Date | null;
   created_at: Date;
 }
@@ -102,6 +108,7 @@ export function rowToThreadMessage(row: ThreadMessageRow): ThreadMessage {
     senderUserId: row.sender_user_id,
     source: row.source as MessageSource,
     body: row.body,
+    imageKeys: row.image_keys ?? [],
     deletedAt: row.deleted_at ? row.deleted_at.toISOString() : null,
     createdAt: row.created_at.toISOString(),
   };
@@ -123,6 +130,11 @@ export function toThreadDTO(kind: ThreadKind, t: SupportThread): ThreadDTO {
   };
 }
 
+/**
+ * `imageUrls` is left empty here — resolving storage keys to URLs needs
+ * `ObjectStorage`, which this pure converter doesn't have. The service layer
+ * overwrites it (see `SupportThreadService.resolveMessageDto`).
+ */
 export function toThreadMessageDTO(m: ThreadMessage): ThreadMessageDTO {
   return {
     id: m.id,
@@ -130,6 +142,7 @@ export function toThreadMessageDTO(m: ThreadMessage): ThreadMessageDTO {
     senderUserId: m.senderUserId,
     source: m.source,
     body: m.deletedAt ? null : m.body,
+    imageUrls: [],
     deletedAt: m.deletedAt,
     createdAt: m.createdAt,
   };

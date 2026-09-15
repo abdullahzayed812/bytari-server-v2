@@ -114,4 +114,29 @@ describe('audit log', () => {
     expect(res.body.data[0].action).toBe('USER_SUSPENDED');
     expect(res.body.meta.total).toBe(1);
   });
+
+  it('enriches each entry with the actor\'s name, and null for a system/no-actor entry', async () => {
+    const admin = await registerAdmin(app);
+    const u = await registerUser(app);
+    await request(app)
+      .post(`/api/v1/admin/users/${u.id}/suspend`)
+      .set(bearer(admin.accessToken))
+      .send({})
+      .expect(200);
+
+    const res = await request(app)
+      .get('/api/v1/admin/audit-logs?action=USER_SUSPENDED')
+      .set(bearer(admin.accessToken));
+    expect(res.status).toBe(200);
+    // `registerUser`/`registerAdmin` default to firstName 'Test', lastName 'User'.
+    expect(res.body.data[0].actorName).toBe('Test User');
+
+    // USER_CREATED on self-registration has no actor — actorName must be null, not a crash.
+    const createdRes = await request(app)
+      .get(`/api/v1/admin/audit-logs?action=USER_CREATED&entityId=${u.id}`)
+      .set(bearer(admin.accessToken));
+    expect(createdRes.status).toBe(200);
+    expect(createdRes.body.data[0].actorUserId).toBeNull();
+    expect(createdRes.body.data[0].actorName).toBeNull();
+  });
 });

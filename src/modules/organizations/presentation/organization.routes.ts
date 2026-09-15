@@ -13,8 +13,10 @@ import {
   createOrganizationBodySchema,
   discoverOrganizationsQuerySchema,
   finalizeGalleryBodySchema,
+  finalizeLicenseDocumentBodySchema,
   finalizeLogoBodySchema,
   galleryUploadUrlBodySchema,
+  licenseDocumentUploadUrlBodySchema,
   listMembersQuerySchema,
   listMyOrganizationsQuerySchema,
   listReviewsQuerySchema,
@@ -22,6 +24,7 @@ import {
   organizationMemberParamSchema,
   organizationSupervisorParamSchema,
   removeGalleryImageQuerySchema,
+  removeLicenseDocumentQuerySchema,
   submitReviewBodySchema,
   updateMemberBodySchema,
   updateOrganizationBodySchema,
@@ -96,26 +99,54 @@ export function createOrganizationRouter(c: Container): Router {
     asyncHandler(ctrl.finalizeLogo),
   );
   // Gallery — same guard as the logo; up to 8 photos, appended one at a time.
+  // `allowInactiveForOwner` — a registration screen ("تسجيل العيادة") uploads
+  // gallery photos right after creation, while the organization is still
+  // PENDING an admin's approval.
   r.post(
     '/:organizationId/gallery/upload-url',
     validate({ params: organizationIdParamSchema, body: galleryUploadUrlBodySchema }),
     withOrganization,
-    authorizeOrg('organization.update'),
+    authorizeOrg('organization.update', { allowInactiveForOwner: true }),
     asyncHandler(ctrl.requestGalleryUploadUrl),
   );
   r.post(
     '/:organizationId/gallery',
     validate({ params: organizationIdParamSchema, body: finalizeGalleryBodySchema }),
     withOrganization,
-    authorizeOrg('organization.update'),
+    authorizeOrg('organization.update', { allowInactiveForOwner: true }),
     asyncHandler(ctrl.addGalleryImage),
   );
   r.delete(
     '/:organizationId/gallery',
     validate({ params: organizationIdParamSchema, query: removeGalleryImageQuerySchema }),
     withOrganization,
-    authorizeOrg('organization.update'),
+    authorizeOrg('organization.update', { allowInactiveForOwner: true }),
     asyncHandler(ctrl.removeGalleryImage),
+  );
+
+  // License documents ("صور الترخيص") — CLINIC / VETERINARY_OFFICE only, same
+  // guard/shape as the gallery (including `allowInactiveForOwner`, for the
+  // same reason: uploaded during registration, before approval).
+  r.post(
+    '/:organizationId/license-documents/upload-url',
+    validate({ params: organizationIdParamSchema, body: licenseDocumentUploadUrlBodySchema }),
+    withOrganization,
+    authorizeOrg('organization.update', { allowInactiveForOwner: true }),
+    asyncHandler(ctrl.requestLicenseDocumentUploadUrl),
+  );
+  r.post(
+    '/:organizationId/license-documents',
+    validate({ params: organizationIdParamSchema, body: finalizeLicenseDocumentBodySchema }),
+    withOrganization,
+    authorizeOrg('organization.update', { allowInactiveForOwner: true }),
+    asyncHandler(ctrl.addLicenseDocument),
+  );
+  r.delete(
+    '/:organizationId/license-documents',
+    validate({ params: organizationIdParamSchema, query: removeLicenseDocumentQuerySchema }),
+    withOrganization,
+    authorizeOrg('organization.update', { allowInactiveForOwner: true }),
+    asyncHandler(ctrl.removeLicenseDocument),
   );
 
   r.post(

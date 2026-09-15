@@ -1,6 +1,6 @@
 import { rooms } from '../../../infra/realtime/index.js';
 import { AuditAction } from '../../audit/audit.types.js';
-import type { AiSettingKey, ThreadKind } from '../domain/thread.constants.js';
+import { MAX_MESSAGE_IMAGES, type AiSettingKey, type ThreadKind } from '../domain/thread.constants.js';
 
 /** Everything that differs between a Consultation and an Inquiry. */
 export interface ThreadKindConfig {
@@ -27,6 +27,12 @@ export interface ThreadKindConfig {
    * only CLOSE (or a manual sender block) stops them.
    */
   aiAutoRespond: boolean;
+  /**
+   * Max image attachments allowed on the initial message. `0` disables
+   * attachments entirely for this kind (SUPPORT) — `SupportThreadService`
+   * rejects any `imageKeys` and the upload-url endpoint 400s.
+   */
+  maxAttachmentImages: number;
   perms: { read: string; respond: string; close: string; adminRead: string };
   auditActions: { created: string; closed: string; blocked: string; unblocked: string };
   events: {
@@ -50,6 +56,7 @@ export const CONSULTATION_CONFIG: ThreadKindConfig = {
   createEligibility: 'ANY_USER',
   responderRequiresApprovedVet: true,
   aiAutoRespond: true,
+  maxAttachmentImages: MAX_MESSAGE_IMAGES,
   perms: {
     read: 'consultation.read',
     respond: 'consultation.respond',
@@ -82,6 +89,7 @@ export const INQUIRY_CONFIG: ThreadKindConfig = {
   createEligibility: 'APPROVED_VET',
   responderRequiresApprovedVet: true,
   aiAutoRespond: true,
+  maxAttachmentImages: MAX_MESSAGE_IMAGES,
   perms: {
     read: 'inquiry.read',
     respond: 'inquiry.respond',
@@ -120,6 +128,8 @@ export const SUPPORT_CONFIG: ThreadKindConfig = {
   responderRequiresApprovedVet: false,
   // "تواصل معنا" is human-only — no automatic AI reply.
   aiAutoRespond: false,
+  // Support messages do not get image attachments — see the file header.
+  maxAttachmentImages: 0,
   perms: {
     read: 'support.read',
     respond: 'support.respond',

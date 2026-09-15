@@ -20,12 +20,17 @@ import {
   type ListThreadsFilter,
   type SupportThread,
   type ThreadDTO,
+  type ThreadMessage,
   type ThreadMessageDTO,
 } from '../domain/thread.types.js';
 import type { AiResponderPort } from './ai-responder.port.js';
 import type { AiSettingsService } from './ai-settings.service.js';
 import type { ThreadKindConfig } from './thread.config.js';
-import type { ThreadRepository } from '../infrastructure/thread.repository.js';
+import type { ThreadAttachmentMedia, PresignResult } from './thread-attachment-media.js';
+import type {
+  CreateThreadMessageData,
+  ThreadRepository,
+} from '../infrastructure/thread.repository.js';
 
 export interface ThreadActor {
   principal: AuthPrincipal;
@@ -62,6 +67,7 @@ export class SupportThreadService {
     private readonly db: Knex,
     private readonly cfg: ThreadKindConfig,
     private readonly repo: ThreadRepository,
+    private readonly media: ThreadAttachmentMedia | null,
     private readonly aiSettings: AiSettingsService,
     private readonly aiResponder: AiResponderPort,
     private readonly authz: AuthorizationService,
@@ -121,7 +127,7 @@ export class SupportThreadService {
 
   async create(
     actor: ThreadActor,
-    input: { body: string; animalId?: string | null },
+    input: { body: string; animalId?: string | null; imageKeys?: string[] },
   ): Promise<ThreadDTO> {
     if (this.cfg.createEligibility === 'APPROVED_VET') {
       this.authz.assertApprovedVeterinarian(actor.principal);
@@ -136,21 +142,28 @@ export class SupportThreadService {
       animalId = input.animalId;
     }
 
+    let imageKeys: string[] = [];
+    if (input.imageKeys && input.imageKeys.length > 0) {
+      if (this.cfg.maxAttachmentImages === 0 || !this.media) {
+        throw new BadRequestError('this thread kind does not support image attachments');
+      }
+      imageKeys = await this.media.validateKeys(input.imageKeys, this.cfg.maxAttachmentImages);
+    }
+
     const now = new Date();
     const thread = await this.db.transaction(async (tx) => {
       const created = await this.repo.create(
         { createdByUserId: actor.principal.userId, animalId },
         tx,
       );
-      await this.repo.createMessage(
-        {
-          threadId: created.id,
-          senderUserId: actor.principal.userId,
-          source: 'USER',
-          body: input.body,
-        },
-        tx,
-      );
+      const messageData: CreateThreadMessageData = {
+        threadId: created.id,
+        senderUserId: actor.principal.userId,
+        source: 'USER',
+        body: input.body,
+      };
+      if (this.cfg.maxAttachmentImages > 0) messageData.imageKeys = imageKeys;
+      await this.repo.createMessage(messageData, tx);
       await this.repo.touchLastMessageAt(created.id, now, tx);
       await this.audit.record(
         {
@@ -158,7 +171,11 @@ export class SupportThreadService {
           entityType: this.entityType,
           entityId: created.id,
           actorUserId: actor.principal.userId,
-          metadata: { [`${this.cfg.kind.toLowerCase()}Id`]: created.id, animalId },
+          metadata: {
+            [`${this.cfg.kind.toLowerCase()}Id`]: created.id,
+            animalId,
+            imageCount: imageKeys.length,
+          },
           context: actor.context,
         },
         tx,
@@ -233,6 +250,26 @@ export class SupportThreadService {
     });
   }
 
+  /** Presign an upload URL for an initial-message image (before the thread exists). */
+  async requestAttachmentUploadUrl(
+    actor: ThreadActor,
+    input: { filename: string; mimeType: string; size: number },
+  ): Promise<PresignResult> {
+    if (this.cfg.maxAttachmentImages === 0 || !this.media) {
+      throw new BadRequestError('this thread kind does not support image attachments');
+    }
+    if (this.cfg.createEligibility === 'APPROVED_VET') {
+      this.authz.assertApprovedVeterinarian(actor.principal);
+    }
+    return this.media.presignUpload(input);
+  }
+
+  private async resolveMessageDto(m: ThreadMessage): Promise<ThreadMessageDTO> {
+    const imageUrls =
+      this.media && m.imageKeys.length > 0 ? await this.media.resolveUrls(m.imageKeys) : [];
+    return { ...toThreadMessageDTO(m), imageUrls };
+  }
+
   // --- reads ----------------------------------------------------
 
   async listMine(
@@ -267,7 +304,7 @@ export class SupportThreadService {
     const thread = await this.load(threadId);
     await this.assertAccess(principal, thread);
     const { items, total } = await this.repo.listMessages(thread.id, { page, pageSize });
-    return { items: items.map(toThreadMessageDTO), total };
+    return { items: await Promise.all(items.map((m) => this.resolveMessageDto(m))), total };
   }
 
   // --- writes -------------------------------------------------
@@ -313,7 +350,7 @@ export class SupportThreadService {
       await this.maybeAiRespond(thread.id);
     }
 
-    return toThreadMessageDTO(message);
+    return this.resolveMessageDto(message);
   }
 
   async close(actor: ThreadActor, threadId: string): Promise<ThreadDTO> {

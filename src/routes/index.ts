@@ -11,6 +11,8 @@ import { createSelfUsersRouter } from '../modules/users/self-users.routes.js';
 import { createVeterinarianRouters } from '../modules/veterinarians/veterinarian.routes.js';
 import { createOrganizationRouter } from '../modules/organizations/presentation/organization.routes.js';
 import { createAdminOrganizationRouter } from '../modules/organizations/presentation/admin-organization.routes.js';
+import { createOrganizationSubscriptionRouter } from '../modules/organizations/presentation/organization-subscription.routes.js';
+import { createOrganizationBroadcastRouter } from '../modules/organizations/presentation/organization-broadcast.routes.js';
 import {
   createAnimalRouter,
   createAdminAnimalRouter,
@@ -39,6 +41,7 @@ import {
 import {
   createPublicVeterinaryOfficeProductRouter,
   createVeterinaryOfficeProductRouter,
+  createVeterinaryOfficeDashboardRouter,
 } from '../modules/veterinary-office/index.js';
 import {
   createPetOwnerStoreRouter,
@@ -59,6 +62,7 @@ import {
   createChatRouter,
   createChatMessageRouter,
   createOrgChatRouter,
+  createAdminChatRouter,
 } from '../modules/chat/index.js';
 import {
   createConsultationRouter,
@@ -87,6 +91,7 @@ import {
   createNotificationRouter,
   createAdminNotificationRouter,
 } from '../modules/notifications/index.js';
+import { createAdminDashboardRouter } from '../modules/admin-dashboard/index.js';
 
 /**
  * Root API router. Each feature module contributes its own sub-router here.
@@ -175,6 +180,18 @@ export function createApiRouter(c: Container): Router {
   router.use('/organizations', createPublicVeterinaryStoreProductRouter(c));
   router.use('/organizations', createVeterinaryOfficeProductRouter(c));
   router.use('/organizations', createPublicVeterinaryOfficeProductRouter(c));
+
+  // Veterinary Office Dashboard: stats summary (products/followers/rating) extends
+  // `/organizations/:organizationId/office-dashboard/summary`.
+  router.use('/organizations', createVeterinaryOfficeDashboardRouter(c));
+
+  // Generalized subscription (VETERINARY_OFFICE / CLINIC) — the non-farm counterpart
+  // of the Phase 6 `/organizations/:organizationId/farm/subscription...` routes above,
+  // reusing the same `FarmSubscriptionService` (Veterinary Office Dashboard spec §3).
+  router.use('/organizations', createOrganizationSubscriptionRouter(c));
+
+  // "إرسال رسالة للمتابعين" — generic follower broadcast, any organization type.
+  router.use('/organizations', createOrganizationBroadcastRouter(c));
 
   // --- Pet Owners Store: platform-run consumer storefront ----
   // Dedicated `pet_owner_store_*` tables. Consumer browse / cart / checkout /
@@ -291,6 +308,8 @@ export function createApiRouter(c: Container): Router {
   router.use('/admin/veterinarian-store', createAdminVeterinarianStoreRouter(c));
   router.use('/admin/notifications', createAdminNotificationRouter(c));
   router.use('/admin/audit-logs', createAdminAuditRouter(c));
+  router.use('/admin/chat', createAdminChatRouter(c));
+  router.use('/admin/dashboard', createAdminDashboardRouter(c));
 
   return router;
 }

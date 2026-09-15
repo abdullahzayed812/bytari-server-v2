@@ -162,6 +162,11 @@ export const PERMISSION_KEYS = [
   // organization-scoped `syndicate.*` permissions — see
   // `organization-rbac.constants.ts`). Granted to NO base role.
   'syndicate.admin.create',
+  // Admin dashboard home — aggregate read-only summary (category counts,
+  // recent activity, pending-task list) across many modules. Granted to
+  // MODERATOR (mirrors 'audit.read'/'organization.admin.read') or ADMIN
+  // (override); reads only, no write surface of its own.
+  'dashboard.admin.read',
 ] as const;
 export type PermissionKey = (typeof PERMISSION_KEYS)[number];
 
@@ -296,6 +301,7 @@ export const PERMISSION_DEFINITIONS: Record<PermissionKey, string> = {
   'vet_course.approve': 'Approve a pending course / seminar / workshop',
   'vet_course.reject': 'Reject a pending course / seminar / workshop',
   'syndicate.admin.create': 'Create a main or subordinate veterinary syndicate',
+  'dashboard.admin.read': 'Read the admin dashboard summary (category counts, recent activity, pending tasks)',
 };
 
 /**
@@ -384,6 +390,7 @@ export const ROLE_PERMISSIONS: Record<RoleKey, PermissionKey[]> = {
     'audit.read',
     'organization.admin.read',
     'trader.admin.read',
+    'dashboard.admin.read',
   ],
   PET_OWNER: [],
   VETERINARIAN: [],

@@ -27,6 +27,7 @@ export interface UpdateVeterinaryOfficeProductData extends VeterinaryOfficeProdu
   productType?: string;
   price?: string | null;
   status?: string;
+  isHidden?: boolean;
   primaryImageKey?: string | null;
 }
 
@@ -93,6 +94,7 @@ export class VeterinaryOfficeProductRepository {
     if (patch.productType !== undefined) dbPatch.product_type = patch.productType;
     if (patch.price !== undefined) dbPatch.price = patch.price;
     if (patch.status !== undefined) dbPatch.status = patch.status;
+    if (patch.isHidden !== undefined) dbPatch.is_hidden = patch.isHidden;
     if (patch.subtype !== undefined) dbPatch.subtype = patch.subtype;
     if (patch.weight !== undefined) dbPatch.weight = patch.weight;
     if (patch.usageInstructions !== undefined) dbPatch.usage_instructions = patch.usageInstructions;
@@ -136,6 +138,7 @@ export class VeterinaryOfficeProductRepository {
       );
       if (filter.status) qb.andWhere('status', filter.status);
       if (filter.productType) qb.andWhere('product_type', filter.productType);
+      if (filter.hidden !== undefined) qb.andWhere('is_hidden', filter.hidden);
       if (filter.search) {
         qb.andWhereRaw('lower(name) like ?', [`%${filter.search.toLowerCase()}%`]);
       }
@@ -158,6 +161,15 @@ export class VeterinaryOfficeProductRepository {
       .offset((filter.page - 1) * filter.pageSize);
 
     return { items: rows.map(rowToVeterinaryOfficeProduct), total };
+  }
+
+  /** Live, visible product count — the Dashboard home's "المنتجات" stat. */
+  async countVisibleForOrganization(organizationId: string, trx?: Knex.Transaction): Promise<number> {
+    const row = await this.conn(trx)(TABLE)
+      .where({ organization_id: organizationId, status: 'ACTIVE', is_hidden: false })
+      .count<{ count: string }>({ count: '*' })
+      .first();
+    return Number(row?.count ?? 0);
   }
 
   // --- images -------------------------------------------------------
