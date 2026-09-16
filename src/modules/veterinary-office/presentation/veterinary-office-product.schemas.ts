@@ -108,8 +108,15 @@ export const veterinaryOfficeProductParamSchema = z.object({
 export const listVeterinaryOfficeProductsQuerySchema = paginationQuerySchema.extend({
   status: z.enum(VETERINARY_OFFICE_PRODUCT_STATUSES).optional(),
   type: z.enum(VETERINARY_OFFICE_PRODUCT_TYPES).optional(),
-  /** Owner-facing "Hidden products" screen (`?hidden=true`). */
-  hidden: z.coerce.boolean().optional(),
+  /**
+   * Owner-facing "Hidden products" screen (`?hidden=true|false`). NEVER
+   * `z.coerce.boolean()` here — `Boolean("false")` is `true` in JS, so that
+   * would silently invert an explicit `?hidden=false` from the client.
+   */
+  hidden: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((v) => (v === undefined ? undefined : v === 'true')),
   search: z.string().trim().min(1).max(200).optional(),
   sort: z.enum(['name', 'price', 'createdAt']).optional(),
   order: z.enum(['asc', 'desc']).optional(),

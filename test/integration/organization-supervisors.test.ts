@@ -221,6 +221,47 @@ describe('organization supervisors', () => {
     expect((list.body.data as unknown[]).length).toBe(0);
   });
 
+  it('the owner assigns a supervisor by email instead of userId', async () => {
+    const { owner, org } = await setup();
+    const vet = await registerApprovedVet(app);
+
+    const res = await request(app)
+      .post(`/api/v1/organizations/${org.id}/supervisors`)
+      .set(bearer(owner.accessToken))
+      .send({ email: vet.email.toUpperCase(), permissions: ['member.read'] });
+
+    expect(res.status).toBe(201);
+    expect(res.body.data).toMatchObject({ userId: vet.id, roleKey: 'SUPERVISOR' });
+  });
+
+  it('assigning a supervisor by an unknown email returns 404', async () => {
+    const { owner, org } = await setup();
+    const res = await request(app)
+      .post(`/api/v1/organizations/${org.id}/supervisors`)
+      .set(bearer(owner.accessToken))
+      .send({ email: 'nobody-here@example.com', permissions: ['member.read'] });
+    expect(res.status).toBe(404);
+  });
+
+  it('rejects a supervisor-assign body with neither userId nor email (422)', async () => {
+    const { owner, org } = await setup();
+    const res = await request(app)
+      .post(`/api/v1/organizations/${org.id}/supervisors`)
+      .set(bearer(owner.accessToken))
+      .send({ permissions: ['member.read'] });
+    expect(res.status).toBe(422);
+  });
+
+  it('rejects a supervisor-assign body with both userId and email (422)', async () => {
+    const { owner, org } = await setup();
+    const vet = await registerApprovedVet(app);
+    const res = await request(app)
+      .post(`/api/v1/organizations/${org.id}/supervisors`)
+      .set(bearer(owner.accessToken))
+      .send({ userId: vet.id, email: vet.email, permissions: ['member.read'] });
+    expect(res.status).toBe(422);
+  });
+
   it('rejects unknown permission keys (400)', async () => {
     const { owner, org } = await setup();
     const supervisor = await registerApprovedVet(app);

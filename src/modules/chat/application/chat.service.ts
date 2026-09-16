@@ -94,6 +94,12 @@ export class ChatService {
       if (m?.status !== 'ACTIVE') return null;
       return conversation.type === 'PET_OWNER_CLINIC' ? 'CLINIC' : 'VETERINARY_OFFICE';
     }
+    if (conversation.type === 'CHAT_ROOM') {
+      // Every room member has an explicit participant row (`ChatRoomService.join`)
+      // — no live membership lookup needed, unlike CLINIC/OFFICE above.
+      const p = await this.conversations.findParticipant(conversation.id, userId);
+      return p && !p.leftAt ? 'ROOM_MEMBER' : null;
+    }
     // FARM_OWNER_MEMBER
     if (!conversation.organizationId) return null;
     const org = await this.organizations.findById(conversation.organizationId);

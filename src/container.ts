@@ -165,6 +165,8 @@ import {
   SyndicateAnnouncementService,
   SyndicateSubmissionService,
 } from './modules/syndicates/index.js';
+import { ChatRoomRepository, ChatRoomService } from './modules/chat-rooms/index.js';
+import { ReportRepository, ReportService } from './modules/reports/index.js';
 import {
   CONSULTATION_CONFIG,
   INQUIRY_CONFIG,
@@ -409,6 +411,10 @@ export interface Container {
   syndicateService: SyndicateService;
   syndicateAnnouncementService: SyndicateAnnouncementService;
   syndicateSubmissionService: SyndicateSubmissionService;
+  chatRoomRepository: ChatRoomRepository;
+  chatRoomService: ChatRoomService;
+  reportRepository: ReportRepository;
+  reportService: ReportService;
 
   objectStorage: ObjectStorage;
   contentRepository: ContentRepository;
@@ -1050,6 +1056,36 @@ export function createContainer(deps: ContainerDeps): Container {
     logger,
   );
 
+  // --- Global Chat rooms — public discussion rooms (an `organizations` row
+  // of type CHAT_ROOM, reusing membership/supervisor RBAC + the chat module's
+  // conversations/messages tables as-is) ------------------------------
+  const chatRoomRepository = new ChatRoomRepository(db);
+  const chatRoomService = new ChatRoomService(
+    db,
+    chatRoomRepository,
+    organizationRepository,
+    membershipRepository,
+    organizationRbacRepository,
+    conversationRepository,
+    messageRepository,
+    userService,
+    objectStorage,
+    auditService,
+    eventBus,
+    logger,
+  );
+
+  // --- content reporting ("الإبلاغ عن الرسالة") — self-contained, reused by
+  // Global Chat's per-message / per-room report entry ------------------
+  const reportRepository = new ReportRepository(db);
+  const reportService = new ReportService(
+    reportRepository,
+    messageRepository,
+    organizationRepository,
+    auditService,
+    logger,
+  );
+
   // --- consultations & inquiries (Phase 13) ------------------
   const aiSettingsRepository = new AiSettingsRepository(db);
   const aiSettingsService = new AiSettingsService(
@@ -1526,6 +1562,10 @@ export function createContainer(deps: ContainerDeps): Container {
     syndicateService,
     syndicateAnnouncementService,
     syndicateSubmissionService,
+    chatRoomRepository,
+    chatRoomService,
+    reportRepository,
+    reportService,
     objectStorage,
     contentRepository,
     contentFileRepository,

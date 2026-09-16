@@ -29,6 +29,11 @@ const DETAIL_TABLE: Record<OrganizationType, string> = {
   // and its own repository (`SyndicateDetailsRepository`). Listed only so
   // this dispatch map stays total over `OrganizationType`.
   SYNDICATE: 'syndicate_details',
+  // Genuinely routed through here (unlike SYNDICATE) — `chat_room_details`
+  // mirrors the directory-profile shape exactly so the generic profile
+  // PATCH + logo upload/replace/remove endpoints work for rooms unmodified;
+  // a room only ever populates `logo_key` in practice.
+  CHAT_ROOM: 'chat_room_details',
 };
 
 export interface CreateOrganizationData {

@@ -14,6 +14,14 @@ export const CONVERSATION_TYPES = [
   'FARM_OWNER_MEMBER',
   'PET_OWNER_VETERINARIAN',
   'PET_OWNER_VETERINARY_OFFICE',
+  /**
+   * Global Chat — a public, many-member discussion room. `organization_id` is
+   * a CHAT_ROOM organization; every member gets an explicit
+   * `conversation_participants` row (role `ROOM_MEMBER`) since, unlike
+   * CLINIC/OFFICE, there is no "resolve the org side live" shortcut for a
+   * room with potentially hundreds of members.
+   */
+  'CHAT_ROOM',
 ] as const;
 export type ConversationType = (typeof CONVERSATION_TYPES)[number];
 
@@ -21,13 +29,15 @@ export type ConversationType = (typeof CONVERSATION_TYPES)[number];
  * Context label on a `conversation_participants` row. The CLINIC side of a
  * PET_OWNER_CLINIC conversation has NO participant row — it is resolved live
  * from `organization_memberships` — so there is no `CLINIC` participant role.
- * PET_OWNER_VETERINARIAN has an explicit row for BOTH sides.
+ * PET_OWNER_VETERINARIAN has an explicit row for BOTH sides. `ROOM_MEMBER` is
+ * every member of a CHAT_ROOM (all explicit rows, see `CONVERSATION_TYPES`).
  */
 export const PARTICIPANT_ROLES = [
   'PET_OWNER',
   'FARM_OWNER',
   'FARM_MEMBER',
   'VETERINARIAN',
+  'ROOM_MEMBER',
 ] as const;
 export type ParticipantRole = (typeof PARTICIPANT_ROLES)[number];
 
@@ -39,6 +49,7 @@ export const CONVERSATION_SIDES = [
   'FARM_MEMBER',
   'VETERINARIAN',
   'VETERINARY_OFFICE',
+  'ROOM_MEMBER',
 ] as const;
 export type ConversationSide = (typeof CONVERSATION_SIDES)[number];
 

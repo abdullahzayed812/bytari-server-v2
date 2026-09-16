@@ -89,6 +89,14 @@ export interface AdminDashboardServiceDeps {
  * `countNew`) rather than a bespoke `COUNT(*)` per card, so a card's number
  * can never drift from what its own management screen shows and is never a
  * raw total (spec §4-§6). All reads run in parallel.
+ *
+ * Each card exposes two independent numbers: `count` (the red notification
+ * badge — new/unseen items, scoped to `status: 'PENDING'` for the org/farm
+ * approval cards so it means "new requests needing approval", and reset to 0
+ * by `markCardSeen` once opened) and `activeCount` (the card's main stat —
+ * how many items in that section are currently active/approved/live, or the
+ * section's total when it has no active/inactive lifecycle; never affected
+ * by "seen").
  */
 export class AdminDashboardService {
   constructor(private readonly deps: AdminDashboardServiceDeps) {}
@@ -125,13 +133,46 @@ export class AdminDashboardService {
       recentActivityPage,
       organizationsPending,
       renewalsPending,
+      poultryActive,
+      livestockActive,
+      clinicsActive,
+      officesActive,
+      syndicateActive,
+      vetApprovalsActive,
+      petOwnersActive,
+      veterinariansActive,
+      usersActive,
+      coursesActive,
+      serviceListingsActive,
+      serviceRequestsActive,
+      contentMagazinesActive,
+      contentBooksActive,
+      jobOffersActive,
+      jobSeekersActive,
+      petOwnerStoreProductsActive,
+      veterinarianStoreProductsActive,
+      consultationsActive,
+      inquiriesActive,
+      userMessagesActive,
     ] = await Promise.all([
       this.deps.seen.getSeenMap(userId),
-      this.deps.farmSubscriptionRenewals.listFarmsForAdmin({ ...WINDOW, speciesGroup: 'POULTRY' }),
-      this.deps.farmSubscriptionRenewals.listFarmsForAdmin({ ...WINDOW, speciesGroup: 'LIVESTOCK' }),
-      this.deps.organizations.listForAdmin({ ...WINDOW, type: 'CLINIC' }),
-      this.deps.organizations.listForAdmin({ ...WINDOW, type: 'VETERINARY_OFFICE' }),
-      this.deps.organizations.listForAdmin({ ...WINDOW, type: 'SYNDICATE' }),
+      this.deps.farmSubscriptionRenewals.listFarmsForAdmin({
+        ...WINDOW,
+        speciesGroup: 'POULTRY',
+        status: 'PENDING',
+      }),
+      this.deps.farmSubscriptionRenewals.listFarmsForAdmin({
+        ...WINDOW,
+        speciesGroup: 'LIVESTOCK',
+        status: 'PENDING',
+      }),
+      this.deps.organizations.listForAdmin({ ...WINDOW, type: 'CLINIC', status: 'PENDING' }),
+      this.deps.organizations.listForAdmin({
+        ...WINDOW,
+        type: 'VETERINARY_OFFICE',
+        status: 'PENDING',
+      }),
+      this.deps.organizations.listForAdmin({ ...WINDOW, type: 'SYNDICATE', status: 'PENDING' }),
       this.deps.veterinarians.listPending(1, CARD_WINDOW_SIZE),
       this.deps.animals.listForAdmin(WINDOW),
       this.deps.consultations.list(WINDOW),
@@ -156,52 +197,137 @@ export class AdminDashboardService {
       this.deps.audit.list({ page: 1, pageSize: RECENT_ACTIVITY_SIZE }),
       this.deps.organizations.listPendingForAdmin(1, CARD_WINDOW_SIZE),
       this.deps.farmSubscriptionRenewals.listAllPendingForAdmin({ page: 1, pageSize: CARD_WINDOW_SIZE }),
+      this.deps.farmSubscriptionRenewals.listFarmsForAdmin({
+        page: 1,
+        pageSize: 1,
+        speciesGroup: 'POULTRY',
+        status: 'ACTIVE',
+      }),
+      this.deps.farmSubscriptionRenewals.listFarmsForAdmin({
+        page: 1,
+        pageSize: 1,
+        speciesGroup: 'LIVESTOCK',
+        status: 'ACTIVE',
+      }),
+      this.deps.organizations.listForAdmin({ page: 1, pageSize: 1, type: 'CLINIC', status: 'ACTIVE' }),
+      this.deps.organizations.listForAdmin({
+        page: 1,
+        pageSize: 1,
+        type: 'VETERINARY_OFFICE',
+        status: 'ACTIVE',
+      }),
+      this.deps.organizations.listForAdmin({ page: 1, pageSize: 1, type: 'SYNDICATE', status: 'ACTIVE' }),
+      this.deps.users.list({ page: 1, pageSize: 1, veterinarianStatus: 'APPROVED' }),
+      this.deps.users.list({ page: 1, pageSize: 1, role: 'PET_OWNER', status: 'ACTIVE' }),
+      this.deps.users.list({ page: 1, pageSize: 1, role: 'VETERINARIAN', status: 'ACTIVE' }),
+      this.deps.users.list({ page: 1, pageSize: 1, status: 'ACTIVE' }),
+      this.deps.vetCourses.listForModeration({ page: 1, pageSize: 1, status: 'APPROVED' }),
+      this.deps.vetServiceListings.listForModeration({ page: 1, pageSize: 1, status: 'APPROVED' }),
+      this.deps.vetServiceRequests.listForModeration({ page: 1, pageSize: 1, status: 'APPROVED' }),
+      this.deps.content.listAdmin({ page: 1, pageSize: 1, type: 'MAGAZINE', status: 'PUBLISHED' }),
+      this.deps.content.listAdmin({ page: 1, pageSize: 1, type: 'BOOK', status: 'PUBLISHED' }),
+      this.deps.vetJobOffers.listForModeration({ page: 1, pageSize: 1, status: 'APPROVED' }),
+      this.deps.vetJobSeekers.listForModeration({ page: 1, pageSize: 1, status: 'APPROVED' }),
+      this.deps.petOwnerStore.listProducts({ page: 1, pageSize: 1, status: 'ACTIVE' }),
+      this.deps.veterinarianStore.listProducts({ page: 1, pageSize: 1, status: 'ACTIVE' }),
+      this.deps.consultations.list({ page: 1, pageSize: 1, status: 'OPEN' }),
+      this.deps.inquiries.list({ page: 1, pageSize: 1, status: 'OPEN' }),
+      this.deps.supportMessages.list({ page: 1, pageSize: 1, status: 'OPEN' }),
     ]);
 
     const since = (id: AdminDashboardCardId) => seenMap.get(id);
     const cards: AdminDashboardCard[] = [
-      { id: 'poultry', count: countNew(poultry.items, since('poultry')) },
-      { id: 'livestock', count: countNew(livestock.items, since('livestock')) },
-      { id: 'pets', count: countNew(pets.items, since('pets')) },
-      { id: 'consultations', count: countNew(consultations.items, since('consultations')) },
-      { id: 'inquiries', count: countNew(inquiries.items, since('inquiries')) },
-      { id: 'ads', count: countNew(ads.items, since('ads')) },
-      { id: 'clinics', count: countNew(clinics.items, since('clinics')) },
-      { id: 'offices', count: countNew(offices.items, since('offices')) },
-      { id: 'vetApprovals', count: countNew(vetApplicationsPending.items, since('vetApprovals')) },
-      { id: 'courses', count: countNew(courses.items, since('courses')) },
+      { id: 'poultry', count: countNew(poultry.items, since('poultry')), activeCount: poultryActive.total },
+      {
+        id: 'livestock',
+        count: countNew(livestock.items, since('livestock')),
+        activeCount: livestockActive.total,
+      },
+      { id: 'pets', count: countNew(pets.items, since('pets')), activeCount: pets.total },
+      {
+        id: 'consultations',
+        count: countNew(consultations.items, since('consultations')),
+        activeCount: consultationsActive.total,
+      },
+      {
+        id: 'inquiries',
+        count: countNew(inquiries.items, since('inquiries')),
+        activeCount: inquiriesActive.total,
+      },
+      { id: 'ads', count: countNew(ads.items, since('ads')), activeCount: ads.total },
+      { id: 'clinics', count: countNew(clinics.items, since('clinics')), activeCount: clinicsActive.total },
+      { id: 'offices', count: countNew(offices.items, since('offices')), activeCount: officesActive.total },
+      {
+        id: 'vetApprovals',
+        count: countNew(vetApplicationsPending.items, since('vetApprovals')),
+        activeCount: vetApprovalsActive.total,
+      },
+      {
+        id: 'courses',
+        count: countNew(courses.items, since('courses')),
+        activeCount: coursesActive.total,
+      },
       {
         id: 'services',
         count:
           countNew(serviceListings.items, since('services')) +
           countNew(serviceRequests.items, since('services')),
+        activeCount: serviceListingsActive.total + serviceRequestsActive.total,
       },
       {
         id: 'content',
         count:
           countNew(contentMagazines.items, since('content')) +
           countNew(contentBooks.items, since('content')),
+        activeCount: contentMagazinesActive.total + contentBooksActive.total,
       },
-      { id: 'syndicate', count: countNew(syndicate.items, since('syndicate')) },
-      { id: 'petOwners', count: countNew(petOwners.items, since('petOwners')) },
-      { id: 'veterinarians', count: countNew(veterinarians.items, since('veterinarians')) },
-      { id: 'chats', count: countNew(chats.items, since('chats')) },
+      {
+        id: 'syndicate',
+        count: countNew(syndicate.items, since('syndicate')),
+        activeCount: syndicateActive.total,
+      },
+      {
+        id: 'petOwners',
+        count: countNew(petOwners.items, since('petOwners')),
+        activeCount: petOwnersActive.total,
+      },
+      {
+        id: 'veterinarians',
+        count: countNew(veterinarians.items, since('veterinarians')),
+        activeCount: veterinariansActive.total,
+      },
+      { id: 'chats', count: countNew(chats.items, since('chats')), activeCount: chats.total },
       {
         id: 'jobs',
         count: countNew(jobOffers.items, since('jobs')) + countNew(jobSeekers.items, since('jobs')),
+        activeCount: jobOffersActive.total + jobSeekersActive.total,
       },
-      { id: 'supervisors', count: countNew(supervisors.items, since('supervisors')) },
+      {
+        id: 'supervisors',
+        count: countNew(supervisors.items, since('supervisors')),
+        activeCount: supervisors.total,
+      },
       {
         id: 'petOwnerStore',
         count: countNew(petOwnerStoreProducts.items, since('petOwnerStore')),
+        activeCount: petOwnerStoreProductsActive.total,
       },
       {
         id: 'veterinarianStore',
         count: countNew(veterinarianStoreProducts.items, since('veterinarianStore')),
+        activeCount: veterinarianStoreProductsActive.total,
       },
-      { id: 'users', count: countNew(allUsers.items, since('users')) },
-      { id: 'userMessages', count: countNew(userMessages.items, since('userMessages')) },
-      { id: 'broadcasts', count: countNew(broadcasts.items, since('broadcasts')) },
+      { id: 'users', count: countNew(allUsers.items, since('users')), activeCount: usersActive.total },
+      {
+        id: 'userMessages',
+        count: countNew(userMessages.items, since('userMessages')),
+        activeCount: userMessagesActive.total,
+      },
+      {
+        id: 'broadcasts',
+        count: countNew(broadcasts.items, since('broadcasts')),
+        activeCount: broadcasts.total,
+      },
     ];
 
     const recentActivity: AdminActivityItem[] = recentActivityPage.items.map((entry) => ({

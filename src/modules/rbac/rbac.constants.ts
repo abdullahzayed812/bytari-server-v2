@@ -162,11 +162,20 @@ export const PERMISSION_KEYS = [
   // organization-scoped `syndicate.*` permissions — see
   // `organization-rbac.constants.ts`). Granted to NO base role.
   'syndicate.admin.create',
+  // Global Chat rooms — same shape as `syndicate.admin.create`: a room is
+  // never self-service, only an ADMIN creates one (it then becomes an
+  // `organizations` row of type CHAT_ROOM, moderated via the organization-
+  // scoped `chat_room.*` permissions). Granted to NO base role.
+  'chat_room.admin.create',
   // Admin dashboard home — aggregate read-only summary (category counts,
   // recent activity, pending-task list) across many modules. Granted to
   // MODERATOR (mirrors 'audit.read'/'organization.admin.read') or ADMIN
   // (override); reads only, no write surface of its own.
   'dashboard.admin.read',
+  // Content reporting moderation queue ("الإبلاغ عن الرسالة") — list reports
+  // and mark them REVIEWED/DISMISSED. Granted to MODERATOR (mirrors
+  // 'dashboard.admin.read') or ADMIN (override).
+  'content_report.admin.manage',
 ] as const;
 export type PermissionKey = (typeof PERMISSION_KEYS)[number];
 
@@ -301,7 +310,9 @@ export const PERMISSION_DEFINITIONS: Record<PermissionKey, string> = {
   'vet_course.approve': 'Approve a pending course / seminar / workshop',
   'vet_course.reject': 'Reject a pending course / seminar / workshop',
   'syndicate.admin.create': 'Create a main or subordinate veterinary syndicate',
+  'chat_room.admin.create': 'Create a Global Chat public discussion room',
   'dashboard.admin.read': 'Read the admin dashboard summary (category counts, recent activity, pending tasks)',
+  'content_report.admin.manage': 'List content reports and mark them reviewed/dismissed',
 };
 
 /**
@@ -391,6 +402,7 @@ export const ROLE_PERMISSIONS: Record<RoleKey, PermissionKey[]> = {
     'organization.admin.read',
     'trader.admin.read',
     'dashboard.admin.read',
+    'content_report.admin.manage',
   ],
   PET_OWNER: [],
   VETERINARIAN: [],

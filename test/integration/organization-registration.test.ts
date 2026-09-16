@@ -5,6 +5,7 @@ import { closeTestDb, ensureSchema, resetDb } from '../helpers/db.js';
 import {
   approveOrganization,
   bearer,
+  createActiveOrganization,
   createOrganization,
   registerAdmin,
   registerApprovedVet,
@@ -129,6 +130,43 @@ describe('organization registration — gallery + license documents while PENDIN
       .send({ storageKey, mimeType: 'image/jpeg' });
     expect(register.status).toBe(200);
     expect(register.body.data.details.galleryUrls).toHaveLength(1);
+  });
+
+  it('the owner uploads, replaces, and removes the organization logo', async () => {
+    const admin = await registerAdmin(app);
+    const owner = await registerApprovedVet(app);
+    const org = await createActiveOrganization(app, owner.accessToken, admin.accessToken, {
+      type: 'CLINIC',
+      name: 'عيادة',
+    });
+
+    const upload = await request(app)
+      .post(`/api/v1/organizations/${org.id}/logo/upload-url`)
+      .set(bearer(owner.accessToken))
+      .send({ filename: 'logo.jpg', mimeType: 'image/jpeg', size: 1024 });
+    expect(upload.status).toBe(201);
+    const storageKey = upload.body.data.storageKey as string;
+    await container.objectStorage.put(storageKey, Buffer.from('fake-bytes'), {
+      contentType: 'image/jpeg',
+    });
+
+    const finalize = await request(app)
+      .post(`/api/v1/organizations/${org.id}/logo`)
+      .set(bearer(owner.accessToken))
+      .send({ storageKey, mimeType: 'image/jpeg' });
+    expect(finalize.status).toBe(200);
+    expect(finalize.body.data.details.logoUrl).toBeTruthy();
+
+    const removed = await request(app)
+      .delete(`/api/v1/organizations/${org.id}/logo`)
+      .set(bearer(owner.accessToken));
+    expect(removed.status).toBe(200);
+    expect(removed.body.data.details.logoUrl).toBeFalsy();
+
+    const again = await request(app)
+      .delete(`/api/v1/organizations/${org.id}/logo`)
+      .set(bearer(owner.accessToken));
+    expect(again.status).toBe(404);
   });
 
   it('the owner uploads, lists, and removes a license document before approval, up to the 3-document cap', async () => {

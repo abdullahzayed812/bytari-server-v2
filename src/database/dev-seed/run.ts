@@ -129,6 +129,7 @@ export async function runDevSeed(knex: Knex, deps: RunDevSeedDeps = {}): Promise
   const { farmAppointmentService, poultryCaseService, farmProfileService } = container;
   const { tipService, newsService } = container;
   const { advertisementService, objectStorage } = container;
+  const { chatRoomService } = container;
 
   /** Non-null lookup into one of the id maps built below. */
   const must = (map: Record<string, string>, key: string, kind: string): string => {
@@ -444,6 +445,7 @@ export async function runDevSeed(knex: Knex, deps: RunDevSeedDeps = {}): Promise
   await seedAdvertisements();
   await seedTips();
   await seedNews();
+  await seedChatRooms();
 
   logger.info(
     {
@@ -1335,6 +1337,61 @@ export async function runDevSeed(knex: Knex, deps: RunDevSeedDeps = {}): Promise
           });
         }
         await advertisementService.setCampaignActive(actor, created.id, true);
+      }
+    }
+  }
+
+  /** Global Chat — public discussion rooms (matches the reference screenshots). */
+  async function seedChatRooms(): Promise<void> {
+    const actor = { actorUserId: adminId, context: SEED_CONTEXT };
+
+    const rooms: Array<{
+      name: string;
+      description: string;
+      rules: string;
+      /** Persona keys to additionally join, beyond the admin (creator/OWNER). */
+      joinKeys: string[];
+    }> = [
+      {
+        name: 'الدواجن',
+        description: 'نقاشات ونصائح حول تربية ورعاية الدواجن',
+        rules: 'يرجى الالتزام بالاحترام المتبادل وعدم نشر إعلانات تجارية.',
+        joinKeys: ['vet', 'owner'],
+      },
+      {
+        name: 'الأغنام والماعز',
+        description: 'كل ما يخص رعاية الأغنام والماعز',
+        rules: 'يرجى الالتزام بالاحترام المتبادل وعدم نشر إعلانات تجارية.',
+        joinKeys: ['vet'],
+      },
+      {
+        name: 'الأبقار',
+        description: 'نقاشات حول تربية الأبقار وإدارة القطعان',
+        rules: 'يرجى الالتزام بالاحترام المتبادل وعدم نشر إعلانات تجارية.',
+        joinKeys: [],
+      },
+      {
+        name: 'استشارات عامة',
+        description: 'أسئلة واستفسارات بيطرية عامة لجميع الأنواع',
+        rules: 'الاستشارات هنا لا تغني عن زيارة الطبيب البيطري.',
+        joinKeys: ['vet', 'owner'],
+      },
+    ];
+
+    for (const r of rooms) {
+      const existing = (await knex('organizations')
+        .where({ type: 'CHAT_ROOM', name: r.name })
+        .first()) as { id: string } | undefined;
+      if (existing) continue;
+
+      const created = await chatRoomService.create(
+        { name: r.name, description: r.description, rules: r.rules },
+        actor,
+      );
+      for (const key of r.joinKeys) {
+        const userId = userIdsByKey[key];
+        if (!userId) continue;
+        await chatRoomService.join(created.id, { actorUserId: userId, context: SEED_CONTEXT });
       }
     }
   }

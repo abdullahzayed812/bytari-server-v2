@@ -4,6 +4,7 @@ export const ORGANIZATION_TYPES = [
   'VETERINARY_OFFICE',
   'VETERINARY_STORE',
   'SYNDICATE',
+  'CHAT_ROOM',
 ] as const;
 export type OrganizationType = (typeof ORGANIZATION_TYPES)[number];
 

@@ -36,6 +36,8 @@ export interface Participant {
   lastReadMessageId: string | null;
   joinedAt: string;
   leftAt: string | null;
+  /** CHAT_ROOM only — "mute this room's notifications" (§ Global Chat). */
+  notificationsMuted: boolean;
 }
 
 export interface Message {
@@ -115,6 +117,7 @@ export interface ParticipantRow {
   last_read_message_id: string | null;
   joined_at: Date;
   left_at: Date | null;
+  notifications_muted: boolean;
 }
 
 export function rowToConversation(row: ConversationRow): Conversation {

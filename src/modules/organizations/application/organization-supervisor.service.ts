@@ -66,31 +66,36 @@ export class OrganizationSupervisorService {
 
   async assign(
     organizationId: string,
-    input: { userId: string; permissions: string[] },
+    input: { userId?: string; email?: string; permissions: string[] },
     actor: SupervisorActor,
   ): Promise<SupervisorMembershipSummary> {
-    if (input.userId === actor.actorUserId) {
-      throw new ForbiddenError('You cannot assign yourself as an organization supervisor');
-    }
     assertValidPermissions(input.permissions);
 
     const org = await this.organizations.findById(organizationId);
     if (!org) throw new NotFoundError('Organization not found');
-    if (input.userId === org.ownerUserId) {
+
+    const target = input.userId
+      ? await this.users.getById(input.userId)
+      : await this.users.findByEmail((input.email as string).toLowerCase());
+    if (!target) {
+      throw new NotFoundError('No account exists with that email address');
+    }
+    if (target.id === actor.actorUserId) {
+      throw new ForbiddenError('You cannot assign yourself as an organization supervisor');
+    }
+    if (target.id === org.ownerUserId) {
       throw new ForbiddenError('The owner cannot also be a supervisor of their own organization');
     }
-
-    const target = await this.users.getById(input.userId);
     if (target.status !== 'ACTIVE') {
       throw new ConflictError('Cannot assign a non-active account as a supervisor');
     }
-    OrganizationPolicy.assertCanBeSupervisor(target);
+    OrganizationPolicy.assertCanBeSupervisor(org.type, target);
 
     const membershipId = await this.db.transaction(async (tx) => {
       const supRole = await this.orgRbac.findRoleByKey(SUPERVISOR_ORG_ROLE_KEY, tx);
       if (!supRole) throw new InternalError('Seed data missing: organization role "SUPERVISOR"');
 
-      const existing = await this.memberships.findByUserAndOrg(input.userId, organizationId, tx);
+      const existing = await this.memberships.findByUserAndOrg(target.id, organizationId, tx);
       let id: string;
       if (existing && existing.roleKey === 'SUPERVISOR' && existing.status === 'ACTIVE') {
         throw new ConflictError('User is already an active supervisor of this organization');
@@ -105,7 +110,7 @@ export class OrganizationSupervisorService {
         const m = await this.memberships.create(
           {
             organizationId,
-            userId: input.userId,
+            userId: target.id,
             organizationRoleId: supRole.id,
             status: 'ACTIVE',
             addedBy: actor.actorUserId,
@@ -124,7 +129,7 @@ export class OrganizationSupervisorService {
           entityType: AuditEntityType.ORGANIZATION_MEMBERSHIP,
           entityId: id,
           actorUserId: actor.actorUserId,
-          metadata: { organizationId, userId: input.userId, permissions: input.permissions },
+          metadata: { organizationId, userId: target.id, permissions: input.permissions },
           context: actor.context,
         },
         tx,
@@ -134,7 +139,7 @@ export class OrganizationSupervisorService {
 
     this.events.publish('organization.supervisor.assigned', {
       organizationId,
-      userId: input.userId,
+      userId: target.id,
       membershipId,
     });
     return this.hydrate(membershipId, organizationId);

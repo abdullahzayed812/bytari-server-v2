@@ -5,6 +5,7 @@ import { closeTestDb, ensureSchema, resetDb } from '../helpers/db.js';
 import {
   bearer,
   createActiveOrganization,
+  createOrganization,
   registerAdmin,
   registerApprovedVet,
   registerModerator,
@@ -47,7 +48,9 @@ describe('admin dashboard summary — GET /admin/dashboard/summary', () => {
   it('returns all 23 category cards, recent activity and pending tasks for an admin', async () => {
     const admin = await registerAdmin(app);
     const vetOwner = await registerApprovedVet(app);
-    // Give the summary at least one real, non-zero count and one recent-activity row to check shape against.
+    // A PENDING clinic feeds the "clinics" badge (new requests awaiting approval);
+    // a separately-approved one feeds its activeCount (currently-active clinics).
+    await createOrganization(app, vetOwner.accessToken, { type: 'CLINIC', name: 'Pending Test Clinic' });
     await createActiveOrganization(app, vetOwner.accessToken, admin.accessToken, {
       type: 'CLINIC',
       name: 'Dashboard Test Clinic',
@@ -69,9 +72,12 @@ describe('admin dashboard summary — GET /admin/dashboard/summary', () => {
     for (const card of cards) {
       expect(typeof card.count).toBe('number');
       expect(card.count).toBeGreaterThanOrEqual(0);
+      expect(typeof card.activeCount).toBe('number');
+      expect(card.activeCount).toBeGreaterThanOrEqual(0);
     }
     const clinics = cards.find((c: { id: string }) => c.id === 'clinics');
     expect(clinics.count).toBeGreaterThanOrEqual(1);
+    expect(clinics.activeCount).toBeGreaterThanOrEqual(1);
 
     expect(Array.isArray(recentActivity)).toBe(true);
     expect(recentActivity.length).toBeGreaterThanOrEqual(1);
@@ -110,7 +116,8 @@ describe('admin dashboard card counts — new/unseen, not totals (spec §4-§8)'
     const admin = await registerAdmin(app);
     const vetOwner = await registerApprovedVet(app);
 
-    await createActiveOrganization(app, vetOwner.accessToken, admin.accessToken, {
+    // PENDING — the "clinics" badge counts new requests awaiting approval.
+    await createOrganization(app, vetOwner.accessToken, {
       type: 'CLINIC',
       name: 'Unseen Count Clinic',
     });
@@ -131,13 +138,15 @@ describe('admin dashboard card counts — new/unseen, not totals (spec §4-§8)'
       .set(bearer(admin.accessToken));
     const clinicsAfter = after.body.data.cards.find((c: { id: string }) => c.id === 'clinics');
     expect(clinicsAfter.count).toBe(0);
+    // "seen" only resets the new/unseen badge — the active-items count is unaffected.
+    expect(clinicsAfter.activeCount).toBe(clinicsBefore.activeCount);
 
     // A different card, never opened, is unaffected by marking "clinics" seen.
     const officesAfter = after.body.data.cards.find((c: { id: string }) => c.id === 'offices');
     expect(officesAfter.count).toBe(0);
 
-    // A genuinely new clinic arriving after the seen-cursor bumps the count back up.
-    await createActiveOrganization(app, vetOwner.accessToken, admin.accessToken, {
+    // A genuinely new pending clinic arriving after the seen-cursor bumps the count back up.
+    await createOrganization(app, vetOwner.accessToken, {
       type: 'CLINIC',
       name: 'Second Unseen Count Clinic',
     });

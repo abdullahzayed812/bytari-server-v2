@@ -47,11 +47,17 @@ describe('OrganizationPolicy.assertCanCreate', () => {
 describe('OrganizationPolicy other rules', () => {
   it('assertCanBeSupervisor requires an approved veterinarian', () => {
     expect(() =>
-      OrganizationPolicy.assertCanBeSupervisor({ veterinarianStatus: 'APPROVED' }),
+      OrganizationPolicy.assertCanBeSupervisor('CLINIC', { veterinarianStatus: 'APPROVED' }),
     ).not.toThrow();
     expect(() =>
-      OrganizationPolicy.assertCanBeSupervisor({ veterinarianStatus: 'PENDING' }),
+      OrganizationPolicy.assertCanBeSupervisor('CLINIC', { veterinarianStatus: 'PENDING' }),
     ).toThrow(AppError);
+  });
+
+  it('assertCanBeSupervisor skips the veterinarian check for CHAT_ROOM', () => {
+    expect(() =>
+      OrganizationPolicy.assertCanBeSupervisor('CHAT_ROOM', { veterinarianStatus: 'NOT_APPLIED' }),
+    ).not.toThrow();
   });
 
   it('assertCanHoldRole gates the VETERINARIAN org role on approved status', () => {

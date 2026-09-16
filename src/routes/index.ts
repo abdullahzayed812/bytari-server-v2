@@ -77,6 +77,8 @@ import {
 import { createVetJobRouter, createAdminVetJobRouter } from '../modules/vet-jobs/index.js';
 import { createVetCourseRouter, createAdminVetCourseRouter } from '../modules/vet-courses/index.js';
 import { createSyndicateRouter, createAdminSyndicateRouter } from '../modules/syndicates/index.js';
+import { createChatRoomRouter, createAdminChatRoomRouter } from '../modules/chat-rooms/index.js';
+import { createReportRouter, createAdminReportRouter } from '../modules/reports/index.js';
 import {
   createContentRouter,
   createContentCategoryRouter,
@@ -264,6 +266,17 @@ export function createApiRouter(c: Container): Router {
   // new. Creation is ADMIN-only, under `/admin/syndicates`.
   router.use('/syndicates', createSyndicateRouter(c));
 
+  // Global Chat — public discussion rooms. A room is an `organizations` row
+  // (type CHAT_ROOM) reusing membership/supervisor RBAC; its discussion
+  // reuses the existing `/conversations/*` message endpoints as-is via the
+  // `conversationId` this router's `GET /chat-rooms/:id` response includes.
+  // Creation is ADMIN-only, under `/admin/chat-rooms`.
+  router.use('/chat-rooms', createChatRoomRouter(c));
+
+  // Content reporting ("الإبلاغ عن الرسالة") — any authenticated user may
+  // report a message or a room; admin queue under `/admin/reports`.
+  router.use('/', createReportRouter(c));
+
   // --- Phase 14: content management --------------------------
   // Public reads of PUBLISHED content; admin/supervisor management under
   // `/admin/content*`. Realtime `content:feed` wired in `server.ts`.
@@ -298,6 +311,8 @@ export function createApiRouter(c: Container): Router {
   router.use('/admin', createAdminVetJobRouter(c));
   router.use('/admin', createAdminVetCourseRouter(c));
   router.use('/admin', createAdminSyndicateRouter(c));
+  router.use('/admin', createAdminChatRoomRouter(c));
+  router.use('/admin', createAdminReportRouter(c));
   router.use('/admin/animals', createAdminAnimalRouter(c));
   router.use('/admin', createSupportAdminRouter(c));
   router.use('/admin', createAdminContentRouter(c));

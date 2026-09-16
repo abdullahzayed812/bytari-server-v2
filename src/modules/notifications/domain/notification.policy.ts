@@ -592,7 +592,15 @@ export class NotificationPolicy {
     if (!conv) return [];
 
     const recipients = new Set<string>();
-    if (conv.type === 'PET_OWNER_VETERINARIAN') {
+    if (conv.type === 'CHAT_ROOM') {
+      // Global Chat — every active, non-muted room member except the sender.
+      const ids = await this.deps.conversations.listActiveParticipantUserIds(conversationId, {
+        excludeUserId: sender,
+        excludeMuted: true,
+        limit: RECIPIENT_FANOUT_CAP,
+      });
+      for (const id of ids) recipients.add(id);
+    } else if (conv.type === 'PET_OWNER_VETERINARIAN') {
       // Direct 1:1 marketplace deal — the other participant.
       for (const id of [conv.petOwnerUserId, conv.veterinarianUserId]) {
         if (id && id !== sender) recipients.add(id);

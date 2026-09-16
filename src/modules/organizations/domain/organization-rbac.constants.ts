@@ -118,6 +118,15 @@ export const ORG_PERMISSION_KEYS = [
   // to NOBODY by default (OWNER override only), same as `farm.subscription.manage` —
   // a mass-send action is sensitive enough to require an explicit supervisor grant. ---
   'organization.broadcast.send',
+  // --- Global Chat rooms — CHAT_ROOM organizations ---
+  // A room has NO self-service creation, same as SYNDICATE — an ADMIN creates
+  // it and assigns authorized moderators as SUPERVISOR members with a subset
+  // of these keys (plus the already-generic `member.read`/`member.remove` for
+  // removing a disruptive member — no `chat_room.member.remove` duplicate).
+  // Joining/leaving/messaging need no permission (public, gated only on the
+  // room being ACTIVE), mirroring the farm join-code flow.
+  'chat_room.rules.manage',
+  'chat_room.message.delete',
 ] as const;
 export type OrgPermissionKey = (typeof ORG_PERMISSION_KEYS)[number];
 
@@ -213,6 +222,8 @@ export const ORG_PERMISSION_DEFINITIONS: Record<OrgPermissionKey, string> = {
   'syndicate.submission.read': 'View this syndicate’s requests and inquiries',
   'syndicate.submission.respond': 'Respond to and close this syndicate’s requests and inquiries',
   'organization.broadcast.send': 'Send a message to everyone following this organization',
+  'chat_room.rules.manage': 'Update this chat room’s rules, image and pinned message',
+  'chat_room.message.delete': 'Delete another member’s inappropriate message in this chat room',
 };
 
 /**

@@ -135,6 +135,11 @@ export class OrganizationController {
     sendSuccess(res, await this.organizations.finalizeLogo(org.id, this.actor(req), body));
   };
 
+  removeLogo = async (req: Request, res: Response): Promise<void> => {
+    const org = requireOrganization(req);
+    sendSuccess(res, await this.organizations.removeLogo(org.id, this.actor(req)));
+  };
+
   // --- gallery --------------------------------------------------------
 
   requestGalleryUploadUrl = async (req: Request, res: Response): Promise<void> => {
@@ -295,7 +300,7 @@ export class OrganizationController {
     const body = validatedBody<AssignSupervisorBody>(req);
     const supervisor = await this.supervisors.assign(
       org.id,
-      { userId: body.userId, permissions: body.permissions },
+      { userId: body.userId, email: body.email, permissions: body.permissions },
       this.actor(req),
     );
     sendSuccess(res, supervisor, StatusCodes.CREATED);

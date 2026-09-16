@@ -33,6 +33,11 @@ const HAS_PROFILE_FIELDS: ReadonlySet<OrganizationType> = new Set<OrganizationTy
   'CLINIC',
   'VETERINARY_OFFICE',
   'VETERINARY_STORE',
+  // CHAT_ROOM only wants the logo (room image) + name/description out of this
+  // shape — the mobile room-edit form simply never renders the unused
+  // address/phone/services/social fields. Reuses the logo upload/replace/
+  // remove endpoints wholesale instead of building a third image seam.
+  'CHAT_ROOM',
 ]);
 
 export interface OrganizationCreatorContext {
@@ -84,9 +89,11 @@ export const OrganizationPolicy = {
 
   /**
    * May `target` be assigned as an organization SUPERVISOR? A supervisor must be
-   * a globally APPROVED veterinarian (spec §15).
+   * a globally APPROVED veterinarian (spec §15) — EXCEPT for CHAT_ROOM, whose
+   * moderators are drawn from all registered users, not just approved vets.
    */
-  assertCanBeSupervisor(target: { veterinarianStatus: string }): void {
+  assertCanBeSupervisor(type: OrganizationType, target: { veterinarianStatus: string }): void {
+    if (type === 'CHAT_ROOM') return;
     if (target.veterinarianStatus !== 'APPROVED') {
       throw new ForbiddenError(
         'Only an approved veterinarian can be assigned as an organization supervisor',

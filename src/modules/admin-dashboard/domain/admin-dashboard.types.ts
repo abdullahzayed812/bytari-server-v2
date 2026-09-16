@@ -34,7 +34,16 @@ export type AdminDashboardCardId = (typeof ADMIN_DASHBOARD_CARD_IDS)[number];
 
 export interface AdminDashboardCard {
   id: AdminDashboardCardId;
+  /** New/unseen items since the caller's last visit to this card — the red notification badge. */
   count: number;
+  /**
+   * How many items in this section are currently active/approved/live (e.g.
+   * ACTIVE organizations, APPROVED veterinarians). For sections with no
+   * active/inactive lifecycle (chats, broadcasts, moderation queues), this is
+   * simply the total item count already available from that section's own
+   * listing — never a second bespoke query.
+   */
+  activeCount: number;
 }
 
 export interface AdminActivityItem {

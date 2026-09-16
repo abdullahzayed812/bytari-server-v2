@@ -54,7 +54,7 @@ const profileFieldsShape = {
  * Ignored server-side for a `type` without a directory profile.
  */
 export const createOrganizationBodySchema = z.object({
-  type: z.enum(ORGANIZATION_TYPES).exclude(['SYNDICATE']),
+  type: z.enum(ORGANIZATION_TYPES).exclude(['SYNDICATE', 'CHAT_ROOM']),
   name: z.string().trim().min(2).max(160),
   description: z.string().trim().max(2000).optional(),
   details: z.object(profileFieldsShape).optional(),
@@ -224,10 +224,16 @@ export const organizationMemberParamSchema = z.object({
 
 // --- supervisors -------------------------------------------------
 
-export const assignSupervisorBodySchema = z.object({
-  userId: z.string().uuid(),
-  permissions: z.array(z.enum(ORG_PERMISSION_KEYS)).max(ORG_PERMISSION_KEYS.length),
-});
+export const assignSupervisorBodySchema = z
+  .object({
+    userId: z.string().uuid().optional(),
+    email: z.string().trim().toLowerCase().email().optional(),
+    permissions: z.array(z.enum(ORG_PERMISSION_KEYS)).max(ORG_PERMISSION_KEYS.length),
+  })
+  .refine((v) => Boolean(v.userId) !== Boolean(v.email), {
+    message: 'Provide exactly one of userId or email',
+    path: ['userId'],
+  });
 export type AssignSupervisorBody = z.infer<typeof assignSupervisorBodySchema>;
 
 export const updateSupervisorBodySchema = z.object({

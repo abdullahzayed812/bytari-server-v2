@@ -581,6 +581,43 @@ export class OrganizationService {
     return this.attachMedia(withDetails);
   }
 
+  /** Clears the organization's logo, if any. */
+  async removeLogo(organizationId: string, actor: OrgActor): Promise<OrganizationWithDetails> {
+    const org = await this.getById(organizationId);
+    OrganizationPolicy.assertHasProfileFields(org.type);
+
+    const row = await this.organizations.findProfileRow(org.type, organizationId);
+    const previousKey = row?.logo_key ?? null;
+    if (!previousKey) {
+      throw new NotFoundError('This organization has no logo to remove');
+    }
+
+    await this.db.transaction(async (tx) => {
+      await this.organizations.updateProfileFields(org.type, organizationId, { logoKey: null }, tx);
+      await this.audit.record(
+        {
+          action: AuditAction.ORGANIZATION_LOGO_UPDATED,
+          entityType: AuditEntityType.ORGANIZATION,
+          entityId: organizationId,
+          actorUserId: actor.actorUserId,
+          metadata: { organizationId, removed: true },
+          context: actor.context,
+        },
+        tx,
+      );
+    });
+
+    try {
+      await this.storage.delete(previousKey);
+    } catch (err) {
+      this.log.error({ err, organizationId }, 'failed to delete removed organization logo — needs a sweep');
+    }
+
+    const withDetails = await this.organizations.findByIdWithDetails(organizationId);
+    if (!withDetails) throw new InternalError('organization vanished after logo update');
+    return this.attachMedia(withDetails);
+  }
+
   // --- gallery (presigned direct-to-storage upload, N photos) -------
 
   /** Same validation/URL shape as {@link requestLogoUploadUrl} — one photo at a time. */

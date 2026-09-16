@@ -36,6 +36,7 @@ function rowToParticipant(row: ParticipantRow): Participant {
     lastReadMessageId: row.last_read_message_id,
     joinedAt: row.joined_at.toISOString(),
     leftAt: row.left_at ? row.left_at.toISOString() : null,
+    notificationsMuted: row.notifications_muted,
   };
 }
 
@@ -93,6 +94,17 @@ export class ConversationRepository {
         organization_id: organizationId,
         member_user_id: memberUserId,
       })
+      .first();
+    return row ? rowToConversation(row) : null;
+  }
+
+  /** A room's single discussion thread — one per CHAT_ROOM organization. */
+  async findChatRoomConversation(
+    organizationId: string,
+    trx?: Knex.Transaction,
+  ): Promise<Conversation | null> {
+    const row = await this.conn(trx)<ConversationRow>(T_CONV)
+      .where({ type: 'CHAT_ROOM', organization_id: organizationId })
       .first();
     return row ? rowToConversation(row) : null;
   }
@@ -204,6 +216,57 @@ export class ConversationRepository {
     await trx(T_PART)
       .where({ conversation_id: conversationId, user_id: userId })
       .update({ last_read_message_id: messageId, updated_at: trx.fn.now() });
+  }
+
+  /** CHAT_ROOM only — "mute this room's notifications" for one member. */
+  async setParticipantMuted(
+    conversationId: string,
+    userId: string,
+    muted: boolean,
+    trx?: Knex.Transaction,
+  ): Promise<void> {
+    await this.conn(trx)(T_PART)
+      .where({ conversation_id: conversationId, user_id: userId })
+      .update({ notifications_muted: muted, updated_at: (trx ?? this.db).fn.now() });
+  }
+
+  /** Soft-leave — marks the participant row `left_at`, does not delete it. */
+  async leaveParticipant(conversationId: string, userId: string, trx: Knex.Transaction): Promise<void> {
+    await trx(T_PART)
+      .where({ conversation_id: conversationId, user_id: userId })
+      .update({ left_at: trx.fn.now(), updated_at: trx.fn.now() });
+  }
+
+  /** Re-activates a participant row that previously left (rejoining a room). */
+  async rejoinParticipant(conversationId: string, userId: string, trx: Knex.Transaction): Promise<void> {
+    await trx(T_PART)
+      .where({ conversation_id: conversationId, user_id: userId })
+      .update({ left_at: null, updated_at: trx.fn.now() });
+  }
+
+  /** Active (not left), non-muted member ids of a conversation — for notification fan-out. */
+  async listActiveParticipantUserIds(
+    conversationId: string,
+    opts: { excludeUserId?: string; excludeMuted?: boolean; limit: number },
+    trx?: Knex.Transaction,
+  ): Promise<string[]> {
+    const qb = this.conn(trx)<ParticipantRow>(T_PART)
+      .where({ conversation_id: conversationId })
+      .whereNull('left_at');
+    if (opts.excludeUserId) qb.andWhereNot('user_id', opts.excludeUserId);
+    if (opts.excludeMuted) qb.andWhere('notifications_muted', false);
+    const rows = await qb.limit(opts.limit).select('user_id');
+    return rows.map((r) => r.user_id);
+  }
+
+  /** ACTIVE (not left) member count of a conversation — a room's "N عضو". */
+  async countActiveParticipants(conversationId: string, trx?: Knex.Transaction): Promise<number> {
+    const row = await this.conn(trx)(T_PART)
+      .where({ conversation_id: conversationId })
+      .whereNull('left_at')
+      .count<{ count: string }>({ count: '*' })
+      .first();
+    return Number(row?.count ?? 0);
   }
 
   /**

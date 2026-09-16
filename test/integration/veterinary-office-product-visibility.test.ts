@@ -81,6 +81,31 @@ describe('veterinary office product — hide/show is orthogonal to delete', () =
     expect(ids).not.toContain(visible.id);
   });
 
+  it('the "?hidden=false" filter returns only non-hidden products (regression: z.coerce.boolean would invert this)', async () => {
+    const admin = await registerAdmin(app);
+    const owner = await registerApprovedVet(app);
+    const office = await createActiveOrganization(app, owner.accessToken, admin.accessToken, {
+      type: 'VETERINARY_OFFICE',
+    });
+    const hidden = await createVeterinaryOfficeProduct(app, owner.accessToken, office.id, {
+      name: 'Hidden two',
+    });
+    const visible = await createVeterinaryOfficeProduct(app, owner.accessToken, office.id, {
+      name: 'Visible two',
+    });
+    await request(app)
+      .patch(`/api/v1/organizations/${office.id}/office-products/${hidden.id}`)
+      .set(bearer(owner.accessToken))
+      .send({ isHidden: true });
+
+    const visibleList = await request(app)
+      .get(`/api/v1/organizations/${office.id}/office-products?hidden=false`)
+      .set(bearer(owner.accessToken));
+    const ids = visibleList.body.data.map((p: { id: string }) => p.id);
+    expect(ids).toContain(visible.id);
+    expect(ids).not.toContain(hidden.id);
+  });
+
   it('showing a hidden product again restores it to the public catalog', async () => {
     const admin = await registerAdmin(app);
     const owner = await registerApprovedVet(app);

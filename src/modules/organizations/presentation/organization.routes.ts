@@ -98,6 +98,13 @@ export function createOrganizationRouter(c: Container): Router {
     authorizeOrg('organization.update'),
     asyncHandler(ctrl.finalizeLogo),
   );
+  r.delete(
+    '/:organizationId/logo',
+    validate({ params: organizationIdParamSchema }),
+    withOrganization,
+    authorizeOrg('organization.update'),
+    asyncHandler(ctrl.removeLogo),
+  );
   // Gallery — same guard as the logo; up to 8 photos, appended one at a time.
   // `allowInactiveForOwner` — a registration screen ("تسجيل العيادة") uploads
   // gallery photos right after creation, while the organization is still
