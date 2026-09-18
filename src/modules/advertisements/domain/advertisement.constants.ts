@@ -46,6 +46,10 @@ export const AD_PLACEMENTS = [
   'CATTLE_FARMS',
   // Veterinarian Home — the vet-mode home screen's ad slot.
   'VETERINARIAN_HOME',
+  // Veterinarian Store — the vet-owned store's home screen ad slot. Already
+  // in the DB CHECK constraint (`20260928010000_veterinarian_store.ts`); this
+  // entry was missed when that migration landed.
+  'VETERINARIAN_STORE',
 ] as const;
 export type AdPlacement = (typeof AD_PLACEMENTS)[number];
 export const DEFAULT_AD_PLACEMENT: AdPlacement = 'HOME';

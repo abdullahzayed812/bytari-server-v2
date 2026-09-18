@@ -5,6 +5,7 @@ import { closeTestDb, ensureSchema, getTestDb, resetDb } from '../helpers/db.js'
 import {
   approveOrganization,
   bearer,
+  createActiveOrganization,
   createCattleFarm,
   createFarm,
   createOrganization,
@@ -18,7 +19,7 @@ import {
   setFarmSubscriptionAsAdmin,
 } from '../helpers/factories.js';
 
-const { app } = buildTestApp();
+const { app, container } = buildTestApp();
 
 beforeAll(() => ensureSchema());
 beforeEach(() => resetDb());
@@ -375,5 +376,58 @@ describe('admin Poultry Farms management list', () => {
       endDate: '2099-01-01',
     });
     expect(set.status).toBe(403);
+  });
+});
+
+describe('admin organizations list — logoUrl thumbnail', () => {
+  it('GET /admin/organizations exposes a resolved logoUrl per row once the owner sets one, batched not N+1', async () => {
+    const admin = await registerAdmin(app);
+    const owner = await registerApprovedVet(app);
+    const office = await createActiveOrganization(app, owner.accessToken, admin.accessToken, {
+      type: 'VETERINARY_OFFICE',
+      name: 'مكتب بيطري',
+    });
+
+    const before = await request(app)
+      .get('/api/v1/admin/organizations')
+      .set(bearer(admin.accessToken))
+      .query({ type: 'VETERINARY_OFFICE' });
+    expect(before.status).toBe(200);
+    const rowBefore = before.body.data.find((o: { id: string }) => o.id === office.id);
+    expect(rowBefore.logoUrl).toBeFalsy();
+
+    const upload = await request(app)
+      .post(`/api/v1/organizations/${office.id}/logo/upload-url`)
+      .set(bearer(owner.accessToken))
+      .send({ filename: 'logo.jpg', mimeType: 'image/jpeg', size: 1024 });
+    const storageKey = upload.body.data.storageKey as string;
+    await container.objectStorage.put(storageKey, Buffer.from('fake-bytes'), {
+      contentType: 'image/jpeg',
+    });
+    await request(app)
+      .post(`/api/v1/organizations/${office.id}/logo`)
+      .set(bearer(owner.accessToken))
+      .send({ storageKey, mimeType: 'image/jpeg' });
+
+    const after = await request(app)
+      .get('/api/v1/admin/organizations')
+      .set(bearer(admin.accessToken))
+      .query({ type: 'VETERINARY_OFFICE' });
+    const rowAfter = after.body.data.find((o: { id: string }) => o.id === office.id);
+    expect(rowAfter.logoUrl).toBeTruthy();
+  });
+
+  it('a FARM row (not a logoable type) has a null logoUrl, no crash', async () => {
+    const admin = await registerAdmin(app);
+    const owner = await registerApprovedVet(app);
+    const farm = await createFarm(app, owner.accessToken, admin.accessToken);
+
+    const list = await request(app)
+      .get('/api/v1/admin/organizations')
+      .set(bearer(admin.accessToken))
+      .query({ type: 'FARM' });
+    expect(list.status).toBe(200);
+    const row = list.body.data.find((o: { id: string }) => o.id === farm.id);
+    expect(row.logoUrl).toBeFalsy();
   });
 });

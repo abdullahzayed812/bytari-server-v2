@@ -174,6 +174,15 @@ export interface OrganizationDetails extends Partial<OrganizationProfile> {
   licenseNumber?: string | null;
   /** Resolved license document photo URLs (R2 keys resolved server-side). */
   licenseDocumentUrls?: string[];
+  /**
+   * Raw R2 storage keys backing {@link OrganizationProfile.galleryUrls} —
+   * owner/admin-only (via `attachMedia`, never on the public discover DTO).
+   * The gallery removal endpoint is keyed by `storageKey`, not an id/index,
+   * so the edit screen needs these to build a working remove button.
+   */
+  galleryKeys?: string[];
+  /** Same as {@link galleryKeys}, for {@link licenseDocumentUrls}. */
+  licenseDocumentKeys?: string[];
 }
 
 export interface OrganizationWithDetails extends Organization {

@@ -155,6 +155,10 @@ describe('product images', () => {
     expect(remove.status).toBe(200);
     expect(remove.body.data.images).toHaveLength(0);
     expect(remove.body.data.primaryImageUrl).toBeNull();
+
+    // The R2 object itself must be deleted too, not just the DB row — a bare
+    // `deleteImage` DB call without `storage.delete` orphans the file forever.
+    expect(await container.objectStorage.exists(storageKey)).toBe(false);
   });
 
   it('a non-member cannot request an upload URL (403)', async () => {

@@ -1,5 +1,8 @@
 import type { Knex } from 'knex';
-import { computeFarmSubscriptionStatus } from '../../organizations/domain/organization.types.js';
+import {
+  computeFarmSubscriptionStatus,
+  type OrganizationType,
+} from '../../organizations/domain/organization.types.js';
 import {
   rowToFarmSubscriptionRenewalRequest,
   type FarmSubscriptionRenewalRequest,
@@ -318,17 +321,21 @@ export class FarmSubscriptionRenewalRepository {
    * org, unlike {@link listForOrganization}) — backs the admin dashboard's
    * cross-cutting "pending tasks" list. `farm_subscription_renewal_requests`
    * has no organization-type column, so this reuses unchanged for FARM /
-   * VETERINARY_OFFICE / CLINIC subscription requests alike.
+   * VETERINARY_OFFICE / CLINIC subscription requests alike; `organizationType`
+   * filters the join to one type (e.g. the "المكاتب" admin screen only wants
+   * VETERINARY_OFFICE requests, never CLINIC/FARM ones mixed in).
    */
   async listAllPendingForAdmin(
-    filter: { page: number; pageSize: number },
+    filter: { page: number; pageSize: number; organizationType?: OrganizationType },
     trx?: Knex.Transaction,
   ): Promise<{ items: Array<FarmSubscriptionRenewalRequest & { organizationName: string }>; total: number }> {
     const conn = this.conn(trx);
-    const base = (): Knex.QueryBuilder =>
-      conn(`${TABLE} as req`)
+    const base = (): Knex.QueryBuilder => {
+      const qb = conn(`${TABLE} as req`)
         .join('organizations as o', 'o.id', 'req.organization_id')
         .where('req.status', 'PENDING');
+      return filter.organizationType ? qb.where('o.type', filter.organizationType) : qb;
+    };
 
     const countRow = await base().count<{ count: string }>({ count: '*' }).first();
     const total = Number(countRow?.count ?? 0);

@@ -72,6 +72,11 @@ const schemas: Obj = {
         description: 'For when the exact dateOfBirth is unknown',
       },
       galleryUrls: { type: 'array', items: { type: 'string' }, description: 'Resolved photo URLs' },
+      galleryKeys: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Raw R2 storage keys backing galleryUrls, for remove-by-key',
+      },
       createdAt: { type: 'string', format: 'date-time' },
       updatedAt: { type: 'string', format: 'date-time' },
     },

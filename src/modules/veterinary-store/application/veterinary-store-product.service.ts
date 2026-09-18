@@ -390,6 +390,15 @@ export class VeterinaryStoreProductService {
       return result;
     });
 
+    try {
+      await this.storage.delete(image.image_key);
+    } catch (err) {
+      this.log.error(
+        { err, organizationId, productId, imageId },
+        'failed to delete removed product image — needs a sweep',
+      );
+    }
+
     return this.toDTO(updated);
   }
 

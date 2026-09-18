@@ -82,27 +82,30 @@ export function createOrganizationRouter(c: Container): Router {
     authorizeOrg('organization.update'),
     asyncHandler(ctrl.update),
   );
-  // Logo — same guard as PATCH (`organization.update`); CLINIC / VETERINARY_OFFICE
-  // / VETERINARY_STORE only (`OrganizationPolicy.assertHasProfileFields`).
+  // Logo — same guard as the gallery/license documents (including
+  // `allowInactiveForOwner`: a registration screen ("تسجيل العيادة") uploads
+  // the logo right after creation, while the organization is still PENDING
+  // an admin's approval). CLINIC / VETERINARY_OFFICE / VETERINARY_STORE only
+  // (`OrganizationPolicy.assertHasProfileFields`).
   r.post(
     '/:organizationId/logo/upload-url',
     validate({ params: organizationIdParamSchema, body: logoUploadUrlBodySchema }),
     withOrganization,
-    authorizeOrg('organization.update'),
+    authorizeOrg('organization.update', { allowInactiveForOwner: true }),
     asyncHandler(ctrl.requestLogoUploadUrl),
   );
   r.post(
     '/:organizationId/logo',
     validate({ params: organizationIdParamSchema, body: finalizeLogoBodySchema }),
     withOrganization,
-    authorizeOrg('organization.update'),
+    authorizeOrg('organization.update', { allowInactiveForOwner: true }),
     asyncHandler(ctrl.finalizeLogo),
   );
   r.delete(
     '/:organizationId/logo',
     validate({ params: organizationIdParamSchema }),
     withOrganization,
-    authorizeOrg('organization.update'),
+    authorizeOrg('organization.update', { allowInactiveForOwner: true }),
     asyncHandler(ctrl.removeLogo),
   );
   // Gallery — same guard as the logo; up to 8 photos, appended one at a time.

@@ -144,6 +144,17 @@ describe('advertisements — campaign creation & authorization', () => {
       ).status,
     ).toBe(422);
   });
+
+  it('accepts VETERINARIAN_STORE — the DB CHECK constraint already allows it, the placement enum must too', async () => {
+    const admin = await registerAdmin(app);
+    const res = await createAdCampaign(app, admin.accessToken, {
+      placement: 'VETERINARIAN_STORE',
+      type: 'BANNER',
+      title: 'x',
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.data.placement).toBe('VETERINARIAN_STORE');
+  });
 });
 
 // --- slides: content, ordering, type rules -------------------

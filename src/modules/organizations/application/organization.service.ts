@@ -171,16 +171,21 @@ export class OrganizationService {
   ): Promise<OrganizationWithDetails> {
     if (!OrganizationPolicy.hasProfileFields(withDetails.type)) return withDetails;
     const row = await this.organizations.findProfileRow(withDetails.type, withDetails.id);
+    const galleryKeys = row?.gallery_keys ?? [];
+    const licenseDocumentKeys = row?.license_document_keys ?? [];
     const [logoUrl, galleryUrls, licenseDocumentUrls] = await Promise.all([
       this.resolveLogoUrl(row?.logo_key ?? null),
-      this.resolveGalleryUrls(row?.gallery_keys ?? []),
-      this.resolveGalleryUrls(row?.license_document_keys ?? []),
+      this.resolveGalleryUrls(galleryKeys),
+      this.resolveGalleryUrls(licenseDocumentKeys),
     ]);
     const extra =
       withDetails.type === 'VETERINARY_OFFICE' || withDetails.type === 'CLINIC'
-        ? { licenseDocumentUrls }
+        ? { licenseDocumentUrls, licenseDocumentKeys }
         : {};
-    return { ...withDetails, details: { ...withDetails.details, logoUrl, galleryUrls, ...extra } };
+    return {
+      ...withDetails,
+      details: { ...withDetails.details, logoUrl, galleryUrls, galleryKeys, ...extra },
+    };
   }
 
   async create(input: CreateOrganizationInput, actor: OrgActor): Promise<OrganizationWithDetails> {
@@ -369,15 +374,71 @@ export class OrganizationService {
     return org;
   }
 
-  listForAdmin(filter: ListOrganizationsFilter): Promise<{ items: Organization[]; total: number }> {
-    return this.organizations.list(filter);
+  async listForAdmin(
+    filter: ListOrganizationsFilter,
+  ): Promise<{ items: Array<Organization & { logoUrl?: string | null }>; total: number }> {
+    const { items, total } = await this.organizations.list(filter);
+    return { items: await this.attachLogoUrls(items), total };
   }
 
-  listPendingForAdmin(
+  async listPendingForAdmin(
     page: number,
     pageSize: number,
-  ): Promise<{ items: Organization[]; total: number }> {
-    return this.organizations.list({ page, pageSize, status: 'PENDING' });
+  ): Promise<{ items: Array<Organization & { logoUrl?: string | null }>; total: number }> {
+    const { items, total } = await this.organizations.list({ page, pageSize, status: 'PENDING' });
+    return { items: await this.attachLogoUrls(items), total };
+  }
+
+  /**
+   * Batched `logoUrl` resolution for an admin LIST page (bounded by
+   * `pageSize`, never the whole table) — mirrors `listMine`'s pattern so the
+   * "المكاتب"/"العيادات" admin screens can show a thumbnail per row without
+   * an N+1 query per organization.
+   */
+  private async attachLogoUrls<T extends Organization>(
+    items: T[],
+  ): Promise<Array<T & { logoUrl: string | null }>> {
+    const detailsTableByType: Partial<Record<OrganizationType, string>> = {
+      CLINIC: 'clinic_details',
+      VETERINARY_OFFICE: 'veterinary_office_details',
+      VETERINARY_STORE: 'veterinary_store_details',
+    };
+    const byType = new Map<OrganizationType, string[]>();
+    for (const item of items) {
+      if (!detailsTableByType[item.type]) continue;
+      const ids = byType.get(item.type) ?? [];
+      ids.push(item.id);
+      byType.set(item.type, ids);
+    }
+    if (byType.size === 0) return items.map((item) => ({ ...item, logoUrl: null }));
+
+    const logoKeyByOrg = new Map<string, string | null>();
+    await Promise.all(
+      [...byType.entries()].map(async ([type, ids]) => {
+        const table = detailsTableByType[type] as string;
+        const rows = (await this.db(table)
+          .whereIn('organization_id', ids)
+          .select('organization_id', 'logo_key')) as Array<{
+          organization_id: string;
+          logo_key: string | null;
+        }>;
+        for (const r of rows) logoKeyByOrg.set(r.organization_id, r.logo_key);
+      }),
+    );
+
+    const urlByKey = new Map<string, string | null>();
+    await Promise.all(
+      [...logoKeyByOrg.values()]
+        .filter((key): key is string => key !== null)
+        .map(async (key) => {
+          if (!urlByKey.has(key)) urlByKey.set(key, await this.resolveLogoUrl(key));
+        }),
+    );
+
+    return items.map((item) => {
+      const logoKey = logoKeyByOrg.get(item.id) ?? null;
+      return { ...item, logoUrl: logoKey ? (urlByKey.get(logoKey) ?? null) : null };
+    });
   }
 
   /**
@@ -961,10 +1022,12 @@ export class OrganizationService {
    * | `null`) so the species-specific farm landings can filter without an extra
    * request per farm. Always `null` for non-FARM types. VETERINARY_OFFICE /
    * CLINIC rows also carry the derived subscription status plus
-   * address/phone/logoUrl (Veterinary Office Dashboard's "my organizations" card —
-   * spec §3/§4, `OwnedOrganizationCard`) — always `null` for other types, sourced
-   * from the SAME batched `*_details` query as the subscription dates (no extra
-   * round trip).
+   * address/phone/logoUrl/galleryUrls (Veterinary Office Dashboard's "my
+   * organizations" card — spec §3/§4, `OwnedOrganizationCard`) — always
+   * `null`/`[]` for other types, sourced from the SAME batched `*_details`
+   * query as the subscription dates (no extra round trip). `galleryUrls` lets
+   * the card fall back to a registration photo when the owner hasn't set a
+   * logo yet (registration collects gallery/license photos, never a logo).
    */
   async listMine(userId: string): Promise<
     Array<
@@ -976,6 +1039,7 @@ export class OrganizationService {
         address: string | null;
         phone: string | null;
         logoUrl: string | null;
+        galleryUrls: string[];
       }
     >
   > {
@@ -1000,7 +1064,10 @@ export class OrganizationService {
       string,
       { status: FarmSubscriptionStatus; endDate: string | null }
     >();
-    const profileByOrg = new Map<string, { address: string | null; phone: string | null; logoKey: string | null }>();
+    const profileByOrg = new Map<
+      string,
+      { address: string | null; phone: string | null; logoKey: string | null; galleryKeys: string[] }
+    >();
     const officeIds = orgs.filter((o) => o.type === 'VETERINARY_OFFICE').map((o) => o.id);
     const clinicIds = orgs.filter((o) => o.type === 'CLINIC').map((o) => o.id);
     for (const [table, ids] of [
@@ -1017,6 +1084,7 @@ export class OrganizationService {
           'address',
           'phone',
           'logo_key',
+          'gallery_keys',
         )) as Array<{
         organization_id: string;
         subscription_start_date: string | Date | null;
@@ -1024,6 +1092,7 @@ export class OrganizationService {
         address: string | null;
         phone: string | null;
         logo_key: string | null;
+        gallery_keys: string[] | null;
       }>;
       for (const r of rows) {
         const startDate = toDateOnlyString(r.subscription_start_date);
@@ -1036,17 +1105,20 @@ export class OrganizationService {
           address: r.address,
           phone: r.phone,
           logoKey: r.logo_key,
+          galleryKeys: r.gallery_keys ?? [],
         });
       }
     }
     const logoUrlByKey = new Map<string, string | null>();
+    const allKeys = new Set<string>();
+    for (const p of profileByOrg.values()) {
+      if (p.logoKey) allKeys.add(p.logoKey);
+      for (const key of p.galleryKeys) allKeys.add(key);
+    }
     await Promise.all(
-      [...profileByOrg.values()]
-        .map((p) => p.logoKey)
-        .filter((key): key is string => key !== null)
-        .map(async (key) => {
-          if (!logoUrlByKey.has(key)) logoUrlByKey.set(key, await this.resolveLogoUrl(key));
-        }),
+      [...allKeys].map(async (key) => {
+        if (!logoUrlByKey.has(key)) logoUrlByKey.set(key, await this.resolveLogoUrl(key));
+      }),
     );
 
     return orgs.map((o) => {
@@ -1060,6 +1132,9 @@ export class OrganizationService {
         address: profile?.address ?? null,
         phone: profile?.phone ?? null,
         logoUrl: profile?.logoKey ? (logoUrlByKey.get(profile.logoKey) ?? null) : null,
+        galleryUrls: (profile?.galleryKeys ?? [])
+          .map((key) => logoUrlByKey.get(key))
+          .filter((url): url is string => url != null),
       };
     });
   }

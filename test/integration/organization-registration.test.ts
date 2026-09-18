@@ -132,6 +132,65 @@ describe('organization registration — gallery + license documents while PENDIN
     expect(register.body.data.details.galleryUrls).toHaveLength(1);
   });
 
+  it('the owner-authenticated detail response exposes galleryKeys/licenseDocumentKeys so the edit screen can remove a specific photo', async () => {
+    const owner = await registerApprovedVet(app);
+    const org = await createOrganization(app, owner.accessToken, { type: 'CLINIC', name: 'عيادة' });
+
+    const upload = await request(app)
+      .post(`/api/v1/organizations/${org.id}/gallery/upload-url`)
+      .set(bearer(owner.accessToken))
+      .send({ filename: 'a.jpg', mimeType: 'image/jpeg', size: 1024 });
+    const storageKey = upload.body.data.storageKey as string;
+    await container.objectStorage.put(storageKey, Buffer.from('fake-bytes'), {
+      contentType: 'image/jpeg',
+    });
+    await request(app)
+      .post(`/api/v1/organizations/${org.id}/gallery`)
+      .set(bearer(owner.accessToken))
+      .send({ storageKey, mimeType: 'image/jpeg' });
+
+    const detail = await request(app)
+      .get(`/api/v1/organizations/${org.id}`)
+      .set(bearer(owner.accessToken));
+    expect(detail.body.data.details.galleryKeys).toEqual([storageKey]);
+
+    // The removal endpoint is keyed by storageKey — prove the key we read back
+    // actually works, closing the loop the mobile edit screen depends on.
+    const removed = await request(app)
+      .delete(`/api/v1/organizations/${org.id}/gallery?storageKey=${encodeURIComponent(storageKey)}`)
+      .set(bearer(owner.accessToken));
+    expect(removed.status).toBe(200);
+    expect(removed.body.data.details.galleryUrls).toHaveLength(0);
+    expect(removed.body.data.details.galleryKeys).toHaveLength(0);
+  });
+
+  it('GET /organizations (listMine) exposes galleryUrls as a logo fallback — registration never sets a logo', async () => {
+    const owner = await registerApprovedVet(app);
+    const org = await createOrganization(app, owner.accessToken, { type: 'VETERINARY_OFFICE', name: 'مكتب' });
+
+    const upload = await request(app)
+      .post(`/api/v1/organizations/${org.id}/gallery/upload-url`)
+      .set(bearer(owner.accessToken))
+      .send({ filename: 'a.jpg', mimeType: 'image/jpeg', size: 1024 });
+    const storageKey = upload.body.data.storageKey as string;
+    await container.objectStorage.put(storageKey, Buffer.from('fake-bytes'), {
+      contentType: 'image/jpeg',
+    });
+    await request(app)
+      .post(`/api/v1/organizations/${org.id}/gallery`)
+      .set(bearer(owner.accessToken))
+      .send({ storageKey, mimeType: 'image/jpeg' });
+
+    const mine = await request(app)
+      .get('/api/v1/organizations')
+      .set(bearer(owner.accessToken));
+    expect(mine.status).toBe(200);
+    const row = mine.body.data.find((o: { id: string }) => o.id === org.id);
+    expect(row).toBeDefined();
+    expect(row.logoUrl).toBeFalsy();
+    expect(row.galleryUrls).toHaveLength(1);
+  });
+
   it('the owner uploads, replaces, and removes the organization logo', async () => {
     const admin = await registerAdmin(app);
     const owner = await registerApprovedVet(app);
@@ -167,6 +226,28 @@ describe('organization registration — gallery + license documents while PENDIN
       .delete(`/api/v1/organizations/${org.id}/logo`)
       .set(bearer(owner.accessToken));
     expect(again.status).toBe(404);
+  });
+
+  it('the owner uploads a logo before approval, same as gallery/license documents', async () => {
+    const owner = await registerApprovedVet(app);
+    const org = await createOrganization(app, owner.accessToken, { type: 'CLINIC', name: 'عيادة' });
+
+    const upload = await request(app)
+      .post(`/api/v1/organizations/${org.id}/logo/upload-url`)
+      .set(bearer(owner.accessToken))
+      .send({ filename: 'logo.jpg', mimeType: 'image/jpeg', size: 1024 });
+    expect(upload.status).toBe(201);
+    const storageKey = upload.body.data.storageKey as string;
+    await container.objectStorage.put(storageKey, Buffer.from('fake-bytes'), {
+      contentType: 'image/jpeg',
+    });
+
+    const finalize = await request(app)
+      .post(`/api/v1/organizations/${org.id}/logo`)
+      .set(bearer(owner.accessToken))
+      .send({ storageKey, mimeType: 'image/jpeg' });
+    expect(finalize.status).toBe(200);
+    expect(finalize.body.data.details.logoUrl).toBeTruthy();
   });
 
   it('the owner uploads, lists, and removes a license document before approval, up to the 3-document cap', async () => {

@@ -14,7 +14,7 @@ import {
   registerUser,
 } from '../helpers/factories.js';
 
-const { app } = buildTestApp();
+const { app, container } = buildTestApp();
 
 beforeAll(() => ensureSchema());
 beforeEach(() => resetDb());
@@ -449,5 +449,40 @@ describe('veterinary store products — events & audit', () => {
       .count<{ count: string }>({ count: '*' })
       .first();
     expect(Number(cnt?.count ?? 0)).toBe(0);
+  });
+});
+
+describe('veterinary store products — images', () => {
+  it('an owner uploads, registers, and removes a product image; the R2 object is actually deleted, not just the DB row', async () => {
+    const { owner, store } = await setup();
+    const prod = await createVeterinaryStoreProduct(app, owner.accessToken, store.id);
+
+    const upload = await request(app)
+      .post(`${pPath(store.id, prod.id)}/images/upload-url`)
+      .set(bearer(owner.accessToken))
+      .send({ filename: 'a.jpg', mimeType: 'image/jpeg', size: 1024 });
+    expect(upload.status).toBe(200);
+    const storageKey = upload.body.data.storageKey as string;
+
+    await container.objectStorage.put(storageKey, Buffer.from('fake-image-bytes'), {
+      contentType: 'image/jpeg',
+    });
+
+    const register = await request(app)
+      .post(`${pPath(store.id, prod.id)}/images`)
+      .set(bearer(owner.accessToken))
+      .send({ storageKey, mimeType: 'image/jpeg' });
+    expect(register.status).toBe(200);
+    expect(register.body.data.images).toHaveLength(1);
+    expect(register.body.data.primaryImageUrl).toBeTruthy();
+
+    const imageId = register.body.data.images[0].id as string;
+    const remove = await request(app)
+      .delete(`${pPath(store.id, prod.id)}/images/${imageId}`)
+      .set(bearer(owner.accessToken));
+    expect(remove.status).toBe(200);
+    expect(remove.body.data.images).toHaveLength(0);
+    expect(remove.body.data.primaryImageUrl).toBeNull();
+    expect(await container.objectStorage.exists(storageKey)).toBe(false);
   });
 });

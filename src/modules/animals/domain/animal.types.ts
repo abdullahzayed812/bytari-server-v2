@@ -62,8 +62,10 @@ export interface AnimalDTO {
   color: string | null;
   distinguishingFeatures: string | null;
   ageEstimate: AnimalAgeEstimate | null;
-  /** Resolved gallery photo URLs — R2 keys never leave the repository layer. */
+  /** Resolved gallery photo URLs. */
   galleryUrls: string[];
+  /** Raw R2 storage keys backing {@link galleryUrls} — exposed so the edit UI can remove-by-key without a second round trip (mirrors the organization gallery). */
+  galleryKeys: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -216,6 +218,7 @@ export function toAnimalDTO(
     distinguishingFeatures: animal.distinguishingFeatures,
     ageEstimate: animal.ageEstimate,
     galleryUrls,
+    galleryKeys: animal.galleryKeys,
     createdAt: animal.createdAt,
     updatedAt: animal.updatedAt,
   };
