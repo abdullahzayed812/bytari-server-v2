@@ -37,6 +37,12 @@ export const ErrorCode = {
    * allowlist) this is a 401 — the token is real but not sufficient here.
    */
   EMAIL_VERIFICATION_REQUIRED: 'EMAIL_VERIFICATION_REQUIRED',
+  /**
+   * 403 from `authenticate`: a VETERINARIAN-registered account whose application
+   * is not APPROVED yet (not submitted / pending / rejected) — only the onboarding
+   * allowlist is reachable. Not a session problem: the client must not sign out.
+   */
+  VETERINARIAN_ACCOUNT_PENDING_APPROVAL: 'VETERINARIAN_ACCOUNT_PENDING_APPROVAL',
   /** `verify-email` code is wrong, or the email has no outstanding code (never distinguished — anti-enumeration). */
   INVALID_VERIFICATION_CODE: 'INVALID_VERIFICATION_CODE',
   /** `verify-email` code was structurally the current one but its TTL passed. */

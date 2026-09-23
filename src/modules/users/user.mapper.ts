@@ -1,6 +1,7 @@
 import type {
   Gender,
   PublicUser,
+  RegistrationType,
   TraderStatus,
   User,
   UserRow,
@@ -23,6 +24,7 @@ export function rowToUser(row: UserRow): User {
     status: row.status as UserStatus,
     veterinarianStatus: row.veterinarian_status as VeterinarianStatus,
     traderStatus: row.trader_status as TraderStatus,
+    registrationType: row.registration_type as RegistrationType,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -48,6 +50,7 @@ export function toPublicUser(user: User, avatarUrl: string | null = null): Publi
     status: user.status,
     veterinarianStatus: user.veterinarianStatus,
     traderStatus: user.traderStatus,
+    registrationType: user.registrationType,
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString(),
   };

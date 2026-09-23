@@ -452,8 +452,8 @@ export interface Container {
   authenticate: RequestHandler;
   /**
    * Same as `authenticate`, but tolerates a `PENDING_VERIFICATION` account's
-   * token — the small explicit self-service allowlist a freshly-registered,
-   * not-yet-verified user needs (see `authenticate.middleware.ts`'s
+   * token — the small explicit self-service allowlist an ONBOARDING user
+   * (unverified Pet Owner, or not-yet-approved Veterinarian) needs (see `authenticate.middleware.ts`'s
    * `CreateAuthenticateOptions` doc comment for the exact route list). Use
    * `authenticate` everywhere else.
    */
@@ -1435,7 +1435,7 @@ export function createContainer(deps: ContainerDeps): Container {
   // See `Container.authenticatePendingOk`'s doc comment for exactly which
   // routes may use this instead of `authenticate`.
   const authenticatePendingOk = createAuthenticate(authenticateDeps, {
-    allowPendingVerification: true,
+    allowOnboarding: true,
   });
   const authorization = createAuthorizationMiddleware(authorizationService);
 

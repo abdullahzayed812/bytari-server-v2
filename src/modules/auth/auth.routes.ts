@@ -54,16 +54,18 @@ export function createAuthRouter(c: Container): Router {
     validate({ body: refreshBodySchema }),
     asyncHandler(controller.refresh),
   );
+  // Onboarding accounts (unverified Pet Owner / unapproved Veterinarian) must be
+  // able to sign out server-side too — revoking your own session grants nothing.
   router.post(
     '/logout',
-    c.authenticate,
+    c.authenticatePendingOk,
     validate({ body: logoutBodySchema }),
     asyncHandler(controller.logout),
   );
-  router.post('/logout-all', c.authenticate, asyncHandler(controller.logoutAll));
-  // A freshly-registered, not-yet-verified account must be able to read its
-  // own `/auth/me` — it's how the mobile client detects `PENDING_VERIFICATION`
-  // and routes to the verify screen instead of the main app.
+  router.post('/logout-all', c.authenticatePendingOk, asyncHandler(controller.logoutAll));
+  // An onboarding account must be able to read its own `/auth/me` — its
+  // `accessState` is how the mobile client routes to the verify-email or
+  // pending-approval screen instead of the main app.
   router.get('/me', c.authenticatePendingOk, asyncHandler(controller.me));
 
   return router;

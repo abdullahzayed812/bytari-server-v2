@@ -8,6 +8,7 @@ import {
 import type { RoleRepository } from '../../rbac/role.repository.js';
 import type { TokenService } from '../../auth/token.service.js';
 import type { UserService } from '../../users/user.service.js';
+import { accessStateFor } from '../../users/user-access.js';
 
 /**
  * WebSocket connection authenticator. Reuses the SAME access-token verification
@@ -50,8 +51,10 @@ export class JwtConnectionAuthenticator implements ConnectionAuthenticator {
 
     const user = await this.deps.users.getByIdOrNull(userId);
     if (!user) throw new RealtimeAuthError('Account no longer exists');
-    if (user.status !== 'ACTIVE')
-      throw new RealtimeAuthError(`Account is ${user.status.toLowerCase()}`);
+    // Same gate as the HTTP `authenticate` middleware — an unverified Pet Owner or
+    // an unapproved Veterinarian gets no realtime (chat) access either.
+    const access = accessStateFor(user);
+    if (access !== 'FULL') throw new RealtimeAuthError(`Account access: ${access.toLowerCase()}`);
 
     return {
       userId: user.id,

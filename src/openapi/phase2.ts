@@ -61,11 +61,12 @@ const schemas: Obj = {
           'Client-usable avatar URL — the public CDN URL when the bucket is public, else a ' +
           'short-lived signed GET. The raw R2 key is never exposed.',
       },
-      status: { type: 'string', enum: ['ACTIVE', 'SUSPENDED', 'DEACTIVATED'] },
+      status: { type: 'string', enum: ['ACTIVE', 'PENDING_VERIFICATION', 'SUSPENDED', 'DEACTIVATED'] },
       veterinarianStatus: {
         type: 'string',
         enum: ['NOT_APPLIED', 'PENDING', 'APPROVED', 'REJECTED'],
       },
+      registrationType: { type: 'string', enum: ['PET_OWNER', 'VETERINARIAN'] },
       createdAt: { type: 'string', format: 'date-time' },
       updatedAt: { type: 'string', format: 'date-time' },
     },
@@ -110,6 +111,12 @@ const schemas: Obj = {
       phone: { type: 'string' },
       gender: { type: 'string', enum: ['MALE', 'FEMALE'] },
       country: { type: 'string', description: 'ISO 3166-1 alpha-2 (auto-uppercased)' },
+      accountType: {
+        type: 'string',
+        enum: ['PET_OWNER', 'VETERINARIAN'],
+        default: 'PET_OWNER',
+        description: 'PET_OWNER → email verification; VETERINARIAN → no email code, admin approval gate',
+      },
     },
   },
   VerifyEmailRequest: {
@@ -364,7 +371,11 @@ const paths: Obj = {
         'an avatar photo, and for a veterinarian applicant, upload identity documents and submit ' +
         'the application — before the user ever leaves the app. That token is scoped: every route ' +
         'outside a small explicit allowlist (see `authenticate.middleware.ts`) still rejects it ' +
-        'with 401 `EMAIL_VERIFICATION_REQUIRED` until `POST /auth/verify-email` succeeds.',
+        'with 401 `EMAIL_VERIFICATION_REQUIRED` until `POST /auth/verify-email` succeeds.\n\n' +
+        '`accountType: VETERINARIAN` instead creates an `ACTIVE` account with NO email code ' +
+        '(`codeExpiresInSeconds: null`) that is gated by admin approval: every route outside the ' +
+        'same allowlist returns 403 `VETERINARIAN_ACCOUNT_PENDING_APPROVAL` until an admin approves ' +
+        'the veterinarian application.',
       requestBody: bodyOf('RegisterRequest'),
       responses: {
         '201': ok(
@@ -374,7 +385,7 @@ const paths: Obj = {
             properties: {
               user: { $ref: '#/components/schemas/User' },
               tokens: { $ref: '#/components/schemas/Tokens' },
-              codeExpiresInSeconds: { type: 'integer' },
+              codeExpiresInSeconds: { type: 'integer', nullable: true },
             },
           }),
         ),
@@ -514,6 +525,11 @@ const paths: Obj = {
             type: 'object',
             properties: {
               user: { $ref: '#/components/schemas/User' },
+              accessState: {
+                type: 'string',
+                enum: ['FULL', 'EMAIL_VERIFICATION_REQUIRED', 'VETERINARIAN_APPROVAL_REQUIRED'],
+                description: 'Onboarding gate — anything but FULL may only use the onboarding allowlist',
+              },
               roles: { type: 'array', items: { type: 'string' } },
               permissions: { type: 'array', items: { type: 'string' } },
               isAdmin: { type: 'boolean' },

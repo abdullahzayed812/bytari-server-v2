@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { REGISTRATION_TYPES } from '../users/user.types.js';
 import {
   emailSchema,
   nameSchema,
@@ -21,6 +22,13 @@ export const registerBodySchema = z.object({
     .toUpperCase()
     .regex(/^[A-Z]{2}$/, 'country must be an ISO 3166-1 alpha-2 code')
     .optional(),
+  /**
+   * Which onboarding path: `PET_OWNER` (default) → email verification;
+   * `VETERINARIAN` → no email verification, admin approval instead. Choosing
+   * VETERINARIAN only ever RESTRICTS the account (it stays gated until an
+   * admin approves), so trusting the client's choice grants nothing.
+   */
+  accountType: z.enum(REGISTRATION_TYPES).default('PET_OWNER'),
 });
 export type RegisterBody = z.infer<typeof registerBodySchema>;
 

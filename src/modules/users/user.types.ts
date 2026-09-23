@@ -24,6 +24,10 @@ export const TRADER_STATUSES = [
 ] as const;
 export type TraderStatus = (typeof TRADER_STATUSES)[number];
 
+/** Which self-registration path created the account — see migration `20261023010000_user_registration_type`. */
+export const REGISTRATION_TYPES = ['PET_OWNER', 'VETERINARIAN'] as const;
+export type RegistrationType = (typeof REGISTRATION_TYPES)[number];
+
 export const GENDERS = ['MALE', 'FEMALE'] as const;
 export type Gender = (typeof GENDERS)[number];
 
@@ -43,6 +47,7 @@ export interface User {
   status: UserStatus;
   veterinarianStatus: VeterinarianStatus;
   traderStatus: TraderStatus;
+  registrationType: RegistrationType;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -65,6 +70,7 @@ export interface PublicUser {
   status: UserStatus;
   veterinarianStatus: VeterinarianStatus;
   traderStatus: TraderStatus;
+  registrationType: RegistrationType;
   createdAt: string;
   updatedAt: string;
 }
@@ -103,6 +109,8 @@ export interface CreateUserData {
    * `PENDING_VERIFICATION`) relies on that default.
    */
   status?: UserStatus;
+  /** Defaults to the column default (`PET_OWNER`). */
+  registrationType?: RegistrationType;
 }
 
 export interface UpdateUserData {
@@ -142,6 +150,7 @@ export interface UserRow {
   status: string;
   veterinarian_status: string;
   trader_status: string;
+  registration_type: string;
   created_at: Date;
   updated_at: Date;
 }

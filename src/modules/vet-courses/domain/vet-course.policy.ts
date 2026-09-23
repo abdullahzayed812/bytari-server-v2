@@ -17,6 +17,18 @@ export const VetCoursePolicy = {
     }
   },
 
+  /**
+   * A creator never reviews their own submission — except an ADMIN, who may
+   * publish what they created on the platform's behalf (single-admin setups).
+   */
+  assertNotSelfReview(entity: { creatorUserId: string }, actorUserId: string, isAdmin: boolean): void {
+    if (!isAdmin && entity.creatorUserId === actorUserId) {
+      throw new ForbiddenError('You cannot review your own submission', {
+        code: ErrorCode.PERMISSION_DENIED,
+      });
+    }
+  },
+
   /** Only the creator may edit / cancel / delete their own submission. */
   assertOwner(entity: { creatorUserId: string }, actorUserId: string, label: string): void {
     if (entity.creatorUserId !== actorUserId) {
@@ -47,13 +59,17 @@ export const VetCoursePolicy = {
         code: ErrorCode.VET_COURSE_NOT_OPEN,
       });
     }
-    const today = new Date().toISOString().slice(0, 10);
-    const cutoff = course.registrationDeadline ?? course.endDate;
-    if (cutoff < today) {
+    if (VetCoursePolicy.isRegistrationClosed(course)) {
       throw new ConflictError('The registration deadline for this course has passed', {
         code: ErrorCode.VET_COURSE_NOT_OPEN,
       });
     }
+  },
+
+  /** Past the registration cutoff (`registrationDeadline`, else `endDate`)? */
+  isRegistrationClosed(course: { registrationDeadline: string | null; endDate: string }): boolean {
+    const today = new Date().toISOString().slice(0, 10);
+    return (course.registrationDeadline ?? course.endDate) < today;
   },
 
   /** Registrations are capped by `capacity` when the creator set one. */

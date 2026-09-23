@@ -46,7 +46,17 @@ export interface VetCourseDTO extends Omit<VetCourse, 'coverImageStorageKey'> {
   coverImageUrl: string | null;
   /** Visible to the creator / moderators only. */
   registrationCount?: number;
+  /** `capacity - registrationCount` (never negative); null = unlimited. */
+  remainingSeats?: number | null;
 }
+
+/**
+ * The viewer's registration state for one public course — derived
+ * server-side so every client shows the same Register / Registered / Full.
+ * `CLOSED` = past the registration cutoff.
+ */
+export const VET_COURSE_REGISTRATION_STATES = ['OPEN', 'REGISTERED', 'FULL', 'CLOSED'] as const;
+export type VetCourseRegistrationState = (typeof VET_COURSE_REGISTRATION_STATES)[number];
 
 /** Public browse / details projection — APPROVED, not cancelled. */
 export interface PublicVetCourseDTO {
@@ -65,7 +75,11 @@ export interface PublicVetCourseDTO {
   locationMode: VetCourseLocationMode;
   locationDetails: string;
   capacity: number | null;
+  registrationCount: number;
   remainingSeats: number | null;
+  /** Whether the caller already holds a registration for this course. */
+  isRegistered: boolean;
+  registrationState: VetCourseRegistrationState;
   price: string | null;
   registrationDeadline: string | null;
   topics: string[];

@@ -41,7 +41,7 @@ export class VetCourseController {
   };
   listPublic = async (req: Request, res: Response): Promise<void> => {
     const q = validatedQuery<CourseBrowseQuery>(req);
-    const { items, total } = await this.courses.listPublic(q);
+    const { items, total } = await this.courses.listPublic(q, requireAuth(req).userId);
     sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
   };
   listMine = async (req: Request, res: Response): Promise<void> => {
@@ -51,7 +51,7 @@ export class VetCourseController {
   };
   getPublic = async (req: Request, res: Response): Promise<void> => {
     const { id } = validatedParams<{ id: string }>(req);
-    sendSuccess(res, await this.courses.getPublic(id));
+    sendSuccess(res, await this.courses.getPublic(id, requireAuth(req).userId));
   };
   getMine = async (req: Request, res: Response): Promise<void> => {
     const { id } = validatedParams<{ id: string }>(req);

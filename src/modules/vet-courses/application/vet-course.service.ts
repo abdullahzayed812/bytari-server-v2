@@ -23,6 +23,7 @@ import type {
   UpdateVetCourseInput,
   VetCourse,
   VetCourseDTO,
+  VetCourseRegistrationState,
 } from '../domain/vet-course.types.js';
 import type { VetCourseRepository, VetCourseWithCreator } from '../infrastructure/vet-course.repository.js';
 import type { VetCourseMedia } from './vet-course-media.js';
@@ -34,6 +35,10 @@ export interface VetCourseActor {
 
 function trimList(list: string[] | undefined): string[] {
   return (list ?? []).map((d) => d.trim()).filter(Boolean).slice(0, 20);
+}
+
+function remainingSeats(capacity: number | null, registrationCount: number): number | null {
+  return capacity === null ? null : Math.max(0, capacity - registrationCount);
 }
 
 /**
@@ -64,14 +69,24 @@ export class VetCourseService {
       creator: data.creator,
       coverImageUrl: await this.media.resolveUrl(coverImageStorageKey),
       registrationCount: data.registrationCount,
+      remainingSeats: remainingSeats(rest.capacity, data.registrationCount ?? 0),
     };
   }
 
   private async toPublicDTO(
     data: VetCourseWithCreator,
     registrationCount: number,
+    isRegistered: boolean,
   ): Promise<PublicVetCourseDTO> {
     const c = data.course;
+    const remaining = remainingSeats(c.capacity, registrationCount);
+    const registrationState: VetCourseRegistrationState = isRegistered
+      ? 'REGISTERED'
+      : remaining === 0
+        ? 'FULL'
+        : VetCoursePolicy.isRegistrationClosed(c)
+          ? 'CLOSED'
+          : 'OPEN';
     return {
       id: c.id,
       type: c.type,
@@ -88,7 +103,10 @@ export class VetCourseService {
       locationMode: c.locationMode,
       locationDetails: c.locationDetails,
       capacity: c.capacity,
-      remainingSeats: c.capacity !== null ? Math.max(0, c.capacity - registrationCount) : null,
+      registrationCount,
+      remainingSeats: remaining,
+      isRegistered,
+      registrationState,
       price: c.price,
       registrationDeadline: c.registrationDeadline,
       topics: c.topics,
@@ -144,19 +162,31 @@ export class VetCourseService {
 
   // --- reads -----------------------------------------------------
 
-  async listPublic(filter: CourseBrowseFilter): Promise<{ items: PublicVetCourseDTO[]; total: number }> {
+  /** Public browse — APPROVED, not cancelled; seat + registration state relative to `viewerUserId`. */
+  async listPublic(
+    filter: CourseBrowseFilter,
+    viewerUserId: string,
+  ): Promise<{ items: PublicVetCourseDTO[]; total: number }> {
     const { items, total } = await this.courses.listPublic(filter);
-    const counts = await Promise.all(items.map((i) => this.courses.registrationCount(i.course.id)));
-    return { items: await Promise.all(items.map((i, idx) => this.toPublicDTO(i, counts[idx] ?? 0))), total };
+    const mine = await this.courses.registeredCourseIds(
+      viewerUserId,
+      items.map((i) => i.course.id),
+    );
+    return {
+      items: await Promise.all(
+        items.map((i) => this.toPublicDTO(i, i.registrationCount ?? 0, mine.has(i.course.id))),
+      ),
+      total,
+    };
   }
 
-  async getPublic(id: string): Promise<PublicVetCourseDTO> {
-    const data = await this.courses.findWithCreatorById(id);
+  async getPublic(id: string, viewerUserId: string): Promise<PublicVetCourseDTO> {
+    const data = await this.courses.findWithCreatorAndCountById(id);
     if (!data || data.course.status !== 'APPROVED' || data.course.cancelledAt !== null) {
       throw new NotFoundError('Course not found');
     }
-    const count = await this.courses.registrationCount(id);
-    return this.toPublicDTO(data, count);
+    const mine = await this.courses.registeredCourseIds(viewerUserId, [id]);
+    return this.toPublicDTO(data, data.registrationCount ?? 0, mine.has(id));
   }
 
   async listMine(
@@ -301,6 +331,7 @@ export class VetCourseService {
   ): Promise<VetCourseDTO> {
     const existing = await this.courses.findById(id);
     if (!existing) throw new NotFoundError('Course not found');
+    VetCoursePolicy.assertNotSelfReview(existing, actor.principal.userId, this.authz.isAdmin(actor.principal));
     VetCoursePolicy.assertModerationPending(existing);
 
     await this.db.transaction(async (tx) => {

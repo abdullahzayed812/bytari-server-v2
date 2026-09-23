@@ -1,4 +1,4 @@
-import type { PublicUser } from '../users/user.types.js';
+import type { PublicUser, RegistrationType } from '../users/user.types.js';
 
 export interface AuthTokens {
   accessToken: string;
@@ -21,6 +21,8 @@ export interface RegisterInput {
   phone?: string | null;
   gender?: 'MALE' | 'FEMALE' | null;
   country?: string | null;
+  /** Onboarding path — see `registerBodySchema.accountType`. Defaults to `PET_OWNER`. */
+  accountType?: RegistrationType;
 }
 
 /**
@@ -30,7 +32,8 @@ export interface RegisterInput {
  * without hardcoding the server's TTL.
  */
 export interface RegisterResult extends AuthResult {
-  codeExpiresInSeconds: number;
+  /** `null` for a VETERINARIAN registration — no code is sent (admin approval gates it instead). */
+  codeExpiresInSeconds: number | null;
 }
 
 export interface LoginInput {

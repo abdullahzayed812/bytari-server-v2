@@ -101,6 +101,8 @@ export class VetCourseRegistrationService {
         // Lock the course row so concurrent registrations serialize on the capacity check.
         const locked = await this.courseRepo.findByIdForUpdate(courseId, tx);
         if (!locked) throw new NotFoundError('Course not found');
+        // Re-check against the locked row — it may have been cancelled since the pre-check.
+        VetCoursePolicy.assertRegistrationOpen(locked);
         const current = await this.courseRepo.registrationCount(courseId, tx);
         VetCoursePolicy.assertCapacityAvailable(locked, current);
 

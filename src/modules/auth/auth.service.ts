@@ -69,6 +69,10 @@ export class AuthService {
    */
   async register(input: RegisterInput, ctx: AuditContext): Promise<RegisterResult> {
     const passwordHash = await this.passwords.hash(input.password);
+    // Veterinarian signups skip email verification: the account is ACTIVE but
+    // gated by admin approval instead (`accessStateFor` → VETERINARIAN_APPROVAL_REQUIRED
+    // until `veterinarian_status = APPROVED`). Pet Owners must verify their email.
+    const isVeterinarian = input.accountType === 'VETERINARIAN';
 
     const result = await this.db.transaction(async (tx) => {
       const user = await this.users.createUser(
@@ -80,7 +84,8 @@ export class AuthService {
           phone: input.phone ?? null,
           gender: input.gender ?? null,
           country: input.country ?? null,
-          status: 'PENDING_VERIFICATION',
+          status: isVeterinarian ? 'ACTIVE' : 'PENDING_VERIFICATION',
+          registrationType: isVeterinarian ? 'VETERINARIAN' : 'PET_OWNER',
         },
         { actorUserId: null, context: ctx },
         tx,
@@ -101,19 +106,21 @@ export class AuthService {
         tx,
       );
 
-      const { code } = await this.emailVerification.issueCode(user.id, tx);
+      const code = isVeterinarian ? null : (await this.emailVerification.issueCode(user.id, tx)).code;
       const tokens = await this.issueTokens(user.id, ctx, tx);
       return { user, tokens, code };
     });
 
     // Email + avatar-URL resolution are I/O — always AFTER the transaction commits.
-    await this.emailVerification.sendCodeEmail(result.user.email, result.user.firstName, result.code);
-    await this.emailVerification.auditSent(result.user.id, { actorUserId: null, context: ctx });
+    if (result.code !== null) {
+      await this.emailVerification.sendCodeEmail(result.user.email, result.user.firstName, result.code);
+      await this.emailVerification.auditSent(result.user.id, { actorUserId: null, context: ctx });
+    }
 
     return {
       user: await this.users.toPublicUserWithAvatar(result.user),
       tokens: result.tokens,
-      codeExpiresInSeconds: this.emailVerification.codeTtlSeconds,
+      codeExpiresInSeconds: result.code !== null ? this.emailVerification.codeTtlSeconds : null,
     };
   }
 

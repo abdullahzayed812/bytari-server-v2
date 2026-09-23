@@ -16,6 +16,7 @@ export const ADMIN_DASHBOARD_CARD_IDS = [
   'offices',
   'vetApprovals',
   'courses',
+  'seminars',
   'services',
   'content',
   'syndicate',

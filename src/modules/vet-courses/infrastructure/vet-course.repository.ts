@@ -193,7 +193,11 @@ export class VetCourseRepository {
       .orderBy('c.start_date', 'asc')
       .limit(filter.pageSize)
       .offset((filter.page - 1) * filter.pageSize)) as JoinedRow[];
-    return { items: rows.map((r) => this.map(r)), total };
+    const counts = await this.registrationCounts(rows.map((r) => r.id));
+    return {
+      items: rows.map((r) => ({ ...this.map(r), registrationCount: counts.get(r.id) ?? 0 })),
+      total,
+    };
   }
 
   // --- "my courses" (every status) + moderation queue ---------------------
@@ -249,7 +253,17 @@ export class VetCourseRepository {
     };
   }
 
-  /** Batched registrant-count lookup for a page of courses (owner / moderator list views). */
+  /** Of `courseIds`, the ones `userId` has registered for (drives the public "Registered" state). */
+  async registeredCourseIds(userId: string, courseIds: string[]): Promise<Set<string>> {
+    if (courseIds.length === 0) return new Set();
+    const rows = await this.conn()('vet_course_registrations')
+      .whereIn('course_id', courseIds)
+      .andWhere('registrant_user_id', userId)
+      .select<{ course_id: string }[]>('course_id');
+    return new Set(rows.map((r) => r.course_id));
+  }
+
+  /** Batched registrant-count lookup for a page of courses (public / owner / moderator list views). */
   private async registrationCounts(courseIds: string[]): Promise<Map<string, number>> {
     if (courseIds.length === 0) return new Map();
     const rows = (await this.conn()('vet_course_registrations')

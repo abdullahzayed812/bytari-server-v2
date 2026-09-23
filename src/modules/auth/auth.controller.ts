@@ -8,6 +8,7 @@ import type { SupervisorService } from '../supervisors/supervisor.service.js';
 import type { UserService } from '../users/user.service.js';
 import type { AuthService } from './auth.service.js';
 import { requireAuth } from './authenticate.middleware.js';
+import { accessStateFor } from '../users/user-access.js';
 import type {
   LoginBody,
   LogoutBody,
@@ -91,6 +92,9 @@ export class AuthController {
 
     sendSuccess(res, {
       user: await this.users.toPublicUserWithAvatar(user),
+      // FULL | EMAIL_VERIFICATION_REQUIRED | VETERINARIAN_APPROVAL_REQUIRED —
+      // the same rule the `authenticate` middleware enforces server-side.
+      accessState: accessStateFor(user),
       roles: auth.roleKeys,
       permissions,
       isAdmin: this.authz.isAdmin(principal),

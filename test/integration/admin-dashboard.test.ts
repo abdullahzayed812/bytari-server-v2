@@ -25,6 +25,7 @@ const EXPECTED_CARD_IDS = [
   'offices',
   'vetApprovals',
   'courses',
+  'seminars',
   'services',
   'content',
   'syndicate',
@@ -45,7 +46,7 @@ beforeEach(() => resetDb());
 afterAll(() => closeTestDb());
 
 describe('admin dashboard summary — GET /admin/dashboard/summary', () => {
-  it('returns all 23 category cards, recent activity and pending tasks for an admin', async () => {
+  it('returns all 24 category cards, recent activity and pending tasks for an admin', async () => {
     const admin = await registerAdmin(app);
     const vetOwner = await registerApprovedVet(app);
     // A PENDING clinic feeds the "clinics" badge (new requests awaiting approval);
