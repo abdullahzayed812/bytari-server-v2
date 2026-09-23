@@ -86,6 +86,17 @@ export interface AnimalPublicationDTO {
 }
 
 /**
+ * Moderation projection — the full {@link AnimalPublicationDTO} plus the joined
+ * animal summary (including resolved `galleryUrls`), so a reviewer can see the
+ * animal's photos before approving / rejecting a listing. Same animal summary
+ * the public projection uses — no extra fields are exposed to moderators that
+ * the owner did not publish.
+ */
+export interface ModerationPublicationDTO extends AnimalPublicationDTO {
+  animal: PublicationAnimalSummary;
+}
+
+/**
  * Public-browse projection — APPROVED publications only. Omits the
  * publisher's account identity and all moderation metadata, but DOES include
  * `contactName` / `contactPhone` — explicit, purpose-collected contact info
@@ -272,6 +283,17 @@ export function rowToPublication(row: AnimalPublicationRow): AnimalPublication {
 
 export function toPublicationDTO(p: AnimalPublication): AnimalPublicationDTO {
   return { ...p };
+}
+
+/** `galleryUrls` is left empty here — the service resolves the keys. */
+export function toModerationPublicationDTO(
+  p: AnimalPublicationWithAnimal,
+): ModerationPublicationDTO {
+  const { galleryKeys: _galleryKeys, ...animalRest } = p.animal;
+  void _galleryKeys;
+  const { animal: _animal, ...publicationRest } = p;
+  void _animal;
+  return { ...publicationRest, animal: { ...animalRest, galleryUrls: [] } };
 }
 
 export function toMyPublicationDTO(p: AnimalPublicationWithAnimal): MyPublicationDTO {

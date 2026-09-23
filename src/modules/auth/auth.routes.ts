@@ -9,6 +9,8 @@ import {
   logoutBodySchema,
   refreshBodySchema,
   registerBodySchema,
+  resendVerificationBodySchema,
+  verifyEmailBodySchema,
 } from './auth.schemas.js';
 
 /** Mounts `/auth/*`. */
@@ -35,6 +37,18 @@ export function createAuthRouter(c: Container): Router {
     asyncHandler(controller.login),
   );
   router.post(
+    '/verify-email',
+    limiter,
+    validate({ body: verifyEmailBodySchema }),
+    asyncHandler(controller.verifyEmail),
+  );
+  router.post(
+    '/resend-verification',
+    limiter,
+    validate({ body: resendVerificationBodySchema }),
+    asyncHandler(controller.resendVerification),
+  );
+  router.post(
     '/refresh',
     limiter,
     validate({ body: refreshBodySchema }),
@@ -47,7 +61,10 @@ export function createAuthRouter(c: Container): Router {
     asyncHandler(controller.logout),
   );
   router.post('/logout-all', c.authenticate, asyncHandler(controller.logoutAll));
-  router.get('/me', c.authenticate, asyncHandler(controller.me));
+  // A freshly-registered, not-yet-verified account must be able to read its
+  // own `/auth/me` — it's how the mobile client detects `PENDING_VERIFICATION`
+  // and routes to the verify screen instead of the main app.
+  router.get('/me', c.authenticatePendingOk, asyncHandler(controller.me));
 
   return router;
 }

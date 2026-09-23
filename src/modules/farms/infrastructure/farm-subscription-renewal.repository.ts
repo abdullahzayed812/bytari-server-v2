@@ -51,6 +51,11 @@ export interface AdminFarmListItem {
   supervisors: Array<{ userId: string; name: string }>;
   /** `POULTRY` | `SHEEP` | `CATTLE` | `MIXED` | `null` (legacy farms). */
   farmSpecies: string | null;
+  /**
+   * Raw R2 key of the farm photo (`farm_details.image_key`). The controller
+   * resolves it to `imageUrl` — the key itself never reaches a client.
+   */
+  imageKey: string | null;
 }
 
 export interface ListFarmsForAdminFilter {
@@ -268,6 +273,7 @@ export class FarmSubscriptionRenewalRepository {
         'd.subscription_start_date as subscription_start_date',
         'd.subscription_end_date as subscription_end_date',
         'd.farm_species as farm_species',
+        'd.image_key as image_key',
       )
       .orderBy('o.created_at', 'desc')
       .limit(filter.pageSize)
@@ -284,6 +290,7 @@ export class FarmSubscriptionRenewalRepository {
       subscription_start_date: string | Date | null;
       subscription_end_date: string | Date | null;
       farm_species: string | null;
+      image_key: string | null;
     }>;
 
     const orgIds = rows.map((r) => r.organization_id);
@@ -310,6 +317,7 @@ export class FarmSubscriptionRenewalRepository {
         hasOpenRenewalRequest: openRequestOrgIds.has(r.organization_id),
         supervisors: supervisorsByOrg.get(r.organization_id) ?? [],
         farmSpecies: r.farm_species,
+        imageKey: r.image_key,
       };
     });
 

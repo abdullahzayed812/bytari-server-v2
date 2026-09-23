@@ -82,8 +82,11 @@ describe('organization registration — full profile captured in one POST /organ
     const res = await request(app)
       .post('/api/v1/organizations')
       .set(bearer(owner.accessToken))
-      .send({ type: 'CLINIC', name: 'x', details: fullClinicDetails });
+      // NB: a 1-char name used to make this 422 on validation, so the 403 it
+      // claims to assert was never actually reached (`name` is `min(2)`).
+      .send({ type: 'CLINIC', name: 'عيادة', details: fullClinicDetails });
     expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('VETERINARIAN_APPROVAL_REQUIRED');
   });
 
   it('license number / license documents are never exposed on the public discover DTO; country/websiteUrl are', async () => {

@@ -32,9 +32,13 @@ describe('GET /users/:id — authenticated name summary', () => {
       lastName: 'Adel',
       veterinarianStatus: 'NOT_APPLIED',
       traderStatus: 'NOT_REGISTERED',
+      // resolved avatar URL (null until the user uploads one) — never the key
+      avatarUrl: null,
     });
     // never leak sensitive / internal fields
     for (const field of [
+      'avatarKey',
+      'avatar_key',
       'email',
       'phone',
       'status',

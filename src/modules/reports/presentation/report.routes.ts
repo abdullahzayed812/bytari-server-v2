@@ -19,15 +19,33 @@ export function createReportRouter(c: Container): Router {
   return r;
 }
 
-/** `/admin/reports/*` — moderation queue (`content_report.admin.manage`). */
+/**
+ * `/admin/reports/*` — moderation queue (`content_report.admin.manage`).
+ *
+ * The permission guard is attached PER ROUTE, never via `r.use(...)`: this
+ * router is mounted path-less at `/admin` (see `routes/index.ts`), so a
+ * router-level `use` would run for EVERY `/admin/*` request that reaches it —
+ * including the many admin routers mounted after it (`/admin/animals`,
+ * `/admin/content`, `/admin/ads`, `/admin/dashboard`, the support threads, the
+ * two stores, …). ADMIN holds every permission and so never noticed, but every
+ * non-admin system supervisor was being denied with
+ * "Missing required permission: content_report.admin.manage" on routes that
+ * have nothing to do with reports.
+ */
 export function createAdminReportRouter(c: Container): Router {
   const ctrl = new AdminReportController(c.reportService);
+  const authorize = c.authorization.authorize('content_report.admin.manage');
   const r = Router();
   r.use(c.authenticate);
-  r.use(c.authorization.authorize('content_report.admin.manage'));
-  r.get('/reports', validate({ query: listReportsQuerySchema }), asyncHandler(ctrl.list));
+  r.get(
+    '/reports',
+    authorize,
+    validate({ query: listReportsQuerySchema }),
+    asyncHandler(ctrl.list),
+  );
   r.patch(
     '/reports/:reportId',
+    authorize,
     validate({ params: reportIdParamSchema, body: reviewReportBodySchema }),
     asyncHandler(ctrl.review),
   );

@@ -282,6 +282,66 @@ describe('advertisements — slide images & activation', () => {
     expect(res.body.data.imageUrl).toBeTruthy();
   });
 
+  it('removes a slide image (clears the reference and deletes the R2 object); replacing an image deletes the old object too', async () => {
+    const admin = await registerAdmin(app);
+    const c = await createAdCampaign(app, admin.accessToken, {
+      placement: 'HOME',
+      type: 'BANNER',
+      title: 'B',
+    });
+    const id = c.body.data.id as string;
+    const slideId = (await addAdSlide(app, admin.accessToken, id, { title: 's' })).body.data
+      .id as string;
+    await uploadAdSlideImage(app, container, admin.accessToken, id, slideId);
+    const firstStorageKey = (
+      await getTestDb()('ad_slides').where({ id: slideId }).first('image_storage_key')
+    ).image_storage_key as string;
+    expect(await container.objectStorage.exists(firstStorageKey)).toBe(true);
+
+    const removed = await request(app)
+      .delete(`/api/v1/admin/ads/${id}/slides/${slideId}/image`)
+      .set(bearer(admin.accessToken));
+    expect(removed.status).toBe(200);
+    expect(removed.body.data.imageUrl).toBeNull();
+    expect(await container.objectStorage.exists(firstStorageKey)).toBe(false);
+
+    // Removing an already-imageless slide is a harmless no-op, not an error.
+    const removeAgain = await request(app)
+      .delete(`/api/v1/admin/ads/${id}/slides/${slideId}/image`)
+      .set(bearer(admin.accessToken));
+    expect(removeAgain.status).toBe(200);
+    expect(removeAgain.body.data.imageUrl).toBeNull();
+
+    // Replacing (uploading a 2nd image) deletes the first uploaded object.
+    const second = await uploadAdSlideImage(app, container, admin.accessToken, id, slideId);
+    expect(second.status).toBe(201);
+    const secondStorageKey = (
+      await getTestDb()('ad_slides').where({ id: slideId }).first('image_storage_key')
+    ).image_storage_key as string;
+    const third = await uploadAdSlideImage(app, container, admin.accessToken, id, slideId);
+    expect(third.status).toBe(201);
+    expect(await container.objectStorage.exists(secondStorageKey)).toBe(false);
+  });
+
+  it('a normal user cannot remove a slide image (403)', async () => {
+    const admin = await registerAdmin(app);
+    const user = await registerUser(app);
+    const c = await createAdCampaign(app, admin.accessToken, {
+      placement: 'HOME',
+      type: 'BANNER',
+      title: 'B',
+    });
+    const id = c.body.data.id as string;
+    const slideId = (await addAdSlide(app, admin.accessToken, id, { title: 's' })).body.data
+      .id as string;
+    await uploadAdSlideImage(app, container, admin.accessToken, id, slideId);
+
+    const denied = await request(app)
+      .delete(`/api/v1/admin/ads/${id}/slides/${slideId}/image`)
+      .set(bearer(user.accessToken));
+    expect(denied.status).toBe(403);
+  });
+
   it('cannot activate a campaign until a slide has an image', async () => {
     const admin = await registerAdmin(app);
     const c = await createAdCampaign(app, admin.accessToken, {

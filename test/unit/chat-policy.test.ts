@@ -3,12 +3,13 @@ import { ChatPolicy } from '../../src/modules/chat/domain/chat.policy.js';
 import { AppError } from '../../src/shared/errors/app-error.js';
 
 describe('ChatPolicy.assertChatOrganizationType', () => {
-  it('accepts CLINIC and FARM (docs 01 §9: Clinic Chat + Farm Chat)', () => {
+  it('accepts CLINIC, FARM and VETERINARY_OFFICE (docs 01 §9 + office chat)', () => {
     expect(() => ChatPolicy.assertChatOrganizationType('CLINIC')).not.toThrow();
     expect(() => ChatPolicy.assertChatOrganizationType('FARM')).not.toThrow();
+    expect(() => ChatPolicy.assertChatOrganizationType('VETERINARY_OFFICE')).not.toThrow();
   });
 
-  it.each(['VETERINARY_STORE', 'VETERINARY_OFFICE', 'SYNDICATE', 'HOSPITAL', 'nonsense'])(
+  it.each(['VETERINARY_STORE', 'SYNDICATE', 'HOSPITAL', 'nonsense'])(
     'rejects %s with 400 ORGANIZATION_TYPE_NOT_SUPPORTED',
     (type) => {
       try {

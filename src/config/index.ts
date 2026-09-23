@@ -106,6 +106,15 @@ const envSchema = z
     // Stricter per-IP limiter for auth endpoints (login / register / refresh).
     AUTH_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
     AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(20),
+
+    // --- Mandatory email verification (self-registration) ----------------
+    // How long a sent code stays valid.
+    EMAIL_VERIFICATION_CODE_TTL_SECONDS: z.coerce.number().int().positive().default(600),
+    // Wrong-code attempts allowed against ONE outstanding code before it is
+    // locked out (the user must request a resend for a fresh one).
+    EMAIL_VERIFICATION_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),
+    // Minimum time between two resends for the same account.
+    EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS: z.coerce.number().int().positive().default(60),
     // Argon2id tuning (defaults follow OWASP guidance).
     ARGON2_MEMORY_KIB: z.coerce.number().int().positive().default(19_456),
     ARGON2_ITERATIONS: z.coerce.number().int().positive().default(2),
@@ -289,6 +298,11 @@ const envSchema = z
         rateLimit: {
           windowMs: env.AUTH_RATE_LIMIT_WINDOW_MS,
           max: env.AUTH_RATE_LIMIT_MAX,
+        },
+        emailVerification: {
+          codeTtlSeconds: env.EMAIL_VERIFICATION_CODE_TTL_SECONDS,
+          maxAttempts: env.EMAIL_VERIFICATION_MAX_ATTEMPTS,
+          resendCooldownSeconds: env.EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS,
         },
         argon2: {
           memoryCost: env.ARGON2_MEMORY_KIB,

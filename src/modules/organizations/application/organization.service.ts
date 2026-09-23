@@ -146,6 +146,16 @@ export class OrganizationService {
     this.log = logger.child({ component: 'organization-service' });
   }
 
+  /**
+   * Resolve one stored image key to a client-usable URL (public CDN URL when
+   * the bucket is public, else a short-lived signed GET). Public so admin
+   * presentation code can resolve keys that come straight off a repository
+   * projection (e.g. the admin farm list) without its own storage handle.
+   */
+  resolveImageUrl(key: string | null): Promise<string | null> {
+    return this.resolveLogoUrl(key);
+  }
+
   private async resolveLogoUrl(key: string | null): Promise<string | null> {
     if (!key) return null;
     return (
@@ -169,6 +179,14 @@ export class OrganizationService {
   private async attachMedia(
     withDetails: OrganizationWithDetails,
   ): Promise<OrganizationWithDetails> {
+    if (withDetails.type === 'FARM') {
+      // FARM has no directory profile — its single photo lives on `farm_details`.
+      const imageKey = await this.organizations.findFarmImageKey(withDetails.id);
+      return {
+        ...withDetails,
+        details: { ...withDetails.details, imageUrl: await this.resolveLogoUrl(imageKey) },
+      };
+    }
     if (!OrganizationPolicy.hasProfileFields(withDetails.type)) return withDetails;
     const row = await this.organizations.findProfileRow(withDetails.type, withDetails.id);
     const galleryKeys = row?.gallery_keys ?? [];

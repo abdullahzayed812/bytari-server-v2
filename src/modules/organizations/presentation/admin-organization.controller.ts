@@ -138,7 +138,15 @@ export class AdminOrganizationController {
       subscriptionStatus: q.subscriptionStatus,
       speciesGroup: q.speciesGroup,
     });
-    sendSuccess(res, items, 200, pageMeta(q.page, q.pageSize, total));
+    // Swap the raw `imageKey` for a resolved `imageUrl` — storage keys never
+    // leave the server, and the admin list renders a farm thumbnail.
+    const withImages = await Promise.all(
+      items.map(async ({ imageKey, ...rest }) => ({
+        ...rest,
+        imageUrl: await this.organizations.resolveImageUrl(imageKey),
+      })),
+    );
+    sendSuccess(res, withImages, 200, pageMeta(q.page, q.pageSize, total));
   };
 
   listFarmSubscriptionRenewals = async (req: Request, res: Response): Promise<void> => {

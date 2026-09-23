@@ -1,4 +1,15 @@
-export const USER_STATUSES = ['ACTIVE', 'SUSPENDED', 'DEACTIVATED'] as const;
+/**
+ * `PENDING_VERIFICATION` — a self-registered account whose email has not been
+ * confirmed yet (`EmailVerificationService`). It is NOT usable for normal
+ * application access: `AuthService.login()` refuses it (403
+ * `EMAIL_VERIFICATION_REQUIRED`, no tokens issued) and the default
+ * `authenticate` middleware blocks it on every route except the small,
+ * explicit self-service allowlist (`createAuthenticate({ allowPending: true
+ * })`) a freshly-registered user needs to finish registering — see
+ * `authenticate.middleware.ts`. Accounts never reach this state any other way
+ * (admin-created users and dev-seed personas are always inserted `ACTIVE`).
+ */
+export const USER_STATUSES = ['ACTIVE', 'PENDING_VERIFICATION', 'SUSPENDED', 'DEACTIVATED'] as const;
 export type UserStatus = (typeof USER_STATUSES)[number];
 
 export const VETERINARIAN_STATUSES = ['NOT_APPLIED', 'PENDING', 'APPROVED', 'REJECTED'] as const;
@@ -45,7 +56,12 @@ export interface PublicUser {
   phone: string | null;
   gender: Gender | null;
   country: string | null;
-  avatarKey: string | null;
+  /**
+   * Client-usable avatar URL — the public CDN URL when the bucket is public,
+   * else a short-lived signed GET URL. The raw R2 key (`User.avatarKey`) is
+   * deliberately NOT exposed: storage keys never leave the server.
+   */
+  avatarUrl: string | null;
   status: UserStatus;
   veterinarianStatus: VeterinarianStatus;
   traderStatus: TraderStatus;
@@ -69,6 +85,8 @@ export interface UserSummary {
   lastName: string;
   veterinarianStatus: VeterinarianStatus;
   traderStatus: TraderStatus;
+  /** Same resolution rule as {@link PublicUser.avatarUrl}; never the raw key. */
+  avatarUrl: string | null;
 }
 
 export interface CreateUserData {
@@ -79,6 +97,12 @@ export interface CreateUserData {
   phone?: string | null;
   gender?: Gender | null;
   country?: string | null;
+  /**
+   * Defaults to the DB column default (`ACTIVE`) when omitted — every caller
+   * except `AuthService.register()` (which explicitly passes
+   * `PENDING_VERIFICATION`) relies on that default.
+   */
+  status?: UserStatus;
 }
 
 export interface UpdateUserData {

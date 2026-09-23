@@ -2,7 +2,6 @@ import type { Request, Response } from 'express';
 import { NotFoundError } from '../../shared/errors/app-error.js';
 import { sendSuccess } from '../../shared/http/response.js';
 import { validatedParams } from '../../shared/http/validate.js';
-import { toUserSummary } from './user.mapper.js';
 import type { UserService } from './user.service.js';
 
 /**
@@ -22,6 +21,6 @@ export class PublicUsersController {
     const user = await this.users.getByIdOrNull(id);
     // A DEACTIVATED account is treated as absent for directory lookups.
     if (!user || user.status === 'DEACTIVATED') throw new NotFoundError('User not found');
-    sendSuccess(res, toUserSummary(user));
+    sendSuccess(res, await this.users.toUserSummaryWithAvatar(user));
   };
 }

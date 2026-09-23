@@ -23,8 +23,9 @@ export interface UpdateSlideData {
 }
 
 export interface SetSlideImageData {
-  imageStorageKey: string;
-  imageStorageProvider: string;
+  /** `null` clears the image (used by `removeSlideImage`). */
+  imageStorageKey: string | null;
+  imageStorageProvider: string | null;
   updatedByUserId: string;
 }
 

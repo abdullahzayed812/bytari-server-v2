@@ -161,6 +161,13 @@ export function computeFarmSubscriptionStatus(
 export interface OrganizationDetails extends Partial<OrganizationProfile> {
   /** FARM only. */
   joinCode?: string;
+  /**
+   * FARM only — the farm's photo (`farm_details.image_key`), resolved to a
+   * client-usable URL. FARM has no directory profile, so this is the one image
+   * a farm carries; surfaced here so the admin farm screens can render it
+   * without a second farm-profile request.
+   */
+  imageUrl?: string | null;
   /** FARM / VETERINARY_OFFICE / CLINIC only — subscription period + derived status. */
   subscriptionStartDate?: string | null;
   subscriptionEndDate?: string | null;

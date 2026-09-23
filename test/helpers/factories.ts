@@ -1,7 +1,9 @@
 import type { Express } from 'express';
 import request from 'supertest';
 import type { ObjectStorage } from '../../src/infra/storage/index.js';
+import type { NoopEmailProvider } from '../../src/infra/email/index.js';
 import { getTestDb } from './db.js';
+import { containerFor } from './app.js';
 
 export interface RegisteredUser {
   id: string;
@@ -17,6 +19,48 @@ export function uniqueEmail(prefix = 'user'): string {
   return `${prefix}.${Date.now()}.${seq}@test.bytari`;
 }
 
+/**
+ * Pull the 6-digit code out of the verification email
+ * `EmailVerificationService` just "sent" — `container.emailProvider` is a
+ * `NoopEmailProvider` in every test run (`.env.test` sets neither
+ * `EMAIL_USER` nor `EMAIL_PASS`), which records every message it would have
+ * sent instead of delivering it. Never reads the DB directly: the code is
+ * stored only as a SHA-256 hash there, by design (`email-verification.repository.ts`).
+ */
+export function extractVerificationCode(app: Express, email: string): string {
+  const provider = containerFor(app).emailProvider as NoopEmailProvider;
+  const message = provider.lastMessageTo(email);
+  if (!message) {
+    throw new Error(`extractVerificationCode: no email was sent to ${email}`);
+  }
+  const match = /\b(\d{6})\b/.exec(String(message.text ?? ''));
+  if (!match?.[1]) {
+    throw new Error(`extractVerificationCode: no 6-digit code found in the email to ${email}`);
+  }
+  return match[1];
+}
+
+/**
+ * `POST /auth/verify-email`. Exported standalone (not just through
+ * `registerUser`) for tests that specifically exercise verification —
+ * wrong-code / expired / too-many-attempts / resend all call `/verify-email`
+ * directly and only need `registerUser`'s account-creation half.
+ */
+export async function verifyEmail(
+  app: Express,
+  email: string,
+  code: string,
+): Promise<request.Response> {
+  return request(app).post('/api/v1/auth/verify-email').send({ email, code });
+}
+
+/**
+ * `POST /auth/register` THEN `POST /auth/verify-email` with the real code the
+ * (noop, test-only) email provider captured — i.e. the actual two-step
+ * production flow, not a shortcut around it. Kept as the one shared factory so
+ * the other ~85 integration-test files, which all just want "a ready-to-use
+ * active user" and know nothing about email verification, need no changes.
+ */
 export async function registerUser(
   app: Express,
   overrides: Partial<{ email: string; password: string; firstName: string; lastName: string }> = {},
@@ -34,12 +78,19 @@ export async function registerUser(
   if (res.status !== 201) {
     throw new Error(`registerUser failed: ${res.status} ${JSON.stringify(res.body)}`);
   }
+
+  const code = extractVerificationCode(app, email);
+  const verifyRes = await verifyEmail(app, email, code);
+  if (verifyRes.status !== 200) {
+    throw new Error(`registerUser: verify-email failed: ${verifyRes.status} ${JSON.stringify(verifyRes.body)}`);
+  }
+
   return {
-    id: res.body.data.user.id as string,
+    id: verifyRes.body.data.user.id as string,
     email,
     password,
-    accessToken: res.body.data.tokens.accessToken as string,
-    refreshToken: res.body.data.tokens.refreshToken as string,
+    accessToken: verifyRes.body.data.tokens.accessToken as string,
+    refreshToken: verifyRes.body.data.tokens.refreshToken as string,
   };
 }
 

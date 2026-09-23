@@ -8,7 +8,6 @@ import { auditContextFromRequest, type AuditContextResult } from '../audit/audit
 import type { AuthService } from '../auth/auth.service.js';
 import { requireAuth } from '../auth/authenticate.middleware.js';
 import type { RbacService } from '../rbac/rbac.service.js';
-import { toPublicUser } from './user.mapper.js';
 import type { UserService } from './user.service.js';
 import type {
   AssignRoleBody,
@@ -40,14 +39,19 @@ export class AdminUsersController {
       search: q.search,
       role: q.role,
     });
-    sendSuccess(res, items.map(toPublicUser), StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
+    sendSuccess(
+      res,
+      await this.users.toPublicUsersWithAvatars(items),
+      StatusCodes.OK,
+      pageMeta(q.page, q.pageSize, total),
+    );
   };
 
   get = async (req: Request, res: Response): Promise<void> => {
     const { id } = validatedParams<{ id: string }>(req);
     const user = await this.users.getById(id);
     const roles = await this.rbac.getRoleKeysForUser(id);
-    sendSuccess(res, { ...toPublicUser(user), roles });
+    sendSuccess(res, { ...(await this.users.toPublicUserWithAvatar(user)), roles });
   };
 
   create = async (req: Request, res: Response): Promise<void> => {
@@ -70,7 +74,7 @@ export class AdminUsersController {
     const { id } = validatedParams<{ id: string }>(req);
     const body = validatedBody<UpdateUserBody>(req);
     const user = await this.users.updateProfile(id, body, this.actor(req));
-    sendSuccess(res, toPublicUser(user));
+    sendSuccess(res, await this.users.toPublicUserWithAvatar(user));
   };
 
   suspend = (req: Request, res: Response): Promise<void> =>
@@ -102,7 +106,7 @@ export class AdminUsersController {
     const { id } = validatedParams<{ id: string }>(req);
     const body = validatedBody<StatusChangeBody>(req);
     const user = await this.users.setStatus(id, status, this.actor(req), body.reason);
-    sendSuccess(res, toPublicUser(user));
+    sendSuccess(res, await this.users.toPublicUserWithAvatar(user));
   }
 
   private async ensureUserExists(id: string): Promise<void> {

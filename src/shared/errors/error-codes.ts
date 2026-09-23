@@ -30,6 +30,19 @@ export const ErrorCode = {
   ACCOUNT_INACTIVE: 'ACCOUNT_INACTIVE',
   /** Caller lacks the permission required for the route. */
   PERMISSION_DENIED: 'PERMISSION_DENIED',
+  /**
+   * Correct credentials / a live session, but the account's email is not
+   * verified yet. On `login` this is a 403 with NO tokens issued. On
+   * `authenticate` (a route outside the pending-verification self-service
+   * allowlist) this is a 401 — the token is real but not sufficient here.
+   */
+  EMAIL_VERIFICATION_REQUIRED: 'EMAIL_VERIFICATION_REQUIRED',
+  /** `verify-email` code is wrong, or the email has no outstanding code (never distinguished — anti-enumeration). */
+  INVALID_VERIFICATION_CODE: 'INVALID_VERIFICATION_CODE',
+  /** `verify-email` code was structurally the current one but its TTL passed. */
+  VERIFICATION_CODE_EXPIRED: 'VERIFICATION_CODE_EXPIRED',
+  /** Too many wrong `verify-email` attempts against the current code — request a resend. */
+  TOO_MANY_VERIFICATION_ATTEMPTS: 'TOO_MANY_VERIFICATION_ATTEMPTS',
 
   // --- Organizations (Phase 3) ---
   /** Creating/owning a CLINIC or FARM requires an APPROVED veterinarian. */

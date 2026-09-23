@@ -80,7 +80,9 @@ describe('avatar finalize', () => {
       filename: 'me.png',
     });
     expect(res.status).toBe(200);
-    expect(res.body.data.avatarKey).toBe(storageKey);
+    // The DTO carries a resolved URL, never the raw R2 key.
+    expect(res.body.data.avatarKey).toBeUndefined();
+    expect(res.body.data.avatarUrl).toContain(storageKey);
 
     const row = await getTestDb()('users').where({ id: u.id }).first();
     expect(row.avatar_key).toBe(storageKey);
@@ -153,7 +155,7 @@ describe('avatar finalize', () => {
       filename: 'v2.png',
     });
     expect(res.status).toBe(200);
-    expect(res.body.data.avatarKey).toBe(second.storageKey);
+    expect(res.body.data.avatarUrl).toContain(second.storageKey);
     expect(await storage.exists(first.storageKey)).toBe(false); // old object cleaned up
   });
 
@@ -190,7 +192,7 @@ describe('avatar finalize', () => {
       .set(bearer(u.accessToken))
       .send({ storageKey: second.storageKey, mimeType: 'image/png', filename: 'v2.png' });
     expect(res.status).toBe(200); // storage error logged, not surfaced
-    expect(res.body.data.avatarKey).toBe(second.storageKey);
+    expect(res.body.data.avatarUrl).toContain(second.storageKey);
   });
 });
 

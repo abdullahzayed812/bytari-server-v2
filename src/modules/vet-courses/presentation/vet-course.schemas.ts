@@ -117,6 +117,7 @@ export type MineQuery = z.infer<typeof mineQuerySchema>;
 
 export const moderationQuerySchema = paginationQuerySchema.extend({
   status: z.enum(VET_COURSE_MODERATION_STATUSES).optional(),
+  type: z.enum(VET_COURSE_TYPES).optional(),
 });
 export type ModerationQuery = z.infer<typeof moderationQuerySchema>;
 

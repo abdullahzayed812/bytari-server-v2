@@ -212,7 +212,17 @@ export class VetCourseRepository {
     filter: ModerationFilter,
   ): Promise<{ items: VetCourseWithCreator[]; total: number }> {
     return this.listScoped((qb) => {
+      // Deliberately mirrors `vet-services`/`vet-jobs`' own `listForModeration`
+      // (same convention across every moderation-queue module): no `status`
+      // defaults to PENDING, not "every status". `AdminDashboardService`
+      // relies on exactly this default (its own `listForModeration(WINDOW)`
+      // call, no `status`) to size the "new submissions" badge — widening
+      // this to "no status = all statuses" would silently pull
+      // approved/rejected rows into that count. The admin screen's explicit
+      // PENDING/APPROVED/REJECTED chips already give full visibility into
+      // every state; only its "All" chip inherits this same PENDING default.
       qb.andWhere('c.status', filter.status ?? 'PENDING');
+      if (filter.type) qb.andWhere('c.type', filter.type);
     }, filter);
   }
 

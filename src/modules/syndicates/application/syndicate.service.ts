@@ -191,6 +191,10 @@ export class SyndicateService {
       patch.logoStorageKey !== undefined
         ? await this.media.validateKey('LOGO', patch.logoStorageKey)
         : undefined;
+    const previousLogoKey =
+      logoStorageKey !== undefined
+        ? ((await this.details.findByOrganizationId(organizationId))?.logoStorageKey ?? null)
+        : null;
 
     await this.db.transaction(async (tx) => {
       if (patch.name !== undefined || patch.description !== undefined) {
@@ -213,6 +217,12 @@ export class SyndicateService {
         tx,
       );
     });
+
+    // The replaced logo is orphaned in R2 — clean up after commit.
+    if (logoStorageKey !== undefined) {
+      await this.media.deleteReplaced([previousLogoKey], [logoStorageKey], { organizationId });
+    }
+
     return this.toPublicDTO(organizationId, actor.principal.userId);
   }
 

@@ -630,4 +630,39 @@ export class AdvertisementService {
 
     return this.slideDto(updated);
   }
+
+  /** Clears a slide's image without deleting the slide itself — "remove image" in the admin UI. No-op (not an error) if the slide already has none. */
+  async removeSlideImage(actor: AdActor, campaignId: string, slideId: string): Promise<AdSlideDTO> {
+    const existing = await this.loadSlide(campaignId, slideId);
+    if (!existing.imageStorageKey) return this.slideDto(existing);
+
+    const previousKey = existing.imageStorageKey;
+    const updated = await this.db.transaction(async (tx) => {
+      const s = await this.slides.setImage(
+        slideId,
+        { imageStorageKey: null, imageStorageProvider: null, updatedByUserId: actor.actorUserId },
+        tx,
+      );
+      await this.audit.record(
+        {
+          action: AuditAction.AD_SLIDE_IMAGE_UPDATED,
+          entityType: AuditEntityType.AD_SLIDE,
+          entityId: slideId,
+          actorUserId: actor.actorUserId,
+          metadata: { campaignId, slideId, removed: true },
+          context: actor.context,
+        },
+        tx,
+      );
+      return s;
+    });
+
+    try {
+      await this.storage.delete(previousKey);
+    } catch (err) {
+      this.log.error({ err, slideId }, 'failed to delete removed ad image — needs a sweep');
+    }
+
+    return this.slideDto(updated);
+  }
 }

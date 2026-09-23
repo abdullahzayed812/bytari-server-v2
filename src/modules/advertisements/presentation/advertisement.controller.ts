@@ -134,4 +134,9 @@ export class AdvertisementController {
       StatusCodes.CREATED,
     );
   };
+
+  removeSlideImage = async (req: Request, res: Response): Promise<void> => {
+    const { campaignId, slideId } = validatedParams<SlideParams>(req);
+    sendSuccess(res, await this.ads.removeSlideImage(this.actor(req), campaignId, slideId));
+  };
 }

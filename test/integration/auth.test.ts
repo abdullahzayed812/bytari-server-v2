@@ -2,7 +2,14 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { buildTestApp } from '../helpers/app.js';
 import { closeTestDb, ensureSchema, getTestDb, resetDb } from '../helpers/db.js';
-import { bearer, loginUser, registerUser, uniqueEmail } from '../helpers/factories.js';
+import {
+  bearer,
+  extractVerificationCode,
+  loginUser,
+  registerUser,
+  uniqueEmail,
+  verifyEmail,
+} from '../helpers/factories.js';
 
 const { app } = buildTestApp();
 
@@ -11,7 +18,7 @@ beforeEach(() => resetDb());
 afterAll(() => closeTestDb());
 
 describe('POST /auth/register', () => {
-  it('creates an ACTIVE user with the PET_OWNER role and returns tokens', async () => {
+  it('creates a PENDING_VERIFICATION user with the PET_OWNER role, sends a code, and STILL returns a (scoped) token pair', async () => {
     const email = uniqueEmail();
     const res = await request(app)
       .post('/api/v1/auth/register')
@@ -20,17 +27,39 @@ describe('POST /auth/register', () => {
     expect(res.status).toBe(201);
     expect(res.body.data.user).toMatchObject({
       email,
-      status: 'ACTIVE',
+      status: 'PENDING_VERIFICATION',
       veterinarianStatus: 'NOT_APPLIED',
     });
     expect(res.body.data.user).not.toHaveProperty('passwordHash');
     expect(res.body.data.tokens.accessToken).toBeTypeOf('string');
     expect(res.body.data.tokens.refreshToken).toBeTypeOf('string');
+    expect(res.body.data.codeExpiresInSeconds).toBeGreaterThan(0);
 
+    // /auth/me is allowlisted even PENDING_VERIFICATION — the client uses it
+    // to detect the state and route to the verify screen.
     const me = await request(app)
       .get('/api/v1/auth/me')
       .set(bearer(res.body.data.tokens.accessToken));
+    expect(me.status).toBe(200);
     expect(me.body.data.roles).toEqual(['PET_OWNER']);
+    expect(me.body.data.user.status).toBe('PENDING_VERIFICATION');
+
+    // A real code was actually emailed.
+    const code = extractVerificationCode(app, email);
+    expect(code).toMatch(/^\d{6}$/);
+  });
+
+  it('the registration token is scoped — it does NOT work for an arbitrary protected route', async () => {
+    const email = uniqueEmail();
+    const res = await request(app)
+      .post('/api/v1/auth/register')
+      .send({ email, password: 'a-very-strong-password', firstName: 'Sam', lastName: 'Doe' });
+
+    const animals = await request(app)
+      .get('/api/v1/animals')
+      .set(bearer(res.body.data.tokens.accessToken));
+    expect(animals.status).toBe(401);
+    expect(animals.body.error.code).toBe('EMAIL_VERIFICATION_REQUIRED');
   });
 
   it('stores an Argon2id hash, never the raw password', async () => {
@@ -62,7 +91,7 @@ describe('POST /auth/register', () => {
     expect(res.body.error.details.length).toBeGreaterThanOrEqual(3);
   });
 
-  it('ignores a client-supplied role (no privilege escalation)', async () => {
+  it('ignores a client-supplied role / status (no privilege escalation)', async () => {
     const email = uniqueEmail();
     const res = await request(app)
       .post('/api/v1/auth/register')
@@ -79,17 +108,23 @@ describe('POST /auth/register', () => {
         status: 'ACTIVE',
       });
     expect(res.status).toBe(201);
-    expect(res.body.data.user.avatarKey).toBeNull();
+    // A client-supplied `avatarKey` is stripped; the DTO exposes only a
+    // server-resolved `avatarUrl`, which is null until a real upload happens.
+    expect(res.body.data.user.avatarKey).toBeUndefined();
+    expect(res.body.data.user.avatarUrl).toBeNull();
     expect(res.body.data.user.veterinarianStatus).toBe('NOT_APPLIED');
+    // A client-supplied `status: 'ACTIVE'` is ignored too — still PENDING_VERIFICATION.
+    expect(res.body.data.user.status).toBe('PENDING_VERIFICATION');
     const me = await request(app)
       .get('/api/v1/auth/me')
       .set(bearer(res.body.data.tokens.accessToken));
     expect(me.body.data.roles).toEqual(['PET_OWNER']);
     expect(me.body.data.isAdmin).toBe(false);
-    expect(me.body.data.user.avatarKey).toBeNull();
+    expect(me.body.data.user.avatarKey).toBeUndefined();
+    expect(me.body.data.user.avatarUrl).toBeNull();
   });
 
-  it('accepts optional gender / country and round-trips them through GET /auth/me', async () => {
+  it('accepts optional gender / country and round-trips them through GET /auth/me and verify-email', async () => {
     const email = uniqueEmail();
     const res = await request(app).post('/api/v1/auth/register').send({
       email,
@@ -108,6 +143,13 @@ describe('POST /auth/register', () => {
       .set(bearer(res.body.data.tokens.accessToken));
     expect(me.body.data.user.gender).toBe('FEMALE');
     expect(me.body.data.user.country).toBe('JO');
+
+    const code = extractVerificationCode(app, email);
+    const verified = await verifyEmail(app, email, code);
+    expect(verified.status).toBe(200);
+    expect(verified.body.data.user.status).toBe('ACTIVE');
+    expect(verified.body.data.user.gender).toBe('FEMALE');
+    expect(verified.body.data.user.country).toBe('JO');
   });
 
   it('rejects an invalid gender enum value (422)', async () => {
@@ -136,14 +178,15 @@ describe('POST /auth/register', () => {
 });
 
 describe('GET /users/:id', () => {
-  it('returns exactly the name-level summary — no gender / country / avatarKey leak', async () => {
+  it('returns exactly the name-level summary — no gender / country / raw avatarKey leak', async () => {
     const u = await registerUser(app);
     const viewer = await registerUser(app);
     const res = await request(app).get(`/api/v1/users/${u.id}`).set(bearer(viewer.accessToken));
     expect(res.status).toBe(200);
     expect(Object.keys(res.body.data).sort()).toEqual(
-      ['firstName', 'id', 'lastName', 'veterinarianStatus', 'traderStatus'].sort(),
+      ['avatarUrl', 'firstName', 'id', 'lastName', 'veterinarianStatus', 'traderStatus'].sort(),
     );
+    expect(res.body.data.avatarUrl).toBeNull();
   });
 });
 

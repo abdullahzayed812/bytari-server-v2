@@ -1,4 +1,6 @@
+import type { Logger } from 'pino';
 import { buildObjectKey, StoragePrefix, type ObjectStorage } from '../../../infra/storage/index.js';
+import { deleteReplacedObjects } from '../../../shared/storage/replaced-objects.js';
 import { BadRequestError } from '../../../shared/errors/app-error.js';
 import { ErrorCode } from '../../../shared/errors/error-codes.js';
 import {
@@ -28,7 +30,22 @@ export interface PresignResult {
  * `vet-services` image pattern.
  */
 export class VetJobMedia {
-  constructor(private readonly storage: ObjectStorage) {}
+  constructor(
+    private readonly storage: ObjectStorage,
+    private readonly log: Logger,
+  ) {}
+
+  /**
+   * Best-effort cleanup of objects a replace just orphaned. Call AFTER the
+   * transaction commits; a failure is logged, never surfaced.
+   */
+  deleteReplaced(
+    previous: ReadonlyArray<string | null | undefined>,
+    next: ReadonlyArray<string | null | undefined>,
+    context: Record<string, unknown> = {},
+  ): Promise<void> {
+    return deleteReplacedObjects(this.storage, this.log, previous, next, context);
+  }
 
   async presignUpload(input: { filename: string; mimeType: string; size: number }): Promise<PresignResult> {
     if (!Number.isInteger(input.size) || input.size <= 0) {

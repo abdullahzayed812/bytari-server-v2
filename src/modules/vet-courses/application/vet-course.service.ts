@@ -97,10 +97,17 @@ export class VetCourseService {
     };
   }
 
-  // --- create (approved veterinarian only) --------------------------------
+  // --- create (approved veterinarian, or ADMIN on the platform's behalf) --
 
   async create(input: CreateVetCourseInput, actor: VetCourseActor): Promise<VetCourseDTO> {
-    this.authz.assertApprovedVeterinarian(actor.principal);
+    if (
+      !this.authz.isApprovedVeterinarian(actor.principal) &&
+      !this.authz.isAdmin(actor.principal)
+    ) {
+      throw new ForbiddenError('Veterinarian access requires an approved veterinarian account', {
+        code: ErrorCode.PERMISSION_DENIED,
+      });
+    }
     const coverImageStorageKey = await this.media.validateKey(input.coverImageStorageKey);
 
     const course = await this.db.transaction(async (tx) => {
@@ -175,7 +182,12 @@ export class VetCourseService {
   async update(id: string, patch: UpdateVetCourseInput, actor: VetCourseActor): Promise<VetCourseDTO> {
     const existing = await this.courses.findById(id);
     if (!existing) throw new NotFoundError('Course not found');
-    VetCoursePolicy.assertOwner({ creatorUserId: existing.creatorUserId }, actor.principal.userId, 'course');
+    // Owner, or ADMIN (matches `remove`/`cancel`'s existing moderator-inclusive
+    // rule via `isSystemSupervisorFor`'s own admin bypass — admin, not the
+    // broader VET_COURSES supervisor scope, which stays read/approve/reject only).
+    if (existing.creatorUserId !== actor.principal.userId && !this.authz.isAdmin(actor.principal)) {
+      VetCoursePolicy.assertOwner({ creatorUserId: existing.creatorUserId }, actor.principal.userId, 'course');
+    }
 
     const coverImageStorageKey =
       patch.coverImageStorageKey !== undefined
@@ -208,6 +220,13 @@ export class VetCourseService {
         tx,
       );
     });
+
+    // The replaced cover image is orphaned in R2 — clean it up after commit.
+    if (coverImageStorageKey !== undefined) {
+      await this.media.deleteReplaced([existing.coverImageStorageKey], [coverImageStorageKey], {
+        courseId: id,
+      });
+    }
     return this.mustGetDTO(id);
   }
 

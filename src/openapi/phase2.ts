@@ -54,7 +54,13 @@ const schemas: Obj = {
       phone: { type: 'string', nullable: true },
       gender: { type: 'string', enum: ['MALE', 'FEMALE'], nullable: true },
       country: { type: 'string', description: 'ISO 3166-1 alpha-2', nullable: true },
-      avatarKey: { type: 'string', nullable: true },
+      avatarUrl: {
+        type: 'string',
+        nullable: true,
+        description:
+          'Client-usable avatar URL — the public CDN URL when the bucket is public, else a ' +
+          'short-lived signed GET. The raw R2 key is never exposed.',
+      },
       status: { type: 'string', enum: ['ACTIVE', 'SUSPENDED', 'DEACTIVATED'] },
       veterinarianStatus: {
         type: 'string',
@@ -76,6 +82,11 @@ const schemas: Obj = {
       veterinarianStatus: {
         type: 'string',
         enum: ['NOT_APPLIED', 'PENDING', 'APPROVED', 'REJECTED'],
+      },
+      avatarUrl: {
+        type: 'string',
+        nullable: true,
+        description: 'Same resolution rule as `User.avatarUrl`; never the raw key.',
       },
     },
   },
@@ -100,6 +111,19 @@ const schemas: Obj = {
       gender: { type: 'string', enum: ['MALE', 'FEMALE'] },
       country: { type: 'string', description: 'ISO 3166-1 alpha-2 (auto-uppercased)' },
     },
+  },
+  VerifyEmailRequest: {
+    type: 'object',
+    required: ['email', 'code'],
+    properties: {
+      email: { type: 'string', format: 'email' },
+      code: { type: 'string', pattern: '^\\d{6}$', description: '6-digit code emailed at registration / resend' },
+    },
+  },
+  ResendVerificationRequest: {
+    type: 'object',
+    required: ['email'],
+    properties: { email: { type: 'string', format: 'email' } },
   },
   AvatarUploadUrlBody: {
     type: 'object',
@@ -333,16 +357,24 @@ const paths: Obj = {
       tags: ['Auth'],
       summary: 'Register a new account (granted the PET_OWNER role)',
       description:
-        'Public. The server controls role assignment — any client-supplied role is ignored.',
+        'Public. The server controls role assignment — any client-supplied role is ignored. ' +
+        'The account starts `PENDING_VERIFICATION` and a 6-digit code is emailed immediately. ' +
+        'The response DOES include `tokens` (unlike a blocked `login` on an already-existing ' +
+        'unverified account) so the SAME registration flow can finish self-service steps — set ' +
+        'an avatar photo, and for a veterinarian applicant, upload identity documents and submit ' +
+        'the application — before the user ever leaves the app. That token is scoped: every route ' +
+        'outside a small explicit allowlist (see `authenticate.middleware.ts`) still rejects it ' +
+        'with 401 `EMAIL_VERIFICATION_REQUIRED` until `POST /auth/verify-email` succeeds.',
       requestBody: bodyOf('RegisterRequest'),
       responses: {
         '201': ok(
-          'Account created',
+          'Account created (PENDING_VERIFICATION) — a code was emailed',
           dataOf({
             type: 'object',
             properties: {
               user: { $ref: '#/components/schemas/User' },
               tokens: { $ref: '#/components/schemas/Tokens' },
+              codeExpiresInSeconds: { type: 'integer' },
             },
           }),
         ),
@@ -354,7 +386,12 @@ const paths: Obj = {
     post: {
       tags: ['Auth'],
       summary: 'Exchange credentials for an access + refresh token pair',
-      description: 'Public. SUSPENDED / DEACTIVATED accounts are rejected with 403.',
+      description:
+        'Public. SUSPENDED / DEACTIVATED accounts are rejected with 403 `ACCOUNT_INACTIVE`. A ' +
+        'PENDING_VERIFICATION account (correct password, email never verified) is rejected with ' +
+        '403 `EMAIL_VERIFICATION_REQUIRED` — deliberately AFTER the password check, so this never ' +
+        'leaks verification state for a wrong password. NO tokens are issued either way; the ' +
+        'client should route to the verify-email screen and offer a resend.',
       requestBody: bodyOf('LoginRequest'),
       responses: {
         '200': ok(
@@ -368,6 +405,64 @@ const paths: Obj = {
           }),
         ),
         ...errs(401, 403, 422, 429),
+      },
+    },
+  },
+  '/auth/verify-email': {
+    post: {
+      tags: ['Auth'],
+      summary: 'Complete registration: check the code, activate the account, issue a full session',
+      description:
+        'Public. An unknown email and a wrong code are deliberately indistinguishable (both ' +
+        '422 `INVALID_VERIFICATION_CODE`) — no account-enumeration signal. On success the account ' +
+        'flips PENDING_VERIFICATION -> ACTIVE and the response is a normal, UNRESTRICTED ' +
+        '`{ user, tokens }` session (same shape `login` returns).',
+      requestBody: bodyOf('VerifyEmailRequest'),
+      responses: {
+        '200': ok(
+          'Verified — full session issued',
+          dataOf({
+            type: 'object',
+            properties: {
+              user: { $ref: '#/components/schemas/User' },
+              tokens: { $ref: '#/components/schemas/Tokens' },
+            },
+          }),
+        ),
+        '422': {
+          description:
+            'INVALID_VERIFICATION_CODE (wrong code / unknown email) or VERIFICATION_CODE_EXPIRED',
+          content: jsonError,
+        },
+        '429': {
+          description: 'TOO_MANY_VERIFICATION_ATTEMPTS, or the shared auth-endpoint rate limit',
+          content: jsonError,
+        },
+      },
+    },
+  },
+  '/auth/resend-verification': {
+    post: {
+      tags: ['Auth'],
+      summary: 'Request a fresh verification code',
+      description:
+        'Public. Deliberately uniform (200, same shape) for an unknown email or an already-ACTIVE ' +
+        'one — no account-enumeration signal; only a real, still-PENDING_VERIFICATION account gets ' +
+        'a new code, subject to a per-account resend cooldown (429 `RATE_LIMITED` when too soon).',
+      requestBody: bodyOf('ResendVerificationRequest'),
+      responses: {
+        '200': ok(
+          'Request processed (a new code was sent if, and only if, the account is real and unverified)',
+          dataOf({
+            type: 'object',
+            properties: {
+              codeExpiresInSeconds: { type: 'integer' },
+              resendAvailableInSeconds: { type: 'integer' },
+            },
+          }),
+        ),
+        '429': { description: 'RATE_LIMITED — resend cooldown not yet elapsed', content: jsonError },
+        ...errs(422),
       },
     },
   },

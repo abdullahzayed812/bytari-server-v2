@@ -5,11 +5,17 @@ import { validatedBody } from '../../shared/http/validate.js';
 import { auditContextFromRequest } from '../audit/audit-context.js';
 import type { AuthorizationService } from '../authorization/authorization.service.js';
 import type { SupervisorService } from '../supervisors/supervisor.service.js';
-import { toPublicUser } from '../users/user.mapper.js';
 import type { UserService } from '../users/user.service.js';
 import type { AuthService } from './auth.service.js';
 import { requireAuth } from './authenticate.middleware.js';
-import type { LoginBody, LogoutBody, RefreshBody, RegisterBody } from './auth.schemas.js';
+import type {
+  LoginBody,
+  LogoutBody,
+  RefreshBody,
+  RegisterBody,
+  ResendVerificationBody,
+  VerifyEmailBody,
+} from './auth.schemas.js';
 
 /** Thin HTTP adapter for the authentication use-cases. No business logic here. */
 export class AuthController {
@@ -29,6 +35,18 @@ export class AuthController {
   login = async (req: Request, res: Response): Promise<void> => {
     const body = validatedBody<LoginBody>(req);
     const result = await this.auth.login(body, auditContextFromRequest(req));
+    sendSuccess(res, result);
+  };
+
+  verifyEmail = async (req: Request, res: Response): Promise<void> => {
+    const body = validatedBody<VerifyEmailBody>(req);
+    const result = await this.auth.verifyEmail(body, auditContextFromRequest(req));
+    sendSuccess(res, result);
+  };
+
+  resendVerification = async (req: Request, res: Response): Promise<void> => {
+    const body = validatedBody<ResendVerificationBody>(req);
+    const result = await this.auth.resendVerification(body.email, auditContextFromRequest(req));
     sendSuccess(res, result);
   };
 
@@ -72,7 +90,7 @@ export class AuthController {
     ]);
 
     sendSuccess(res, {
-      user: toPublicUser(user),
+      user: await this.users.toPublicUserWithAvatar(user),
       roles: auth.roleKeys,
       permissions,
       isAdmin: this.authz.isAdmin(principal),

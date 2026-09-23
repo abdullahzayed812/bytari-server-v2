@@ -20,6 +20,8 @@ import { RefreshSessionRepository } from './modules/auth/refresh-session.reposit
 import { RefreshSessionService } from './modules/auth/refresh-session.service.js';
 import { PasswordService } from './modules/auth/password.service.js';
 import { TokenService } from './modules/auth/token.service.js';
+import { EmailVerificationRepository } from './modules/auth/email-verification.repository.js';
+import { EmailVerificationService } from './modules/auth/email-verification.service.js';
 import { AuthService } from './modules/auth/auth.service.js';
 import { createAuthenticate } from './modules/auth/authenticate.middleware.js';
 import { VeterinarianRepository } from './modules/veterinarians/veterinarian.repository.js';
@@ -448,6 +450,14 @@ export interface Container {
 
   /** `authenticate` middleware (verifies the access token, loads `req.auth`). */
   authenticate: RequestHandler;
+  /**
+   * Same as `authenticate`, but tolerates a `PENDING_VERIFICATION` account's
+   * token — the small explicit self-service allowlist a freshly-registered,
+   * not-yet-verified user needs (see `authenticate.middleware.ts`'s
+   * `CreateAuthenticateOptions` doc comment for the exact route list). Use
+   * `authenticate` everywhere else.
+   */
+  authenticatePendingOk: RequestHandler;
   /** `authorize(permission)` / `requireApprovedVeterinarian()` guards. */
   authorization: AuthorizationMiddleware;
 }
@@ -500,6 +510,21 @@ export function createContainer(deps: ContainerDeps): Container {
   // for avatar / document presigned uploads, as well as the content module) --
   const objectStorage = deps.objectStorage ?? createObjectStorage(config, logger);
 
+  // --- outbound email (hoisted: needed by EmailVerificationService, which
+  // AuthService depends on for mandatory registration verification — Gmail
+  // SMTP when EMAIL_USER/EMAIL_PASS are set, else a logging no-op) --------
+  const emailProvider: EmailProvider = deps.emailProvider ?? createEmailProvider(config, logger);
+  const emailService = new EmailService(emailProvider, logger);
+  const emailVerificationRepository = new EmailVerificationRepository(db);
+  const emailVerificationService = new EmailVerificationService(
+    db,
+    emailVerificationRepository,
+    emailService,
+    auditService,
+    config.auth.emailVerification,
+    logger,
+  );
+
   // --- users -------------------------------------------------------
   const userRepository = new UserRepository(db);
   const userService = new UserService(
@@ -521,6 +546,7 @@ export function createContainer(deps: ContainerDeps): Container {
     refreshSessionService,
     roleRepository,
     auditService,
+    emailVerificationService,
     logger,
   );
 
@@ -595,7 +621,7 @@ export function createContainer(deps: ContainerDeps): Container {
   );
 
   // --- Veterinary Syndicates / Unions ----------------------------------
-  const syndicateMedia = new SyndicateMedia(objectStorage);
+  const syndicateMedia = new SyndicateMedia(objectStorage, logger);
   const syndicateDetailsRepository = new SyndicateDetailsRepository(db);
   const syndicateAnnouncementRepository = new SyndicateAnnouncementRepository(db);
   const syndicateSubmissionRepository = new SyndicateSubmissionRepository(db);
@@ -1214,7 +1240,7 @@ export function createContainer(deps: ContainerDeps): Container {
   );
 
   // --- Veterinarian Jobs / Careers -----------------------------------
-  const vetJobMedia = new VetJobMedia(objectStorage);
+  const vetJobMedia = new VetJobMedia(objectStorage, logger);
   const vetJobOfferRepository = new VetJobOfferRepository(db);
   const vetJobSeekerProfileRepository = new VetJobSeekerProfileRepository(db);
   const vetJobApplicationRepository = new VetJobApplicationRepository(db);
@@ -1249,7 +1275,7 @@ export function createContainer(deps: ContainerDeps): Container {
   );
 
   // --- Veterinarian Courses & Seminars --------------------------------
-  const vetCourseMedia = new VetCourseMedia(objectStorage);
+  const vetCourseMedia = new VetCourseMedia(objectStorage, logger);
   const vetCourseRepository = new VetCourseRepository(db);
   const vetCourseRegistrationRepository = new VetCourseRegistrationRepository(db);
   const vetCourseService = new VetCourseService(
@@ -1342,8 +1368,6 @@ export function createContainer(deps: ContainerDeps): Container {
   // events → NotificationEventHandler → NotificationService → in-app row (+ FCM).
   const pushProvider: PushNotificationProvider =
     deps.pushProvider ?? createPushProvider(config, logger);
-  const emailProvider: EmailProvider = deps.emailProvider ?? createEmailProvider(config, logger);
-  const emailService = new EmailService(emailProvider, logger);
   const deviceTokenRepository = new DeviceTokenRepository(db);
   const pushNotificationService = new PushNotificationService(
     pushProvider,
@@ -1406,10 +1430,12 @@ export function createContainer(deps: ContainerDeps): Container {
     audit: auditService,
   });
 
-  const authenticate = createAuthenticate({
-    tokens: tokenService,
-    users: userService,
-    roles: roleRepository,
+  const authenticateDeps = { tokens: tokenService, users: userService, roles: roleRepository };
+  const authenticate = createAuthenticate(authenticateDeps);
+  // See `Container.authenticatePendingOk`'s doc comment for exactly which
+  // routes may use this instead of `authenticate`.
+  const authenticatePendingOk = createAuthenticate(authenticateDeps, {
+    allowPendingVerification: true,
   });
   const authorization = createAuthorizationMiddleware(authorizationService);
 
@@ -1594,6 +1620,7 @@ export function createContainer(deps: ContainerDeps): Container {
     notificationEventHandler,
     adminDashboardService,
     authenticate,
+    authenticatePendingOk,
     authorization,
   };
 }

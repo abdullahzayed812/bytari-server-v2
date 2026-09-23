@@ -158,6 +158,17 @@ export class VetJobSeekerProfileService {
         tx,
       );
     });
+
+    // A replaced CV / photo is orphaned in R2 — clean up after commit.
+    await this.media.deleteReplaced(
+      [
+        cvStorageKey !== undefined ? existing.cvStorageKey : null,
+        photoStorageKey !== undefined ? existing.photoStorageKey : null,
+      ],
+      [cvStorageKey, photoStorageKey],
+      { seekerProfileId: existing.id },
+    );
+
     return this.mustGetDTO(existing.id);
   }
 

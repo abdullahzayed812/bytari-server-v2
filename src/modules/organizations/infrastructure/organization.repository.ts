@@ -189,6 +189,20 @@ export class OrganizationRepository {
   }
 
   /** Raw `*_details` row for a profile-bearing type — `null` for FARM. */
+  /**
+   * FARM has no directory-profile row, but `farm_details` does carry one photo.
+   * Returns its raw key; the service resolves it to a URL.
+   */
+  async findFarmImageKey(
+    organizationId: string,
+    trx?: Knex.Transaction,
+  ): Promise<string | null> {
+    const row = await this.conn(trx)('farm_details')
+      .where({ organization_id: organizationId })
+      .first('image_key');
+    return (row?.image_key as string | null | undefined) ?? null;
+  }
+
   async findProfileRow(
     type: OrganizationType,
     organizationId: string,

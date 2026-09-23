@@ -192,26 +192,44 @@ export class AnimalPublicationRepository {
     return { items: rows.map(rowToPublication), total };
   }
 
-  /** Moderation listing (admin / animal supervisor). Filter by kind / status. */
+  /**
+   * Moderation listing (admin / animal supervisor). Filter by kind / status.
+   * Joined with the animal summary — a reviewer decides on a listing WITH the
+   * animal's photos, same join the public browse uses.
+   */
   async listForModeration(
     filter: ListPublicationsFilter,
     trx?: Knex.Transaction,
-  ): Promise<{ items: AnimalPublication[]; total: number }> {
+  ): Promise<{ items: AnimalPublicationWithAnimal[]; total: number }> {
     const base = (): Knex.QueryBuilder => {
-      const qb = this.conn(trx)<AnimalPublicationRow>(TABLE);
-      if (filter.kind) qb.where('kind', filter.kind);
-      if (filter.status) qb.where('status', filter.status);
+      const qb = this.conn(trx)(`${TABLE} as p`).join('animals as a', 'a.id', 'p.animal_id');
+      if (filter.kind) qb.where('p.kind', filter.kind);
+      if (filter.status) qb.where('p.status', filter.status);
       return qb;
     };
 
     const countRow = await base().count<{ count: string }>({ count: '*' }).first();
     const total = Number(countRow?.count ?? 0);
-    const rows: AnimalPublicationRow[] = await base()
-      .orderBy('created_at', 'asc')
+    const rows: JoinedRow[] = await base()
+      .orderBy('p.created_at', 'asc')
       .limit(filter.pageSize)
-      .offset((filter.page - 1) * filter.pageSize);
+      .offset((filter.page - 1) * filter.pageSize)
+      .select('p.*', ...ANIMAL_JOIN_COLUMNS);
 
-    return { items: rows.map(rowToPublication), total };
+    return { items: rows.map(toWithAnimal), total };
+  }
+
+  /** One publication of ANY status, joined with the animal summary (moderation detail). */
+  async findByIdWithAnimal(
+    id: string,
+    trx?: Knex.Transaction,
+  ): Promise<AnimalPublicationWithAnimal | null> {
+    const row: JoinedRow | undefined = await this.conn(trx)(`${TABLE} as p`)
+      .join('animals as a', 'a.id', 'p.animal_id')
+      .where('p.id', id)
+      .select('p.*', ...ANIMAL_JOIN_COLUMNS)
+      .first();
+    return row ? toWithAnimal(row) : null;
   }
 
   /** Public browse — APPROVED publications only, joined with the animal summary. */

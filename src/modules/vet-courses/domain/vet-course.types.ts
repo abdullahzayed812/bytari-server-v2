@@ -254,6 +254,7 @@ export interface ModerationFilter {
   page: number;
   pageSize: number;
   status?: VetCourseModerationStatus;
+  type?: VetCourseType;
 }
 
 export interface RegistrationListFilter {

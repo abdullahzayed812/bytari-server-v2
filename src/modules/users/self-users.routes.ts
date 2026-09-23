@@ -12,13 +12,19 @@ const UPLOAD_RATE_LIMIT = { windowMs: 15 * 60 * 1000, max: 20 };
  * Mounts `/users/me/*` — authenticated self-service (avatar upload). Mounted
  * BEFORE `createPublicUsersRouter` (`/users/:id`) so `/users/me/*` is matched
  * first and never swallowed by the `:id` param route.
+ *
+ * Uses `authenticatePendingOk`, not the default `authenticate`: a
+ * freshly-registered `PENDING_VERIFICATION` account must be able to set its
+ * avatar in the SAME registration flow, before verifying its email — see
+ * `authenticate.middleware.ts`'s `CreateAuthenticateOptions` doc comment for
+ * the full, deliberately short, allowlist this belongs to.
  */
 export function createSelfUsersRouter(c: Container): Router {
   const ctrl = new SelfUsersController(c.userService);
   const limiter = userRateLimiter(c.config, UPLOAD_RATE_LIMIT);
   const r = Router();
 
-  r.use(c.authenticate);
+  r.use(c.authenticatePendingOk);
 
   r.post(
     '/me/avatar/upload-url',

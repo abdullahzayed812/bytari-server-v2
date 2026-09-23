@@ -246,4 +246,100 @@ describe('Veterinarian Courses & Seminars — admin oversight', () => {
       .set(bearer(creator.accessToken));
     expect(denied.status).toBe(403);
   });
+
+  it('an ADMIN (not also an approved veterinarian) can create a course/seminar directly', async () => {
+    const admin = await registerAdmin(app);
+    const plainUser = await registerUser(app);
+
+    const created = await createVetCourse(app, admin.accessToken, {
+      type: 'SEMINAR',
+      title: 'ندوة إدارية من الإدارة',
+    });
+    expect(created.id).toBeTruthy();
+
+    // It still starts PENDING like any other submission — no auto-approve
+    // shortcut — but ADMIN already holds `vet_course.approve`, so they can
+    // immediately approve their own submission (unlike a plain vet — see the
+    // self-approval test above).
+    const asPlainUser = await request(app)
+      .get(api(`/${created.id}`))
+      .set(bearer(plainUser.accessToken));
+    expect(asPlainUser.status).toBe(404); // still PENDING, not public yet
+
+    const approve = await approveVetCourse(app, admin.accessToken, created.id);
+    expect(approve.status).toBe(200);
+    expect(approve.body.data.status).toBe('APPROVED');
+  });
+
+  it('an ADMIN can edit a course they did not create; a plain approved vet who is not the owner cannot', async () => {
+    const admin = await registerAdmin(app);
+    const creator = await registerApprovedVet(app);
+    const otherVet = await registerApprovedVet(app);
+    const course = await createVetCourse(app, creator.accessToken, { title: 'العنوان الأصلي' });
+
+    const deniedForOtherVet = await request(app)
+      .patch(api(`/${course.id}`))
+      .set(bearer(otherVet.accessToken))
+      .send({ title: 'محاولة تعديل من طرف آخر' });
+    expect(deniedForOtherVet.status).toBe(403);
+
+    const adminEdit = await request(app)
+      .patch(api(`/${course.id}`))
+      .set(bearer(admin.accessToken))
+      .send({ title: 'عنوان محدّث من الإدارة' });
+    expect(adminEdit.status).toBe(200);
+    expect(adminEdit.body.data.title).toBe('عنوان محدّث من الإدارة');
+  });
+
+  it('admin can view every course/seminar state via explicit status filters; omitting status defaults to PENDING (same convention as vet-services/vet-jobs)', async () => {
+    const admin = await registerAdmin(app);
+    const vet = await registerApprovedVet(app);
+    const pending = await createVetCourse(app, vet.accessToken, { title: 'قيد الانتظار' });
+    const toApprove = await createVetCourse(app, vet.accessToken, { title: 'سيُعتمد' });
+    const toReject = await createVetCourse(app, vet.accessToken, { title: 'سيُرفض' });
+    await approveVetCourse(app, admin.accessToken, toApprove.id);
+    await request(app)
+      .post(adminApi(`/vet-courses/${toReject.id}/reject`))
+      .set(bearer(admin.accessToken))
+      .send({ reason: 'غير مكتمل' });
+
+    const pendingOnly = await request(app)
+      .get(adminApi('/vet-courses'))
+      .query({ status: 'PENDING' })
+      .set(bearer(admin.accessToken));
+    expect(pendingOnly.body.data.map((c: { id: string }) => c.id)).toEqual([pending.id]);
+
+    const approvedOnly = await request(app)
+      .get(adminApi('/vet-courses'))
+      .query({ status: 'APPROVED' })
+      .set(bearer(admin.accessToken));
+    expect(approvedOnly.body.data.map((c: { id: string }) => c.id)).toEqual([toApprove.id]);
+
+    const rejectedOnly = await request(app)
+      .get(adminApi('/vet-courses'))
+      .query({ status: 'REJECTED' })
+      .set(bearer(admin.accessToken));
+    expect(rejectedOnly.body.data.map((c: { id: string }) => c.id)).toEqual([toReject.id]);
+
+    // No `status` — the admin UI's "All" chip — defaults to PENDING, exactly
+    // like `AdminVetServiceListingsScreen`'s own "All" chip. This is what
+    // `AdminDashboardService`'s badge count relies on.
+    const noFilter = await request(app).get(adminApi('/vet-courses')).set(bearer(admin.accessToken));
+    expect(noFilter.body.data.map((c: { id: string }) => c.id)).toEqual([pending.id]);
+  });
+
+  it('GET /admin/vet-courses?type=SEMINAR excludes COURSE/WORKSHOP submissions', async () => {
+    const admin = await registerAdmin(app);
+    const vet = await registerApprovedVet(app);
+    const course = await createVetCourse(app, vet.accessToken, { type: 'COURSE', title: 'دورة' });
+    const seminar = await createVetCourse(app, vet.accessToken, { type: 'SEMINAR', title: 'ندوة' });
+
+    const seminarsOnly = await request(app)
+      .get(adminApi('/vet-courses'))
+      .query({ type: 'SEMINAR' })
+      .set(bearer(admin.accessToken));
+    const ids = seminarsOnly.body.data.map((c: { id: string }) => c.id);
+    expect(ids).toEqual([seminar.id]);
+    expect(ids).not.toContain(course.id);
+  });
 });

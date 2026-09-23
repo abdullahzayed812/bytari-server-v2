@@ -125,6 +125,28 @@ const schemas: Obj = {
       updatedAt: { type: 'string', format: 'date-time' },
     },
   },
+  ModerationAnimalPublication: {
+    type: 'object',
+    description:
+      'Moderation projection (`/admin/animal-publications*`) — the full `AnimalPublication` PLUS ' +
+      'the joined animal summary with resolved `galleryUrls`, so a reviewer sees the animal’s ' +
+      'photos before approving / rejecting. Same animal summary the public projection uses.',
+    properties: {
+      id: uuid,
+      animalId: uuid,
+      kind: { type: 'string', enum: kindEnum },
+      status: { type: 'string', enum: statusEnum },
+      note: { type: 'string', nullable: true },
+      createdByUserId: uuid,
+      reviewedByUserId: { type: 'string', format: 'uuid', nullable: true },
+      reviewedAt: { type: 'string', format: 'date-time', nullable: true },
+      rejectionReason: { type: 'string', nullable: true },
+      ...listingFields,
+      createdAt: { type: 'string', format: 'date-time' },
+      updatedAt: { type: 'string', format: 'date-time' },
+      animal: animalSummary,
+    },
+  },
   PublicAnimalPublication: {
     type: 'object',
     description:
@@ -430,7 +452,10 @@ const paths: Obj = {
         { name: 'status', in: 'query', schema: { type: 'string', enum: statusEnum } },
       ],
       responses: {
-        '200': ok('Paginated publications', listOf('#/components/schemas/AnimalPublication')),
+        '200': ok(
+          'Paginated publications (each with the joined animal + its photo URLs)',
+          listOf('#/components/schemas/ModerationAnimalPublication'),
+        ),
         ...errs(401, 403),
       },
     },
@@ -442,7 +467,10 @@ const paths: Obj = {
       security: bearer,
       parameters: [publicationIdParam],
       responses: {
-        '200': ok('Publication', dataOf({ $ref: '#/components/schemas/AnimalPublication' })),
+        '200': ok(
+          'Publication with the joined animal + its photo URLs',
+          dataOf({ $ref: '#/components/schemas/ModerationAnimalPublication' }),
+        ),
         ...errs(401, 403, 404),
       },
     },

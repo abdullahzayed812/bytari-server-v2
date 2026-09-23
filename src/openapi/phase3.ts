@@ -67,6 +67,13 @@ const schemas: Obj = {
         type: 'object',
         properties: {
           joinCode: { type: 'string', description: 'FARM only' },
+          imageUrl: {
+            type: 'string',
+            nullable: true,
+            description:
+              'FARM only — the farm photo (`farm_details.image_key`) resolved server-side. ' +
+              'FARM has no directory profile, so this is the one image it carries.',
+          },
           subscriptionStartDate: {
             type: 'string',
             format: 'date',
@@ -718,7 +725,7 @@ const paths: Obj = {
       tags: ['Admin · Organizations'],
       summary:
         'Poultry Farms management list — owner, supervisors, subscription dates/status, ' +
-        'open-renewal flag (`organization.admin.read`)',
+        'open-renewal flag, and a resolved `imageUrl` thumbnail (`organization.admin.read`)',
       security: bearer,
       parameters: [
         { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },

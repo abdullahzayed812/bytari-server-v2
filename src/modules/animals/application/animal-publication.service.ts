@@ -9,6 +9,7 @@ import type { AuditService } from '../../audit/audit.service.js';
 import { PublicationPolicy } from '../domain/publication.policy.js';
 import { PUBLICATION_AUDIT_ACTIONS, PUBLICATION_EVENTS } from '../domain/publication.constants.js';
 import {
+  toModerationPublicationDTO,
   toMyPublicationDTO,
   toPublicPublicationDTO,
   toPublicationDTO,
@@ -17,6 +18,7 @@ import {
   type CreatePublicationInput,
   type ListPublicationsFilter,
   type MinePublicationsFilter,
+  type ModerationPublicationDTO,
   type MyPublicationDTO,
   type PublicListFilter,
   type PublicPublicationDTO,
@@ -75,6 +77,14 @@ export class AnimalPublicationService {
     item: AnimalPublicationWithAnimal,
   ): Promise<PublicPublicationDTO> {
     const dto = toPublicPublicationDTO(item);
+    const galleryUrls = await this.resolveGalleryUrls(item.animal.galleryKeys);
+    return { ...dto, animal: { ...dto.animal, galleryUrls } };
+  }
+
+  private async withResolvedGalleryModeration(
+    item: AnimalPublicationWithAnimal,
+  ): Promise<ModerationPublicationDTO> {
+    const dto = toModerationPublicationDTO(item);
     const galleryUrls = await this.resolveGalleryUrls(item.animal.galleryKeys);
     return { ...dto, animal: { ...dto.animal, galleryUrls } };
   }
@@ -220,18 +230,20 @@ export class AnimalPublicationService {
 
   // --- moderation (ADMIN / ANIMAL system supervisor) ------------
 
-  listForModeration(
+  async listForModeration(
     filter: ListPublicationsFilter,
-  ): Promise<{ items: AnimalPublicationDTO[]; total: number }> {
-    return this.publications
-      .listForModeration(filter)
-      .then(({ items, total }) => ({ items: items.map(toPublicationDTO), total }));
+  ): Promise<{ items: ModerationPublicationDTO[]; total: number }> {
+    const { items, total } = await this.publications.listForModeration(filter);
+    return {
+      items: await Promise.all(items.map((i) => this.withResolvedGalleryModeration(i))),
+      total,
+    };
   }
 
-  async getForModeration(publicationId: string): Promise<AnimalPublicationDTO> {
-    const found = await this.publications.findById(publicationId);
+  async getForModeration(publicationId: string): Promise<ModerationPublicationDTO> {
+    const found = await this.publications.findByIdWithAnimal(publicationId);
     if (!found) throw new NotFoundError('Publication not found');
-    return toPublicationDTO(found);
+    return this.withResolvedGalleryModeration(found);
   }
 
   async approve(publicationId: string, actor: PublicationActor): Promise<AnimalPublicationDTO> {

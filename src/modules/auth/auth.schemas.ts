@@ -39,3 +39,20 @@ export const logoutBodySchema = z.object({
   refreshToken: z.string().min(20).max(512).optional(),
 });
 export type LogoutBody = z.infer<typeof logoutBodySchema>;
+
+/** Exactly 6 digits — matches `EmailVerificationService`'s generated code shape. */
+const verificationCode = z
+  .string()
+  .trim()
+  .regex(/^\d{6}$/, 'code must be exactly 6 digits');
+
+export const verifyEmailBodySchema = z.object({
+  email: emailSchema,
+  code: verificationCode,
+});
+export type VerifyEmailBody = z.infer<typeof verifyEmailBodySchema>;
+
+export const resendVerificationBodySchema = z.object({
+  email: emailSchema,
+});
+export type ResendVerificationBody = z.infer<typeof resendVerificationBodySchema>;

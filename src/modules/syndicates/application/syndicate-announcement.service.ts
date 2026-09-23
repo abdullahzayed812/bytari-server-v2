@@ -123,6 +123,14 @@ export class SyndicateAnnouncementService {
       );
       return a;
     });
+
+    // The replaced announcement image is orphaned in R2 — clean up after commit.
+    if (imageStorageKey !== undefined) {
+      await this.media.deleteReplaced([existing.imageStorageKey], [imageStorageKey], {
+        announcementId: id,
+      });
+    }
+
     return this.toDTO(updated);
   }
 
@@ -144,6 +152,9 @@ export class SyndicateAnnouncementService {
         tx,
       );
     });
+
+    // Nothing references the announcement's image any more.
+    await this.media.deleteReplaced([existing.imageStorageKey], [], { announcementId: id });
   }
 
   async listForOrganization(

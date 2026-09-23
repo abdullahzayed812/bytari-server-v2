@@ -24,7 +24,14 @@ export function createVeterinarianRouters(c: Container): { self: Router; admin: 
   const limiter = userRateLimiter(c.config, APPLICATION_RATE_LIMIT);
 
   const self = Router();
-  self.use(c.authenticate);
+  // `authenticatePendingOk`: a freshly-registered `PENDING_VERIFICATION`
+  // account applying to become a veterinarian in the SAME registration flow
+  // must be able to upload its identity documents and submit the application
+  // before verifying its email — see `authenticate.middleware.ts`'s
+  // `CreateAuthenticateOptions` doc comment. `/me/status` is read-only and
+  // self-scoped, so it rides along on the same lenient guard rather than
+  // needing its own middleware line.
+  self.use(c.authenticatePendingOk);
   self.post('/apply', limiter, validate({ body: applyBodySchema }), asyncHandler(ctrl.apply));
   self.post(
     '/documents/upload-url',

@@ -28,8 +28,14 @@ export function rowToUser(row: UserRow): User {
   };
 }
 
-/** Strip the password hash and normalise dates for API responses. */
-export function toPublicUser(user: User): PublicUser {
+/**
+ * Strip the password hash and normalise dates for API responses.
+ *
+ * `avatarUrl` must be resolved from `user.avatarKey` by a caller that holds
+ * {@link ObjectStorage} — use `UserService.toPublicUserWithAvatar` rather than
+ * this mapper wherever the response is meant to render the avatar.
+ */
+export function toPublicUser(user: User, avatarUrl: string | null = null): PublicUser {
   return {
     id: user.id,
     email: user.email,
@@ -38,7 +44,7 @@ export function toPublicUser(user: User): PublicUser {
     phone: user.phone,
     gender: user.gender,
     country: user.country,
-    avatarKey: user.avatarKey,
+    avatarUrl,
     status: user.status,
     veterinarianStatus: user.veterinarianStatus,
     traderStatus: user.traderStatus,
@@ -48,12 +54,13 @@ export function toPublicUser(user: User): PublicUser {
 }
 
 /** Name-only directory projection. See {@link UserSummary}. */
-export function toUserSummary(user: User): UserSummary {
+export function toUserSummary(user: User, avatarUrl: string | null = null): UserSummary {
   return {
     id: user.id,
     firstName: user.firstName,
     lastName: user.lastName,
     veterinarianStatus: user.veterinarianStatus,
     traderStatus: user.traderStatus,
+    avatarUrl,
   };
 }

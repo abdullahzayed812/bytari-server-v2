@@ -7,7 +7,8 @@ import { buildObjectKey, StoragePrefix, type ObjectStorage } from '../../infra/s
 import { AuditAction, AuditEntityType, type AuditContext } from '../audit/audit.types.js';
 import type { AuditService } from '../audit/audit.service.js';
 import type { RefreshSessionRepository } from '../auth/refresh-session.repository.js';
-import { toPublicUser } from './user.mapper.js';
+import { resolveStorageUrlOrNull } from '../../shared/storage/media-url.js';
+import { toPublicUser, toUserSummary } from './user.mapper.js';
 import { UserPolicy } from './user.policy.js';
 import type { UserRepository } from './user.repository.js';
 import type {
@@ -17,6 +18,7 @@ import type {
   TraderStatus,
   User,
   UserStatus,
+  UserSummary,
   VeterinarianStatus,
 } from './user.types.js';
 
@@ -26,6 +28,8 @@ export interface ActorContext {
 }
 
 const AVATAR_UPLOAD_URL_TTL_SECONDS = 600;
+/** How long a signed avatar GET URL stays valid (private-bucket fallback). */
+const AVATAR_URL_TTL_SECONDS = 3600;
 
 /**
  * User lifecycle & account-status operations. Registration/authentication logic
@@ -44,6 +48,30 @@ export class UserService {
     logger: Logger,
   ) {
     this.log = logger.child({ component: 'user-service' });
+  }
+
+  /**
+   * Resolve one user's avatar key to a client-usable URL. Shared by every
+   * surface that returns a user DTO (auth, `/users/:id`, `/admin/users`) so
+   * there is exactly one resolution rule and the raw R2 key never ships.
+   */
+  resolveAvatarUrl(user: User): Promise<string | null> {
+    return resolveStorageUrlOrNull(this.storage, user.avatarKey, AVATAR_URL_TTL_SECONDS);
+  }
+
+  /** {@link toPublicUser} with `avatarUrl` resolved. */
+  async toPublicUserWithAvatar(user: User): Promise<PublicUser> {
+    return toPublicUser(user, await this.resolveAvatarUrl(user));
+  }
+
+  /** {@link toUserSummary} with `avatarUrl` resolved. */
+  async toUserSummaryWithAvatar(user: User): Promise<UserSummary> {
+    return toUserSummary(user, await this.resolveAvatarUrl(user));
+  }
+
+  /** Batched {@link toPublicUserWithAvatar} for list endpoints. */
+  toPublicUsersWithAvatars(users: User[]): Promise<PublicUser[]> {
+    return Promise.all(users.map((u) => this.toPublicUserWithAvatar(u)));
   }
 
   getByIdOrNull(id: string, trx?: Knex.Transaction): Promise<User | null> {
@@ -269,6 +297,6 @@ export class UserService {
     }
 
     this.events.publish('user.avatar.updated', { userId });
-    return toPublicUser(updated);
+    return this.toPublicUserWithAvatar(updated);
   }
 }

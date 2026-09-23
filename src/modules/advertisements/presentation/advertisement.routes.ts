@@ -128,6 +128,12 @@ export function createAdminAdRouter(c: Container): Router {
     validate({ params: slideParamsSchema, body: registerImageBodySchema }),
     asyncHandler(ctrl.registerSlideImage),
   );
+  r.delete(
+    '/:campaignId/slides/:slideId/image',
+    manage,
+    validate({ params: slideParamsSchema }),
+    asyncHandler(ctrl.removeSlideImage),
+  );
 
   return r;
 }
