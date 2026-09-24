@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { computeFarmSubscriptionStatus } from '../../src/modules/organizations/domain/organization.types.js';
 import { FarmSubscriptionPolicy } from '../../src/modules/farms/domain/farm-subscription.policy.js';
-import { AppError } from '../../src/shared/errors/app-error.js';
+import type { AppError } from '../../src/shared/errors/app-error.js';
 
 describe('computeFarmSubscriptionStatus', () => {
   const today = new Date('2026-06-15T12:00:00Z');
@@ -31,8 +31,12 @@ describe('computeFarmSubscriptionStatus', () => {
 
 describe('FarmSubscriptionPolicy.assertValidPeriod', () => {
   it('accepts endDate >= startDate', () => {
-    expect(() => FarmSubscriptionPolicy.assertValidPeriod('2026-01-01', '2026-01-01')).not.toThrow();
-    expect(() => FarmSubscriptionPolicy.assertValidPeriod('2026-01-01', '2026-12-31')).not.toThrow();
+    expect(() =>
+      FarmSubscriptionPolicy.assertValidPeriod('2026-01-01', '2026-01-01'),
+    ).not.toThrow();
+    expect(() =>
+      FarmSubscriptionPolicy.assertValidPeriod('2026-01-01', '2026-12-31'),
+    ).not.toThrow();
   });
 
   it('rejects endDate before startDate with 400 INVALID_SUBSCRIPTION_DATES', () => {
@@ -48,9 +52,7 @@ describe('FarmSubscriptionPolicy.assertValidPeriod', () => {
 
 describe('FarmSubscriptionPolicy.assertOwner', () => {
   it('accepts the organization owner', () => {
-    expect(() =>
-      FarmSubscriptionPolicy.assertOwner({ ownerUserId: 'u1' }, 'u1'),
-    ).not.toThrow();
+    expect(() => FarmSubscriptionPolicy.assertOwner({ ownerUserId: 'u1' }, 'u1')).not.toThrow();
   });
 
   it('rejects a non-owner with 403 PERMISSION_DENIED', () => {

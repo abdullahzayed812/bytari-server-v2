@@ -20,7 +20,7 @@ Every item below is tagged:
 | Container healthcheck | **[Implemented]** | `HEALTHCHECK` → `GET /health` (liveness). Compose `api` service mirrors it.                                                                                                                                                                          |
 | Readiness             | **[Implemented]** | `GET /health/ready` returns 503 until the DB answers `select 1`. Wire it to your load-balancer / k8s `readinessProbe`.                                                                                                                               |
 | Graceful shutdown     | **[Implemented]** | `SIGTERM`/`SIGINT` → stop accepting, close WS sockets (code 1001), drain infra, `db.destroy()`, exit. 10s hard-kill safety net (`server.ts`).                                                                                                        |
-| Migrations on boot    | **[Implemented]** | Container `CMD` runs `migrate latest` + idempotent catalogue `seed` before `server.js`.                                                                                                                                                              |
+| Migrations on boot    | **[Implemented]** | Image default `CMD` runs `migrate latest` + `seed` before `server.js` (dev `docker-compose.yml`). **Production** (`docker-compose.production.yml`) overrides it to `node dist/server.js`; `deploy/scripts/deploy.sh` migrates explicitly after a backup — see `docs/deployment.md`. |
 | Horizontal scaling    | **[Future]**      | The WebSocket gateway is single-node (in-memory room index). Multiple API replicas work for REST, but realtime fan-out only reaches clients on the same node. A Redis-backed gateway is the documented swap point (`ARCHITECTURE.md` §16.4 / §23.4). |
 | Background job runner | **[Future]**      | No external queue. Async work is in-process, post-commit `EventBus` handlers (notifications, realtime, push). See §6.                                                                                                                                |
 
@@ -139,9 +139,11 @@ node dist/database/migrate.js seed
      fresh backup.
   3. For a destructive change, restore from backup rather than `down()`.
 - Take a backup immediately before any deploy that includes a migration.
-- Migrations run automatically on container start; a failed migration aborts
-  the boot (`CMD` chain stops) and the old container keeps serving — deploy is
-  effectively atomic per replica.
+- Production (`docs/deployment.md`): `deploy.sh` takes a `pg_dump`, then runs
+  migrations with the new image **before** replacing any container; a failed
+  migration aborts the deploy while the old release keeps serving. (With the
+  image's default `CMD`, as in the dev compose, migrations run on container
+  start instead.)
 
 ---
 

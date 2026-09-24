@@ -48,7 +48,7 @@ export class EmailVerificationRepository {
       .where({ id })
       .increment('attempts', 1)
       .returning('attempts');
-    return Number((row as { attempts: number } | undefined)?.attempts ?? 0);
+    return Number(row?.attempts ?? 0);
   }
 
   async markConsumed(id: string, trx?: Knex.Transaction): Promise<void> {

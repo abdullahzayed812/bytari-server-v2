@@ -202,6 +202,16 @@ const envSchema = z
         message: 'JWT_ACCESS_SECRET (>=32 chars) is required when NODE_ENV=production.',
       });
     }
+
+    // CORS is `credentials: true` — a wildcard origin must never reach production.
+    if (env.NODE_ENV === 'production' && env.CORS_ORIGINS.includes('*')) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['CORS_ORIGINS'],
+        message:
+          'CORS_ORIGINS must list explicit origins (e.g. https://bytari.com) when NODE_ENV=production.',
+      });
+    }
   })
   .transform((env) => {
     const firebaseConfigured =

@@ -5,7 +5,9 @@ import type { MembershipRepository } from '../../organizations/infrastructure/me
 import type { OrganizationFollowRepository } from '../../organizations/infrastructure/organization-follow.repository.js';
 import type { OrganizationRepository } from '../../organizations/infrastructure/organization.repository.js';
 import type { SupervisorRepository } from '../../supervisors/supervisor.repository.js';
+import type { NotificationRecipientRepository } from '../infrastructure/recipient.repository.js';
 import type { NotificationType } from './notification.constants.js';
+import { NOTIFICATION_COPY } from './notification.copy.js';
 import type { NotificationSpec } from './notification.types.js';
 
 export interface NotificationPolicyDeps {
@@ -17,208 +19,11 @@ export interface NotificationPolicyDeps {
   organizations: OrganizationRepository;
   supervisors: SupervisorRepository;
   organizationFollows: OrganizationFollowRepository;
+  recipients: NotificationRecipientRepository;
 }
 
 /** Fan-out cap for a single domain event (clinic staff / domain supervisors). */
 const RECIPIENT_FANOUT_CAP = 200;
-
-const COPY: Record<NotificationType, { title: string; body: string }> = {
-  ACCOUNT_STATUS_CHANGED: {
-    title: 'Account status changed',
-    body: 'Your account status was updated.',
-  },
-  ORGANIZATION_APPROVED: {
-    title: 'Organization approved',
-    body: 'Your organization has been approved.',
-  },
-  ORGANIZATION_REJECTED: {
-    title: 'Organization rejected',
-    body: 'Your organization request was rejected.',
-  },
-  ORGANIZATION_SUSPENDED: {
-    title: 'Organization suspended',
-    body: 'Your organization has been suspended.',
-  },
-  ORGANIZATION_ACTIVATED: {
-    title: 'Organization activated',
-    body: 'Your organization has been re-activated.',
-  },
-  ORGANIZATION_MEMBER_ADDED: {
-    title: 'Added to an organization',
-    body: 'You were added to an organization.',
-  },
-  ORGANIZATION_MEMBER_REMOVED: {
-    title: 'Removed from an organization',
-    body: 'You were removed from an organization.',
-  },
-  ORGANIZATION_SUPERVISOR_ASSIGNED: {
-    title: 'Supervisor assignment',
-    body: 'You were assigned as an organization supervisor.',
-  },
-  SYSTEM_SUPERVISOR_ASSIGNED: {
-    title: 'Supervisor assignment',
-    body: 'You were assigned as a system supervisor.',
-  },
-  CHAT_MESSAGE_RECEIVED: { title: 'New message', body: 'You have a new message.' },
-  CONSULTATION_CREATED: { title: 'New consultation', body: 'A new consultation was submitted.' },
-  CONSULTATION_MESSAGE_RECEIVED: {
-    title: 'New consultation reply',
-    body: 'There is a new message on a consultation.',
-  },
-  CONSULTATION_CLOSED: { title: 'Consultation closed', body: 'Your consultation has been closed.' },
-  INQUIRY_CREATED: { title: 'New inquiry', body: 'A new inquiry was submitted.' },
-  INQUIRY_MESSAGE_RECEIVED: {
-    title: 'New inquiry reply',
-    body: 'There is a new message on an inquiry.',
-  },
-  INQUIRY_CLOSED: { title: 'Inquiry closed', body: 'Your inquiry has been closed.' },
-  SUPPORT_CREATED: { title: 'New support message', body: 'A new support message was submitted.' },
-  SUPPORT_MESSAGE_RECEIVED: {
-    title: 'New support reply',
-    body: 'There is a new message on a support request.',
-  },
-  SUPPORT_CLOSED: {
-    title: 'Support request closed',
-    body: 'Your support request has been closed.',
-  },
-  VET_SERVICE_LISTING_SUBMITTED: {
-    title: 'New service listing to review',
-    body: 'A veterinarian submitted a service listing for approval.',
-  },
-  VET_SERVICE_LISTING_APPROVED: {
-    title: 'Service listing approved',
-    body: 'Your service listing is now public.',
-  },
-  VET_SERVICE_LISTING_REJECTED: {
-    title: 'Service listing rejected',
-    body: 'Your service listing needs changes before it can be published.',
-  },
-  VET_SERVICE_REQUEST_SUBMITTED: {
-    title: 'New service request to review',
-    body: 'A pet owner submitted a service request for approval.',
-  },
-  VET_SERVICE_REQUEST_APPROVED: {
-    title: 'Service request approved',
-    body: 'Your service request is now public.',
-  },
-  VET_SERVICE_REQUEST_REJECTED: {
-    title: 'Service request rejected',
-    body: 'Your service request needs changes before it can be published.',
-  },
-  VET_SERVICE_OFFER_RECEIVED: {
-    title: 'New offer on your request',
-    body: 'A veterinarian submitted an offer on your service request.',
-  },
-  VET_SERVICE_OFFER_ACCEPTED: {
-    title: 'Your offer was accepted',
-    body: 'The pet owner accepted your offer — a conversation is open.',
-  },
-  VET_SERVICE_OFFER_REJECTED: {
-    title: 'Your offer was declined',
-    body: 'The pet owner chose a different offer.',
-  },
-  VET_SERVICE_LISTING_REQUEST_RECEIVED: {
-    title: 'New request on your service',
-    body: 'A pet owner requested your service listing.',
-  },
-  VET_SERVICE_LISTING_REQUEST_ACCEPTED: {
-    title: 'Your request was accepted',
-    body: 'The veterinarian accepted your request — a conversation is open.',
-  },
-  VET_SERVICE_LISTING_REQUEST_REJECTED: {
-    title: 'Your request was declined',
-    body: 'The veterinarian declined your service request.',
-  },
-  VET_SERVICE_DEAL_COMPLETED: {
-    title: 'Service completed',
-    body: 'The service has been marked as completed.',
-  },
-  VET_COURSE_SUBMITTED: {
-    title: 'New course/seminar to review',
-    body: 'A veterinarian submitted a course or seminar for approval.',
-  },
-  VET_COURSE_APPROVED: {
-    title: 'Course/seminar approved',
-    body: 'Your course/seminar is now public.',
-  },
-  VET_COURSE_REJECTED: {
-    title: 'Course/seminar rejected',
-    body: 'Your course/seminar needs changes before it can be published.',
-  },
-  VET_COURSE_REGISTRATION_CONFIRMED: {
-    title: 'Registration confirmed',
-    body: 'Your registration was confirmed.',
-  },
-  SYNDICATE_ANNOUNCEMENT_PUBLISHED: {
-    title: 'New syndicate announcement',
-    body: 'A syndicate you follow published a new announcement.',
-  },
-  SYNDICATE_SUBMISSION_CREATED: {
-    title: 'New submission to review',
-    body: 'A member submitted a new request or inquiry.',
-  },
-  SYNDICATE_SUBMISSION_RESPONDED: {
-    title: 'Your submission was answered',
-    body: 'The syndicate responded to your request or inquiry.',
-  },
-  CONTENT_PUBLISHED: { title: 'New content published', body: 'New content is available.' },
-  ADMIN_ANNOUNCEMENT: { title: 'Announcement', body: 'You have a new announcement.' },
-  PUBLICATION_ADOPTION_REQUESTED: {
-    title: 'Adoption request',
-    body: 'Someone is interested in adopting your listed animal.',
-  },
-  PUBLICATION_MATING_REQUESTED: {
-    title: 'Mating request',
-    body: 'Someone is interested in mating with your listed animal.',
-  },
-  PUBLICATION_SIGHTING_REPORTED: {
-    title: 'Sighting reported',
-    body: 'Someone reported a sighting of your lost animal.',
-  },
-  TRANSFER_REQUEST_RECEIVED: {
-    title: 'Ownership transfer request',
-    body: 'Someone wants to transfer an animal to you.',
-  },
-  TRANSFER_REQUEST_ACCEPTED: {
-    title: 'Transfer request accepted',
-    body: 'Your ownership transfer request was accepted.',
-  },
-  TRANSFER_REQUEST_REJECTED: {
-    title: 'Transfer request declined',
-    body: 'Your ownership transfer request was declined.',
-  },
-  CLINIC_APPOINTMENT_REQUESTED: {
-    title: 'New appointment request',
-    body: 'A pet owner has requested an appointment.',
-  },
-  CLINIC_APPOINTMENT_CONFIRMED: {
-    title: 'Appointment confirmed',
-    body: 'The clinic confirmed your appointment.',
-  },
-  CLINIC_APPOINTMENT_REJECTED: {
-    title: 'Appointment declined',
-    body: 'The clinic declined your appointment request.',
-  },
-  CLINIC_APPOINTMENT_RESCHEDULE_PROPOSED: {
-    title: 'New appointment time proposed',
-    body: 'The clinic proposed a different date/time for your appointment.',
-  },
-  CLINIC_APPOINTMENT_CANCELLED: {
-    title: 'Appointment cancelled',
-    body: 'An appointment was cancelled.',
-  },
-  CLINIC_APPOINTMENT_COMPLETED: {
-    title: 'Appointment completed',
-    body: 'Your appointment has been marked as completed.',
-  },
-  // Real title/body are sender-supplied and set directly on the spec by
-  // `organizationBroadcastToFollowers` (bypasses `spec()`'s static COPY lookup) —
-  // this entry only satisfies the `Record<NotificationType, ...>` exhaustiveness check.
-  ORGANIZATION_BROADCAST: {
-    title: 'Message from an organization you follow',
-    body: 'An organization you follow sent a message.',
-  },
-};
 
 type P = Record<string, unknown>;
 
@@ -472,11 +277,7 @@ export class NotificationPolicy {
           entityId: str(p.courseId),
         });
       case 'vet_course.registration.created':
-        return this.vetServiceToUser('VET_COURSE_REGISTRATION_CONFIRMED', event.name, p, {
-          userId: str(p.registrantUserId),
-          entityType: 'VET_COURSE',
-          entityId: str(p.courseId),
-        });
+        return this.vetCourseRegistration(event.name, p);
 
       // --- Veterinary Syndicates / Unions ---
       case 'syndicate.announcement.published':
@@ -515,6 +316,232 @@ export class NotificationPolicy {
           str(p.actorUserId),
         );
 
+      // --- account -------------------------------------------------
+      case 'user.status.changed':
+        return this.userStatusChanged(event, p);
+
+      // --- veterinarian approval workflow ----------------------------
+      case 'veterinarian.application.submitted':
+        return this.toReviewers('VETERINARIAN_APPLICATION_SUBMITTED', null, {
+          excludeUserId: str(p.userId),
+          data: { applicationId: str(p.applicationId), applicantUserId: str(p.userId) },
+          entityType: 'VETERINARIAN_APPLICATION',
+          entityId: str(p.applicationId),
+          key: `${event.name}:${str(p.applicationId)}`,
+        });
+      case 'veterinarian.approved':
+      case 'veterinarian.rejected':
+        return this.toUser(
+          event.name === 'veterinarian.approved'
+            ? 'VETERINARIAN_APPROVED'
+            : 'VETERINARIAN_REJECTED',
+          str(p.userId),
+          {
+            applicationId: str(p.applicationId),
+            entityType: 'VETERINARIAN_APPLICATION',
+            entityId: str(p.applicationId),
+            key: `${event.name}:${str(p.applicationId)}`,
+          },
+        );
+
+      // --- organizations ---------------------------------------------
+      case 'organization.created':
+        return this.organizationSubmitted(event.name, p);
+      case 'organization.deactivated':
+        return this.singleOwner(
+          'ORGANIZATION_DEACTIVATED',
+          p,
+          repeatableKey(event, str(p.organizationId)),
+        );
+      case 'organization.member.updated':
+        if (str(p.actorUserId) === str(p.userId)) return [];
+        return this.toUser('ORGANIZATION_ROLE_CHANGED', str(p.userId), {
+          organizationId: str(p.organizationId),
+          ...(str(p.roleKey) ? { roleKey: str(p.roleKey) } : {}),
+          ...(str(p.status) ? { status: str(p.status) } : {}),
+          entityType: 'ORGANIZATION',
+          entityId: str(p.organizationId),
+          key: repeatableKey(event, str(p.membershipId)),
+        });
+
+      // --- organization subscription (FARM / VETERINARY_OFFICE / CLINIC) ---
+      case 'farm.subscription.set':
+        return this.subscriptionToOwner(
+          'SUBSCRIPTION_UPDATED',
+          p,
+          `${event.name}:${str(p.organizationId)}:${str(p.endDate)}`,
+        );
+      case 'farm.subscription.renewal.requested':
+        return this.subscriptionRenewalRequested(event.name, p);
+      case 'farm.subscription.renewal.approved':
+        return this.subscriptionToOwner(
+          'SUBSCRIPTION_RENEWAL_APPROVED',
+          p,
+          `${event.name}:${str(p.requestId)}`,
+        );
+      case 'farm.subscription.renewal.rejected':
+        return this.subscriptionToOwner(
+          'SUBSCRIPTION_RENEWAL_REJECTED',
+          p,
+          `${event.name}:${str(p.requestId)}`,
+        );
+
+      // --- farms -------------------------------------------------------
+      case 'farm.member.joined':
+        return this.farmMemberJoined(event.name, p);
+      case 'farm.appointment.created':
+        return this.farmAppointmentCreated(event.name, p);
+
+      // --- poultry market traders -----------------------------------
+      case 'trader.application.submitted':
+        return this.toReviewers('TRADER_APPLICATION_SUBMITTED', 'MARKET', {
+          excludeUserId: str(p.userId),
+          data: { traderProfileId: str(p.traderProfileId) },
+          entityType: 'TRADER_PROFILE',
+          entityId: str(p.traderProfileId),
+          key: repeatableKey(event, str(p.traderProfileId)),
+        });
+      case 'trader.approved':
+      case 'trader.rejected':
+      case 'trader.suspended':
+      case 'trader.reactivated':
+        return this.toUser(TRADER_TYPES[event.name] as NotificationType, str(p.userId), {
+          entityType: 'TRADER_PROFILE',
+          entityId: str(p.userId),
+          key: repeatableKey(event, str(p.userId)),
+        });
+
+      // --- animal publications (lost / adoption / mating) moderation ---
+      case 'animal.lost.created':
+      case 'animal.adoption.created':
+      case 'animal.mating.created':
+        return this.toReviewers('PUBLICATION_SUBMITTED', 'ANIMAL', {
+          excludeUserId: str(p.createdByUserId),
+          data: { publicationId: str(p.publicationId), kind: str(p.kind) },
+          entityType: 'ANIMAL_PUBLICATION',
+          entityId: str(p.publicationId),
+          key: `${event.name}:${str(p.publicationId)}`,
+        });
+      case 'animal.lost.approved':
+      case 'animal.adoption.approved':
+      case 'animal.mating.approved':
+      case 'animal.lost.rejected':
+      case 'animal.adoption.rejected':
+      case 'animal.mating.rejected':
+        if (str(p.actorUserId) === str(p.createdByUserId)) return [];
+        return this.toUser(
+          event.name.endsWith('.approved') ? 'PUBLICATION_APPROVED' : 'PUBLICATION_REJECTED',
+          str(p.createdByUserId),
+          {
+            publicationId: str(p.publicationId),
+            kind: str(p.kind),
+            entityType: 'ANIMAL_PUBLICATION',
+            entityId: str(p.publicationId),
+            key: `${event.name}:${str(p.publicationId)}`,
+          },
+        );
+
+      // --- Veterinarian Courses & Seminars (additions) ----------------
+      case 'vet_course.cancelled':
+        return this.vetCourseCancelled(event.name, p);
+
+      // --- Veterinary Jobs ----------------------------------------------
+      case 'vet_job.offer.submitted':
+        return this.toReviewers('VET_JOB_OFFER_SUBMITTED', 'VET_JOBS', {
+          excludeUserId: str(p.postedByUserId),
+          data: { offerId: str(p.offerId) },
+          entityType: 'VET_JOB_OFFER',
+          entityId: str(p.offerId),
+          key: repeatableKey(event, str(p.offerId)),
+        });
+      case 'vet_job.offer.approved':
+      case 'vet_job.offer.rejected':
+        if (str(p.actorUserId) === str(p.postedByUserId)) return [];
+        return this.toUser(
+          event.name === 'vet_job.offer.approved'
+            ? 'VET_JOB_OFFER_APPROVED'
+            : 'VET_JOB_OFFER_REJECTED',
+          str(p.postedByUserId),
+          {
+            offerId: str(p.offerId),
+            entityType: 'VET_JOB_OFFER',
+            entityId: str(p.offerId),
+            key: repeatableKey(event, str(p.offerId)),
+          },
+        );
+      case 'vet_job.seeker_profile.submitted':
+        return this.toReviewers('VET_JOB_SEEKER_PROFILE_SUBMITTED', 'VET_JOBS', {
+          excludeUserId: str(p.userId),
+          data: { profileId: str(p.profileId) },
+          entityType: 'VET_JOB_SEEKER_PROFILE',
+          entityId: str(p.profileId),
+          key: repeatableKey(event, str(p.profileId)),
+        });
+      case 'vet_job.seeker_profile.approved':
+      case 'vet_job.seeker_profile.rejected':
+        if (str(p.actorUserId) === str(p.userId)) return [];
+        return this.toUser(
+          event.name === 'vet_job.seeker_profile.approved'
+            ? 'VET_JOB_SEEKER_PROFILE_APPROVED'
+            : 'VET_JOB_SEEKER_PROFILE_REJECTED',
+          str(p.userId),
+          {
+            profileId: str(p.profileId),
+            entityType: 'VET_JOB_SEEKER_PROFILE',
+            entityId: str(p.profileId),
+            key: repeatableKey(event, str(p.profileId)),
+          },
+        );
+      case 'vet_job.application.received':
+        return this.toUser('VET_JOB_APPLICATION_RECEIVED', str(p.posterUserId), {
+          applicationId: str(p.applicationId),
+          jobOfferId: str(p.jobOfferId),
+          entityType: 'VET_JOB_APPLICATION',
+          entityId: str(p.applicationId),
+          key: `${event.name}:${str(p.applicationId)}`,
+        });
+      case 'vet_job.application.accepted':
+      case 'vet_job.application.rejected':
+        return this.toUser(
+          event.name === 'vet_job.application.accepted'
+            ? 'VET_JOB_APPLICATION_ACCEPTED'
+            : 'VET_JOB_APPLICATION_REJECTED',
+          str(p.applicantUserId),
+          {
+            applicationId: str(p.applicationId),
+            jobOfferId: str(p.jobOfferId),
+            ...(str(p.conversationId) ? { conversationId: str(p.conversationId) } : {}),
+            entityType: 'VET_JOB_APPLICATION',
+            entityId: str(p.applicationId),
+            key: `${event.name}:${str(p.applicationId)}`,
+          },
+        );
+
+      // --- platform store orders --------------------------------------
+      case 'pet_store.order.placed':
+      case 'veterinarian_store.order.placed': {
+        const store = event.name.startsWith('pet_store') ? 'PET_OWNER_STORE' : 'VETERINARIAN_STORE';
+        return this.toReviewers('STORE_ORDER_PLACED', store, {
+          excludeUserId: str(p.userId),
+          data: { orderId: str(p.orderId), store },
+          entityType: 'STORE_ORDER',
+          entityId: str(p.orderId),
+          key: `${event.name}:${str(p.orderId)}`,
+        });
+      }
+      case 'pet_store.order.status_changed':
+      case 'veterinarian_store.order.status_changed': {
+        const store = event.name.startsWith('pet_store') ? 'PET_OWNER_STORE' : 'VETERINARIAN_STORE';
+        return this.toUser('STORE_ORDER_STATUS_CHANGED', str(p.userId), {
+          orderId: str(p.orderId),
+          store,
+          status: str(p.status),
+          entityType: 'STORE_ORDER',
+          entityId: str(p.orderId),
+          key: `${event.name}:${str(p.orderId)}:${str(p.status)}`,
+        });
+      }
+
       default:
         return [];
     }
@@ -536,8 +563,8 @@ export class NotificationPolicy {
     return {
       recipientUserId,
       type,
-      title: COPY[type].title,
-      body: COPY[type].body,
+      title: NOTIFICATION_COPY[type].title,
+      body: NOTIFICATION_COPY[type].body,
       data: { type, ...data },
       actorUserId: extra.actorUserId ?? null,
       entityType: extra.entityType ?? null,
@@ -770,7 +797,9 @@ export class NotificationPolicy {
         this.spec(
           type,
           m.userId,
-          { organizationId, appointmentId },
+          // `audience` lets the client route clinic staff vs the pet owner —
+          // CONFIRMED / CANCELLED reach either side.
+          { organizationId, appointmentId, audience: 'CLINIC' },
           {
             actorUserId: actor || null,
             entityType: 'CLINIC_APPOINTMENT',
@@ -795,7 +824,7 @@ export class NotificationPolicy {
       this.spec(
         type,
         owner,
-        { organizationId: str(p.organizationId), appointmentId },
+        { organizationId: str(p.organizationId), appointmentId, audience: 'OWNER' },
         {
           actorUserId: actor || null,
           entityType: 'CLINIC_APPOINTMENT',
@@ -914,7 +943,7 @@ export class NotificationPolicy {
   /**
    * Notify an organization's followers about a broadcast message (Veterinary Office
    * Dashboard "إرسال رسالة للمتابعين"). Unlike every other mapper, title/body are
-   * SENDER-supplied, not a fixed `COPY` string — built directly, bypassing `spec()`.
+   * SENDER-supplied, not a fixed `NOTIFICATION_COPY` string — built directly, bypassing `spec()`.
    * Not backed by a persisted entity (no "past broadcasts" screen exists — spec
    * intentionally scoped this as fire-and-forget); `broadcastId` is generated by
    * `OrganizationBroadcastService` per send purely to make `sourceEventKey` idempotent.
@@ -998,7 +1027,10 @@ export class NotificationPolicy {
       this.spec(
         type,
         opts.userId,
-        { entityId: opts.entityId, ...(str(p.conversationId) ? { conversationId: str(p.conversationId) } : {}) },
+        {
+          entityId: opts.entityId,
+          ...(str(p.conversationId) ? { conversationId: str(p.conversationId) } : {}),
+        },
         {
           actorUserId: opts.actorUserId ?? null,
           entityType: opts.entityType,
@@ -1007,6 +1039,234 @@ export class NotificationPolicy {
         },
       ),
     ];
+  }
+
+  // --- review queues / owners / subscriptions -----------------------------
+
+  /**
+   * The people who act on a review queue: every ACTIVE global ADMIN plus the
+   * ACTIVE system supervisors of `domain` (when the queue has one). Capped.
+   */
+  private async reviewerUserIds(domain: string | null): Promise<string[]> {
+    const [admins, supervisors] = await Promise.all([
+      this.deps.recipients.activeAdminUserIds(RECIPIENT_FANOUT_CAP),
+      domain ? this.activeSupervisorUserIds(domain) : Promise.resolve([]),
+    ]);
+    return [...new Set([...admins, ...supervisors])].slice(0, RECIPIENT_FANOUT_CAP);
+  }
+
+  private async toReviewers(
+    type: NotificationType,
+    domain: string | null,
+    opts: {
+      excludeUserId: string;
+      data: Record<string, string>;
+      entityType: string;
+      entityId: string;
+      key: string;
+    },
+  ): Promise<NotificationSpec[]> {
+    if (!opts.entityId) return [];
+    const ids = await this.reviewerUserIds(domain);
+    return ids
+      .filter((id) => id !== opts.excludeUserId)
+      .map((uid) =>
+        this.spec(type, uid, opts.data, {
+          actorUserId: opts.excludeUserId || null,
+          entityType: opts.entityType,
+          entityId: opts.entityId,
+          sourceEventKey: opts.key,
+        }),
+      );
+  }
+
+  /** A self-registered organization awaiting approval → the reviewers. */
+  private async organizationSubmitted(eventName: string, p: P): Promise<NotificationSpec[]> {
+    const organizationId = str(p.organizationId);
+    if (!organizationId) return [];
+    const org = await this.deps.organizations.findById(organizationId);
+    if (!org || org.status !== 'PENDING') return [];
+    return this.toReviewers('ORGANIZATION_SUBMITTED', null, {
+      excludeUserId: org.ownerUserId,
+      data: { organizationId, organizationType: org.type },
+      entityType: 'ORGANIZATION',
+      entityId: organizationId,
+      key: `${eventName}:${organizationId}`,
+    });
+  }
+
+  /** Subscription outcomes → the organization's owner (org type in `data` for routing). */
+  private async subscriptionToOwner(
+    type: NotificationType,
+    p: P,
+    key: string,
+  ): Promise<NotificationSpec[]> {
+    const organizationId = str(p.organizationId);
+    if (!organizationId) return [];
+    const org = await this.deps.organizations.findById(organizationId);
+    if (!org) return [];
+    return [
+      this.spec(
+        type,
+        org.ownerUserId,
+        {
+          organizationId,
+          organizationType: org.type,
+          ...(str(p.requestId) ? { requestId: str(p.requestId) } : {}),
+        },
+        { entityType: 'ORGANIZATION', entityId: organizationId, sourceEventKey: key },
+      ),
+    ];
+  }
+
+  private async subscriptionRenewalRequested(eventName: string, p: P): Promise<NotificationSpec[]> {
+    const organizationId = str(p.organizationId);
+    const requestId = str(p.requestId);
+    if (!organizationId || !requestId) return [];
+    const org = await this.deps.organizations.findById(organizationId);
+    if (!org) return [];
+    return this.toReviewers('SUBSCRIPTION_RENEWAL_REQUESTED', null, {
+      excludeUserId: org.ownerUserId,
+      data: { organizationId, organizationType: org.type, requestId },
+      entityType: 'SUBSCRIPTION_RENEWAL_REQUEST',
+      entityId: requestId,
+      key: `${eventName}:${requestId}`,
+    });
+  }
+
+  /** Someone joined a farm with its join code → the farm owner. */
+  private async farmMemberJoined(eventName: string, p: P): Promise<NotificationSpec[]> {
+    const organizationId = str(p.organizationId);
+    const joiner = str(p.userId);
+    if (!organizationId) return [];
+    const org = await this.deps.organizations.findById(organizationId);
+    if (!org || org.ownerUserId === joiner) return [];
+    return [
+      this.spec(
+        'FARM_MEMBER_JOINED',
+        org.ownerUserId,
+        { organizationId, organizationType: org.type },
+        {
+          actorUserId: joiner || null,
+          entityType: 'ORGANIZATION',
+          entityId: organizationId,
+          sourceEventKey: `${eventName}:${str(p.membershipId)}`,
+        },
+      ),
+    ];
+  }
+
+  /** New farm appointment → the farm's owner + ACTIVE members, minus the creator. */
+  private async farmAppointmentCreated(eventName: string, p: P): Promise<NotificationSpec[]> {
+    const organizationId = str(p.organizationId);
+    const appointmentId = str(p.appointmentId);
+    const creator = str(p.createdByUserId);
+    if (!organizationId || !appointmentId) return [];
+    const [org, { items }] = await Promise.all([
+      this.deps.organizations.findById(organizationId),
+      this.deps.memberships.listForOrg(organizationId, {
+        page: 1,
+        pageSize: RECIPIENT_FANOUT_CAP,
+        status: 'ACTIVE',
+      }),
+    ]);
+    const recipients = new Set(items.map((m) => m.userId));
+    if (org) recipients.add(org.ownerUserId);
+    recipients.delete(creator);
+    return [...recipients].map((uid) =>
+      this.spec(
+        'FARM_APPOINTMENT_CREATED',
+        uid,
+        { organizationId, appointmentId },
+        {
+          actorUserId: creator || null,
+          entityType: 'FARM_APPOINTMENT',
+          entityId: appointmentId,
+          sourceEventKey: `${eventName}:${appointmentId}`,
+        },
+      ),
+    );
+  }
+
+  private userStatusChanged(event: DomainEvent, p: P): NotificationSpec[] {
+    const userId = str(p.userId);
+    const status = str(p.status);
+    // `from` is absent on events published before the payload carried it —
+    // treat that as "unknown transition" and stay quiet rather than guess.
+    if (!userId || !status || !str(p.from) || str(p.from) === status) return [];
+    // Completing email verification is not notified: the user is on the verify
+    // screen at that moment (and has no push device registered yet).
+    if (p.reason === 'email_verified') return [];
+    return this.toUser('ACCOUNT_STATUS_CHANGED', userId, {
+      status,
+      key: repeatableKey(event, userId),
+    });
+  }
+
+  /**
+   * "تسجيل" in a course/seminar: confirmation → the registrant; heads-up →
+   * the organizer; and — exactly once, on the registration that fills the last
+   * seat — "capacity reached" → the organizer.
+   */
+  private vetCourseRegistration(eventName: string, p: P): NotificationSpec[] {
+    const courseId = str(p.courseId);
+    const creator = str(p.creatorUserId);
+    const registrant = str(p.registrantUserId);
+    if (!courseId) return [];
+    const data = {
+      entityId: courseId,
+      ...(str(p.courseType) ? { courseType: str(p.courseType) } : {}),
+    };
+    const out = this.vetServiceToUser('VET_COURSE_REGISTRATION_CONFIRMED', eventName, p, {
+      userId: registrant,
+      entityType: 'VET_COURSE',
+      entityId: courseId,
+    });
+    if (creator && creator !== registrant) {
+      out.push(
+        this.spec('VET_COURSE_REGISTRATION_RECEIVED', creator, data, {
+          actorUserId: registrant || null,
+          entityType: 'VET_COURSE',
+          entityId: courseId,
+          sourceEventKey: `${eventName}:${str(p.registrationId)}`,
+        }),
+      );
+      const capacity = typeof p.capacity === 'number' ? p.capacity : null;
+      const count = typeof p.registrationCount === 'number' ? p.registrationCount : 0;
+      if (capacity !== null && count >= capacity) {
+        out.push(
+          this.spec('VET_COURSE_CAPACITY_REACHED', creator, data, {
+            entityType: 'VET_COURSE',
+            entityId: courseId,
+            sourceEventKey: `vet_course.capacity_reached:${courseId}`,
+          }),
+        );
+      }
+    }
+    return out;
+  }
+
+  /** A course/seminar was cancelled → every registrant (minus whoever cancelled it). */
+  private async vetCourseCancelled(eventName: string, p: P): Promise<NotificationSpec[]> {
+    const courseId = str(p.courseId);
+    const actor = str(p.actorUserId);
+    if (!courseId) return [];
+    const ids = await this.deps.recipients.courseRegistrantUserIds(courseId, RECIPIENT_FANOUT_CAP);
+    return ids
+      .filter((id) => id !== actor)
+      .map((uid) =>
+        this.spec(
+          'VET_COURSE_CANCELLED',
+          uid,
+          { entityId: courseId, ...(str(p.courseType) ? { courseType: str(p.courseType) } : {}) },
+          {
+            actorUserId: actor || null,
+            entityType: 'VET_COURSE',
+            entityId: courseId,
+            sourceEventKey: `${eventName}:${courseId}`,
+          },
+        ),
+      );
   }
 
   /** "إنهاء الطلب" — notify the party that did NOT complete it. */
@@ -1036,3 +1296,20 @@ export class NotificationPolicy {
 function str(v: unknown): string {
   return typeof v === 'string' ? v : '';
 }
+
+/**
+ * Idempotency key for a transition that can legitimately happen more than
+ * once for the same entity (suspend → reactivate → suspend, resubmit after
+ * rejection…). `occurredAt` is fixed on the event object, so a redelivery of
+ * the SAME event still dedupes while a later, genuine repeat does not.
+ */
+function repeatableKey(event: DomainEvent, id: string): string {
+  return `${event.name}:${id}:${event.occurredAt.getTime()}`;
+}
+
+const TRADER_TYPES: Record<string, NotificationType> = {
+  'trader.approved': 'TRADER_APPROVED',
+  'trader.rejected': 'TRADER_REJECTED',
+  'trader.suspended': 'TRADER_SUSPENDED',
+  'trader.reactivated': 'TRADER_REACTIVATED',
+};

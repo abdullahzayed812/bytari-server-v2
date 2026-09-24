@@ -28,7 +28,7 @@ export class ReportRepository {
   constructor(private readonly db: Knex) {}
 
   async create(reporterUserId: string, input: SubmitReportInput): Promise<ContentReport> {
-    const [row] = (await this.db<ContentReportRow>('content_reports')
+    const [row]: ContentReportRow[] = await this.db<ContentReportRow>('content_reports')
       .insert({
         reporter_user_id: reporterUserId,
         target_type: input.targetType,
@@ -36,7 +36,7 @@ export class ReportRepository {
         reason: input.reason,
         details: input.details ?? null,
       })
-      .returning('*')) as ContentReportRow[];
+      .returning('*');
     if (!row) throw new Error('content_reports insert did not return a row');
     return toDTO(row);
   }

@@ -75,12 +75,26 @@ export class ChatRoomService {
       if (!ownerRole) throw new Error('Seed data missing: organization role "OWNER"');
 
       const org = await this.organizations.create(
-        { type: 'CHAT_ROOM', name: input.name, description: input.description ?? null, ownerUserId: actor.actorUserId },
+        {
+          type: 'CHAT_ROOM',
+          name: input.name,
+          description: input.description ?? null,
+          ownerUserId: actor.actorUserId,
+        },
         tx,
       );
       // Admin-created — active immediately, no PENDING moderation queue (same as SYNDICATE).
-      await this.organizations.updateStatus(org.id, { status: 'ACTIVE', decidedBy: actor.actorUserId }, tx);
-      await this.organizations.insertDetails('CHAT_ROOM', org.id, { rules: input.rules ?? null }, tx);
+      await this.organizations.updateStatus(
+        org.id,
+        { status: 'ACTIVE', decidedBy: actor.actorUserId },
+        tx,
+      );
+      await this.organizations.insertDetails(
+        'CHAT_ROOM',
+        org.id,
+        { rules: input.rules ?? null },
+        tx,
+      );
       await this.memberships.create(
         {
           organizationId: org.id,
@@ -145,10 +159,9 @@ export class ChatRoomService {
       this.rooms.findActiveMembershipOrgIds(viewerUserId, ids),
       this.rooms.findConversationIdsByOrgIds(ids),
     ]);
-    const unreadByConversationId = await this.conversations.unreadCounts(
-      viewerUserId,
-      [...conversationIds.values()],
-    );
+    const unreadByConversationId = await this.conversations.unreadCounts(viewerUserId, [
+      ...conversationIds.values(),
+    ]);
 
     const dtos: ChatRoomSummaryDTO[] = await Promise.all(
       items.map(async (org) => {
@@ -158,9 +171,13 @@ export class ChatRoomService {
           id: org.id,
           name: org.name,
           description: org.description,
-          logoUrl: await resolveStorageUrlOrNull(this.storage, details?.logoKey ?? null, LOGO_URL_TTL_SECONDS),
+          logoUrl: await resolveStorageUrlOrNull(
+            this.storage,
+            details?.logoKey ?? null,
+            LOGO_URL_TTL_SECONDS,
+          ),
           memberCount: memberCounts.get(org.id) ?? 0,
-          unreadCount: conversationId ? unreadByConversationId.get(conversationId) ?? 0 : 0,
+          unreadCount: conversationId ? (unreadByConversationId.get(conversationId) ?? 0) : 0,
           isJoined: joinedIds.has(org.id),
           status: org.status,
           createdAt: org.createdAt,
@@ -187,7 +204,9 @@ export class ChatRoomService {
       ? await this.conversations.findParticipant(conversation.id, viewerUserId)
       : null;
     const unread = isJoined
-      ? (await this.conversations.unreadCounts(viewerUserId, [conversation.id])).get(conversation.id) ?? 0
+      ? ((await this.conversations.unreadCounts(viewerUserId, [conversation.id])).get(
+          conversation.id,
+        ) ?? 0)
       : 0;
     const pinnedMessage = details?.pinnedMessageId
       ? await this.messages.findById(details.pinnedMessageId)
@@ -197,7 +216,11 @@ export class ChatRoomService {
       id: org.id,
       name: org.name,
       description: org.description,
-      logoUrl: await resolveStorageUrlOrNull(this.storage, details?.logoKey ?? null, LOGO_URL_TTL_SECONDS),
+      logoUrl: await resolveStorageUrlOrNull(
+        this.storage,
+        details?.logoKey ?? null,
+        LOGO_URL_TTL_SECONDS,
+      ),
       memberCount,
       unreadCount: unread,
       isJoined,
@@ -205,7 +228,7 @@ export class ChatRoomService {
       createdAt: org.createdAt,
       rules: details?.rules ?? null,
       conversationId: conversation.id,
-      joinedAt: isJoined ? membership!.createdAt : null,
+      joinedAt: isJoined ? membership.createdAt : null,
       notificationsMuted: participant?.notificationsMuted ?? false,
       pinnedMessage:
         pinnedMessage && !pinnedMessage.deletedAt
@@ -300,7 +323,11 @@ export class ChatRoomService {
         );
       }
 
-      const participant = await this.conversations.findParticipant(conversation.id, actor.actorUserId, tx);
+      const participant = await this.conversations.findParticipant(
+        conversation.id,
+        actor.actorUserId,
+        tx,
+      );
       if (!participant) {
         await this.conversations.addParticipants(
           [{ conversationId: conversation.id, userId: actor.actorUserId, role: 'ROOM_MEMBER' }],
@@ -333,7 +360,9 @@ export class ChatRoomService {
       throw new NotFoundError('You are not a member of this room');
     }
     if (membership.roleKey === 'OWNER') {
-      throw new ConflictError('The room owner cannot leave — transfer ownership first (not available yet)');
+      throw new ConflictError(
+        'The room owner cannot leave — transfer ownership first (not available yet)',
+      );
     }
     const conversation = await this.conversations.findChatRoomConversation(organizationId);
 
@@ -371,7 +400,11 @@ export class ChatRoomService {
 
   // --- moderation (chat_room.rules.manage, checked by the route) -----
 
-  async updateRules(organizationId: string, rules: string | null, actor: ChatRoomActor): Promise<void> {
+  async updateRules(
+    organizationId: string,
+    rules: string | null,
+    actor: ChatRoomActor,
+  ): Promise<void> {
     const org = await this.organizations.findById(organizationId);
     if (!org || org.type !== 'CHAT_ROOM') throw new NotFoundError('Chat room not found');
     await this.rooms.updateRules(organizationId, rules);
@@ -406,7 +439,11 @@ export class ChatRoomService {
    * checked by the route) — deliberately separate from `ChatService
    * .deleteMessage`, which only ever lets a message's own sender delete it.
    */
-  async deleteMessage(organizationId: string, messageId: string, actor: ChatRoomActor): Promise<void> {
+  async deleteMessage(
+    organizationId: string,
+    messageId: string,
+    actor: ChatRoomActor,
+  ): Promise<void> {
     const conversation = await this.conversations.findChatRoomConversation(organizationId);
     if (!conversation) throw new NotFoundError('Chat room not found');
     const message = await this.messages.findByIdInConversation(messageId, conversation.id);

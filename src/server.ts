@@ -56,6 +56,9 @@ function bootstrap(): void {
   // Share the HTTP port with the WebSocket gateway.
   infra.attach(server);
 
+  // Time-driven "subscription expiring / expired" notifications (idempotent).
+  container.subscriptionExpiryNotifier.start();
+
   server.listen(config.port, () => {
     logger.info(
       {
@@ -80,6 +83,7 @@ function bootstrap(): void {
     if (shuttingDown) return;
     shuttingDown = true;
     logger.info({ signal }, 'Shutting down gracefully');
+    container.subscriptionExpiryNotifier.stop();
 
     server.close((closeErr) => {
       if (closeErr) logger.error({ err: closeErr }, 'Error closing HTTP server');

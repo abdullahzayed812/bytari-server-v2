@@ -434,12 +434,12 @@ export class OrganizationService {
     await Promise.all(
       [...byType.entries()].map(async ([type, ids]) => {
         const table = detailsTableByType[type] as string;
-        const rows = (await this.db(table)
-          .whereIn('organization_id', ids)
-          .select('organization_id', 'logo_key')) as Array<{
+        const rows: Array<{
           organization_id: string;
           logo_key: string | null;
-        }>;
+        }> = await this.db(table)
+          .whereIn('organization_id', ids)
+          .select('organization_id', 'logo_key');
         for (const r of rows) logoKeyByOrg.set(r.organization_id, r.logo_key);
       }),
     );
@@ -689,7 +689,10 @@ export class OrganizationService {
     try {
       await this.storage.delete(previousKey);
     } catch (err) {
-      this.log.error({ err, organizationId }, 'failed to delete removed organization logo — needs a sweep');
+      this.log.error(
+        { err, organizationId },
+        'failed to delete removed organization logo — needs a sweep',
+      );
     }
 
     const withDetails = await this.organizations.findByIdWithDetails(organizationId);
@@ -970,14 +973,23 @@ export class OrganizationService {
     const licenseDocumentKeys = [...currentKeys, input.storageKey];
 
     await this.db.transaction(async (tx) => {
-      await this.organizations.updateProfileFields(org.type, organizationId, { licenseDocumentKeys }, tx);
+      await this.organizations.updateProfileFields(
+        org.type,
+        organizationId,
+        { licenseDocumentKeys },
+        tx,
+      );
       await this.audit.record(
         {
           action: AuditAction.ORGANIZATION_LICENSE_DOCUMENTS_UPDATED,
           entityType: AuditEntityType.ORGANIZATION,
           entityId: organizationId,
           actorUserId: actor.actorUserId,
-          metadata: { organizationId, sizeBytes: head.size, documentCount: licenseDocumentKeys.length },
+          metadata: {
+            organizationId,
+            sizeBytes: head.size,
+            documentCount: licenseDocumentKeys.length,
+          },
           context: actor.context,
         },
         tx,
@@ -985,7 +997,8 @@ export class OrganizationService {
     });
 
     const withDetails = await this.organizations.findByIdWithDetails(organizationId);
-    if (!withDetails) throw new InternalError('organization vanished after license document update');
+    if (!withDetails)
+      throw new InternalError('organization vanished after license document update');
     return this.attachMedia(withDetails);
   }
 
@@ -1006,7 +1019,12 @@ export class OrganizationService {
     }
 
     await this.db.transaction(async (tx) => {
-      await this.organizations.updateProfileFields(org.type, organizationId, { licenseDocumentKeys }, tx);
+      await this.organizations.updateProfileFields(
+        org.type,
+        organizationId,
+        { licenseDocumentKeys },
+        tx,
+      );
       await this.audit.record(
         {
           action: AuditAction.ORGANIZATION_LICENSE_DOCUMENTS_UPDATED,
@@ -1030,7 +1048,8 @@ export class OrganizationService {
     }
 
     const withDetails = await this.organizations.findByIdWithDetails(organizationId);
-    if (!withDetails) throw new InternalError('organization vanished after license document update');
+    if (!withDetails)
+      throw new InternalError('organization vanished after license document update');
     return this.attachMedia(withDetails);
   }
 
@@ -1069,12 +1088,12 @@ export class OrganizationService {
     const farmIds = orgs.filter((o) => o.type === 'FARM').map((o) => o.id);
     const speciesByOrg = new Map<string, string | null>();
     if (farmIds.length > 0) {
-      const rows = (await this.db('farm_details')
-        .whereIn('organization_id', farmIds)
-        .select('organization_id', 'farm_species')) as Array<{
+      const rows: Array<{
         organization_id: string;
         farm_species: string | null;
-      }>;
+      }> = await this.db('farm_details')
+        .whereIn('organization_id', farmIds)
+        .select('organization_id', 'farm_species');
       for (const r of rows) speciesByOrg.set(r.organization_id, r.farm_species);
     }
 
@@ -1084,7 +1103,12 @@ export class OrganizationService {
     >();
     const profileByOrg = new Map<
       string,
-      { address: string | null; phone: string | null; logoKey: string | null; galleryKeys: string[] }
+      {
+        address: string | null;
+        phone: string | null;
+        logoKey: string | null;
+        galleryKeys: string[];
+      }
     >();
     const officeIds = orgs.filter((o) => o.type === 'VETERINARY_OFFICE').map((o) => o.id);
     const clinicIds = orgs.filter((o) => o.type === 'CLINIC').map((o) => o.id);
@@ -1093,7 +1117,15 @@ export class OrganizationService {
       ['clinic_details', clinicIds],
     ] as const) {
       if (ids.length === 0) continue;
-      const rows = (await this.db(table)
+      const rows: Array<{
+        organization_id: string;
+        subscription_start_date: string | Date | null;
+        subscription_end_date: string | Date | null;
+        address: string | null;
+        phone: string | null;
+        logo_key: string | null;
+        gallery_keys: string[] | null;
+      }> = await this.db(table)
         .whereIn('organization_id', ids)
         .select(
           'organization_id',
@@ -1103,15 +1135,7 @@ export class OrganizationService {
           'phone',
           'logo_key',
           'gallery_keys',
-        )) as Array<{
-        organization_id: string;
-        subscription_start_date: string | Date | null;
-        subscription_end_date: string | Date | null;
-        address: string | null;
-        phone: string | null;
-        logo_key: string | null;
-        gallery_keys: string[] | null;
-      }>;
+        );
       for (const r of rows) {
         const startDate = toDateOnlyString(r.subscription_start_date);
         const endDate = toDateOnlyString(r.subscription_end_date);

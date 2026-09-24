@@ -9,6 +9,8 @@
  * tokens. `POST /admin/notifications` needs `notification.admin.send`.
  * Firebase service-account details are NEVER exposed.
  */
+import { NOTIFICATION_TYPES } from '../modules/notifications/domain/notification.constants.js';
+
 type Obj = Record<string, unknown>;
 
 const bearer = [{ bearerAuth: [] }];
@@ -44,26 +46,8 @@ function listOf(ref: string): Obj {
 const uuid = { type: 'string', format: 'uuid' };
 const notificationIdParam = { name: 'notificationId', in: 'path', required: true, schema: uuid };
 const deviceIdParam = { name: 'deviceId', in: 'path', required: true, schema: uuid };
-const typeEnum = [
-  'ACCOUNT_STATUS_CHANGED',
-  'ORGANIZATION_APPROVED',
-  'ORGANIZATION_REJECTED',
-  'ORGANIZATION_SUSPENDED',
-  'ORGANIZATION_ACTIVATED',
-  'ORGANIZATION_MEMBER_ADDED',
-  'ORGANIZATION_MEMBER_REMOVED',
-  'ORGANIZATION_SUPERVISOR_ASSIGNED',
-  'SYSTEM_SUPERVISOR_ASSIGNED',
-  'CHAT_MESSAGE_RECEIVED',
-  'CONSULTATION_CREATED',
-  'CONSULTATION_MESSAGE_RECEIVED',
-  'CONSULTATION_CLOSED',
-  'INQUIRY_CREATED',
-  'INQUIRY_MESSAGE_RECEIVED',
-  'INQUIRY_CLOSED',
-  'CONTENT_PUBLISHED',
-  'ADMIN_ANNOUNCEMENT',
-];
+// Derived from the catalogue so the documented enum can never drift from the API.
+const typeEnum = [...NOTIFICATION_TYPES];
 
 const schemas: Obj = {
   Notification: {

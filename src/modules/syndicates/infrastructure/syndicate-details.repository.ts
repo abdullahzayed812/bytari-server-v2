@@ -55,7 +55,10 @@ export class SyndicateDetailsRepository {
     trx?: Knex.Transaction,
   ): Promise<Map<string, SyndicateDetails>> {
     if (organizationIds.length === 0) return new Map();
-    const rows = await this.conn(trx)<SyndicateDetailsRow>(T).whereIn('organization_id', organizationIds);
+    const rows = await this.conn(trx)<SyndicateDetailsRow>(T).whereIn(
+      'organization_id',
+      organizationIds,
+    );
     return new Map(rows.map((r) => [r.organization_id, rowToSyndicateDetails(r)]));
   }
 
@@ -93,7 +96,10 @@ export class SyndicateDetailsRepository {
     return Number(row?.count ?? 0);
   }
 
-  async countBranchesFor(parentOrganizationIds: string[], trx?: Knex.Transaction): Promise<Map<string, number>> {
+  async countBranchesFor(
+    parentOrganizationIds: string[],
+    trx?: Knex.Transaction,
+  ): Promise<Map<string, number>> {
     if (parentOrganizationIds.length === 0) return new Map();
     const rows = (await this.conn(trx)(T)
       .whereIn('parent_organization_id', parentOrganizationIds)
@@ -122,14 +128,15 @@ export class SyndicateDetailsRepository {
       }
       return qb;
     };
-    const base = () => this.conn(trx)(`${T} as d`).join('organizations as o', 'o.id', 'd.organization_id');
+    const base = () =>
+      this.conn(trx)(`${T} as d`).join('organizations as o', 'o.id', 'd.organization_id');
     const countRow = await scope(base()).count<{ count: string }>({ count: '*' }).first();
     const total = Number(countRow?.count ?? 0);
-    const rows = (await scope(base())
+    const rows: { organization_id: string }[] = await scope(base())
       .orderBy('o.name', 'asc')
       .limit(filter.pageSize)
       .offset((filter.page - 1) * filter.pageSize)
-      .select('d.organization_id')) as { organization_id: string }[];
+      .select('d.organization_id');
     return { ids: rows.map((r) => r.organization_id), total };
   }
 
@@ -148,14 +155,15 @@ export class SyndicateDetailsRepository {
       }
       return qb;
     };
-    const base = () => this.conn(trx)(`${T} as d`).join('organizations as o', 'o.id', 'd.organization_id');
+    const base = () =>
+      this.conn(trx)(`${T} as d`).join('organizations as o', 'o.id', 'd.organization_id');
     const countRow = await scope(base()).count<{ count: string }>({ count: '*' }).first();
     const total = Number(countRow?.count ?? 0);
-    const rows = (await scope(base())
+    const rows: { organization_id: string }[] = await scope(base())
       .orderBy('o.name', 'asc')
       .limit(filter.pageSize)
       .offset((filter.page - 1) * filter.pageSize)
-      .select('d.organization_id')) as { organization_id: string }[];
+      .select('d.organization_id');
     return { ids: rows.map((r) => r.organization_id), total };
   }
 }

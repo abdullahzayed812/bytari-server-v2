@@ -63,6 +63,7 @@ export const VetCourseEvent = {
   APPROVED: 'vet_course.approved',
   REJECTED: 'vet_course.rejected',
   REGISTERED: 'vet_course.registration.created',
+  CANCELLED: 'vet_course.cancelled',
 } as const;
 
 /** RBAC: the "authorized specialist supervisor" domain for Courses & Seminars moderation. */

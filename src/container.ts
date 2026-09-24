@@ -211,6 +211,8 @@ import { PreferenceRepository } from './modules/notifications/infrastructure/pre
 import { NotificationPolicy } from './modules/notifications/domain/notification.policy.js';
 import { NotificationService } from './modules/notifications/application/notification.service.js';
 import { NotificationEventHandler } from './modules/notifications/application/notification-event-handler.js';
+import { NotificationRecipientRepository } from './modules/notifications/infrastructure/recipient.repository.js';
+import { SubscriptionExpiryNotifier } from './modules/notifications/application/subscription-expiry-notifier.js';
 import { AdminDashboardService } from './modules/admin-dashboard/application/admin-dashboard.service.js';
 import { AdminDashboardSeenRepository } from './modules/admin-dashboard/infrastructure/admin-dashboard-seen.repository.js';
 
@@ -445,6 +447,7 @@ export interface Container {
   notificationPolicy: NotificationPolicy;
   notificationService: NotificationService;
   notificationEventHandler: NotificationEventHandler;
+  subscriptionExpiryNotifier: SubscriptionExpiryNotifier;
 
   adminDashboardService: AdminDashboardService;
 
@@ -1386,6 +1389,14 @@ export function createContainer(deps: ContainerDeps): Container {
     auditService,
     eventBus,
     logger,
+    // Tests: no back-off, so a retried push can't land after the test ends.
+    config.env === 'test' ? { pushRetryDelaysMs: [0, 0] } : {},
+  );
+  const notificationRecipientRepository = new NotificationRecipientRepository(db);
+  const subscriptionExpiryNotifier = new SubscriptionExpiryNotifier(
+    notificationRecipientRepository,
+    notificationService,
+    logger,
   );
   const notificationPolicy = new NotificationPolicy({
     conversations: conversationRepository,
@@ -1396,6 +1407,7 @@ export function createContainer(deps: ContainerDeps): Container {
     organizations: organizationRepository,
     supervisors: supervisorRepository,
     organizationFollows: organizationFollowRepository,
+    recipients: notificationRecipientRepository,
   });
   const notificationEventHandler = new NotificationEventHandler(
     eventBus,
@@ -1618,6 +1630,7 @@ export function createContainer(deps: ContainerDeps): Container {
     notificationPolicy,
     notificationService,
     notificationEventHandler,
+    subscriptionExpiryNotifier,
     adminDashboardService,
     authenticate,
     authenticatePendingOk,

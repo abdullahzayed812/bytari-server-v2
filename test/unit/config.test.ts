@@ -87,9 +87,22 @@ describe('loadConfig', () => {
         ...BASE_ENV,
         NODE_ENV: 'production',
         JWT_ACCESS_SECRET: 'a-production-grade-secret-at-least-32-chars',
+        CORS_ORIGINS: 'https://bytari.com',
         REALTIME_ALLOW_ANONYMOUS: 'true',
       });
       expect(config.realtime.allowAnonymous).toBe(false);
+    });
+
+    it('rejects a wildcard CORS origin in production', () => {
+      const prod = {
+        ...BASE_ENV,
+        NODE_ENV: 'production',
+        JWT_ACCESS_SECRET: 'a-production-grade-secret-at-least-32-chars',
+      };
+      expect(() => loadConfig({ ...prod, CORS_ORIGINS: '*' })).toThrowError(/CORS_ORIGINS/);
+      expect(loadConfig({ ...prod, CORS_ORIGINS: 'https://bytari.com' }).http.corsOrigins).toEqual([
+        'https://bytari.com',
+      ]);
     });
 
     it('requires JWT_ACCESS_SECRET in production', () => {

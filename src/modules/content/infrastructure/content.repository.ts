@@ -91,19 +91,19 @@ export class ContentRepository {
    * reflects an actual content edit, not passive engagement.
    */
   async adjustLikeCount(id: string, delta: number, trx: Knex.Transaction): Promise<number> {
-    const [row] = (await trx(T)
+    const [row]: Array<{ like_count: number }> = await trx(T)
       .where({ id })
       .update({ like_count: trx.raw('like_count + ?', [delta]) })
-      .returning('like_count')) as Array<{ like_count: number }>;
+      .returning('like_count');
     if (!row) throw new Error('content not found on like-count adjust');
     return row.like_count;
   }
 
   async adjustCommentCount(id: string, delta: number, trx: Knex.Transaction): Promise<number> {
-    const [row] = (await trx(T)
+    const [row]: Array<{ comment_count: number }> = await trx(T)
       .where({ id })
       .update({ comment_count: trx.raw('comment_count + ?', [delta]) })
-      .returning('comment_count')) as Array<{ comment_count: number }>;
+      .returning('comment_count');
     if (!row) throw new Error('content not found on comment-count adjust');
     return row.comment_count;
   }
@@ -186,7 +186,9 @@ export class ContentRepository {
     if (filter.sort === 'topRated') {
       return `(select avg(rating) from content_ratings cr where cr.content_id = c.id) desc nulls last, c.id desc`;
     }
-    return publicOnly ? 'c.published_at desc nulls last, c.id desc' : 'c.created_at desc, c.id desc';
+    return publicOnly
+      ? 'c.published_at desc nulls last, c.id desc'
+      : 'c.created_at desc, c.id desc';
   }
 
   async list(

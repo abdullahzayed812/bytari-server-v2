@@ -1,6 +1,11 @@
 import type { Knex } from 'knex';
 import type { Logger } from 'pino';
-import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '../../shared/errors/app-error.js';
+import {
+  BadRequestError,
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+} from '../../shared/errors/app-error.js';
 import { ErrorCode } from '../../shared/errors/error-codes.js';
 import type { EventBus } from '../../shared/events/index.js';
 import { buildObjectKey, StoragePrefix, type ObjectStorage } from '../../infra/storage/index.js';
@@ -171,9 +176,11 @@ export class UserService {
           ? AuditAction.USER_SUSPENDED
           : AuditAction.USER_DEACTIVATED;
 
+    let from: string | null = null;
     const updated = await this.db.transaction(async (tx) => {
       const existing = await this.users.findById(id, tx);
       if (!existing) throw new NotFoundError('User not found');
+      from = existing.status;
       if (existing.status === status) return existing;
 
       const user = await this.users.update(id, { status }, tx);
@@ -197,7 +204,12 @@ export class UserService {
       return user;
     });
 
-    this.events.publish('user.status.changed', { userId: id, status });
+    this.events.publish('user.status.changed', {
+      userId: id,
+      status,
+      from,
+      reason: reason ?? null,
+    });
     return updated;
   }
 

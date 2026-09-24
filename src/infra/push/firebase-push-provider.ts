@@ -9,6 +9,14 @@ import {
   type PushSendResult,
 } from './types.js';
 
+/**
+ * Android notification channel the app creates at startup
+ * (`mobile/src/services/notifications/notificationService.ts`,
+ * `ANDROID_CHANNEL_ID`). Without it Android 8+ files the notification under
+ * FCM's generic fallback channel.
+ */
+const ANDROID_CHANNEL_ID = 'default';
+
 /** FCM multicast hard limit per request. */
 const MAX_TOKENS_PER_BATCH = 500;
 
@@ -75,6 +83,7 @@ export class FirebasePushProvider implements PushNotificationProvider {
         ...(message.data ? { data: message.data } : {}),
         android: {
           priority: message.options?.priority === 'normal' ? 'normal' : 'high',
+          notification: { channelId: ANDROID_CHANNEL_ID },
           ...(message.options?.ttlSeconds !== undefined
             ? { ttl: message.options.ttlSeconds * 1000 }
             : {}),
@@ -99,6 +108,11 @@ export class FirebasePushProvider implements PushNotificationProvider {
         const token = batch[idx];
         if (token && INVALID_TOKEN_ERROR_CODES.has(r.error.code)) {
           result.invalidTokens.push(token);
+          // Only a short suffix — never the full device token.
+          this.log.info(
+            { code: r.error.code, tokenSuffix: token.slice(-6) },
+            'push token permanently invalid',
+          );
         } else {
           this.log.warn({ code: r.error?.code }, 'push send failure');
         }

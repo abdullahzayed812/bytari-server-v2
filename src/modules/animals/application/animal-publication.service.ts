@@ -155,6 +155,7 @@ export class AnimalPublicationService {
       publicationId: publication.id,
       animalId: animal.id,
       kind: input.kind,
+      createdByUserId: actor.actorUserId,
     });
     return toPublicationDTO(publication);
   }
@@ -305,6 +306,8 @@ export class AnimalPublicationService {
       publicationId,
       animalId: existing.animalId,
       kind,
+      createdByUserId: existing.createdByUserId,
+      actorUserId: actor.actorUserId,
     });
     return toPublicationDTO(updated);
   }

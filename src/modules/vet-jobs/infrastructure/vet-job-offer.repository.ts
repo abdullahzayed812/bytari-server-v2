@@ -83,7 +83,10 @@ export class VetJobOfferRepository {
     return row ? rowToOffer(row) : null;
   }
 
-  async findWithPosterById(id: string, trx?: Knex.Transaction): Promise<VetJobOfferWithPoster | null> {
+  async findWithPosterById(
+    id: string,
+    trx?: Knex.Transaction,
+  ): Promise<VetJobOfferWithPoster | null> {
     const row = (await this.joined(trx).where('o.id', id).first()) as JoinedRow | undefined;
     return row ? this.map(row) : null;
   }
@@ -168,12 +171,16 @@ export class VetJobOfferRepository {
 
   // --- public browse (APPROVED, not closed, deadline not passed) --------
 
-  async listPublic(filter: OfferBrowseFilter): Promise<{ items: VetJobOfferWithPoster[]; total: number }> {
+  async listPublic(
+    filter: OfferBrowseFilter,
+  ): Promise<{ items: VetJobOfferWithPoster[]; total: number }> {
     const today = new Date().toISOString().slice(0, 10);
     const scope = (qb: Knex.QueryBuilder): Knex.QueryBuilder => {
       qb.where('o.status', 'APPROVED')
         .whereNull('o.closed_at')
-        .andWhere((w) => w.whereNull('o.application_deadline').orWhere('o.application_deadline', '>=', today));
+        .andWhere((w) => {
+          w.whereNull('o.application_deadline').orWhere('o.application_deadline', '>=', today);
+        });
       if (filter.employmentType) qb.andWhere('o.employment_type', filter.employmentType);
       if (filter.governorate) qb.andWhere('o.governorate', filter.governorate);
       if (filter.search) {

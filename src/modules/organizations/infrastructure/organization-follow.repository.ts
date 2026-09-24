@@ -49,10 +49,10 @@ export class OrganizationFollowRepository {
     limit: number,
     trx?: Knex.Transaction,
   ): Promise<string[]> {
-    const rows = (await this.conn(trx)(TABLE)
+    const rows: { user_id: string }[] = await this.conn(trx)(TABLE)
       .where({ organization_id: organizationId })
       .limit(limit)
-      .select('user_id')) as { user_id: string }[];
+      .select('user_id');
     return rows.map((r) => r.user_id);
   }
 }

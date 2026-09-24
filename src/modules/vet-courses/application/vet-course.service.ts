@@ -25,7 +25,10 @@ import type {
   VetCourseDTO,
   VetCourseRegistrationState,
 } from '../domain/vet-course.types.js';
-import type { VetCourseRepository, VetCourseWithCreator } from '../infrastructure/vet-course.repository.js';
+import type {
+  VetCourseRepository,
+  VetCourseWithCreator,
+} from '../infrastructure/vet-course.repository.js';
 import type { VetCourseMedia } from './vet-course-media.js';
 
 export interface VetCourseActor {
@@ -34,7 +37,10 @@ export interface VetCourseActor {
 }
 
 function trimList(list: string[] | undefined): string[] {
-  return (list ?? []).map((d) => d.trim()).filter(Boolean).slice(0, 20);
+  return (list ?? [])
+    .map((d) => d.trim())
+    .filter(Boolean)
+    .slice(0, 20);
 }
 
 function remainingSeats(capacity: number | null, registrationCount: number): number | null {
@@ -202,21 +208,32 @@ export class VetCourseService {
     const data = await this.courses.findWithCreatorAndCountById(id);
     if (!data) throw new NotFoundError('Course not found');
     const isOwner = data.course.creatorUserId === actor.principal.userId;
-    const isModerator = await this.authz.isSystemSupervisorFor(actor.principal, VET_COURSE_SUPERVISOR_DOMAIN);
+    const isModerator = await this.authz.isSystemSupervisorFor(
+      actor.principal,
+      VET_COURSE_SUPERVISOR_DOMAIN,
+    );
     if (!isOwner && !isModerator) throw new NotFoundError('Course not found');
     return this.toDTO(data);
   }
 
   // --- owner actions -------------------------------------------
 
-  async update(id: string, patch: UpdateVetCourseInput, actor: VetCourseActor): Promise<VetCourseDTO> {
+  async update(
+    id: string,
+    patch: UpdateVetCourseInput,
+    actor: VetCourseActor,
+  ): Promise<VetCourseDTO> {
     const existing = await this.courses.findById(id);
     if (!existing) throw new NotFoundError('Course not found');
     // Owner, or ADMIN (matches `remove`/`cancel`'s existing moderator-inclusive
     // rule via `isSystemSupervisorFor`'s own admin bypass — admin, not the
     // broader VET_COURSES supervisor scope, which stays read/approve/reject only).
     if (existing.creatorUserId !== actor.principal.userId && !this.authz.isAdmin(actor.principal)) {
-      VetCoursePolicy.assertOwner({ creatorUserId: existing.creatorUserId }, actor.principal.userId, 'course');
+      VetCoursePolicy.assertOwner(
+        { creatorUserId: existing.creatorUserId },
+        actor.principal.userId,
+        'course',
+      );
     }
 
     const coverImageStorageKey =
@@ -299,12 +316,20 @@ export class VetCourseService {
         ),
       ),
     );
+    this.events.publish(VetCourseEvent.CANCELLED, {
+      courseId: id,
+      courseType: existing.type,
+      creatorUserId: existing.creatorUserId,
+      actorUserId: actor.principal.userId,
+    });
     return this.mustGetDTO(id);
   }
 
   // --- moderation (ADMIN / VET_COURSES supervisor) -------------
 
-  async listForModeration(filter: ModerationFilter): Promise<{ items: VetCourseDTO[]; total: number }> {
+  async listForModeration(
+    filter: ModerationFilter,
+  ): Promise<{ items: VetCourseDTO[]; total: number }> {
     const { items, total } = await this.courses.listForModeration(filter);
     return { items: await Promise.all(items.map((i) => this.toDTO(i))), total };
   }
@@ -331,18 +356,28 @@ export class VetCourseService {
   ): Promise<VetCourseDTO> {
     const existing = await this.courses.findById(id);
     if (!existing) throw new NotFoundError('Course not found');
-    VetCoursePolicy.assertNotSelfReview(existing, actor.principal.userId, this.authz.isAdmin(actor.principal));
+    VetCoursePolicy.assertNotSelfReview(
+      existing,
+      actor.principal.userId,
+      this.authz.isAdmin(actor.principal),
+    );
     VetCoursePolicy.assertModerationPending(existing);
 
     await this.db.transaction(async (tx) => {
       await this.courses.update(
         id,
-        { status, reviewedByUserId: actor.principal.userId, reviewedAt: new Date(), rejectionReason: reason },
+        {
+          status,
+          reviewedByUserId: actor.principal.userId,
+          reviewedAt: new Date(),
+          rejectionReason: reason,
+        },
         tx,
       );
       await this.audit.record(
         {
-          action: status === 'APPROVED' ? VetCourseAuditAction.APPROVED : VetCourseAuditAction.REJECTED,
+          action:
+            status === 'APPROVED' ? VetCourseAuditAction.APPROVED : VetCourseAuditAction.REJECTED,
           entityType: VetCourseAuditEntity.COURSE,
           entityId: id,
           actorUserId: actor.principal.userId,
@@ -372,7 +407,8 @@ export class VetCourseService {
 
   private async assertOwnerOrModerator(course: VetCourse, actor: VetCourseActor): Promise<void> {
     if (course.creatorUserId === actor.principal.userId) return;
-    if (await this.authz.isSystemSupervisorFor(actor.principal, VET_COURSE_SUPERVISOR_DOMAIN)) return;
+    if (await this.authz.isSystemSupervisorFor(actor.principal, VET_COURSE_SUPERVISOR_DOMAIN))
+      return;
     throw new ForbiddenError('Only the course owner or a moderator can do this', {
       code: ErrorCode.PERMISSION_DENIED,
     });

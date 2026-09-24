@@ -96,6 +96,8 @@ export class VetCourseRegistrationService {
     VetCoursePolicy.assertNotSelf(course.creatorUserId, actor.principal.userId);
 
     let id: string;
+    let registrationCount = 0;
+    let capacity: number | null = null;
     try {
       id = await this.db.transaction(async (tx) => {
         // Lock the course row so concurrent registrations serialize on the capacity check.
@@ -105,6 +107,8 @@ export class VetCourseRegistrationService {
         VetCoursePolicy.assertRegistrationOpen(locked);
         const current = await this.courseRepo.registrationCount(courseId, tx);
         VetCoursePolicy.assertCapacityAvailable(locked, current);
+        registrationCount = current + 1;
+        capacity = locked.capacity;
 
         const created = await this.registrations.create(
           { ...input, courseId, registrantUserId: actor.principal.userId },
@@ -138,6 +142,9 @@ export class VetCourseRegistrationService {
       courseTitle: course.title,
       creatorUserId: course.creatorUserId,
       registrantUserId: actor.principal.userId,
+      courseType: course.type,
+      capacity,
+      registrationCount,
     });
     return this.mustGetDTO(id);
   }
@@ -168,11 +175,15 @@ export class VetCourseRegistrationService {
     const data = await this.registrations.findJoinedById(id);
     if (!data) throw new NotFoundError('Registration not found');
     if (data.registration.registrantUserId === actor.principal.userId) return this.toDTO(data);
-    if (data.course && (await this.isCourseOwnerOrModerator(data.course.id, actor))) return this.toDTO(data);
+    if (data.course && (await this.isCourseOwnerOrModerator(data.course.id, actor)))
+      return this.toDTO(data);
     throw new NotFoundError('Registration not found');
   }
 
-  private async isCourseOwnerOrModerator(courseId: string, actor: VetCourseActor): Promise<boolean> {
+  private async isCourseOwnerOrModerator(
+    courseId: string,
+    actor: VetCourseActor,
+  ): Promise<boolean> {
     try {
       await this.courses.getForActor(courseId, actor);
       return true;

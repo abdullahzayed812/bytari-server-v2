@@ -18,6 +18,7 @@ function deps(
     memberships: notImpl,
     organizations: notImpl,
     supervisors: notImpl,
+    recipients: notImpl,
     ...over,
   } as NotificationPolicyDeps;
 }
@@ -148,5 +149,160 @@ describe('NotificationPolicy — pure branches', () => {
       ev('chat.message.created', { conversationId: 'c1', messageId: 'm2', senderUserId: 'member' }),
     );
     expect(fromMember.map((s) => s.recipientUserId)).toEqual(['owner']);
+  });
+});
+
+describe('NotificationPolicy — post-Phase-15 mappings', () => {
+  const admins = {
+    activeAdminUserIds: () => Promise.resolve(['admin1', 'admin2']),
+    courseRegistrantUserIds: () => Promise.resolve(['r1', 'r2', 'canceller']),
+  };
+  const supervisors = {
+    list: () => Promise.resolve({ items: [{ userId: 'sup1' }, { userId: 'admin1' }], total: 2 }),
+  };
+
+  it('veterinarian.approved → the applicant, keyed by the application', async () => {
+    const p = new NotificationPolicy(deps());
+    const specs = await p.resolve(
+      ev('veterinarian.approved', { userId: 'v1', applicationId: 'app1' }),
+    );
+    expect(specs).toEqual([
+      expect.objectContaining({
+        recipientUserId: 'v1',
+        type: 'VETERINARIAN_APPROVED',
+        entityType: 'VETERINARIAN_APPLICATION',
+        entityId: 'app1',
+        sourceEventKey: 'veterinarian.approved:app1',
+        push: true,
+      }),
+    ]);
+  });
+
+  it('review queues → ADMINs ∪ domain supervisors, de-duplicated, minus the submitter', async () => {
+    const p = new NotificationPolicy(deps({ recipients: admins, supervisors }));
+    const specs = await p.resolve(
+      ev('trader.application.submitted', { userId: 'admin2', traderProfileId: 'tp1' }),
+    );
+    expect(specs.map((s) => s.recipientUserId).sort()).toEqual(['admin1', 'sup1']);
+    expect(specs.every((s) => s.type === 'TRADER_APPLICATION_SUBMITTED')).toBe(true);
+  });
+
+  it('user.status.changed: admin transition → ACCOUNT_STATUS_CHANGED; email verification / no-op → nothing', async () => {
+    const p = new NotificationPolicy(deps());
+    const verified = await p.resolve(
+      ev('user.status.changed', {
+        userId: 'u1',
+        status: 'ACTIVE',
+        from: 'PENDING_VERIFICATION',
+        reason: 'email_verified',
+      }),
+    );
+    expect(verified).toEqual([]);
+    expect(
+      await p.resolve(
+        ev('user.status.changed', { userId: 'u1', status: 'ACTIVE', from: 'ACTIVE' }),
+      ),
+    ).toEqual([]);
+    const suspended = await p.resolve(
+      ev('user.status.changed', { userId: 'u1', status: 'SUSPENDED', from: 'ACTIVE' }),
+    );
+    expect(suspended[0]).toMatchObject({
+      type: 'ACCOUNT_STATUS_CHANGED',
+      data: { status: 'SUSPENDED' },
+    });
+  });
+
+  it('repeatable transitions get a per-occurrence key; a redelivered event keeps it', async () => {
+    const p = new NotificationPolicy(deps());
+    const first = ev('trader.suspended', { userId: 't1' });
+    const later = {
+      ...ev('trader.suspended', { userId: 't1' }),
+      occurredAt: new Date(Date.now() + 5000),
+    };
+    const [a] = await p.resolve(first);
+    const [aAgain] = await p.resolve(first);
+    const [b] = await p.resolve(later);
+    expect(a?.sourceEventKey).toBe(aAgain?.sourceEventKey);
+    expect(a?.sourceEventKey).not.toBe(b?.sourceEventKey);
+  });
+
+  it('store order status → the customer, one key per status', async () => {
+    const p = new NotificationPolicy(deps());
+    const [spec] = await p.resolve(
+      ev('pet_store.order.status_changed', { orderId: 'o1', userId: 'c1', status: 'SHIPPED' }),
+    );
+    expect(spec).toMatchObject({
+      recipientUserId: 'c1',
+      type: 'STORE_ORDER_STATUS_CHANGED',
+      data: { orderId: 'o1', store: 'PET_OWNER_STORE', status: 'SHIPPED' },
+      sourceEventKey: 'pet_store.order.status_changed:o1:SHIPPED',
+    });
+  });
+
+  it('course registration filling the last seat → organizer gets CAPACITY_REACHED (stable once-only key)', async () => {
+    const p = new NotificationPolicy(deps());
+    const specs = await p.resolve(
+      ev('vet_course.registration.created', {
+        registrationId: 'reg2',
+        courseId: 'c1',
+        creatorUserId: 'org',
+        registrantUserId: 'r2',
+        capacity: 2,
+        registrationCount: 2,
+      }),
+    );
+    expect(specs.map((s) => [s.recipientUserId, s.type])).toEqual([
+      ['r2', 'VET_COURSE_REGISTRATION_CONFIRMED'],
+      ['org', 'VET_COURSE_REGISTRATION_RECEIVED'],
+      ['org', 'VET_COURSE_CAPACITY_REACHED'],
+    ]);
+    expect(specs[2]?.sourceEventKey).toBe('vet_course.capacity_reached:c1');
+  });
+
+  it('course cancelled → registrants minus whoever cancelled', async () => {
+    const p = new NotificationPolicy(deps({ recipients: admins }));
+    const specs = await p.resolve(
+      ev('vet_course.cancelled', {
+        courseId: 'c1',
+        creatorUserId: 'org',
+        actorUserId: 'canceller',
+      }),
+    );
+    expect(specs.map((s) => s.recipientUserId)).toEqual(['r1', 'r2']);
+  });
+
+  it('publication moderation by the creator themself produces nothing', async () => {
+    const p = new NotificationPolicy(deps());
+    expect(
+      await p.resolve(
+        ev('animal.lost.approved', {
+          publicationId: 'p1',
+          kind: 'LOST',
+          createdByUserId: 'u1',
+          actorUserId: 'u1',
+        }),
+      ),
+    ).toEqual([]);
+  });
+
+  it('every data value is a string (FCM data payload requirement)', async () => {
+    const p = new NotificationPolicy(deps({ recipients: admins, supervisors }));
+    const specs = [
+      ...(await p.resolve(ev('veterinarian.rejected', { userId: 'v1', applicationId: 'a' }))),
+      ...(await p.resolve(ev('pet_store.order.placed', { orderId: 'o1', userId: 'c1' }))),
+      ...(await p.resolve(
+        ev('vet_course.registration.created', {
+          registrationId: 'r',
+          courseId: 'c',
+          creatorUserId: 'o',
+          registrantUserId: 'x',
+          capacity: 1,
+          registrationCount: 1,
+        }),
+      )),
+    ];
+    for (const s of specs) {
+      for (const v of Object.values(s.data)) expect(typeof v).toBe('string');
+    }
   });
 });

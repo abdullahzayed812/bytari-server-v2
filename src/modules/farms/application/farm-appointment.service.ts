@@ -74,6 +74,7 @@ export class FarmAppointmentService {
     this.events.publish('farm.appointment.created', {
       organizationId,
       appointmentId: appointment.id,
+      createdByUserId: actor.actorUserId,
     });
     return appointment;
   }

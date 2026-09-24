@@ -52,7 +52,10 @@ export class SyndicateAnnouncementRepository {
     if (patch.title !== undefined) dbPatch.title = patch.title;
     if (patch.body !== undefined) dbPatch.body = patch.body;
     if (patch.imageStorageKey !== undefined) dbPatch.image_key = patch.imageStorageKey;
-    const [row] = (await trx(T).where({ id }).update(dbPatch).returning('*')) as SyndicateAnnouncementRow[];
+    const [row] = (await trx(T)
+      .where({ id })
+      .update(dbPatch)
+      .returning('*')) as SyndicateAnnouncementRow[];
     if (!row) throw new Error('syndicate_announcement not found on update');
     return rowToAnnouncement(row);
   }
@@ -70,11 +73,11 @@ export class SyndicateAnnouncementRepository {
       .count<{ count: string }>({ count: '*' })
       .first();
     const total = Number(countRow?.count ?? 0);
-    const rows = (await this.conn()<SyndicateAnnouncementRow>(T)
+    const rows: SyndicateAnnouncementRow[] = await this.conn()<SyndicateAnnouncementRow>(T)
       .where({ organization_id: organizationId })
       .orderBy('published_at', 'desc')
       .limit(filter.pageSize)
-      .offset((filter.page - 1) * filter.pageSize)) as SyndicateAnnouncementRow[];
+      .offset((filter.page - 1) * filter.pageSize);
     return { items: rows.map(rowToAnnouncement), total };
   }
 
@@ -84,10 +87,10 @@ export class SyndicateAnnouncementRepository {
     limit: number,
   ): Promise<SyndicateAnnouncement[]> {
     if (organizationIds.length === 0) return [];
-    const rows = (await this.conn()<SyndicateAnnouncementRow>(T)
+    const rows: SyndicateAnnouncementRow[] = await this.conn()<SyndicateAnnouncementRow>(T)
       .whereIn('organization_id', organizationIds)
       .orderBy('published_at', 'desc')
-      .limit(limit)) as SyndicateAnnouncementRow[];
+      .limit(limit);
     return rows.map(rowToAnnouncement);
   }
 }

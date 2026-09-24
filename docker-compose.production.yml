@@ -1,0 +1,140 @@
+# Bytari — production stack for a single VPS (/opt/bytari).
+#
+#   Internet ─▶ nginx (80/443, TLS) ─┬─▶ web  (Expo Web static, :8080)   bytari.com
+#                                    └─▶ api  (Node, HTTP + WS, :3000)  api.bytari.com
+#                                              └─▶ db (PostgreSQL 16)    internal only
+#   certbot renews the Let's Encrypt certificate; nginx reloads every 6 h.
+#
+# Only nginx publishes ports. `db` sits on an `internal` network with no route
+# to the internet. Images are pulled from GHCR; `deploy/scripts/deploy.sh`
+# sets API_TAG / WEB_TAG, backs up, migrates, then starts and health-checks.
+#
+# Development keeps using `docker-compose.yml` — this file is production only.
+
+name: bytari-prod
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: '20m'
+    max-file: '5'
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:?DB_NAME is required}
+      POSTGRES_USER: ${DB_USER:?DB_USER is required}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks: [backend]
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    stop_grace_period: 30s
+    logging: *logging
+
+  api:
+    image: ${API_IMAGE:-ghcr.io/abdullahzayed812/bytari-server-v2}:${API_TAG:-latest}
+    restart: unless-stopped
+    # Migrations are NOT run on boot in production — deploy.sh runs them
+    # explicitly (after a backup) before this container is replaced.
+    command: ['node', 'dist/server.js']
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_SSL: 'false'
+      ENABLE_DEV_SEEDS: 'false'
+      REALTIME_ALLOW_ANONYMOUS: 'false'
+    depends_on:
+      db:
+        condition: service_healthy
+    # `edge` gives nginx a route in and the API egress (FCM, R2, SMTP);
+    # `backend` reaches the database.
+    networks: [edge, backend]
+    healthcheck:
+      # Readiness (DB reachable) — `docker compose up --wait` blocks on it.
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 30s
+    # server.ts drains within 10 s of SIGTERM (tini forwards it).
+    stop_grace_period: 20s
+    logging: *logging
+
+  web:
+    image: ${WEB_IMAGE:-ghcr.io/abdullahzayed812/bytari-client-v2}:${WEB_TAG:-latest}
+    restart: unless-stopped
+    networks: [edge]
+    read_only: true
+    tmpfs: [/tmp]
+    logging: *logging
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      # Override only for a local rehearsal of the stack; production uses 80/443.
+      - '${EDGE_HTTP_PORT:-80}:80'
+      - '${EDGE_HTTPS_PORT:-443}:443'
+    volumes:
+      - ./deploy/nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./deploy/nginx/snippets:/etc/nginx/snippets:ro
+      - letsencrypt:/etc/letsencrypt:ro
+      - certbot-www:/var/www/certbot:ro
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    networks: [edge]
+    # Reload every 6 h so a renewed certificate is picked up without downtime.
+    command:
+      ['/bin/sh', '-c', 'while :; do sleep 6h; nginx -s reload; done & exec nginx -g "daemon off;"']
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q -O /dev/null http://127.0.0.1/nginx-health || exit 1']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging: *logging
+
+  certbot:
+    image: certbot/certbot:v2.11.0
+    restart: unless-stopped
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - certbot-www:/var/www/certbot
+    networks: [edge]
+    # Twice a day; `renew` is a no-op until the cert is within 30 days of expiry.
+    entrypoint:
+      [
+        '/bin/sh',
+        '-c',
+        'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done',
+      ]
+    logging: *logging
+
+volumes:
+  db-data:
+  letsencrypt:
+  certbot-www:
+
+networks:
+  edge:
+  backend:
+    internal: true

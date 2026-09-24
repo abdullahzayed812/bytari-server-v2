@@ -189,7 +189,14 @@ export class MembershipService {
       );
     });
 
-    this.events.publish('organization.member.updated', { organizationId, membershipId });
+    this.events.publish('organization.member.updated', {
+      organizationId,
+      membershipId,
+      userId: membership.userId,
+      actorUserId: actor.actorUserId,
+      ...(patch.roleKey ? { roleKey: patch.roleKey } : {}),
+      ...(patch.status ? { status: patch.status } : {}),
+    });
     return this.hydrate(membershipId, organizationId);
   }
 

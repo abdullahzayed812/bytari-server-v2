@@ -45,6 +45,22 @@ export interface AdminNotificationInput {
 
 const PUSH_FANOUT_BATCH = 200;
 
+/**
+ * Default back-off between push attempts after a TRANSIENT provider failure
+ * (the provider threw — network / 5xx / quota). Bounded: at most
+ * `1 + delays.length` attempts, then logged and dropped (in-app row kept).
+ * Per-token permanent failures never throw — the provider reports them as
+ * invalid and they are revoked, never retried.
+ */
+export const DEFAULT_PUSH_RETRY_DELAYS_MS: readonly number[] = [1_000, 5_000];
+
+export interface NotificationServiceOptions {
+  pushRetryDelaysMs?: readonly number[];
+}
+
+const sleep = (ms: number): Promise<void> =>
+  ms > 0 ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve();
+
 function tokenSuffix(token: string): string {
   return token.length > 6 ? `…${token.slice(-6)}` : '…';
 }
@@ -59,6 +75,7 @@ function tokenSuffix(token: string): string {
  */
 export class NotificationService {
   private readonly log: Logger;
+  private readonly pushRetryDelaysMs: readonly number[];
 
   constructor(
     private readonly db: Knex,
@@ -70,8 +87,10 @@ export class NotificationService {
     private readonly audit: AuditService,
     private readonly events: EventBus,
     logger: Logger,
+    options: NotificationServiceOptions = {},
   ) {
     this.log = logger.child({ component: 'notification-service' });
+    this.pushRetryDelaysMs = options.pushRetryDelaysMs ?? DEFAULT_PUSH_RETRY_DELAYS_MS;
   }
 
   // --- event-driven delivery (called by the handler) --------------------
@@ -106,7 +125,17 @@ export class NotificationService {
         tx,
       ),
     );
-    if (!created) return; // duplicate source event — already delivered
+    const logCtx = {
+      notificationId: created?.id,
+      type: spec.type,
+      recipientUserId: spec.recipientUserId,
+      sourceEventKey: spec.sourceEventKey ?? null,
+    };
+    if (!created) {
+      this.log.debug(logCtx, 'duplicate source event — notification already delivered');
+      return;
+    }
+    this.log.info(logCtx, 'notification created');
 
     // realtime — best effort, after commit
     this.events.publish('notification.created', {
@@ -116,17 +145,62 @@ export class NotificationService {
     });
 
     // FCM — best effort, gated by the user's preference
-    if (spec.push) {
+    if (!spec.push) return;
+    try {
+      if (!(await this.preferences.pushEnabled(spec.recipientUserId))) {
+        this.log.debug(logCtx, 'push skipped — disabled by user preference');
+        return;
+      }
+    } catch (err) {
+      this.log.warn({ ...logCtx, err }, 'push preference lookup failed — in-app kept');
+      return;
+    }
+    // `notificationId` lets a push tap mark this exact row read. Detached so a
+    // retry back-off for one recipient never delays the rest of a fan-out;
+    // `sendPushWithRetry` never rejects.
+    void this.sendPushWithRetry(logCtx, spec, { ...spec.data, notificationId: created.id });
+  }
+
+  private async sendPushWithRetry(
+    logCtx: Record<string, unknown>,
+    spec: NotificationSpec,
+    data: Record<string, string>,
+  ): Promise<void> {
+    const maxAttempts = 1 + this.pushRetryDelaysMs.length;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        if (await this.preferences.pushEnabled(spec.recipientUserId)) {
-          await this.push.sendToUser(
-            spec.recipientUserId,
-            { title: spec.title, body: spec.body },
-            spec.data,
-          );
-        }
+        const result = await this.push.sendToUser(
+          spec.recipientUserId,
+          { title: spec.title, body: spec.body },
+          data,
+        );
+        this.log.info(
+          {
+            ...logCtx,
+            provider: result.provider,
+            attempt,
+            successCount: result.successCount,
+            failureCount: result.failureCount,
+            revokedTokens: result.invalidTokens.length,
+          },
+          'push dispatched',
+        );
+        return;
       } catch (err) {
-        this.log.warn({ err, notificationId: created.id }, 'push delivery failed — in-app kept');
+        const retrying = attempt < maxAttempts;
+        this.log.warn(
+          {
+            ...logCtx,
+            provider: this.push.providerName,
+            attempt,
+            retrying,
+            errorCategory: 'transient',
+            errorMessage: err instanceof Error ? err.message : 'unknown',
+          },
+          retrying ? 'push attempt failed — retrying' : 'push delivery failed — in-app kept',
+        );
+        if (!retrying) return;
+        await sleep(this.pushRetryDelaysMs[attempt - 1] ?? 0);
       }
     }
   }

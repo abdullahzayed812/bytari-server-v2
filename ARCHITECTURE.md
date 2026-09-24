@@ -1361,6 +1361,58 @@ documented, no EventBus change made.
   `ALL` / `ROLE` admin path is the seam.
 - Notification **retention / cleanup** — rows are kept; a cron is a future item.
 
+### 19.8 Event-matrix completion (post-Phase-15)
+
+Same pipeline, no new infrastructure. What changed:
+
+- **Catalogue**: 90 types. New mappings for events that were already published
+  but unmapped — `user.status.changed` (ACCOUNT_STATUS_CHANGED for admin-driven transitions; email verification is deliberately silent),
+  `veterinarian.application.submitted|approved|rejected`, `organization.created`
+  (only when PENDING) / `.deactivated` / `.member.updated`, `farm.subscription.*`
+  (FARM / OFFICE / CLINIC), `farm.member.joined`, `farm.appointment.created`,
+  `trader.*`, `animal.{lost,adoption,mating}.{created,approved,rejected}`,
+  `vet_job.*`, `{pet_store,veterinarian_store}.order.*`, plus
+  `vet_course.cancelled` (new event, published after commit) and course
+  registration → organizer + a once-only CAPACITY_REACHED.
+- **Review queues** (`toReviewers`): ACTIVE global ADMINs ∪ the ACTIVE supervisors
+  of the queue's domain (`ANIMAL`, `MARKET`, `VET_JOBS`, `PET_OWNER_STORE`,
+  `VETERINARIAN_STORE`), minus the submitter. Pre-existing mappers
+  (VET_SERVICE / VET_COURSES submissions, threads) are unchanged (supervisors only).
+- **Additive payload fields** (no behaviour change): `user.status.changed`
+  `{from, reason}`, publication events `{createdByUserId, actorUserId}`,
+  `organization.member.updated` `{userId, actorUserId, roleKey?, status?}`,
+  `farm.appointment.created` `{createdByUserId}`, course registration
+  `{courseType, capacity, registrationCount}`.
+- **Copy** lives in `notification.copy.ts`, in Arabic (the app default — the
+  user's language is not stored server-side, so this is what an OS push shows).
+  Clients re-render the inbox from `notifications:types.<TYPE>` for other
+  languages. Copy is generic — no names, reasons, or message/medical content.
+- **Idempotency keys**: one-shot transitions keep `event:<entityId>`;
+  transitions that can recur (suspend/reactivate, resubmit, role change) use
+  `repeatableKey` = `event:<id>:<occurredAt>`, so a redelivered event still
+  dedupes but a later genuine repeat notifies.
+- **Push**: data now carries `notificationId` (a tap marks that row read);
+  Android `channelId: 'default'` (matches the app's channel). Transient
+  provider errors (the provider threw) are retried with bounded back-off
+  `[1s, 5s]` (`[0, 0]` under `NODE_ENV=test`), detached from the fan-out;
+  per-token permanent failures are revoked, never retried. Structured logs:
+  `notification created` / `push dispatched` / `push attempt failed` with
+  type, recipient, sourceEventKey, provider, attempt, counts — never tokens
+  (suffix only) or content.
+- **Subscription expiry** (`SubscriptionExpiryNotifier`, the one time-driven
+  source): every 6 h (first run 60 s after boot, `server.ts` only) scans
+  ACTIVE FARM / OFFICE / CLINIC orgs — end date within 7 days → EXPIRING,
+  ended within the last 7 days → EXPIRED. Key
+  `subscription.{expiring|expired}:<orgId>:<endDate>` ⇒ exactly once per
+  period across re-runs, restarts and nodes; a renewal moves the end date and
+  re-arms it.
+- **Management counts** are untouched — `admin_dashboard_card_seen` cursors
+  stay per card and independent of notification read-state.
+- **Not applicable** (no feature): password change, login-security events,
+  lost-pet matching, chat mentions / room invites, product approval (admin-run
+  stores), ad review (admin-created ads), syndicate review (admin-created).
+  Farm daily data deliberately produces no notification (noise).
+
 ## 20. Phase status
 
 - [x] **Phase 1 — Foundation**: project setup, config, logging, error handling,
