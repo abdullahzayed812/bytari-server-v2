@@ -12,6 +12,8 @@ import { createSupportRealtime } from '../../src/modules/consultations/index.js'
 import { createContentRealtime } from '../../src/modules/content/index.js';
 import { createNotificationRealtime } from '../../src/modules/notifications/index.js';
 import { createApp } from '../../src/app.js';
+import { NoopEmailProvider } from '../../src/infra/email/index.js';
+import { registerTestApp } from './app.js';
 import { getTestDb } from './db.js';
 
 const logger = pino({ level: 'silent' });
@@ -33,7 +35,15 @@ export async function buildRealtimeHarness(
   const config = loadConfig();
   const db = getTestDb();
   const eventBus = new InMemoryEventBus(logger);
-  const container = createContainer({ db, config, logger, eventBus, ...overrides });
+  // Same email double as buildTestApp(): factories read verification codes back from it.
+  const container = createContainer({
+    db,
+    config,
+    logger,
+    eventBus,
+    emailProvider: new NoopEmailProvider(logger),
+    ...overrides,
+  });
 
   const chatRealtime = createChatRealtime(container);
   const supportRealtime = createSupportRealtime(container);
@@ -58,6 +68,7 @@ export async function buildRealtimeHarness(
   notificationRealtime.registerBridgeRoutes(infra.realtimeBridge);
 
   const app = createApp({ config, db, logger, infra, container });
+  registerTestApp(app, container);
   const server = createServer(app);
   infra.attach(server);
 

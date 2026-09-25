@@ -186,6 +186,8 @@ describe('roles ↔ permissions', () => {
     expect(keys).toContain('vet_course.approve');
     expect(keys).toContain('vet_course.reject');
     expect(keys).toContain('syndicate.admin.create');
-    expect(keys.length).toBe(83);
+    expect(keys).toContain('chat_room.admin.create');
+    expect(keys).toContain('content_report.admin.manage');
+    expect(keys.length).toBe(86);
   });
 });

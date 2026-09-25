@@ -28,6 +28,11 @@ export type TestHarnessOverrides = Pick<
  */
 const containersByApp = new WeakMap<Express, Container>();
 
+/** Register an app built outside `buildTestApp()` (e.g. the realtime harness) for `containerFor`. */
+export function registerTestApp(app: Express, container: Container): void {
+  containersByApp.set(app, container);
+}
+
 /** The container `buildTestApp()` built `app` with. Throws if `app` wasn't built here. */
 export function containerFor(app: Express): Container {
   const container = containersByApp.get(app);
