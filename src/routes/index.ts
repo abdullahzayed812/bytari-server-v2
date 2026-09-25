@@ -275,7 +275,7 @@ export function createApiRouter(c: Container): Router {
 
   // Content reporting ("الإبلاغ عن الرسالة") — any authenticated user may
   // report a message or a room; admin queue under `/admin/reports`.
-  router.use('/', createReportRouter(c));
+  router.use('/reports', createReportRouter(c));
 
   // --- Phase 14: content management --------------------------
   // Public reads of PUBLISHED content; admin/supervisor management under

@@ -10,12 +10,16 @@ import {
   submitReportBodySchema,
 } from './report.schemas.js';
 
-/** `/reports` — any authenticated user may submit a report. */
+/**
+ * `/reports` — any authenticated user may submit a report. Mounted at
+ * `/reports`, never path-less: its router-level `authenticate` would otherwise
+ * 401 every later public route and every unknown URL (404 → 401).
+ */
 export function createReportRouter(c: Container): Router {
   const ctrl = new ReportController(c.reportService);
   const r = Router();
   r.use(c.authenticate);
-  r.post('/reports', validate({ body: submitReportBodySchema }), asyncHandler(ctrl.submit));
+  r.post('/', validate({ body: submitReportBodySchema }), asyncHandler(ctrl.submit));
   return r;
 }
 
