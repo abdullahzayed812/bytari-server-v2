@@ -58,7 +58,9 @@ jobs:
         # `npm run format` commit (docs/deployment.md §CI).
         run: |
           base="${{ github.event.pull_request.base.sha || github.event.before }}"
-          if [ -z "$base" ] || ! git cat-file -e "$base" 2>/dev/null; then base="$(git rev-list --max-parents=0 HEAD)"; fi
+          # Tag pushes / manual runs have no base (`before` is all zeros): skip
+          # rather than diff against the root commit, which checks every file.
+          if [ -z "$base" ] || ! git cat-file -e "$base" 2>/dev/null; then echo "no base commit (tag or manual run) — skipped"; exit 0; fi
           files=$(git diff --name-only --diff-filter=ACMR "$base" HEAD -- '*.ts' '*.js' '*.json' '*.yml' '*.yaml' | grep -v '^package-lock.json$' || true)
           if [ -n "$files" ]; then echo "$files" | xargs npx prettier --check; else echo "no formattable changes"; fi
       - name: Test (unit + integration)
