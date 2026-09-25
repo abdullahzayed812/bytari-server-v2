@@ -25,8 +25,12 @@ for key in DB_NAME DB_USER DB_PASSWORD JWT_ACCESS_SECRET CORS_ORIGINS \
            R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET; do
   v="$(get "$key")"
   [[ -n "$v" ]] || fail "$key is empty"
-  [[ "$v" != "CHANGE_ME" ]] || fail "$key still has the placeholder value"
 done
+
+# Any placeholder left anywhere (FIREBASE_PRIVATE_KEY, EMAIL_PASS, …).
+while IFS= read -r key; do
+  fail "$key still has the placeholder value"
+done < <(grep -oE '^[A-Z0-9_]+="?CHANGE_ME"?$' "$ENV_FILE" | cut -d= -f1)
 
 # An empty `KEY=` reaches the app as "" and fails its format validation —
 # optional settings must be commented out instead.
