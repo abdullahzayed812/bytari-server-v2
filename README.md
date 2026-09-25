@@ -222,7 +222,7 @@ curl -s -XPOST localhost:3000/api/v1/auth/register -H 'content-type: application
 
 ## Production deployment
 
-Single-VPS Docker Compose stack (`bytari.com` + `api.bytari.com`, nginx + Let's
+Single-VPS Docker Compose stack (`baytari.com` + `api.baytari.com`, nginx + Let's
 Encrypt, GHCR images, GitHub Actions): see [`docs/deployment.md`](docs/deployment.md).
 `docker-compose.production.yml` is production-only; `docker-compose.yml` below
 is for development.

@@ -1,6 +1,6 @@
 # Production deployment — single VPS (Docker Compose)
 
-Runbook for `https://bytari.com` (Expo Web) and `https://api.bytari.com`
+Runbook for `https://baytari.com` (Expo Web) and `https://api.baytari.com`
 (API + realtime). Companion to [`OPERATIONS.md`](OPERATIONS.md) (runtime
 behaviour, secrets, backups in depth).
 
@@ -16,13 +16,13 @@ Status tags used below:
 
 ```
 Internet
-  │  DNS: bytari.com, www.bytari.com, api.bytari.com → VPS public IP
+  │  DNS: baytari.com, www.baytari.com, api.baytari.com → VPS public IP
   ▼
 nginx  (container, ports 80/443 — the ONLY published ports)
   │  :80  → ACME challenge + 301 to https
-  │  www.bytari.com → 301 https://bytari.com
-  ├── bytari.com      ─▶ web  (nginx-unprivileged, Expo Web static files, :8080)
-  └── api.bytari.com  ─▶ api  (Node 20, REST /api/v1 + WebSocket /realtime, :3000)
+  │  www.baytari.com → 301 https://baytari.com
+  ├── baytari.com      ─▶ web  (nginx-unprivileged, Expo Web static files, :8080)
+  └── api.baytari.com  ─▶ api  (Node 20, REST /api/v1 + WebSocket /realtime, :3000)
                               └─▶ db (PostgreSQL 16, `backend` network: internal, no egress)
 certbot (container) renews the Let's Encrypt cert; nginx reloads every 6 h.
 ```
@@ -57,12 +57,12 @@ Client repo: `Dockerfile`, `deploy/nginx-web.conf`, `.github/workflows/`.
 
 | Type | Name             | Value           |
 | ---- | ---------------- | --------------- |
-| A    | `bytari.com`     | `VPS_PUBLIC_IP` |
-| A    | `www.bytari.com` | `VPS_PUBLIC_IP` |
-| A    | `api.bytari.com` | `VPS_PUBLIC_IP` |
+| A    | `baytari.com`     | `VPS_PUBLIC_IP` |
+| A    | `www.baytari.com` | `VPS_PUBLIC_IP` |
+| A    | `api.baytari.com` | `VPS_PUBLIC_IP` |
 
 (Add matching `AAAA` records only if the VPS has IPv6 and you open it in the
-firewall.) Canonical host is `bytari.com`; `www` 301-redirects to it.
+firewall.) Canonical host is `baytari.com`; `www` 301-redirects to it.
 If DNS is on Cloudflare, use **DNS only** (grey cloud) at least until the
 certificate is issued — the HTTP-01 challenge must reach this server.
 
@@ -112,7 +112,7 @@ docker login ghcr.io -u <github-user>
 deploy/scripts/init-letsencrypt.sh dummy
 SMOKE_INSECURE=1 deploy/scripts/deploy.sh --api-tag <server-tag> --web-tag <client-tag>
 deploy/scripts/init-letsencrypt.sh issue          # add --staging for a dry run first
-curl -fsS https://api.bytari.com/health/ready && curl -fsS -o /dev/null https://bytari.com/
+curl -fsS https://api.baytari.com/health/ready && curl -fsS -o /dev/null https://baytari.com/
 
 # 5. Remove BOOTSTRAP_ADMIN_* from .env once the first admin exists.
 ```
@@ -122,14 +122,14 @@ curl -fsS https://api.bytari.com/health/ready && curl -fsS -o /dev/null https://
 
 ## 5. TLS / HTTPS [Implemented + VPS config]
 
-- One Let's Encrypt certificate (`--cert-name bytari.com`) for `bytari.com`,
-  `www.bytari.com`, `api.bytari.com`, HTTP-01 via webroot
+- One Let's Encrypt certificate (`--cert-name baytari.com`) for `baytari.com`,
+  `www.baytari.com`, `api.baytari.com`, HTTP-01 via webroot
   (`/.well-known/acme-challenge/` is served on :80 by nginx).
 - **Renewal is automatic**: the `certbot` service runs `certbot renew` every
   12 h (no-op until < 30 days left); nginx reloads every 6 h and picks up the
   new files with no downtime. Check: `docker compose -f docker-compose.production.yml run --rm --entrypoint certbot certbot certificates`.
 - TLS 1.2/1.3 only, HSTS (1 year, `includeSubDomains`, no `preload`).
-- `wss://api.bytari.com/realtime` terminates TLS at nginx (upgrade headers,
+- `wss://api.baytari.com/realtime` terminates TLS at nginx (upgrade headers,
   1 h idle timeout; the server pings every 30 s).
 - Certificates live only in the `letsencrypt` volume — never in git.
 
@@ -147,7 +147,7 @@ and wrong file permissions. The app itself also refuses to boot with
 | ------------------------------------------------------------------------------------------------------------ | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `DB_NAME`, `DB_USER`, `DB_PASSWORD`                                                                          | yes          | Also initialise the `db` container on first start.                                                                                                                                                                                |
 | `JWT_ACCESS_SECRET`                                                                                          | yes          | ≥ 32 chars (`openssl rand -base64 48`).                                                                                                                                                                                           |
-| `CORS_ORIGINS`                                                                                               | yes          | `https://bytari.com,https://www.bytari.com`. Native apps send no `Origin`.                                                                                                                                                        |
+| `CORS_ORIGINS`                                                                                               | yes          | `https://baytari.com,https://www.baytari.com`. Native apps send no `Origin`.                                                                                                                                                        |
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`                                     | yes          | Blank = volatile in-memory storage (never in production).                                                                                                                                                                         |
 | `R2_PUBLIC_BASE_URL`                                                                                         | optional     | Only if the bucket has a public domain.                                                                                                                                                                                           |
 | `FIREBASE_PROJECT_ID` + `FIREBASE_CLIENT_EMAIL` + `FIREBASE_PRIVATE_KEY`, or `FIREBASE_SERVICE_ACCOUNT_JSON` | recommended  | Firebase **Admin** service account of project `bytari` (same project as the Android `google-services.json`). Private key on one line with literal `\n`, in double quotes. Blank = push disabled, in-app notifications still work. |
@@ -167,8 +167,8 @@ Baked into the JS bundle by `expo export`; passed as Docker build args
 
 | Variable                    | Production value         |
 | --------------------------- | ------------------------ |
-| `EXPO_PUBLIC_API_BASE_URL`  | `https://api.bytari.com` |
-| `EXPO_PUBLIC_REALTIME_URL`  | `wss://api.bytari.com`   |
+| `EXPO_PUBLIC_API_BASE_URL`  | `https://api.baytari.com` |
+| `EXPO_PUBLIC_REALTIME_URL`  | `wss://api.baytari.com`   |
 | `EXPO_PUBLIC_REALTIME_PATH` | `/realtime`              |
 | `EXPO_PUBLIC_ENVIRONMENT`   | `production`             |
 
@@ -198,7 +198,7 @@ missing API URL is found in the bundle.
   ```json
   [
     {
-      "AllowedOrigins": ["https://bytari.com"],
+      "AllowedOrigins": ["https://baytari.com"],
       "AllowedMethods": ["GET", "PUT", "HEAD"],
       "AllowedHeaders": ["content-type"],
       "MaxAgeSeconds": 3600
@@ -220,9 +220,9 @@ git push / PR ──▶ CI (both repos): npm ci · typecheck · lint · prettier
 
 git tag vX.Y.Z && git push origin vX.Y.Z
   server repo ─▶ CI ─▶ push ghcr.io/…/bytari-server-v2:vX.Y.Z ─▶ rsync compose/nginx/scripts
-                ─▶ ssh deploy.sh --api-tag vX.Y.Z ─▶ curl https://api.bytari.com/health/ready
+                ─▶ ssh deploy.sh --api-tag vX.Y.Z ─▶ curl https://api.baytari.com/health/ready
   client repo ─▶ CI ─▶ push ghcr.io/…/bytari-client-v2:vX.Y.Z ─▶ ssh deploy.sh --web-tag vX.Y.Z
-                ─▶ curl https://bytari.com/
+                ─▶ curl https://baytari.com/
 ```
 
 Both workflows also run on **Actions → Run workflow** (tag `sha-<12>`).
@@ -276,8 +276,8 @@ Old images stay in the local Docker cache and in GHCR; prune occasionally:
 
 | Check          | Command                                                                                              |
 | -------------- | ---------------------------------------------------------------------------------------------------- |
-| Liveness       | `curl https://api.bytari.com/health`                                                                 |
-| Readiness (DB) | `curl https://api.bytari.com/health/ready` (503 until DB answers)                                    |
+| Liveness       | `curl https://api.baytari.com/health`                                                                 |
+| Readiness (DB) | `curl https://api.baytari.com/health/ready` (503 until DB answers)                                    |
 | Containers     | `docker compose -f docker-compose.production.yml ps`                                                 |
 | Logs           | `docker compose -f docker-compose.production.yml logs -f --tail 200 api` (also `nginx`, `web`, `db`) |
 | Release        | `cat deploy/state/current.env`                                                                       |
@@ -319,7 +319,7 @@ docker compose -f docker-compose.production.yml exec -T db sh -c \
   'pg_restore --clean --if-exists --no-owner --no-privileges -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
   < backups/bytari-<timestamp>.dump
 docker compose -f docker-compose.production.yml start api
-curl -fsS https://api.bytari.com/health/ready
+curl -fsS https://api.baytari.com/health/ready
 ```
 
 Also back up `/opt/bytari/.env` (password manager / secret store) — it is the

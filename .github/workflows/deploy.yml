@@ -88,5 +88,5 @@ jobs:
         run: ssh vps "cd /opt/bytari && deploy/scripts/deploy.sh --api-tag '${{ needs.image.outputs.tag }}'"
       - name: Verify from the internet
         run: |
-          curl -fsS --retry 5 --retry-delay 5 --retry-all-errors -o /dev/null https://api.bytari.com/health/ready
-          curl -fsS --retry 5 --retry-delay 5 --retry-all-errors -o /dev/null https://bytari.com/
+          curl -fsS --retry 5 --retry-delay 5 --retry-all-errors -o /dev/null https://api.baytari.com/health/ready
+          curl -fsS --retry 5 --retry-delay 5 --retry-all-errors -o /dev/null https://baytari.com/

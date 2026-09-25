@@ -97,9 +97,9 @@ jobs:
           docker compose -f docker-compose.production.yml config --quiet
       - name: nginx -t (edge config)
         run: |
-          mkdir -p /tmp/le/live/bytari.com
-          openssl req -x509 -nodes -newkey rsa:2048 -days 1 -subj /CN=bytari.com \
-            -keyout /tmp/le/live/bytari.com/privkey.pem -out /tmp/le/live/bytari.com/fullchain.pem 2>/dev/null
+          mkdir -p /tmp/le/live/baytari.com
+          openssl req -x509 -nodes -newkey rsa:2048 -days 1 -subj /CN=baytari.com \
+            -keyout /tmp/le/live/baytari.com/privkey.pem -out /tmp/le/live/baytari.com/fullchain.pem 2>/dev/null
           docker run --rm \
             -v "$PWD/deploy/nginx/conf.d:/etc/nginx/conf.d:ro" \
             -v "$PWD/deploy/nginx/snippets:/etc/nginx/snippets:ro" \

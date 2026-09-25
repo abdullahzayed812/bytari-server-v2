@@ -118,12 +118,12 @@ if ! "${COMPOSE[@]}" up -d --remove-orphans --wait --wait-timeout 180; then
 fi
 
 # --- 6. smoke test through the edge ---------------------------------------------------
-log "6/7 smoke testing https://bytari.com and https://api.bytari.com"
+log "6/7 smoke testing https://baytari.com and https://api.baytari.com"
 curl_opts=(-fsS -o /dev/null --max-time 10 --retry 5 --retry-delay 3 --retry-all-errors)
 # Before the real certificate exists (first deploy) the placeholder is self-signed.
 [[ "${SMOKE_INSECURE:-0}" == "1" ]] && curl_opts+=(-k)
 https_port="$(env_value EDGE_HTTPS_PORT .env)"; https_port="${https_port:-443}"
-resolve=(--resolve "bytari.com:$https_port:127.0.0.1" --resolve "api.bytari.com:$https_port:127.0.0.1")
+resolve=(--resolve "baytari.com:$https_port:127.0.0.1" --resolve "api.baytari.com:$https_port:127.0.0.1")
 smoke() {
   local url="$1"
   if curl "${curl_opts[@]}" "${resolve[@]}" "$url"; then
@@ -134,10 +134,10 @@ smoke() {
   fi
 }
 ok=1
-smoke "https://api.bytari.com:$https_port/health" || ok=0
-smoke "https://api.bytari.com:$https_port/health/ready" || ok=0
-smoke "https://bytari.com:$https_port/" || ok=0
-smoke "https://bytari.com:$https_port/pets/smoke-test-deep-link" || ok=0
+smoke "https://api.baytari.com:$https_port/health" || ok=0
+smoke "https://api.baytari.com:$https_port/health/ready" || ok=0
+smoke "https://baytari.com:$https_port/" || ok=0
+smoke "https://baytari.com:$https_port/pets/smoke-test-deep-link" || ok=0
 if (( ! ok )); then
   rollback
   die "smoke test failed"

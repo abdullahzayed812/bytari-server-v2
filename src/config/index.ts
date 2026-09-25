@@ -209,7 +209,7 @@ const envSchema = z
         code: z.ZodIssueCode.custom,
         path: ['CORS_ORIGINS'],
         message:
-          'CORS_ORIGINS must list explicit origins (e.g. https://bytari.com) when NODE_ENV=production.',
+          'CORS_ORIGINS must list explicit origins (e.g. https://baytari.com) when NODE_ENV=production.',
       });
     }
   })

@@ -1,7 +1,7 @@
 # Bytari — production stack for a single VPS (/opt/bytari).
 #
-#   Internet ─▶ nginx (80/443, TLS) ─┬─▶ web  (Expo Web static, :8080)   bytari.com
-#                                    └─▶ api  (Node, HTTP + WS, :3000)  api.bytari.com
+#   Internet ─▶ nginx (80/443, TLS) ─┬─▶ web  (Expo Web static, :8080)   baytari.com
+#                                    └─▶ api  (Node, HTTP + WS, :3000)  api.baytari.com
 #                                              └─▶ db (PostgreSQL 16)    internal only
 #   certbot renews the Let's Encrypt certificate; nginx reloads every 6 h.
 #

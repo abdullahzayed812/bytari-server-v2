@@ -87,7 +87,7 @@ describe('loadConfig', () => {
         ...BASE_ENV,
         NODE_ENV: 'production',
         JWT_ACCESS_SECRET: 'a-production-grade-secret-at-least-32-chars',
-        CORS_ORIGINS: 'https://bytari.com',
+        CORS_ORIGINS: 'https://baytari.com',
         REALTIME_ALLOW_ANONYMOUS: 'true',
       });
       expect(config.realtime.allowAnonymous).toBe(false);
@@ -100,8 +100,8 @@ describe('loadConfig', () => {
         JWT_ACCESS_SECRET: 'a-production-grade-secret-at-least-32-chars',
       };
       expect(() => loadConfig({ ...prod, CORS_ORIGINS: '*' })).toThrowError(/CORS_ORIGINS/);
-      expect(loadConfig({ ...prod, CORS_ORIGINS: 'https://bytari.com' }).http.corsOrigins).toEqual([
-        'https://bytari.com',
+      expect(loadConfig({ ...prod, CORS_ORIGINS: 'https://baytari.com' }).http.corsOrigins).toEqual([
+        'https://baytari.com',
       ]);
     });
 

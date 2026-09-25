@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# First-time TLS bootstrap for bytari.com / www.bytari.com / api.bytari.com.
+# First-time TLS bootstrap for baytari.com / www.baytari.com / api.baytari.com.
 #
 #   init-letsencrypt.sh dummy            1) self-signed placeholder so nginx can start
 #   (run deploy/scripts/deploy.sh with SMOKE_INSECURE=1)
@@ -12,7 +12,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 
 COMPOSE=(docker compose -f docker-compose.production.yml)
-DOMAINS=(bytari.com www.bytari.com api.bytari.com)
+DOMAINS=(baytari.com www.baytari.com api.baytari.com)
 PRIMARY="${DOMAINS[0]}"
 LIVE="/etc/letsencrypt/live/$PRIMARY"
 
