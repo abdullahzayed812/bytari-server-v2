@@ -122,4 +122,76 @@ export class OrganizationReviewRepository {
     }));
     return { items, total };
   }
+
+  async findById(id: string, trx?: Knex.Transaction): Promise<OrganizationReview | null> {
+    const row = await this.conn(trx)<OrganizationReviewRow>(TABLE).where({ id }).first();
+    return row ? rowToOrganizationReview(row) : null;
+  }
+
+  async deleteById(id: string, trx?: Knex.Transaction): Promise<boolean> {
+    const n = await this.conn(trx)(TABLE).where({ id }).delete();
+    return Number(n) > 0;
+  }
+
+  /**
+   * Admin moderation list — every review across organizations, newest first,
+   * with the organization (name/type) and the author so the moderator sees
+   * where each review belongs. Optional narrowing by organization / type.
+   */
+  async listForModeration(
+    filter: {
+      page: number;
+      pageSize: number;
+      organizationId?: string;
+      organizationType?: string;
+      maxRating?: number;
+    },
+    trx?: Knex.Transaction,
+  ): Promise<{ items: AdminOrganizationReview[]; total: number }> {
+    const conn = this.conn(trx);
+    const base = (): Knex.QueryBuilder => {
+      const qb = conn(`${TABLE} as rv`).join('organizations as o', 'o.id', 'rv.organization_id');
+      if (filter.organizationId) qb.where('rv.organization_id', filter.organizationId);
+      if (filter.organizationType) qb.where('o.type', filter.organizationType);
+      if (filter.maxRating !== undefined) qb.where('rv.rating', '<=', filter.maxRating);
+      return qb;
+    };
+    const countRow = (await base().count({ count: '*' }).first()) as { count: string } | undefined;
+    const total = Number(countRow?.count ?? 0);
+
+    type ModerationRow = OrganizationReviewRow & {
+      u_first_name: string;
+      u_last_name: string;
+      u_email: string;
+      o_name: string;
+      o_type: string;
+    };
+    const rows: ModerationRow[] = await base()
+      .join('users as u', 'u.id', 'rv.user_id')
+      .orderBy('rv.created_at', 'desc')
+      .limit(filter.pageSize)
+      .offset((filter.page - 1) * filter.pageSize)
+      .select(
+        'rv.*',
+        'u.first_name as u_first_name',
+        'u.last_name as u_last_name',
+        'u.email as u_email',
+        'o.name as o_name',
+        'o.type as o_type',
+      );
+
+    return {
+      items: rows.map((row) => ({
+        ...rowToOrganizationReview(row),
+        author: { firstName: row.u_first_name, lastName: row.u_last_name, email: row.u_email },
+        organization: { id: row.organization_id, name: row.o_name, type: row.o_type },
+      })),
+      total,
+    };
+  }
+}
+
+export interface AdminOrganizationReview extends OrganizationReview {
+  author: { firstName: string; lastName: string; email: string };
+  organization: { id: string; name: string; type: string };
 }

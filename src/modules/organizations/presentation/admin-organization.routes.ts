@@ -12,8 +12,11 @@ import {
   setSubscriptionBodySchema,
 } from '../../farms/presentation/farm-subscription.schemas.js';
 import { AdminOrganizationController } from './admin-organization.controller.js';
+import { AdminOrganizationReviewController } from './admin-organization-review.controller.js';
 import {
+  adminDeleteReviewBodySchema,
   adminListOrganizationsQuerySchema,
+  adminListReviewsQuerySchema,
   rejectOrganizationBodySchema,
   statusChangeBodySchema,
 } from './organization.schemas.js';
@@ -36,6 +39,21 @@ export function createAdminOrganizationRouter(c: Container): Router {
   const { authorize } = c.authorization;
   const r = Router();
   r.use(c.authenticate);
+
+  // --- review moderation (clinics / offices / stores). BEFORE `/:id`. ---
+  const reviews = new AdminOrganizationReviewController(c.organizationEngagementService);
+  r.get(
+    '/reviews',
+    authorize('organization.admin.read'),
+    validate({ query: adminListReviewsQuerySchema }),
+    asyncHandler(reviews.list),
+  );
+  r.delete(
+    '/reviews/:id',
+    authorize('organization.admin.manage'),
+    validate({ params: idParamSchema, body: adminDeleteReviewBodySchema }),
+    asyncHandler(reviews.remove),
+  );
 
   // Mounted BEFORE `/:id` so `/farms` is never parsed as an org id.
   r.get(

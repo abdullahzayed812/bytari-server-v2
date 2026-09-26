@@ -88,9 +88,14 @@ export interface PublicVeterinarian {
 export interface OrganizationEngagementSummary {
   isFollowing: boolean;
   followersCount: number;
+  /** "إعجاب" — distinct from following (`organization_likes`). */
+  isLiked: boolean;
+  likesCount: number;
   /** Average rating rounded to 1 decimal, `null` when there are no reviews yet. */
   rating: number | null;
   reviewsCount: number;
+  /** The viewer's own review (one per user — resubmitting updates it). */
+  myReview: { rating: number; comment: string | null } | null;
 }
 
 export interface OrganizationReview {

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { asyncHandler } from '../../../shared/http/async-handler.js';
 import { validate } from '../../../shared/http/validate.js';
+import { userRateLimiter } from '../../../shared/http/user-rate-limit.js';
 import type { Container } from '../../../container.js';
 import { OrganizationController } from './organization.controller.js';
 import {
@@ -181,11 +182,40 @@ export function createOrganizationRouter(c: Container): Router {
     withOrganization,
     asyncHandler(ctrl.unfollow),
   );
+  // "إعجاب" — distinct from follow (organization_likes).
+  r.post(
+    '/:organizationId/like',
+    validate({ params: organizationIdParamSchema }),
+    withOrganization,
+    asyncHandler(ctrl.like),
+  );
+  r.delete(
+    '/:organizationId/like',
+    validate({ params: organizationIdParamSchema }),
+    withOrganization,
+    asyncHandler(ctrl.unlike),
+  );
+  // Abuse protection on review writes (per user) — reads stay unthrottled.
+  const reviewWriteLimiter = userRateLimiter(c.config, { windowMs: 60 * 60 * 1000, max: 30 });
   r.post(
     '/:organizationId/reviews',
+    reviewWriteLimiter,
     validate({ params: organizationIdParamSchema, body: submitReviewBodySchema }),
     withOrganization,
     asyncHandler(ctrl.submitReview),
+  );
+  r.get(
+    '/:organizationId/reviews/mine',
+    validate({ params: organizationIdParamSchema }),
+    withOrganization,
+    asyncHandler(ctrl.getOwnReview),
+  );
+  r.delete(
+    '/:organizationId/reviews/mine',
+    reviewWriteLimiter,
+    validate({ params: organizationIdParamSchema }),
+    withOrganization,
+    asyncHandler(ctrl.deleteOwnReview),
   );
   r.get(
     '/:organizationId/reviews',
