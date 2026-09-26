@@ -479,12 +479,20 @@ export class OrganizationService {
     type?: OrganizationType;
     search?: string;
     near?: { lat: number; lng: number };
+    country?: string;
+    minRating?: number;
+    service?: string;
+    topRated?: boolean;
   }): Promise<{ items: PublicOrganizationDTO[]; total: number }> {
     if (filter.type && OrganizationPolicy.hasProfileFields(filter.type)) {
       const { items, total } = await this.organizations.discoverWithDetails({
         type: filter.type,
         search: filter.search,
         near: filter.near,
+        country: filter.country,
+        minRating: filter.minRating,
+        service: filter.service,
+        topRated: filter.topRated,
         page: filter.page,
         pageSize: filter.pageSize,
       });
@@ -1077,6 +1085,10 @@ export class OrganizationService {
         phone: string | null;
         logoUrl: string | null;
         galleryUrls: string[];
+        /** FARM rows: the farm photo (`farm_details.image_key`, resolved) + where it is. */
+        imageUrl: string | null;
+        location: string | null;
+        governorate: string | null;
       }
     >
   > {
@@ -1087,14 +1099,30 @@ export class OrganizationService {
 
     const farmIds = orgs.filter((o) => o.type === 'FARM').map((o) => o.id);
     const speciesByOrg = new Map<string, string | null>();
+    const farmCardByOrg = new Map<
+      string,
+      { imageKey: string | null; location: string | null; governorate: string | null; address: string | null }
+    >();
     if (farmIds.length > 0) {
       const rows: Array<{
         organization_id: string;
         farm_species: string | null;
+        image_key: string | null;
+        location: string | null;
+        governorate: string | null;
+        address: string | null;
       }> = await this.db('farm_details')
         .whereIn('organization_id', farmIds)
-        .select('organization_id', 'farm_species');
-      for (const r of rows) speciesByOrg.set(r.organization_id, r.farm_species);
+        .select('organization_id', 'farm_species', 'image_key', 'location', 'governorate', 'address');
+      for (const r of rows) {
+        speciesByOrg.set(r.organization_id, r.farm_species);
+        farmCardByOrg.set(r.organization_id, {
+          imageKey: r.image_key,
+          location: r.location,
+          governorate: r.governorate,
+          address: r.address,
+        });
+      }
     }
 
     const subscriptionByOrg = new Map<
@@ -1157,6 +1185,7 @@ export class OrganizationService {
       if (p.logoKey) allKeys.add(p.logoKey);
       for (const key of p.galleryKeys) allKeys.add(key);
     }
+    for (const f of farmCardByOrg.values()) if (f.imageKey) allKeys.add(f.imageKey);
     await Promise.all(
       [...allKeys].map(async (key) => {
         if (!logoUrlByKey.has(key)) logoUrlByKey.set(key, await this.resolveLogoUrl(key));
@@ -1165,18 +1194,22 @@ export class OrganizationService {
 
     return orgs.map((o) => {
       const profile = profileByOrg.get(o.id);
+      const farmCard = farmCardByOrg.get(o.id);
       return {
         ...o,
         myRole: roleByOrg.get(o.id) ?? 'STAFF',
         farmSpecies: o.type === 'FARM' ? (speciesByOrg.get(o.id) ?? null) : null,
         subscriptionStatus: subscriptionByOrg.get(o.id)?.status ?? null,
         subscriptionEndDate: subscriptionByOrg.get(o.id)?.endDate ?? null,
-        address: profile?.address ?? null,
+        address: profile?.address ?? farmCard?.address ?? null,
         phone: profile?.phone ?? null,
         logoUrl: profile?.logoKey ? (logoUrlByKey.get(profile.logoKey) ?? null) : null,
         galleryUrls: (profile?.galleryKeys ?? [])
           .map((key) => logoUrlByKey.get(key))
           .filter((url): url is string => url != null),
+        imageUrl: farmCard?.imageKey ? (logoUrlByKey.get(farmCard.imageKey) ?? null) : null,
+        location: farmCard?.location ?? null,
+        governorate: farmCard?.governorate ?? null,
       };
     });
   }

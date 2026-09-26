@@ -81,6 +81,14 @@ export interface DiscoverWithDetailsFilter {
   type: OrganizationType;
   search?: string;
   near?: { lat: number; lng: number };
+  /** Profile country, exact match on the stored value. */
+  country?: string;
+  /** Minimum average review rating (1–5); unrated organizations are excluded. */
+  minRating?: number;
+  /** Case-insensitive substring match against any entry of `services`. */
+  service?: string;
+  /** Order by average rating (then review count) instead of recency. */
+  topRated?: boolean;
   page: number;
   pageSize: number;
 }
@@ -267,6 +275,19 @@ export class OrganizationRepository {
       if (filter.search) {
         qb.whereRaw('lower(o.name) like ?', [`%${filter.search.toLowerCase()}%`]);
       }
+      if (filter.country) qb.where('d.country', filter.country);
+      if (filter.service) {
+        qb.whereRaw(
+          `EXISTS (SELECT 1 FROM unnest(coalesce(d.services, '{}'::text[])) AS s(v) WHERE v ILIKE ?)`,
+          [`%${filter.service.replace(/[\\%_]/g, (c) => `\\${c}`)}%`],
+        );
+      }
+      if (filter.minRating !== undefined) {
+        qb.whereRaw(
+          `(SELECT avg(rv.rating) FROM organization_reviews rv WHERE rv.organization_id = o.id) >= ?`,
+          [filter.minRating],
+        );
+      }
       return qb;
     };
 
@@ -310,6 +331,15 @@ export class OrganizationRepository {
         // Postgres default null ordering already puts NULLs last on ASC —
         // organizations with no coordinates simply sort to the end.
         .orderBy('distance_km', 'asc')
+        .orderBy('o.created_at', 'desc');
+    } else if (filter.topRated) {
+      query = query
+        .orderByRaw(
+          `(SELECT avg(rv.rating) FROM organization_reviews rv WHERE rv.organization_id = o.id) DESC NULLS LAST`,
+        )
+        .orderByRaw(
+          `(SELECT count(*) FROM organization_reviews rv WHERE rv.organization_id = o.id) DESC`,
+        )
         .orderBy('o.created_at', 'desc');
     } else {
       query = query.orderBy('o.created_at', 'desc');

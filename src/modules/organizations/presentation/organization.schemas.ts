@@ -89,9 +89,16 @@ export const discoverOrganizationsQuerySchema = paginationQuerySchema
   .extend({
     type: z.enum(ORGANIZATION_TYPES).optional(),
     search: z.string().trim().min(1).max(160).optional(),
-    sort: z.enum(['default', 'nearest']).optional().default('default'),
+    sort: z.enum(['default', 'nearest', 'top_rated']).optional().default('default'),
     lat: latitude.optional(),
     lng: longitude.optional(),
+    // --- "تصفية" filter sheet (profile-bearing types: CLINIC / VETERINARY_OFFICE / …) ---
+    /** Exact profile country, as stored (the name picked at registration). */
+    country: z.string().trim().min(1).max(100).optional(),
+    /** Only organizations whose average review rating is at least this (1–5). */
+    minRating: z.coerce.number().int().min(1).max(5).optional(),
+    /** Case-insensitive match against one of the profile's listed services. */
+    service: z.string().trim().min(1).max(100).optional(),
   })
   .refine((v) => (v.lat === undefined) === (v.lng === undefined), {
     message: 'lat and lng must be provided together',
@@ -169,6 +176,22 @@ export const listReviewsQuerySchema = paginationQuerySchema;
 export type ListReviewsQuery = z.infer<typeof listReviewsQuerySchema>;
 
 // --- admin -----------------------------------------------------------
+
+/** `GET /admin/organizations/reviews` — review moderation queue. */
+export const adminListReviewsQuerySchema = paginationQuerySchema.extend({
+  organizationId: z.string().uuid().optional(),
+  type: z.enum(ORGANIZATION_TYPES).optional(),
+  /** e.g. `2` → only 1–2 star reviews (likely complaints / abuse). */
+  maxRating: z.coerce.number().int().min(1).max(5).optional(),
+});
+export type AdminListReviewsQuery = z.infer<typeof adminListReviewsQuerySchema>;
+
+// A DELETE may arrive without any body — default to `{}`.
+export const adminDeleteReviewBodySchema = z
+  .object({ reason: z.string().trim().min(1).max(500).optional() })
+  .strict()
+  .default({});
+export type AdminDeleteReviewBody = z.infer<typeof adminDeleteReviewBodySchema>;
 
 export const adminListOrganizationsQuerySchema = paginationQuerySchema.extend({
   type: z.enum(ORGANIZATION_TYPES).optional(),

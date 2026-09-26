@@ -77,6 +77,10 @@ export class OrganizationController {
       type: q.type,
       search: q.search,
       near: q.sort === 'nearest' ? { lat: q.lat as number, lng: q.lng as number } : undefined,
+      country: q.country,
+      minRating: q.minRating,
+      service: q.service,
+      topRated: q.sort === 'top_rated',
     });
     const ratings = await this.engagement.getRatingsForOrganizations(items.map((i) => i.id));
     const withRatings = items.map((item) => ({ ...item, ...ratings.get(item.id) }));
@@ -210,6 +214,33 @@ export class OrganizationController {
     sendSuccess(res, { success: true });
   };
 
+  like = async (req: Request, res: Response): Promise<void> => {
+    const { userId } = requireAuth(req);
+    const org = requireOrganization(req);
+    await this.engagement.like(org.id, userId);
+    sendSuccess(res, { success: true });
+  };
+
+  unlike = async (req: Request, res: Response): Promise<void> => {
+    const { userId } = requireAuth(req);
+    const org = requireOrganization(req);
+    await this.engagement.unlike(org.id, userId);
+    sendSuccess(res, { success: true });
+  };
+
+  getOwnReview = async (req: Request, res: Response): Promise<void> => {
+    const { userId } = requireAuth(req);
+    const org = requireOrganization(req);
+    sendSuccess(res, await this.engagement.getOwnReview(org.id, userId));
+  };
+
+  deleteOwnReview = async (req: Request, res: Response): Promise<void> => {
+    const { userId } = requireAuth(req);
+    const org = requireOrganization(req);
+    await this.engagement.deleteOwnReview(org.id, userId);
+    sendSuccess(res, { success: true });
+  };
+
   submitReview = async (req: Request, res: Response): Promise<void> => {
     const { userId } = requireAuth(req);
     const org = requireOrganization(req);
@@ -264,6 +295,7 @@ export class OrganizationController {
       org.id,
       { userId: body.userId, email: body.email, roleKey: body.role },
       this.actor(req),
+      { organizationType: org.type },
     );
     sendSuccess(res, member, StatusCodes.CREATED);
   };
@@ -277,6 +309,7 @@ export class OrganizationController {
       memberId,
       { roleKey: body.role, status: body.status },
       this.actor(req),
+      { organizationType: org.type },
     );
     sendSuccess(res, member);
   };
