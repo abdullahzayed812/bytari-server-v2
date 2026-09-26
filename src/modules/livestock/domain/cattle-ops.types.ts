@@ -124,7 +124,9 @@ export interface CreateCattleDailyRecordInput {
   notes?: string | null;
 }
 
-export type UpdateCattleDailyRecordInput = Partial<Omit<CreateCattleDailyRecordInput, 'recordDate'>>;
+export type UpdateCattleDailyRecordInput = Partial<
+  Omit<CreateCattleDailyRecordInput, 'recordDate'>
+>;
 
 export interface ListCattleDailyRecordsFilter {
   page: number;

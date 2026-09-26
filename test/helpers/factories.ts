@@ -83,7 +83,9 @@ export async function registerUser(
   const code = extractVerificationCode(app, email);
   const verifyRes = await verifyEmail(app, email, code);
   if (verifyRes.status !== 200) {
-    throw new Error(`registerUser: verify-email failed: ${verifyRes.status} ${JSON.stringify(verifyRes.body)}`);
+    throw new Error(
+      `registerUser: verify-email failed: ${verifyRes.status} ${JSON.stringify(verifyRes.body)}`,
+    );
   }
 
   return {
@@ -310,8 +312,7 @@ export async function addOrganizationMember(
   // the join flow creates, seeded directly.
   const db = getTestDb();
   const org = (await db('organizations').where({ id: organizationId }).first()) as
-    | { type: string }
-    | undefined;
+    { type: string } | undefined;
   if (org?.type === 'FARM' && input.role === 'VETERINARIAN') {
     const role = (await db('organization_roles').where({ key: 'VETERINARIAN' }).first()) as {
       id: string;
@@ -1023,7 +1024,9 @@ export async function createVeterinaryStoreProduct(
       ...(body.stockQuantity !== undefined ? { stockQuantity: body.stockQuantity } : {}),
     });
   if (res.status !== 201) {
-    throw new Error(`createVeterinaryStoreProduct failed: ${res.status} ${JSON.stringify(res.body)}`);
+    throw new Error(
+      `createVeterinaryStoreProduct failed: ${res.status} ${JSON.stringify(res.body)}`,
+    );
   }
   return res.body.data as TestProduct;
 }
@@ -1046,7 +1049,9 @@ export async function createVeterinaryOfficeProduct(
       ...(body.stockQuantity !== undefined ? { stockQuantity: body.stockQuantity } : {}),
     });
   if (res.status !== 201) {
-    throw new Error(`createVeterinaryOfficeProduct failed: ${res.status} ${JSON.stringify(res.body)}`);
+    throw new Error(
+      `createVeterinaryOfficeProduct failed: ${res.status} ${JSON.stringify(res.body)}`,
+    );
   }
   return res.body.data as TestProduct;
 }
@@ -2055,7 +2060,12 @@ export async function seedDailyRecordRow(
   batchId: string,
   organizationId: string,
   recordDate: string,
-  fields: { feedKg?: number; waterLiters?: number; mortalityCount?: number; expenseAmount?: number } = {},
+  fields: {
+    feedKg?: number;
+    waterLiters?: number;
+    mortalityCount?: number;
+    expenseAmount?: number;
+  } = {},
 ): Promise<void> {
   const { table, fk } = DAILY_RECORD_TABLES[kind];
   await getTestDb()(table).insert({

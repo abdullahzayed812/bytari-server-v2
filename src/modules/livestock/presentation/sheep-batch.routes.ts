@@ -3,7 +3,10 @@ import { asyncHandler } from '../../../shared/http/async-handler.js';
 import { validate } from '../../../shared/http/validate.js';
 import type { Container } from '../../../container.js';
 import { createOrganizationMiddleware } from '../../organizations/presentation/organization.middleware.js';
-import { createFarmSubscriptionMiddleware, withFarmOrganization } from '../../farms/presentation/farm.middleware.js';
+import {
+  createFarmSubscriptionMiddleware,
+  withFarmOrganization,
+} from '../../farms/presentation/farm.middleware.js';
 import { SheepBatchController } from './sheep-batch.controller.js';
 import { createSheepBatchMiddleware } from './sheep-batch.middleware.js';
 import {
@@ -47,7 +50,11 @@ import {
  *     → [withSheepBatch for batch-scoped] → controller
  */
 export function createSheepBatchRouter(c: Container): Router {
-  const batchCtrl = new SheepBatchController(c.sheepBatchService, c.organizationService, c.authorizationService);
+  const batchCtrl = new SheepBatchController(
+    c.sheepBatchService,
+    c.organizationService,
+    c.authorizationService,
+  );
   const opsCtrl = new SheepOpsController(
     c.sheepDailyRecordService,
     c.sheepHealthEventService,

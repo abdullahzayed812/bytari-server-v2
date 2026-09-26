@@ -86,8 +86,11 @@ export class EmailVerificationRepository {
    * (it will simply fail the "not consumed" / value check).
    */
   async consumeAllForUser(userId: string, trx?: Knex.Transaction): Promise<void> {
-    await this.table(trx).where({ user_id: userId, purpose: this.purpose }).whereNull('consumed_at').update({
-      consumed_at: new Date(),
-    });
+    await this.table(trx)
+      .where({ user_id: userId, purpose: this.purpose })
+      .whereNull('consumed_at')
+      .update({
+        consumed_at: new Date(),
+      });
   }
 }

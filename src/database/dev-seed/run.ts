@@ -727,7 +727,8 @@ export async function runDevSeed(knex: Knex, deps: RunDevSeedDeps = {}): Promise
         productType: 'CARE' as const,
         price: '28000',
         stockQuantity: 20,
-        description: 'مطهر عالي الجودة لتحصين إنتاج ومناعة الحيوانات والوقاية من الأمراض البكتيرية.',
+        description:
+          'مطهر عالي الجودة لتحصين إنتاج ومناعة الحيوانات والوقاية من الأمراض البكتيرية.',
         subtype: 'مطهر ومعقم',
       },
     ];
@@ -1202,8 +1203,7 @@ export async function runDevSeed(knex: Knex, deps: RunDevSeedDeps = {}): Promise
         type: 'BOOK',
         title: bookTitle,
         description: 'دليل شامل للأطباء البيطريين',
-        body:
-          'يقدم هذا الكتاب دليلاً شاملاً ومفصلاً لأطباء البيطرة حول تشخيص وعلاج أمراض الكلاب والقطط الداخلية، يشمل أحدث المعلومات الطبية والممارسات السريرية المثلى.',
+        body: 'يقدم هذا الكتاب دليلاً شاملاً ومفصلاً لأطباء البيطرة حول تشخيص وعلاج أمراض الكلاب والقطط الداخلية، يشمل أحدث المعلومات الطبية والممارسات السريرية المثلى.',
         authorName: 'د. أحمد محمود الشافعي',
         language: 'العربية',
         pageCount: 560,

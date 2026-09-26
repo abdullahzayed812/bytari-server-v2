@@ -35,7 +35,11 @@ export class PoultryController {
     const org = requireOrganization(req);
     const visible = await canSeeFarmFinancials(this.authz, req, org.id);
     const body = validatedBody<CreatePoultryFlockBody>(req);
-    const dto = await this.flocks.create({ id: org.id, type: org.type }, stripFinancialInput(body, visible), this.actor(req));
+    const dto = await this.flocks.create(
+      { id: org.id, type: org.type },
+      stripFinancialInput(body, visible),
+      this.actor(req),
+    );
     sendSuccess(res, applyFinancialVisibility(dto, visible), StatusCodes.CREATED);
   };
 
@@ -49,7 +53,12 @@ export class PoultryController {
       birdType: q.birdType,
     });
     const visible = await canSeeFarmFinancials(this.authz, req, org.id);
-    sendSuccess(res, items.map((i) => applyFinancialVisibility(i, visible)), StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
+    sendSuccess(
+      res,
+      items.map((i) => applyFinancialVisibility(i, visible)),
+      StatusCodes.OK,
+      pageMeta(q.page, q.pageSize, total),
+    );
   };
 
   getFlock = async (req: Request, res: Response): Promise<void> => {
@@ -64,7 +73,12 @@ export class PoultryController {
     const flock = requirePoultryFlock(req);
     const body = validatedBody<UpdatePoultryFlockBody>(req);
     const visible = await canSeeFarmFinancials(this.authz, req, org.id);
-    const dto = await this.flocks.update(org.id, flock.id, stripFinancialInput(body, visible), this.actor(req));
+    const dto = await this.flocks.update(
+      org.id,
+      flock.id,
+      stripFinancialInput(body, visible),
+      this.actor(req),
+    );
     sendSuccess(res, applyFinancialVisibility(dto, visible));
   };
 

@@ -15,7 +15,10 @@ const isoDate = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD')
   .refine((v) => !Number.isNaN(Date.parse(v)), 'Invalid date');
-const pastOrToday = isoDate.refine((v) => new Date(v) <= new Date(), 'Date cannot be in the future');
+const pastOrToday = isoDate.refine(
+  (v) => new Date(v) <= new Date(),
+  'Date cannot be in the future',
+);
 const shortText = z.string().trim().min(1).max(200);
 const longText = z.string().trim().min(1).max(4000);
 const qty = z.coerce.number().nonnegative().max(100_000_000);
@@ -28,7 +31,10 @@ export const filename = z
   .trim()
   .min(1)
   .max(255)
-  .refine((v) => !v.includes('/') && !v.includes('\\'), 'filename must not contain path separators');
+  .refine(
+    (v) => !v.includes('/') && !v.includes('\\'),
+    'filename must not contain path separators',
+  );
 export const mimeType = z.string().trim().min(1).max(255);
 
 export const imageUploadUrlBodySchema = z

@@ -60,7 +60,9 @@ export async function down(knex: Knex): Promise<void> {
   await knex.schema.alterTable('inquiries', (t) => {
     t.dropColumn('category');
   });
-  await knex.raw(`ALTER TABLE consultations DROP CONSTRAINT IF EXISTS chk_consultations_animal_type`);
+  await knex.raw(
+    `ALTER TABLE consultations DROP CONSTRAINT IF EXISTS chk_consultations_animal_type`,
+  );
   await knex.schema.alterTable('consultations', (t) => {
     t.dropColumn('animal_type');
   });

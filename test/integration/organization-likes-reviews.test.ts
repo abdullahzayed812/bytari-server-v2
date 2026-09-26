@@ -26,9 +26,8 @@ async function setupOffice() {
 }
 
 const engagement = async (orgId: string, token: string) =>
-  (
-    await request(app).get(`/api/v1/organizations/discover/${orgId}`).set(bearer(token))
-  ).body.data.engagement as {
+  (await request(app).get(`/api/v1/organizations/discover/${orgId}`).set(bearer(token))).body.data
+    .engagement as {
     isLiked: boolean;
     likesCount: number;
     isFollowing: boolean;
@@ -43,8 +42,11 @@ describe('likes — a real like count, independent of followers', () => {
     const b = await registerUser(app);
 
     expect(
-      (await request(app).post(`/api/v1/organizations/${office.id}/like`).set(bearer(a.accessToken)))
-        .status,
+      (
+        await request(app)
+          .post(`/api/v1/organizations/${office.id}/like`)
+          .set(bearer(a.accessToken))
+      ).status,
     ).toBe(200);
     // double like is a no-op
     await request(app).post(`/api/v1/organizations/${office.id}/like`).set(bearer(a.accessToken));
@@ -53,7 +55,12 @@ describe('likes — a real like count, independent of followers', () => {
     await request(app).post(`/api/v1/organizations/${office.id}/follow`).set(bearer(b.accessToken));
 
     let e = await engagement(office.id, a.accessToken);
-    expect(e).toMatchObject({ isLiked: true, likesCount: 2, followersCount: 1, isFollowing: false });
+    expect(e).toMatchObject({
+      isLiked: true,
+      likesCount: 2,
+      followersCount: 1,
+      isFollowing: false,
+    });
 
     await request(app).delete(`/api/v1/organizations/${office.id}/like`).set(bearer(a.accessToken));
     e = await engagement(office.id, a.accessToken);

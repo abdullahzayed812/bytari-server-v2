@@ -134,11 +134,13 @@ export class VeterinarianService {
     }
 
     // Storage I/O ALWAYS happens before the transaction opens.
-    const validatedDocuments: Array<
-      ApplyDocumentInput & { mimeType: string; sizeBytes: number }
-    > = [];
+    const validatedDocuments: Array<ApplyDocumentInput & { mimeType: string; sizeBytes: number }> =
+      [];
     for (const doc of input.documents) {
-      VeterinarianPolicy.assertKeyBelongsToPrefix(doc.storageKey, StoragePrefix.veterinarianDocuments);
+      VeterinarianPolicy.assertKeyBelongsToPrefix(
+        doc.storageKey,
+        StoragePrefix.veterinarianDocuments,
+      );
       const head = await this.storage.head(doc.storageKey);
       if (!head) {
         throw new BadRequestError('no uploaded object exists at that storage key', {

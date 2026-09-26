@@ -78,8 +78,7 @@ export class ThreadRepository {
 
   async findById(id: string, trx?: Knex.Transaction): Promise<SupportThread | null> {
     const row = (await this.selectWithPreview(this.conn(trx)).where('t.id', id).first()) as
-      | ThreadRow
-      | undefined;
+      ThreadRow | undefined;
     return row ? rowToThread(row) : null;
   }
 
@@ -146,10 +145,7 @@ export class ThreadRepository {
     filter: ListThreadsFilter,
     trx?: Knex.Transaction,
   ): Promise<{ items: SupportThread[]; total: number }> {
-    const countRow = (await this.applyList(
-      this.conn(trx)(`${this.cfg.threadTable} as t`),
-      filter,
-    )
+    const countRow = (await this.applyList(this.conn(trx)(`${this.cfg.threadTable} as t`), filter)
       .count({ count: '*' })
       .first()) as { count: string } | undefined;
     const total = Number(countRow?.count ?? 0);

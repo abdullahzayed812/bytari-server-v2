@@ -233,7 +233,11 @@ export class UserService {
   }
 
   /** Set the (optional) veterinarian specialization. Used by the vet application inside its trx. */
-  applySpecialization(id: string, specialization: string | null, trx: Knex.Transaction): Promise<User> {
+  applySpecialization(
+    id: string,
+    specialization: string | null,
+    trx: Knex.Transaction,
+  ): Promise<User> {
     return this.users.update(id, { specialization }, trx);
   }
 

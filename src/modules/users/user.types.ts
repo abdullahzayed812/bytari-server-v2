@@ -9,7 +9,12 @@
  * `authenticate.middleware.ts`. Accounts never reach this state any other way
  * (admin-created users and dev-seed personas are always inserted `ACTIVE`).
  */
-export const USER_STATUSES = ['ACTIVE', 'PENDING_VERIFICATION', 'SUSPENDED', 'DEACTIVATED'] as const;
+export const USER_STATUSES = [
+  'ACTIVE',
+  'PENDING_VERIFICATION',
+  'SUSPENDED',
+  'DEACTIVATED',
+] as const;
 export type UserStatus = (typeof USER_STATUSES)[number];
 
 export const VETERINARIAN_STATUSES = ['NOT_APPLIED', 'PENDING', 'APPROVED', 'REJECTED'] as const;

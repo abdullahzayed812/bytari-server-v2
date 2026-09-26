@@ -6,7 +6,10 @@ import { validatedBody, validatedParams, validatedQuery } from '../../../shared/
 import { auditContextFromRequest, type AuditContextResult } from '../../audit/audit-context.js';
 import { requireAuth } from '../../auth/authenticate.middleware.js';
 import { requireOrganization } from '../../organizations/presentation/organization.middleware.js';
-import { applyFinancialVisibility, canSeeFarmFinancials } from '../../farms/presentation/farm-financials.js';
+import {
+  applyFinancialVisibility,
+  canSeeFarmFinancials,
+} from '../../farms/presentation/farm-financials.js';
 import type { AuthorizationService } from '../../authorization/authorization.service.js';
 import type { SheepCaseService } from '../application/sheep-case.service.js';
 import type { SheepDailyRecordService } from '../application/sheep-daily-record.service.js';
@@ -130,7 +133,13 @@ export class SheepOpsController {
     const body = validatedBody<UpdateHealthEventBody>(req);
     sendSuccess(
       res,
-      await this.healthEvents.update(this.orgId(req), this.batchId(req), eventId, body, this.actor(req)),
+      await this.healthEvents.update(
+        this.orgId(req),
+        this.batchId(req),
+        eventId,
+        body,
+        this.actor(req),
+      ),
     );
   };
 
@@ -188,7 +197,10 @@ export class SheepOpsController {
   requestCaseImageUploadUrl = async (req: Request, res: Response): Promise<void> => {
     const { caseId } = validatedParams<{ caseId: string }>(req);
     const body = validatedBody<ImageUploadUrlBody>(req);
-    sendSuccess(res, await this.cases.requestImageUploadUrl(this.orgId(req), this.batchId(req), caseId, body));
+    sendSuccess(
+      res,
+      await this.cases.requestImageUploadUrl(this.orgId(req), this.batchId(req), caseId, body),
+    );
   };
 
   registerCaseImage = async (req: Request, res: Response): Promise<void> => {
@@ -196,7 +208,13 @@ export class SheepOpsController {
     const body = validatedBody<RegisterImageBody>(req);
     sendSuccess(
       res,
-      await this.cases.registerImage(this.orgId(req), this.batchId(req), caseId, this.actor(req), body),
+      await this.cases.registerImage(
+        this.orgId(req),
+        this.batchId(req),
+        caseId,
+        this.actor(req),
+        body,
+      ),
     );
   };
 }

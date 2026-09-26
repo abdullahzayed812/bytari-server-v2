@@ -1,6 +1,10 @@
 import { rooms } from '../../../infra/realtime/index.js';
 import { AuditAction } from '../../audit/audit.types.js';
-import { MAX_MESSAGE_IMAGES, type AiSettingKey, type ThreadKind } from '../domain/thread.constants.js';
+import {
+  MAX_MESSAGE_IMAGES,
+  type AiSettingKey,
+  type ThreadKind,
+} from '../domain/thread.constants.js';
 
 /** Everything that differs between a Consultation and an Inquiry. */
 export interface ThreadKindConfig {

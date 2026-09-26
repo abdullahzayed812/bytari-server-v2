@@ -48,7 +48,8 @@ export class CattleBatchController {
     const details: CreateOrganizationDetails = { farm_species: 'CATTLE' };
     if (body.location !== undefined) details.location = body.location;
     if (body.governorate !== undefined) details.governorate = body.governorate;
-    if (body.cattleProductionType !== undefined) details.cattle_production_type = body.cattleProductionType;
+    if (body.cattleProductionType !== undefined)
+      details.cattle_production_type = body.cattleProductionType;
     if (body.address != null) details.address = body.address;
     if (body.capacity != null) details.capacity = body.capacity;
     if (body.currentCattleCount != null) details.current_cattle_count = body.currentCattleCount;
@@ -67,7 +68,11 @@ export class CattleBatchController {
     const org = requireOrganization(req);
     const visible = await canSeeFarmFinancials(this.authz, req, org.id);
     const body = validatedBody<CreateCattleBatchBody>(req);
-    const dto = await this.batches.create({ id: org.id, type: org.type }, stripFinancialInput(body, visible), this.actor(req));
+    const dto = await this.batches.create(
+      { id: org.id, type: org.type },
+      stripFinancialInput(body, visible),
+      this.actor(req),
+    );
     sendSuccess(res, applyFinancialVisibility(dto, visible), StatusCodes.CREATED);
   };
 
@@ -80,7 +85,12 @@ export class CattleBatchController {
       status: q.status,
     });
     const visible = await canSeeFarmFinancials(this.authz, req, org.id);
-    sendSuccess(res, items.map((i) => applyFinancialVisibility(i, visible)), StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
+    sendSuccess(
+      res,
+      items.map((i) => applyFinancialVisibility(i, visible)),
+      StatusCodes.OK,
+      pageMeta(q.page, q.pageSize, total),
+    );
   };
 
   getBatch = async (req: Request, res: Response): Promise<void> => {
@@ -95,7 +105,12 @@ export class CattleBatchController {
     const batch = requireCattleBatch(req);
     const body = validatedBody<UpdateCattleBatchBody>(req);
     const visible = await canSeeFarmFinancials(this.authz, req, org.id);
-    const dto = await this.batches.update(org.id, batch.id, stripFinancialInput(body, visible), this.actor(req));
+    const dto = await this.batches.update(
+      org.id,
+      batch.id,
+      stripFinancialInput(body, visible),
+      this.actor(req),
+    );
     sendSuccess(res, applyFinancialVisibility(dto, visible));
   };
 

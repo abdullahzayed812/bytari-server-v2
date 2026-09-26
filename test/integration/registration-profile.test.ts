@@ -50,7 +50,9 @@ describe('POST /auth/register — phone, country → governorate, specialization
       .post('/api/v1/auth/register')
       .send({ ...base(), country: 'IQ', governorate: 'Riyadh' });
     expect(res.status).toBe(422);
-    expect(res.body.error.details.map((d: { path: string }) => d.path)).toContain('body.governorate');
+    expect(res.body.error.details.map((d: { path: string }) => d.path)).toContain(
+      'body.governorate',
+    );
   });
 
   it('requires a governorate once a country is chosen, and a country for a governorate', async () => {

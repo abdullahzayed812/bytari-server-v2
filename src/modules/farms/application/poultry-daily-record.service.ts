@@ -120,7 +120,13 @@ export class PoultryDailyRecordService {
         });
       }
       const created = await this.records.create(
-        { ...input, recordDate, poultryFlockId: flockId, organizationId, createdByUserId: actor.actorUserId },
+        {
+          ...input,
+          recordDate,
+          poultryFlockId: flockId,
+          organizationId,
+          createdByUserId: actor.actorUserId,
+        },
         tx,
       );
       // Keep the flock's headline average weight in step with the latest record.

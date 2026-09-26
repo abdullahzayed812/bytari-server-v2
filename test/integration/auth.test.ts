@@ -20,9 +20,13 @@ afterAll(() => closeTestDb());
 describe('POST /auth/register', () => {
   it('creates a PENDING_VERIFICATION user with the PET_OWNER role, sends a code, and STILL returns a (scoped) token pair', async () => {
     const email = uniqueEmail();
-    const res = await request(app)
-      .post('/api/v1/auth/register')
-      .send({ email, password: 'a-very-strong-password', firstName: 'Sam', lastName: 'Doe', phone: '+9647700000001' });
+    const res = await request(app).post('/api/v1/auth/register').send({
+      email,
+      password: 'a-very-strong-password',
+      firstName: 'Sam',
+      lastName: 'Doe',
+      phone: '+9647700000001',
+    });
 
     expect(res.status).toBe(201);
     expect(res.body.data.user).toMatchObject({
@@ -51,9 +55,13 @@ describe('POST /auth/register', () => {
 
   it('the registration token is scoped — it does NOT work for an arbitrary protected route', async () => {
     const email = uniqueEmail();
-    const res = await request(app)
-      .post('/api/v1/auth/register')
-      .send({ email, password: 'a-very-strong-password', firstName: 'Sam', lastName: 'Doe', phone: '+9647700000001' });
+    const res = await request(app).post('/api/v1/auth/register').send({
+      email,
+      password: 'a-very-strong-password',
+      firstName: 'Sam',
+      lastName: 'Doe',
+      phone: '+9647700000001',
+    });
 
     const animals = await request(app)
       .get('/api/v1/animals')
@@ -64,9 +72,13 @@ describe('POST /auth/register', () => {
 
   it('stores an Argon2id hash, never the raw password', async () => {
     const email = uniqueEmail();
-    await request(app)
-      .post('/api/v1/auth/register')
-      .send({ email, password: 'plaintext-secret-123', firstName: 'A', lastName: 'B', phone: '+9647700000001' });
+    await request(app).post('/api/v1/auth/register').send({
+      email,
+      password: 'plaintext-secret-123',
+      firstName: 'A',
+      lastName: 'B',
+      phone: '+9647700000001',
+    });
 
     const row = (await getTestDb()('users').where({ email }).first()) as { password_hash: string };
     expect(row.password_hash.startsWith('$argon2id$')).toBe(true);

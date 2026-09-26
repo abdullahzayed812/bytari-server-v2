@@ -81,7 +81,10 @@ export class EmailVerificationService {
    * the caller emails it AFTER that transaction commits (storage/network I/O
    * never runs inside one, same rule `UserService.finalizeAvatar` follows).
    */
-  async issueCode(userId: string, trx: Knex.Transaction): Promise<{ code: string; expiresAt: Date }> {
+  async issueCode(
+    userId: string,
+    trx: Knex.Transaction,
+  ): Promise<{ code: string; expiresAt: Date }> {
     await this.repo.consumeAllForUser(userId, trx);
     const code = generateCode();
     const expiresAt = secondsFromNow(this.config.codeTtlSeconds);

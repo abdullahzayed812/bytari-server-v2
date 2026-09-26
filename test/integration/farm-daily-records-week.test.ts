@@ -27,7 +27,10 @@ async function setup() {
   const vet = await registerApprovedVet(app);
   const staff = await registerUser(app);
   const farm = await createFarm(app, owner.accessToken, admin.accessToken, { name: 'Week Farm' });
-  await addOrganizationMember(app, owner.accessToken, farm.id, { userId: vet.id, role: 'VETERINARIAN' });
+  await addOrganizationMember(app, owner.accessToken, farm.id, {
+    userId: vet.id,
+    role: 'VETERINARIAN',
+  });
   await addOrganizationMember(app, owner.accessToken, farm.id, { userId: staff.id, role: 'STAFF' });
   const flock = await createPoultryFlock(app, vet.accessToken, farm.id, {
     birdCount: 1000,
@@ -82,7 +85,10 @@ describe('daily records — weekly sequence (Day 1 … Day 7)', () => {
     for (const d of pastDates(6)) await seedDailyRecordRow('poultry', flock.id, farm.id, d);
     const [a, b] = await Promise.all([
       request(app).post(daily(farm.id, flock.id)).set(bearer(vet.accessToken)).send({ feedKg: 1 }),
-      request(app).post(daily(farm.id, flock.id)).set(bearer(owner.accessToken)).send({ feedKg: 2 }),
+      request(app)
+        .post(daily(farm.id, flock.id))
+        .set(bearer(owner.accessToken))
+        .send({ feedKg: 2 }),
     ]);
     expect([a.status, b.status].sort()).toEqual([201, 409]);
     const count = (await getTestDb()('poultry_daily_records')
@@ -112,12 +118,16 @@ describe('daily records — weekly sequence (Day 1 … Day 7)', () => {
       .send({ feedKg: 5 });
     const id = created.body.data.id as string;
 
-    const staffDel = await request(app).delete(daily(farm.id, flock.id, id)).set(bearer(staff.accessToken));
+    const staffDel = await request(app)
+      .delete(daily(farm.id, flock.id, id))
+      .set(bearer(staff.accessToken));
     expect(staffDel.status).toBe(403);
 
     // A vet of ANOTHER farm cannot touch it (cross-farm IDOR).
     const otherOwner = await registerApprovedVet(app);
-    const otherFarm = await createFarm(app, otherOwner.accessToken, admin.accessToken, { name: 'Other' });
+    const otherFarm = await createFarm(app, otherOwner.accessToken, admin.accessToken, {
+      name: 'Other',
+    });
     const cross = await request(app)
       .delete(daily(otherFarm.id, flock.id, id))
       .set(bearer(otherOwner.accessToken));
@@ -128,7 +138,9 @@ describe('daily records — weekly sequence (Day 1 … Day 7)', () => {
       .set(bearer(vet.accessToken))
       .send({ feedKg: 9 });
     expect(upd.status).toBe(200);
-    const del = await request(app).delete(daily(farm.id, flock.id, id)).set(bearer(vet.accessToken));
+    const del = await request(app)
+      .delete(daily(farm.id, flock.id, id))
+      .set(bearer(vet.accessToken));
     expect(del.status).toBe(200);
     const audit = await getTestDb()('audit_logs')
       .where({ action: 'POULTRY_DAILY_RECORD_DELETED', entity_id: id })

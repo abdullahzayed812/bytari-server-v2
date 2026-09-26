@@ -34,7 +34,10 @@ const IMAGE_URL_TTL_SECONDS = 3600;
  * pattern the CLINIC / OFFICE / STORE directory profiles use). Authorization is
  * the route guard `authorizeOrg('organization.update')` + a FARM type gate.
  */
-const SPECIES_FIELDS: Record<'POULTRY' | 'SHEEP' | 'CATTLE', readonly (keyof UpdateFarmProfileInput)[]> = {
+const SPECIES_FIELDS: Record<
+  'POULTRY' | 'SHEEP' | 'CATTLE',
+  readonly (keyof UpdateFarmProfileInput)[]
+> = {
   POULTRY: ['currentBirdCount', 'poultryProductionType'],
   SHEEP: ['currentSheepCount', 'sheepProductionType'],
   CATTLE: ['currentCattleCount', 'cattleProductionType'],
@@ -104,7 +107,8 @@ export class FarmProfileService {
       contactEmail: row.contact_email,
       farmSpecies: (row.farm_species as FarmProfile['farmSpecies']) ?? null,
       currentSheepCount: row.current_sheep_count === null ? null : Number(row.current_sheep_count),
-      currentCattleCount: row.current_cattle_count === null ? null : Number(row.current_cattle_count),
+      currentCattleCount:
+        row.current_cattle_count === null ? null : Number(row.current_cattle_count),
       sheepProductionType: row.sheep_production_type,
       cattleProductionType: row.cattle_production_type,
     };

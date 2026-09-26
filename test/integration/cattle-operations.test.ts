@@ -25,8 +25,13 @@ async function setup() {
   const owner = await registerApprovedVet(app);
   const vet = await registerApprovedVet(app);
   const staff = await registerUser(app);
-  const farm = await createFarm(app, owner.accessToken, admin.accessToken, { name: 'Cattle Ops Farm' });
-  await addOrganizationMember(app, owner.accessToken, farm.id, { userId: vet.id, role: 'VETERINARIAN' });
+  const farm = await createFarm(app, owner.accessToken, admin.accessToken, {
+    name: 'Cattle Ops Farm',
+  });
+  await addOrganizationMember(app, owner.accessToken, farm.id, {
+    userId: vet.id,
+    role: 'VETERINARIAN',
+  });
   await addOrganizationMember(app, owner.accessToken, farm.id, { userId: staff.id, role: 'STAFF' });
   const batch = await createCattleBatch(app, vet.accessToken, farm.id, {
     headCount: 60,
@@ -85,7 +90,9 @@ describe('cattle daily records', () => {
     expect(upd.body.data.sickCasesCount).toBe(2);
     expect(upd.body.data.feedType).toBe('MIXED');
 
-    const del = await request(app).delete(daily(farm.id, batch.id, id)).set(bearer(vet.accessToken));
+    const del = await request(app)
+      .delete(daily(farm.id, batch.id, id))
+      .set(bearer(vet.accessToken));
     expect(del.status).toBe(200);
   });
 
@@ -93,7 +100,10 @@ describe('cattle daily records', () => {
     const { vet, farm, batch } = await setup();
     const body = { feedKg: 10 };
     await request(app).post(daily(farm.id, batch.id)).set(bearer(vet.accessToken)).send(body);
-    const dup = await request(app).post(daily(farm.id, batch.id)).set(bearer(vet.accessToken)).send(body);
+    const dup = await request(app)
+      .post(daily(farm.id, batch.id))
+      .set(bearer(vet.accessToken))
+      .send(body);
     expect(dup.status).toBe(409);
     expect(dup.body.error.code).toBe('CATTLE_DAILY_RECORD_DUPLICATE_DATE');
   });
@@ -195,7 +205,9 @@ describe('cattle batch summary + weekly summary (server-computed)', () => {
       });
     }
     const res = await request(app)
-      .get(`/api/v1/organizations/${farm.id}/cattle/batches/${batch.id}/weekly-summary?weekOf=2026-02-04`)
+      .get(
+        `/api/v1/organizations/${farm.id}/cattle/batches/${batch.id}/weekly-summary?weekOf=2026-02-04`,
+      )
       .set(bearer(vet.accessToken));
     expect(res.status).toBe(200);
     expect(res.body.data).toMatchObject({
@@ -235,7 +247,9 @@ describe('cattle health events (treatments & vaccinations)', () => {
     expect(upd.status).toBe(200);
     expect(upd.body.data.status).toBe('DONE');
 
-    const del = await request(app).delete(health(farm.id, batch.id, id)).set(bearer(vet.accessToken));
+    const del = await request(app)
+      .delete(health(farm.id, batch.id, id))
+      .set(bearer(vet.accessToken));
     expect(del.status).toBe(200);
   });
 
@@ -288,7 +302,9 @@ describe('cattle individual cases', () => {
     expect(summary.status).toBe(200);
     expect(summary.body.data).toMatchObject({ recovered: 1, underTreatment: 0, deceased: 0 });
 
-    const del = await request(app).delete(cases(farm.id, batch.id, id)).set(bearer(vet.accessToken));
+    const del = await request(app)
+      .delete(cases(farm.id, batch.id, id))
+      .set(bearer(vet.accessToken));
     expect(del.status).toBe(200);
   });
 

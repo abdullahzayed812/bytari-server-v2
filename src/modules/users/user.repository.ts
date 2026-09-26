@@ -48,7 +48,9 @@ export class UserRepository {
         // Omitted → the column default (`ACTIVE`) applies. Only
         // `AuthService.register()` passes `PENDING_VERIFICATION` explicitly.
         ...(data.status !== undefined ? { status: data.status } : {}),
-        ...(data.registrationType !== undefined ? { registration_type: data.registrationType } : {}),
+        ...(data.registrationType !== undefined
+          ? { registration_type: data.registrationType }
+          : {}),
       })
       .returning('*');
     return rowToUser(row as UserRow);

@@ -24,10 +24,8 @@ export async function lockBatchAndCountRecords(
   batchId: string,
 ): Promise<number> {
   await trx(t.batchTable).where({ id: batchId }).forUpdate().select('id').first();
-  const row = (await trx(t.recordTable)
-    .where(t.batchFk, batchId)
-    .count({ count: '*' })
-    .first()) as { count: string } | undefined;
+  const row = (await trx(t.recordTable).where(t.batchFk, batchId).count({ count: '*' }).first()) as
+    { count: string } | undefined;
   return Number(row?.count ?? 0);
 }
 
@@ -54,4 +52,3 @@ export function selectRecordsWithDayAndCreator(
     .leftJoin('users as cb', 'cb.id', 'r.created_by_user_id')
     .select('r.*', 'cb.first_name as cb_first_name', 'cb.last_name as cb_last_name');
 }
-

@@ -201,10 +201,7 @@ export class OrganizationRepository {
    * FARM has no directory-profile row, but `farm_details` does carry one photo.
    * Returns its raw key; the service resolves it to a URL.
    */
-  async findFarmImageKey(
-    organizationId: string,
-    trx?: Knex.Transaction,
-  ): Promise<string | null> {
+  async findFarmImageKey(organizationId: string, trx?: Knex.Transaction): Promise<string | null> {
     const row = await this.conn(trx)('farm_details')
       .where({ organization_id: organizationId })
       .first('image_key');
@@ -245,7 +242,8 @@ export class OrganizationRepository {
     if (patch.tiktokUrl !== undefined) dbPatch.tiktok_url = patch.tiktokUrl;
     if (patch.galleryKeys !== undefined) dbPatch.gallery_keys = patch.galleryKeys;
     if (patch.licenseNumber !== undefined) dbPatch.license_number = patch.licenseNumber;
-    if (patch.licenseDocumentKeys !== undefined) dbPatch.license_document_keys = patch.licenseDocumentKeys;
+    if (patch.licenseDocumentKeys !== undefined)
+      dbPatch.license_document_keys = patch.licenseDocumentKeys;
     if (Object.keys(dbPatch).length === 1) return; // nothing but updated_at — no-op
 
     const updated = await trx(DETAIL_TABLE[type])

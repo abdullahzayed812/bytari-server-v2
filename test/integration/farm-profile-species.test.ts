@@ -62,7 +62,11 @@ describe('farm profile edit is species-correct (sheep / cattle ≠ poultry)', ()
       .set(bearer(cattleOwner.accessToken))
       .send({ cattleProductionType: 'BEEF', currentCattleCount: 40 });
     expect(res.status).toBe(200);
-    expect(res.body.data).toMatchObject({ farmSpecies: 'CATTLE', cattleProductionType: 'BEEF', currentCattleCount: 40 });
+    expect(res.body.data).toMatchObject({
+      farmSpecies: 'CATTLE',
+      cattleProductionType: 'BEEF',
+      currentCattleCount: 40,
+    });
 
     const poultryOwner = await registerApprovedVet(app);
     const poultry = await createFarm(app, poultryOwner.accessToken, admin.accessToken);

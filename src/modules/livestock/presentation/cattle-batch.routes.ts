@@ -3,7 +3,10 @@ import { asyncHandler } from '../../../shared/http/async-handler.js';
 import { validate } from '../../../shared/http/validate.js';
 import type { Container } from '../../../container.js';
 import { createOrganizationMiddleware } from '../../organizations/presentation/organization.middleware.js';
-import { createFarmSubscriptionMiddleware, withFarmOrganization } from '../../farms/presentation/farm.middleware.js';
+import {
+  createFarmSubscriptionMiddleware,
+  withFarmOrganization,
+} from '../../farms/presentation/farm.middleware.js';
 import { CattleBatchController } from './cattle-batch.controller.js';
 import { createCattleBatchMiddleware } from './cattle-batch.middleware.js';
 import {
@@ -47,7 +50,11 @@ import {
  *     → [withCattleBatch for batch-scoped] → controller
  */
 export function createCattleBatchRouter(c: Container): Router {
-  const batchCtrl = new CattleBatchController(c.cattleBatchService, c.organizationService, c.authorizationService);
+  const batchCtrl = new CattleBatchController(
+    c.cattleBatchService,
+    c.organizationService,
+    c.authorizationService,
+  );
   const opsCtrl = new CattleOpsController(
     c.cattleDailyRecordService,
     c.cattleHealthEventService,

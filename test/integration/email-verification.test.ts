@@ -107,9 +107,7 @@ describe('POST /auth/verify-email', () => {
 describe('POST /auth/resend-verification', () => {
   it('an unknown email gets a generic 200 (no email is actually sent, no enumeration signal)', async () => {
     const ghost = uniqueEmail('ghost');
-    const res = await request(app)
-      .post('/api/v1/auth/resend-verification')
-      .send({ email: ghost });
+    const res = await request(app).post('/api/v1/auth/resend-verification').send({ email: ghost });
     expect(res.status).toBe(200);
     expect(() => extractVerificationCode(app, ghost)).toThrow();
   });
@@ -124,9 +122,7 @@ describe('POST /auth/resend-verification', () => {
 
   it('resending too soon is rate-limited (429) — the cooldown is measured from the last code issued, INCLUDING the one registration itself just sent', async () => {
     const { email } = await registerPending();
-    const tooSoon = await request(app)
-      .post('/api/v1/auth/resend-verification')
-      .send({ email });
+    const tooSoon = await request(app).post('/api/v1/auth/resend-verification').send({ email });
     expect(tooSoon.status).toBe(429);
     expect(tooSoon.body.error.code).toBe('RATE_LIMITED');
 
@@ -203,9 +199,7 @@ describe('an unverified account cannot use normal application functionality', ()
 
   it('a refresh keeps working pre-verification (the registration session can outlive one access-token TTL)', async () => {
     const { refreshToken } = await registerPending();
-    const res = await request(app)
-      .post('/api/v1/auth/refresh')
-      .send({ refreshToken });
+    const res = await request(app).post('/api/v1/auth/refresh').send({ refreshToken });
     expect(res.status).toBe(200);
     expect(res.body.data.tokens.accessToken).toBeTypeOf('string');
 
@@ -237,16 +231,21 @@ describe('expiry & resend-cooldown — real elapsed time, short TTLs', () => {
   afterAll(() => {
     if (originalTtl === undefined) delete process.env.EMAIL_VERIFICATION_CODE_TTL_SECONDS;
     else process.env.EMAIL_VERIFICATION_CODE_TTL_SECONDS = originalTtl;
-    if (originalCooldown === undefined) delete process.env.EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS;
+    if (originalCooldown === undefined)
+      delete process.env.EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS;
     else process.env.EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS = originalCooldown;
   });
 
   it('an expired code is rejected (400 VERIFICATION_CODE_EXPIRED), distinctly from a wrong code', async () => {
     const { app: shortApp } = buildTestApp();
     const email = uniqueEmail();
-    const res = await request(shortApp)
-      .post('/api/v1/auth/register')
-      .send({ email, password: 'a-very-strong-password', firstName: 'A', lastName: 'B', phone: '+9647700000001' });
+    const res = await request(shortApp).post('/api/v1/auth/register').send({
+      email,
+      password: 'a-very-strong-password',
+      firstName: 'A',
+      lastName: 'B',
+      phone: '+9647700000001',
+    });
     expect(res.status).toBe(201);
     const code = extractVerificationCode(shortApp, email);
 
@@ -260,15 +259,17 @@ describe('expiry & resend-cooldown — real elapsed time, short TTLs', () => {
   it('a resend after the cooldown elapses succeeds', async () => {
     const { app: shortApp } = buildTestApp();
     const email = uniqueEmail();
-    await request(shortApp)
-      .post('/api/v1/auth/register')
-      .send({ email, password: 'a-very-strong-password', firstName: 'A', lastName: 'B', phone: '+9647700000001' });
+    await request(shortApp).post('/api/v1/auth/register').send({
+      email,
+      password: 'a-very-strong-password',
+      firstName: 'A',
+      lastName: 'B',
+      phone: '+9647700000001',
+    });
 
     await new Promise((resolve) => setTimeout(resolve, 1_200));
 
-    const resend = await request(shortApp)
-      .post('/api/v1/auth/resend-verification')
-      .send({ email });
+    const resend = await request(shortApp).post('/api/v1/auth/resend-verification').send({ email });
     expect(resend.status).toBe(200);
 
     const code = extractVerificationCode(shortApp, email);
@@ -279,16 +280,18 @@ describe('expiry & resend-cooldown — real elapsed time, short TTLs', () => {
   it('a resend replaces the outstanding code — the OLD code stops working, the NEW one works', async () => {
     const { app: shortApp } = buildTestApp();
     const email = uniqueEmail();
-    await request(shortApp)
-      .post('/api/v1/auth/register')
-      .send({ email, password: 'a-very-strong-password', firstName: 'A', lastName: 'B', phone: '+9647700000001' });
+    await request(shortApp).post('/api/v1/auth/register').send({
+      email,
+      password: 'a-very-strong-password',
+      firstName: 'A',
+      lastName: 'B',
+      phone: '+9647700000001',
+    });
     const firstCode = extractVerificationCode(shortApp, email);
 
     await new Promise((resolve) => setTimeout(resolve, 1_200)); // clear the resend cooldown
 
-    const resend = await request(shortApp)
-      .post('/api/v1/auth/resend-verification')
-      .send({ email });
+    const resend = await request(shortApp).post('/api/v1/auth/resend-verification').send({ email });
     expect(resend.status).toBe(200);
     expect(resend.body.data.codeExpiresInSeconds).toBeGreaterThan(0);
 

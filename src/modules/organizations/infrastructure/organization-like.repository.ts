@@ -18,7 +18,9 @@ export class OrganizationLikeRepository {
   }
 
   async unlike(organizationId: string, userId: string, trx?: Knex.Transaction): Promise<void> {
-    await this.conn(trx)(TABLE).where({ organization_id: organizationId, user_id: userId }).delete();
+    await this.conn(trx)(TABLE)
+      .where({ organization_id: organizationId, user_id: userId })
+      .delete();
   }
 
   async isLiked(organizationId: string, userId: string, trx?: Knex.Transaction): Promise<boolean> {

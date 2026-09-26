@@ -1101,7 +1101,12 @@ export class OrganizationService {
     const speciesByOrg = new Map<string, string | null>();
     const farmCardByOrg = new Map<
       string,
-      { imageKey: string | null; location: string | null; governorate: string | null; address: string | null }
+      {
+        imageKey: string | null;
+        location: string | null;
+        governorate: string | null;
+        address: string | null;
+      }
     >();
     if (farmIds.length > 0) {
       const rows: Array<{
@@ -1113,7 +1118,14 @@ export class OrganizationService {
         address: string | null;
       }> = await this.db('farm_details')
         .whereIn('organization_id', farmIds)
-        .select('organization_id', 'farm_species', 'image_key', 'location', 'governorate', 'address');
+        .select(
+          'organization_id',
+          'farm_species',
+          'image_key',
+          'location',
+          'governorate',
+          'address',
+        );
       for (const r of rows) {
         speciesByOrg.set(r.organization_id, r.farm_species);
         farmCardByOrg.set(r.organization_id, {

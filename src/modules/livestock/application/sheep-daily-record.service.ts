@@ -112,7 +112,13 @@ export class SheepDailyRecordService {
         });
       }
       const created = await this.records.create(
-        { ...input, recordDate, sheepBatchId: batchId, organizationId, createdByUserId: actor.actorUserId },
+        {
+          ...input,
+          recordDate,
+          sheepBatchId: batchId,
+          organizationId,
+          createdByUserId: actor.actorUserId,
+        },
         tx,
       );
       if (input.averageWeightKg != null) {
@@ -269,7 +275,10 @@ export class SheepDailyRecordService {
     const weighed = rows.filter((r) => r.averageWeightKg != null);
     const weightChangeKg =
       weighed.length >= 2
-        ? round2(Number(weighed[weighed.length - 1]!.averageWeightKg) - Number(weighed[0]!.averageWeightKg))
+        ? round2(
+            Number(weighed[weighed.length - 1]!.averageWeightKg) -
+              Number(weighed[0]!.averageWeightKg),
+          )
         : null;
 
     return {

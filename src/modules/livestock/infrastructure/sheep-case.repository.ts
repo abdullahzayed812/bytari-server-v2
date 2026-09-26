@@ -77,10 +77,7 @@ export class SheepCaseRepository {
     if (patch.startedOn !== undefined) dbPatch.started_on = patch.startedOn;
     if (patch.nextFollowupOn !== undefined) dbPatch.next_followup_on = patch.nextFollowupOn;
     if (patch.imageKey !== undefined) dbPatch.image_key = patch.imageKey;
-    const [row] = (await trx(TABLE)
-      .where({ id })
-      .update(dbPatch)
-      .returning('*')) as SheepCaseRow[];
+    const [row] = (await trx(TABLE).where({ id }).update(dbPatch).returning('*')) as SheepCaseRow[];
     if (!row) throw new Error('sheep case not found after update');
     return row;
   }

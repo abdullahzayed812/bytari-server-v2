@@ -53,10 +53,9 @@ export interface PendingApplicationSummary extends VeterinarianApplication {
   documents: AdminVeterinarianApplicationDocument[];
 }
 
-export function rowToApplication(row: VeterinarianApplicationRow): Omit<
-  VeterinarianApplication,
-  'documents'
-> {
+export function rowToApplication(
+  row: VeterinarianApplicationRow,
+): Omit<VeterinarianApplication, 'documents'> {
   return {
     id: row.id,
     userId: row.user_id,

@@ -155,9 +155,9 @@ describe('AI reply switch — enforced by the backend', () => {
     expect(off.body.data.aiResponded).toBe(false);
     expect(ai.calls).toBe(0);
 
-    expect((await setAiSettings(app, admin.accessToken, { consultationAiEnabled: true })).status).toBe(
-      200,
-    );
+    expect(
+      (await setAiSettings(app, admin.accessToken, { consultationAiEnabled: true })).status,
+    ).toBe(200);
     const on = await request(app)
       .post('/api/v1/consultations')
       .set(bearer(user.accessToken))

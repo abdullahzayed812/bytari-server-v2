@@ -116,14 +116,20 @@ export class AuthService {
         tx,
       );
 
-      const code = isVeterinarian ? null : (await this.emailVerification.issueCode(user.id, tx)).code;
+      const code = isVeterinarian
+        ? null
+        : (await this.emailVerification.issueCode(user.id, tx)).code;
       const tokens = await this.issueTokens(user.id, ctx, tx);
       return { user, tokens, code };
     });
 
     // Email + avatar-URL resolution are I/O — always AFTER the transaction commits.
     if (result.code !== null) {
-      await this.emailVerification.sendCodeEmail(result.user.email, result.user.firstName, result.code);
+      await this.emailVerification.sendCodeEmail(
+        result.user.email,
+        result.user.firstName,
+        result.code,
+      );
       await this.emailVerification.auditSent(result.user.id, { actorUserId: null, context: ctx });
     }
 
@@ -188,7 +194,9 @@ export class AuthService {
           code: ErrorCode.RATE_LIMITED,
         });
       }
-      const { code } = await this.db.transaction((tx) => this.emailVerification.issueCode(user.id, tx));
+      const { code } = await this.db.transaction((tx) =>
+        this.emailVerification.issueCode(user.id, tx),
+      );
       await this.emailVerification.sendCodeEmail(user.email, user.firstName, code);
       await this.emailVerification.auditSent(user.id, { actorUserId: null, context: ctx });
     }
@@ -204,7 +212,10 @@ export class AuthService {
    * A resend inside the cooldown is a 429 — same contract as
    * `resendVerification`. Issuing a code invalidates any previous reset code.
    */
-  async requestPasswordReset(email: string, ctx: AuditContext): Promise<PasswordResetRequestResult> {
+  async requestPasswordReset(
+    email: string,
+    ctx: AuditContext,
+  ): Promise<PasswordResetRequestResult> {
     const codes = this.requirePasswordResetCodes();
     const user = await this.users.findByEmail(email);
     if (user && user.status === 'ACTIVE') {

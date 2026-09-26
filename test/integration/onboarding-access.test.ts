@@ -46,12 +46,25 @@ const PROTECTED_CALLS: Array<{ method: 'get' | 'post'; path: string; body?: obje
   { method: 'post', path: '/organizations', body: { type: 'CLINIC', name: 'Bypass Clinic' } },
 ];
 
-async function registerAs(accountType: 'PET_OWNER' | 'VETERINARIAN', email = uniqueEmail(accountType.toLowerCase())) {
-  const res = await request(app)
-    .post(api('/auth/register'))
-    .send({ email, password: PASSWORD, firstName: 'Onboard', lastName: 'Tester', phone: '+9647700000001', accountType });
+async function registerAs(
+  accountType: 'PET_OWNER' | 'VETERINARIAN',
+  email = uniqueEmail(accountType.toLowerCase()),
+) {
+  const res = await request(app).post(api('/auth/register')).send({
+    email,
+    password: PASSWORD,
+    firstName: 'Onboard',
+    lastName: 'Tester',
+    phone: '+9647700000001',
+    accountType,
+  });
   expect(res.status).toBe(201);
-  return { email, res, token: res.body.data.tokens.accessToken as string, userId: res.body.data.user.id as string };
+  return {
+    email,
+    res,
+    token: res.body.data.tokens.accessToken as string,
+    userId: res.body.data.user.id as string,
+  };
 }
 
 async function applyWithLicense(token: string): Promise<request.Response> {
@@ -64,7 +77,11 @@ async function applyWithLicense(token: string): Promise<request.Response> {
   return request(app)
     .post(api('/veterinarians/apply'))
     .set(bearer(token))
-    .send({ documents: [{ kind: 'LICENSE_OR_ID', storageKey, filename: 'license.pdf', mimeType: 'application/pdf' }] });
+    .send({
+      documents: [
+        { kind: 'LICENSE_OR_ID', storageKey, filename: 'license.pdf', mimeType: 'application/pdf' },
+      ],
+    });
 }
 
 const VALID_COURSE = {
@@ -80,9 +97,14 @@ const VALID_COURSE = {
 };
 
 const me = (token: string) => request(app).get(api('/auth/me')).set(bearer(token));
-const login = (email: string) => request(app).post(api('/auth/login')).send({ email, password: PASSWORD });
+const login = (email: string) =>
+  request(app).post(api('/auth/login')).send({ email, password: PASSWORD });
 
-async function expectAllProtectedRejected(token: string, status: number, code: string): Promise<void> {
+async function expectAllProtectedRejected(
+  token: string,
+  status: number,
+  code: string,
+): Promise<void> {
   for (const call of PROTECTED_CALLS) {
     const req = request(app)[call.method](api(call.path)).set(bearer(token));
     const res = call.body ? await req.send(call.body) : await req;
@@ -97,7 +119,10 @@ async function expectAllProtectedRejected(token: string, status: number, code: s
 describe('Pet Owner onboarding — email verification required', () => {
   it('register → code emailed → protected APIs + login blocked → verify → full access', async () => {
     const { email, res, token } = await registerAs('PET_OWNER');
-    expect(res.body.data.user).toMatchObject({ status: 'PENDING_VERIFICATION', registrationType: 'PET_OWNER' });
+    expect(res.body.data.user).toMatchObject({
+      status: 'PENDING_VERIFICATION',
+      registrationType: 'PET_OWNER',
+    });
     expect(res.body.data.codeExpiresInSeconds).toBeGreaterThan(0);
 
     // The registration token only reaches the onboarding allowlist.
@@ -145,7 +170,10 @@ describe('Veterinarian onboarding — no email verification, admin approval requ
     const before = provider.sent.length;
     const { email, res, token } = await registerAs('VETERINARIAN');
 
-    expect(res.body.data.user).toMatchObject({ status: 'ACTIVE', registrationType: 'VETERINARIAN' });
+    expect(res.body.data.user).toMatchObject({
+      status: 'ACTIVE',
+      registrationType: 'VETERINARIAN',
+    });
     expect(res.body.data.codeExpiresInSeconds).toBeNull();
     expect(provider.sent.slice(before).filter((m) => m.to === email)).toHaveLength(0);
 
@@ -163,7 +191,10 @@ describe('Veterinarian onboarding — no email verification, admin approval requ
     // Onboarding allowlist: documents + application + own status.
     const applied = await applyWithLicense(token);
     expect(applied.status).toBe(201);
-    expect((await request(app).get(api('/veterinarians/me/status')).set(bearer(token))).body.data.veterinarianStatus).toBe('PENDING');
+    expect(
+      (await request(app).get(api('/veterinarians/me/status')).set(bearer(token))).body.data
+        .veterinarianStatus,
+    ).toBe('PENDING');
 
     // Direct API calls with the registration token are refused (403, not a session error).
     await expectAllProtectedRejected(token, 403, 'VETERINARIAN_ACCOUNT_PENDING_APPROVAL');
@@ -186,14 +217,22 @@ describe('Veterinarian onboarding — no email verification, admin approval requ
 
     // Admin sees it in the AdminVetApplicationsScreen queue, with documents.
     const admin = await registerAdmin(app);
-    const queue = await request(app).get(api('/admin/veterinarians/pending')).set(bearer(admin.accessToken));
+    const queue = await request(app)
+      .get(api('/admin/veterinarians/pending'))
+      .set(bearer(admin.accessToken));
     const entry = queue.body.data.find((a: { userId: string }) => a.userId === userId);
     expect(entry).toBeTruthy();
     expect(entry.documents).toHaveLength(1);
     expect(entry.documents[0].downloadUrl).toBeTruthy();
 
     // The applicant cannot approve themselves.
-    expect((await request(app).post(api(`/admin/veterinarians/${userId}/approve`)).set(bearer(token))).status).toBe(403);
+    expect(
+      (
+        await request(app)
+          .post(api(`/admin/veterinarians/${userId}/approve`))
+          .set(bearer(token))
+      ).status,
+    ).toBe(403);
 
     const approve = await request(app)
       .post(api(`/admin/veterinarians/${userId}/approve`))
@@ -249,7 +288,9 @@ describe('Veterinarian onboarding — no email verification, admin approval requ
     });
     const handshake = { headers: { authorization: `Bearer ${token}` }, query: {} };
 
-    await expect(socketAuth.authenticate(handshake as never)).rejects.toThrow(/veterinarian_approval_required/);
+    await expect(socketAuth.authenticate(handshake as never)).rejects.toThrow(
+      /veterinarian_approval_required/,
+    );
 
     await getTestDb()('users').where({ id: userId }).update({ veterinarian_status: 'APPROVED' });
     await expect(socketAuth.authenticate(handshake as never)).resolves.toMatchObject({ userId });
@@ -259,9 +300,16 @@ describe('Veterinarian onboarding — no email verification, admin approval requ
     const { res } = await registerAs('VETERINARIAN');
     const t = res.body.data.tokens;
     expect(
-      (await request(app).post(api('/auth/logout')).set(bearer(t.accessToken)).send({ refreshToken: t.refreshToken })).status,
+      (
+        await request(app)
+          .post(api('/auth/logout'))
+          .set(bearer(t.accessToken))
+          .send({ refreshToken: t.refreshToken })
+      ).status,
     ).toBe(200);
-    const again = await request(app).post(api('/auth/refresh')).send({ refreshToken: t.refreshToken });
+    const again = await request(app)
+      .post(api('/auth/refresh'))
+      .send({ refreshToken: t.refreshToken });
     expect(again.status).toBe(401);
   });
 });
@@ -275,7 +323,9 @@ describe('Existing Pet Owners applying in-app are NOT locked out', () => {
     const m = await me(owner.accessToken);
     expect(m.body.data.accessState).toBe('FULL');
     expect(m.body.data.veterinarian.status).toBe('PENDING');
-    expect((await request(app).get(api('/notifications')).set(bearer(owner.accessToken))).status).toBe(200);
+    expect(
+      (await request(app).get(api('/notifications')).set(bearer(owner.accessToken))).status,
+    ).toBe(200);
 
     // …but still gets no veterinarian-only capability until approved.
     const course = await request(app)

@@ -37,7 +37,10 @@ export function applyFinancialVisibility<T extends FinancialFields>(
 }
 
 /** A caller without the permission may not SET the sale price either — the field is dropped. */
-export function stripFinancialInput<T extends { targetPricePerKg?: unknown }>(body: T, visible: boolean): T {
+export function stripFinancialInput<T extends { targetPricePerKg?: unknown }>(
+  body: T,
+  visible: boolean,
+): T {
   if (visible || body.targetPricePerKg === undefined) return body;
   const { targetPricePerKg: _dropped, ...rest } = body;
   return rest as T;
