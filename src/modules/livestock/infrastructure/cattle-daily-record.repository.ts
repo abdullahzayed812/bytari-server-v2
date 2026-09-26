@@ -1,5 +1,10 @@
 import type { Knex } from 'knex';
 import {
+  lockBatchAndCountRecords,
+  selectRecordsWithDayAndCreator,
+  type DailyRecordTables,
+} from '../../farms/infrastructure/daily-record-common.js';
+import {
   rowToCattleDailyRecord,
   type CreateCattleDailyRecordInput,
   type ListCattleDailyRecordsFilter,
@@ -9,6 +14,11 @@ import {
 } from '../domain/cattle-ops.types.js';
 
 const TABLE = 'cattle_daily_records';
+const TABLES: DailyRecordTables = {
+  batchTable: 'cattle_batches',
+  recordTable: TABLE,
+  batchFk: 'cattle_batch_id',
+};
 
 export interface CattleDailyRecordAggregates {
   recordsCount: number;
@@ -30,9 +40,9 @@ export class CattleDailyRecordRepository {
     batchId: string,
     trx?: Knex.Transaction,
   ): Promise<CattleDailyRecord | null> {
-    const row = await this.conn(trx)<CattleDailyRecordRow>(TABLE)
-      .where({ id, cattle_batch_id: batchId })
-      .first();
+    const row = (await selectRecordsWithDayAndCreator(this.conn(trx), TABLES, batchId)
+      .where('r.id', id)
+      .first()) as CattleDailyRecordRow | undefined;
     return row ? rowToCattleDailyRecord(row) : null;
   }
 
@@ -123,10 +133,13 @@ export class CattleDailyRecordRepository {
     };
     const countRow = await base().count<{ count: string }>({ count: '*' }).first();
     const total = Number(countRow?.count ?? 0);
-    const rows: CattleDailyRecordRow[] = await base()
-      .orderBy('record_date', 'desc')
+    const numbered = selectRecordsWithDayAndCreator(this.db, TABLES, batchId);
+    if (filter.from) numbered.andWhere('r.record_date', '>=', filter.from);
+    if (filter.to) numbered.andWhere('r.record_date', '<=', filter.to);
+    const rows = (await numbered
+      .orderBy('r.record_date', 'desc')
       .limit(filter.pageSize)
-      .offset((filter.page - 1) * filter.pageSize);
+      .offset((filter.page - 1) * filter.pageSize)) as CattleDailyRecordRow[];
     return { items: rows.map(rowToCattleDailyRecord), total };
   }
 
@@ -175,5 +188,10 @@ export class CattleDailyRecordRepository {
       .orderBy('record_date', 'desc')
       .first()) as { average_weight_kg: string | number } | undefined;
     return row ? String(row.average_weight_kg) : null;
+  }
+
+  /** Lock the batch row and return its daily-record count (see `lockBatchAndCountRecords`). */
+  lockBatchAndCount(batchId: string, trx: Knex.Transaction): Promise<number> {
+    return lockBatchAndCountRecords(trx, TABLES, batchId);
   }
 }

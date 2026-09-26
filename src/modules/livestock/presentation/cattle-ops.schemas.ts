@@ -46,7 +46,7 @@ export type RegisterImageBody = z.infer<typeof registerImageBodySchema>;
 export const recordIdParamSchema = batchParamSchema.extend({ recordId: uuid });
 
 export const createDailyRecordBodySchema = z.object({
-  recordDate: pastOrToday,
+  // recordDate is server-assigned (today, business time zone) — a client value is stripped.
   feedKg: qty.optional(),
   waterLiters: qty.optional(),
   appetite: z.enum(LIVESTOCK_APPETITE_LEVELS).nullable().optional(),
@@ -134,6 +134,7 @@ export type ListHealthEventsQuery = z.infer<typeof listHealthEventsQuerySchema>;
 export const caseIdParamSchema = batchParamSchema.extend({ caseId: uuid });
 
 export const createCaseBodySchema = z.object({
+  caseCount: z.coerce.number().int().min(1).max(1_000_000).optional(),
   animalTag: shortText.nullable().optional(),
   sex: z.enum(LIVESTOCK_CASE_SEXES).optional(),
   diagnosis: shortText.nullable().optional(),
@@ -145,6 +146,7 @@ export type CreateCaseBody = z.infer<typeof createCaseBodySchema>;
 
 export const updateCaseBodySchema = z
   .object({
+    caseCount: z.coerce.number().int().min(1).max(1_000_000).optional(),
     animalTag: shortText.nullable().optional(),
     sex: z.enum(LIVESTOCK_CASE_SEXES).optional(),
     diagnosis: shortText.nullable().optional(),

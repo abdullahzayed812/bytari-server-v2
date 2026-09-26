@@ -47,11 +47,12 @@ import {
  *     → [withSheepBatch for batch-scoped] → controller
  */
 export function createSheepBatchRouter(c: Container): Router {
-  const batchCtrl = new SheepBatchController(c.sheepBatchService, c.organizationService);
+  const batchCtrl = new SheepBatchController(c.sheepBatchService, c.organizationService, c.authorizationService);
   const opsCtrl = new SheepOpsController(
     c.sheepDailyRecordService,
     c.sheepHealthEventService,
     c.sheepCaseService,
+    c.authorizationService,
   );
   const { withOrganization, authorizeOrg } = createOrganizationMiddleware({
     organizations: c.organizationRepository,

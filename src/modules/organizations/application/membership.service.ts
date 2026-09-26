@@ -1,4 +1,5 @@
 import type { Knex } from 'knex';
+import { ErrorCode } from '../../../shared/errors/error-codes.js';
 import type { Logger } from 'pino';
 import {
   BadRequestError,
@@ -29,6 +30,16 @@ export interface MemberActor {
 
 /** Org roles that can be granted via the generic member-management routes. */
 const ASSIGNABLE_MEMBER_ROLES = new Set(['VETERINARIAN', 'STAFF']);
+
+/** See `MembershipService.addMember` — farms take veterinarians only via their join code. */
+function assertFarmVetViaJoinCode(organizationType: string | undefined, roleKey: string): void {
+  if (organizationType === 'FARM' && roleKey === 'VETERINARIAN') {
+    throw new ConflictError(
+      'A veterinarian joins a farm with the farm join code (or its QR code), not by direct add',
+      { code: ErrorCode.FARM_VETERINARIAN_REQUIRES_JOIN_CODE },
+    );
+  }
+}
 
 export class MembershipService {
   private readonly log: Logger;
@@ -77,14 +88,23 @@ export class MembershipService {
     return found;
   }
 
+  /**
+   * `organizationType` (the server-loaded org's type, from the route
+   * middleware) enables the FARM rule: a veterinarian is attached to a farm
+   * ONLY through the farm's join code / QR (`FarmJoinService.joinByCode`) —
+   * never by an owner typing someone's email. STAFF may still be added
+   * directly. Omitted only by trusted internal callers (dev seed).
+   */
   async addMember(
     organizationId: string,
     input: { userId?: string; email?: string; roleKey: string },
     actor: MemberActor,
+    opts: { organizationType?: string } = {},
   ): Promise<OrganizationMembershipSummary> {
     if (!ASSIGNABLE_MEMBER_ROLES.has(input.roleKey)) {
       throw new BadRequestError('Members may only be added as VETERINARIAN or STAFF');
     }
+    assertFarmVetViaJoinCode(opts.organizationType, input.roleKey);
     const target = input.userId
       ? await this.users.getById(input.userId)
       : await this.users.findByEmail((input.email as string).toLowerCase());
@@ -153,9 +173,14 @@ export class MembershipService {
     membershipId: string,
     patch: { roleKey?: string; status?: 'ACTIVE' | 'SUSPENDED' },
     actor: MemberActor,
+    opts: { organizationType?: string } = {},
   ): Promise<OrganizationMembershipSummary> {
     const membership = await this.memberships.findByIdInOrg(membershipId, organizationId);
     if (!membership) throw new NotFoundError('Membership not found in this organization');
+    // Promoting a farm employee to VETERINARIAN would bypass the join-code rule.
+    if (patch.roleKey && patch.roleKey !== membership.roleKey) {
+      assertFarmVetViaJoinCode(opts.organizationType, patch.roleKey);
+    }
     if (membership.roleKey === 'OWNER') {
       throw new ForbiddenError('The owner membership cannot be modified');
     }

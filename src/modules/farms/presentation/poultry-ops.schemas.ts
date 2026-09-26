@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import { paginationQuerySchema } from '../../../shared/http/pagination.js';
+import { CATTLE_PRODUCTION_TYPES } from '../../livestock/domain/cattle-batch.constants.js';
+import { SHEEP_PRODUCTION_TYPES } from '../../livestock/domain/sheep-batch.constants.js';
 import {
   FARM_APPOINTMENT_CATEGORIES,
   FARM_APPOINTMENT_STATUSES,
@@ -44,6 +46,12 @@ export const updateFarmProfileBodySchema = z
     currentBirdCount: count.nullable().optional(),
     establishedOn: pastOrToday.nullable().optional(),
     poultryProductionType: z.enum(POULTRY_PRODUCTION_TYPES).nullable().optional(),
+    // Sheep / cattle farms share this profile endpoint — species-specific
+    // fields are accepted only for a farm of that species (see FarmProfileService).
+    currentSheepCount: count.nullable().optional(),
+    sheepProductionType: z.enum(SHEEP_PRODUCTION_TYPES).nullable().optional(),
+    currentCattleCount: count.nullable().optional(),
+    cattleProductionType: z.enum(CATTLE_PRODUCTION_TYPES).nullable().optional(),
     contactName: shortText.max(160).nullable().optional(),
     contactPhone: z.string().trim().min(3).max(40).nullable().optional(),
     contactEmail: z.string().trim().max(255).email().nullable().optional(),
@@ -77,7 +85,7 @@ export type RegisterImageBody = z.infer<typeof registerImageBodySchema>;
 export const recordIdParamSchema = flockScopeParamSchema.extend({ recordId: uuid });
 
 export const createDailyRecordBodySchema = z.object({
-  recordDate: pastOrToday,
+  // recordDate is server-assigned (today, business time zone) — a client value is stripped.
   feedKg: qty.optional(),
   waterLiters: qty.optional(),
   appetite: z.enum(POULTRY_APPETITE_LEVELS).nullable().optional(),
@@ -225,6 +233,7 @@ export type ListAppointmentsQuery = z.infer<typeof listAppointmentsQuerySchema>;
 export const caseIdParamSchema = flockScopeParamSchema.extend({ caseId: uuid });
 
 export const createCaseBodySchema = z.object({
+  caseCount: z.coerce.number().int().min(1).max(1_000_000).optional(),
   animalTag: shortText.nullable().optional(),
   sex: z.enum(POULTRY_CASE_SEXES).optional(),
   diagnosis: shortText.nullable().optional(),
@@ -236,6 +245,7 @@ export type CreateCaseBody = z.infer<typeof createCaseBodySchema>;
 
 export const updateCaseBodySchema = z
   .object({
+    caseCount: z.coerce.number().int().min(1).max(1_000_000).optional(),
     animalTag: shortText.nullable().optional(),
     sex: z.enum(POULTRY_CASE_SEXES).optional(),
     diagnosis: shortText.nullable().optional(),

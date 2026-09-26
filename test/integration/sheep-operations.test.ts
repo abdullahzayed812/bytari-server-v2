@@ -10,7 +10,9 @@ import {
   registerAdmin,
   registerApprovedVet,
   registerUser,
+  seedDailyRecordRow,
 } from '../helpers/factories.js';
+import { businessToday } from '../../src/shared/time/business-date.js';
 
 const { app } = buildTestApp();
 
@@ -48,7 +50,6 @@ describe('sheep daily records', () => {
       .post(daily(farm.id, batch.id))
       .set(bearer(vet.accessToken))
       .send({
-        recordDate: '2026-02-02',
         feedKg: 85,
         waterLiters: 300,
         appetite: 'GOOD',
@@ -64,7 +65,8 @@ describe('sheep daily records', () => {
     const id = create.body.data.id as string;
     expect(create.body.data).toMatchObject({
       sheepBatchId: batch.id,
-      recordDate: '2026-02-02',
+      recordDate: businessToday(),
+      dayNumber: 1,
       feedKg: '85.00',
       sickCasesCount: 2,
       feedType: 'CONCENTRATED',
@@ -89,20 +91,21 @@ describe('sheep daily records', () => {
 
   it('rejects a second record for the same date (409)', async () => {
     const { vet, farm, batch } = await setup();
-    const body = { recordDate: '2026-02-03', feedKg: 10 };
+    const body = { feedKg: 10 };
     await request(app).post(daily(farm.id, batch.id)).set(bearer(vet.accessToken)).send(body);
     const dup = await request(app).post(daily(farm.id, batch.id)).set(bearer(vet.accessToken)).send(body);
     expect(dup.status).toBe(409);
     expect(dup.body.error.code).toBe('SHEEP_DAILY_RECORD_DUPLICATE_DATE');
   });
 
-  it('rejects a future record date (422)', async () => {
+  it('ignores a client-supplied recordDate — the server records today', async () => {
     const { vet, farm, batch } = await setup();
     const res = await request(app)
       .post(daily(farm.id, batch.id))
       .set(bearer(vet.accessToken))
       .send({ recordDate: '2999-01-01' });
-    expect(res.status).toBe(422);
+    expect(res.status).toBe(201);
+    expect(res.body.data.recordDate).toBe(businessToday());
   });
 
   it('STAFF can read but not write daily records', async () => {
@@ -110,14 +113,14 @@ describe('sheep daily records', () => {
     await request(app)
       .post(daily(farm.id, batch.id))
       .set(bearer(vet.accessToken))
-      .send({ recordDate: '2026-02-02', feedKg: 5 });
+      .send({ feedKg: 5 });
 
     const read = await request(app).get(daily(farm.id, batch.id)).set(bearer(staff.accessToken));
     expect(read.status).toBe(200);
     const write = await request(app)
       .post(daily(farm.id, batch.id))
       .set(bearer(staff.accessToken))
-      .send({ recordDate: '2026-02-04', feedKg: 5 });
+      .send({ feedKg: 5 });
     expect(write.status).toBe(403);
   });
 
@@ -130,19 +133,18 @@ describe('sheep daily records', () => {
 });
 
 describe('sheep batch summary + weekly summary (server-computed)', () => {
-  it('derives current count, mortality and estimated profit from the records', async () => {
-    const { vet, farm, batch } = await setup();
+  it('derives current count, mortality and estimated profit from the records (owner only)', async () => {
+    const { vet, owner, farm, batch } = await setup();
     await request(app)
       .patch(`/api/v1/organizations/${farm.id}/sheep/batches/${batch.id}`)
-      .set(bearer(vet.accessToken))
+      .set(bearer(owner.accessToken))
       .send({ targetPricePerKg: 3, averageWeightKg: 40, initialHeadCount: 150 });
 
     for (const [d, m] of [
       ['2026-02-02', 3],
       ['2026-02-03', 2],
     ] as const) {
-      await request(app).post(daily(farm.id, batch.id)).set(bearer(vet.accessToken)).send({
-        recordDate: d,
+      await seedDailyRecordRow('sheep', batch.id, farm.id, d, {
         mortalityCount: m,
         feedKg: 85,
         waterLiters: 300,
@@ -152,7 +154,7 @@ describe('sheep batch summary + weekly summary (server-computed)', () => {
 
     const summary = await request(app)
       .get(`/api/v1/organizations/${farm.id}/sheep/batches/${batch.id}/summary`)
-      .set(bearer(vet.accessToken));
+      .set(bearer(owner.accessToken));
     expect(summary.status).toBe(200);
     expect(summary.body.data).toMatchObject({
       initialHeadCount: 150,
@@ -162,6 +164,19 @@ describe('sheep batch summary + weekly summary (server-computed)', () => {
     });
     // revenue 145 * 40kg * 3 = 17400 ; expenses 100000 ; profit negative
     expect(summary.body.data.estimatedProfit).toBe(17400 - 100000);
+    expect(summary.body.data.financialsVisible).toBe(true);
+
+    // A farm veterinarian sees the operational numbers but NOT the profit / sale price.
+    const vetView = await request(app)
+      .get(`/api/v1/organizations/${farm.id}/sheep/batches/${batch.id}/summary`)
+      .set(bearer(vet.accessToken));
+    expect(vetView.status).toBe(200);
+    expect(vetView.body.data).toMatchObject({
+      financialsVisible: false,
+      estimatedProfit: null,
+      targetPricePerKg: null,
+    });
+    expect(vetView.body.data.totalMortality).toBe(summary.body.data.totalMortality);
     expect(summary.body.data.totalExpenses).toBe(100000);
   });
 
@@ -173,10 +188,11 @@ describe('sheep batch summary + weekly summary (server-computed)', () => {
       ['2026-02-03', 85],
       ['2026-02-04', 90],
     ] as const) {
-      await request(app)
-        .post(daily(farm.id, batch.id))
-        .set(bearer(vet.accessToken))
-        .send({ recordDate: d, feedKg: feed, waterLiters: 300, mortalityCount: 1 });
+      await seedDailyRecordRow('sheep', batch.id, farm.id, d, {
+        feedKg: feed,
+        waterLiters: 300,
+        mortalityCount: 1,
+      });
     }
     const res = await request(app)
       .get(`/api/v1/organizations/${farm.id}/sheep/batches/${batch.id}/weekly-summary?weekOf=2026-02-04`)

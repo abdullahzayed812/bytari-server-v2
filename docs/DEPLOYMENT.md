@@ -4,6 +4,8 @@ Runbook for `https://baytari.com` (Expo Web) and `https://api.baytari.com`
 (API + realtime). Companion to [`OPERATIONS.md`](OPERATIONS.md) (runtime
 behaviour, secrets, backups in depth).
 
+Step-by-step record of the first real deployment (with every problem hit): [`VPS_SETUP_WALKTHROUGH.md`](VPS_SETUP_WALKTHROUGH.md).
+
 Status tags used below:
 
 - **[Implemented]** — shipped in these repos and exercised in a local rehearsal.

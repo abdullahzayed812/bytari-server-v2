@@ -63,6 +63,7 @@ export function createPoultryOpsRouter(c: Container): Router {
     c.farmAppointmentService,
     c.poultryCaseService,
     c.farmSubscriptionService,
+    c.authorizationService,
   );
   const { withOrganization, authorizeOrg } = createOrganizationMiddleware({
     organizations: c.organizationRepository,

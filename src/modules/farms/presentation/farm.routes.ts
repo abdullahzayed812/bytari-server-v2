@@ -31,7 +31,7 @@ import {
  */
 export function createFarmRouter(c: Container): Router {
   const farmCtrl = new FarmController(c.farmJoinService, c.organizationService);
-  const poultryCtrl = new PoultryController(c.poultryFlockService);
+  const poultryCtrl = new PoultryController(c.poultryFlockService, c.authorizationService);
   const { requireApprovedVeterinarian } = createAuthorizationMiddleware(c.authorizationService);
   const { withOrganization, authorizeOrg } = createOrganizationMiddleware({
     organizations: c.organizationRepository,

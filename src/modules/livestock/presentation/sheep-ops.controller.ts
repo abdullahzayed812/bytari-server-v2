@@ -6,6 +6,8 @@ import { validatedBody, validatedParams, validatedQuery } from '../../../shared/
 import { auditContextFromRequest, type AuditContextResult } from '../../audit/audit-context.js';
 import { requireAuth } from '../../auth/authenticate.middleware.js';
 import { requireOrganization } from '../../organizations/presentation/organization.middleware.js';
+import { applyFinancialVisibility, canSeeFarmFinancials } from '../../farms/presentation/farm-financials.js';
+import type { AuthorizationService } from '../../authorization/authorization.service.js';
 import type { SheepCaseService } from '../application/sheep-case.service.js';
 import type { SheepDailyRecordService } from '../application/sheep-daily-record.service.js';
 import type { SheepHealthEventService } from '../application/sheep-health-event.service.js';
@@ -30,6 +32,7 @@ export class SheepOpsController {
     private readonly daily: SheepDailyRecordService,
     private readonly healthEvents: SheepHealthEventService,
     private readonly cases: SheepCaseService,
+    private readonly authz: AuthorizationService,
   ) {}
 
   private actor(req: Request): { actorUserId: string; context: AuditContextResult } {
@@ -84,7 +87,10 @@ export class SheepOpsController {
   };
 
   batchSummary = async (req: Request, res: Response): Promise<void> => {
-    sendSuccess(res, await this.daily.batchSummary(this.orgId(req), this.batchId(req)));
+    const orgId = this.orgId(req);
+    const summary = await this.daily.batchSummary(orgId, this.batchId(req));
+    const visible = await canSeeFarmFinancials(this.authz, req, orgId);
+    sendSuccess(res, applyFinancialVisibility(summary, visible));
   };
 
   weeklySummary = async (req: Request, res: Response): Promise<void> => {

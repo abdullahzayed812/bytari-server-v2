@@ -571,7 +571,7 @@ export async function runDevSeed(knex: Knex, deps: RunDevSeedDeps = {}): Promise
       farmId,
       flockId,
       {
-        recordDate: '2026-02-01',
+        // recordDate is server-assigned (today, business time zone).
         feedKg: 240,
         waterLiters: 2000,
         appetite: 'GOOD',

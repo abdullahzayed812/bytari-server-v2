@@ -34,6 +34,34 @@ const IMAGE_URL_TTL_SECONDS = 3600;
  * pattern the CLINIC / OFFICE / STORE directory profiles use). Authorization is
  * the route guard `authorizeOrg('organization.update')` + a FARM type gate.
  */
+const SPECIES_FIELDS: Record<'POULTRY' | 'SHEEP' | 'CATTLE', readonly (keyof UpdateFarmProfileInput)[]> = {
+  POULTRY: ['currentBirdCount', 'poultryProductionType'],
+  SHEEP: ['currentSheepCount', 'sheepProductionType'],
+  CATTLE: ['currentCattleCount', 'cattleProductionType'],
+};
+
+/**
+ * Reject species-specific fields that don't belong to this farm's species.
+ * A legacy row with no species is treated as POULTRY (the only type that
+ * existed before `farm_species`); MIXED farms accept every species' fields.
+ */
+function assertProfilePatchMatchesSpecies(
+  species: string | null,
+  patch: UpdateFarmProfileInput,
+): void {
+  if (species === 'MIXED') return;
+  const own = (species ?? 'POULTRY') as keyof typeof SPECIES_FIELDS;
+  for (const [other, fields] of Object.entries(SPECIES_FIELDS)) {
+    if (other === own) continue;
+    const offending = fields.filter((f) => patch[f] !== undefined);
+    if (offending.length > 0) {
+      throw new BadRequestError(
+        `${offending.join(', ')} ${offending.length > 1 ? 'do' : 'does'} not apply to a ${own} farm`,
+      );
+    }
+  }
+}
+
 export class FarmProfileService {
   private readonly log: Logger;
 
@@ -87,6 +115,11 @@ export class FarmProfileService {
     patch: UpdateFarmProfileInput,
     actor: FarmActor,
   ): Promise<FarmProfile> {
+    // A sheep / cattle farm must never receive poultry fields (and vice versa)
+    // — this is what used to happen when a sheep farm was edited through the
+    // poultry settings form.
+    const current = await this.profiles.findByOrganizationId(organizationId);
+    assertProfilePatchMatchesSpecies(current?.farm_species ?? null, patch);
     await this.db.transaction(async (tx) => {
       await this.profiles.update(
         organizationId,

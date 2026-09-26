@@ -1,3 +1,5 @@
+import { DAILY_RECORDS_PER_BATCH } from '../../farms/domain/daily-record.js';
+import { businessToday } from '../../../shared/time/business-date.js';
 import type { Knex } from 'knex';
 import type { Logger } from 'pino';
 import { BadRequestError, ConflictError, NotFoundError } from '../../../shared/errors/app-error.js';
@@ -87,24 +89,30 @@ export class CattleDailyRecordService {
   async create(
     organizationId: string,
     batchId: string,
-    input: CreateCattleDailyRecordInput,
+    /** `recordDate` is NOT client-controlled — the server assigns today's business date. */
+    input: Omit<CreateCattleDailyRecordInput, 'recordDate'>,
     actor: FarmActor,
   ): Promise<CattleDailyRecord> {
     const batch = await this.loadBatch(organizationId, batchId);
     CattleBatchPolicy.assertBatchMutable(batch);
-    if (new Date(`${input.recordDate}T00:00:00Z`) > new Date()) {
-      throw new BadRequestError('recordDate cannot be in the future');
-    }
-    const existing = await this.records.findByBatchAndDate(batchId, input.recordDate);
-    if (existing) {
-      throw new ConflictError('A daily record already exists for that date', {
-        code: ErrorCode.CATTLE_DAILY_RECORD_DUPLICATE_DATE,
-      });
-    }
+    const recordDate = businessToday();
 
     const record = await this.db.transaction(async (tx) => {
+      // Serialise concurrent submissions on the batch row, then enforce the
+      // one-record-per-day and seven-days-per-batch rules under that lock.
+      const existingCount = await this.records.lockBatchAndCount(batchId, tx);
+      if (existingCount >= DAILY_RECORDS_PER_BATCH) {
+        throw new ConflictError('This batch already has its seven daily records', {
+          code: ErrorCode.DAILY_RECORD_LIMIT_REACHED,
+        });
+      }
+      if (await this.records.findByBatchAndDate(batchId, recordDate, tx)) {
+        throw new ConflictError('A daily record already exists for today', {
+          code: ErrorCode.CATTLE_DAILY_RECORD_DUPLICATE_DATE,
+        });
+      }
       const created = await this.records.create(
-        { ...input, cattleBatchId: batchId, organizationId, createdByUserId: actor.actorUserId },
+        { ...input, recordDate, cattleBatchId: batchId, organizationId, createdByUserId: actor.actorUserId },
         tx,
       );
       if (input.averageWeightKg != null) {
@@ -116,7 +124,7 @@ export class CattleDailyRecordService {
           entityType: CattleOpsAuditEntity.CATTLE_DAILY_RECORD,
           entityId: created.id,
           actorUserId: actor.actorUserId,
-          metadata: { organizationId, cattleBatchId: batchId, recordDate: input.recordDate },
+          metadata: { organizationId, cattleBatchId: batchId, recordDate },
           context: actor.context,
         },
         tx,
@@ -129,7 +137,8 @@ export class CattleDailyRecordService {
       organizationId,
       recordId: record.id,
     });
-    return record;
+    // Re-read through the enriched query: day number + creator name.
+    return (await this.records.findByIdForBatch(record.id, batchId)) ?? record;
   }
 
   async update(
@@ -162,7 +171,7 @@ export class CattleDailyRecordService {
       );
       return r;
     });
-    return updated;
+    return (await this.records.findByIdForBatch(recordId, batchId)) ?? updated;
   }
 
   async delete(

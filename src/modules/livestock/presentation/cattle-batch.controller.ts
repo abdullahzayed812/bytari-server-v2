@@ -6,6 +6,12 @@ import { validatedBody, validatedQuery } from '../../../shared/http/validate.js'
 import { auditContextFromRequest, type AuditContextResult } from '../../audit/audit-context.js';
 import { requireAuth } from '../../auth/authenticate.middleware.js';
 import { requireOrganization } from '../../organizations/presentation/organization.middleware.js';
+import {
+  applyFinancialVisibility,
+  canSeeFarmFinancials,
+  stripFinancialInput,
+} from '../../farms/presentation/farm-financials.js';
+import type { AuthorizationService } from '../../authorization/authorization.service.js';
 import type {
   CreateOrganizationDetails,
   OrganizationService,
@@ -24,6 +30,7 @@ export class CattleBatchController {
   constructor(
     private readonly batches: CattleBatchService,
     private readonly organizations: OrganizationService,
+    private readonly authz: AuthorizationService,
   ) {}
 
   private actor(req: Request): { actorUserId: string; context: AuditContextResult } {
@@ -58,9 +65,10 @@ export class CattleBatchController {
 
   createBatch = async (req: Request, res: Response): Promise<void> => {
     const org = requireOrganization(req);
+    const visible = await canSeeFarmFinancials(this.authz, req, org.id);
     const body = validatedBody<CreateCattleBatchBody>(req);
-    const dto = await this.batches.create({ id: org.id, type: org.type }, body, this.actor(req));
-    sendSuccess(res, dto, StatusCodes.CREATED);
+    const dto = await this.batches.create({ id: org.id, type: org.type }, stripFinancialInput(body, visible), this.actor(req));
+    sendSuccess(res, applyFinancialVisibility(dto, visible), StatusCodes.CREATED);
   };
 
   listBatches = async (req: Request, res: Response): Promise<void> => {
@@ -71,20 +79,24 @@ export class CattleBatchController {
       pageSize: q.pageSize,
       status: q.status,
     });
-    sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
+    const visible = await canSeeFarmFinancials(this.authz, req, org.id);
+    sendSuccess(res, items.map((i) => applyFinancialVisibility(i, visible)), StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
   };
 
   getBatch = async (req: Request, res: Response): Promise<void> => {
     const org = requireOrganization(req);
     const batch = requireCattleBatch(req);
-    sendSuccess(res, await this.batches.get(org.id, batch.id));
+    const visible = await canSeeFarmFinancials(this.authz, req, org.id);
+    sendSuccess(res, applyFinancialVisibility(await this.batches.get(org.id, batch.id), visible));
   };
 
   updateBatch = async (req: Request, res: Response): Promise<void> => {
     const org = requireOrganization(req);
     const batch = requireCattleBatch(req);
     const body = validatedBody<UpdateCattleBatchBody>(req);
-    sendSuccess(res, await this.batches.update(org.id, batch.id, body, this.actor(req)));
+    const visible = await canSeeFarmFinancials(this.authz, req, org.id);
+    const dto = await this.batches.update(org.id, batch.id, stripFinancialInput(body, visible), this.actor(req));
+    sendSuccess(res, applyFinancialVisibility(dto, visible));
   };
 
   deleteBatch = async (req: Request, res: Response): Promise<void> => {

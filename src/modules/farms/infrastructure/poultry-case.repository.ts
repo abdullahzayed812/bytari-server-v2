@@ -50,6 +50,7 @@ export class PoultryCaseRepository {
         organization_id: data.organizationId,
         organization_type: 'FARM',
         case_number: data.caseNumber,
+        case_count: data.caseCount ?? 1,
         animal_tag: data.animalTag ?? null,
         sex: data.sex ?? 'UNKNOWN',
         diagnosis: data.diagnosis ?? null,
@@ -71,6 +72,7 @@ export class PoultryCaseRepository {
   ): Promise<PoultryCaseRow> {
     const dbPatch: Record<string, unknown> = { updated_at: new Date() };
     if (patch.animalTag !== undefined) dbPatch.animal_tag = patch.animalTag;
+    if (patch.caseCount !== undefined) dbPatch.case_count = patch.caseCount;
     if (patch.sex !== undefined) dbPatch.sex = patch.sex;
     if (patch.diagnosis !== undefined) dbPatch.diagnosis = patch.diagnosis;
     if (patch.treatment !== undefined) dbPatch.treatment = patch.treatment;
@@ -116,7 +118,7 @@ export class PoultryCaseRepository {
     const rows = (await this.db(TABLE)
       .where('poultry_flock_id', flockId)
       .select('status')
-      .count<{ status: string; count: string }[]>({ count: '*' })
+      .sum<{ status: string; count: string }[]>({ count: 'case_count' })
       .groupBy('status')) as unknown as { status: string; count: string }[];
     const out: Record<string, number> = {};
     for (const r of rows) out[r.status] = Number(r.count);

@@ -1,3 +1,8 @@
+import {
+  toDailyRecordExtras,
+  type DailyRecordExtras,
+  type DailyRecordRowExtras,
+} from '../../farms/domain/daily-record.js';
 import type {
   LivestockActivity,
   LivestockAppetite,
@@ -34,7 +39,7 @@ function iso(v: Date): string {
 // Cattle daily records
 // =====================================================================
 
-export interface CattleDailyRecord {
+export interface CattleDailyRecord extends DailyRecordExtras {
   id: string;
   cattleBatchId: string;
   organizationId: string;
@@ -56,7 +61,7 @@ export interface CattleDailyRecord {
   updatedAt: string;
 }
 
-export interface CattleDailyRecordRow {
+export interface CattleDailyRecordRow extends DailyRecordRowExtras {
   id: string;
   cattle_batch_id: string;
   organization_id: string;
@@ -99,6 +104,7 @@ export function rowToCattleDailyRecord(r: CattleDailyRecordRow): CattleDailyReco
     createdByUserId: r.created_by_user_id,
     createdAt: iso(r.created_at),
     updatedAt: iso(r.updated_at),
+    ...toDailyRecordExtras(r),
   };
 }
 
@@ -261,6 +267,8 @@ export interface CattleCase {
   cattleBatchId: string;
   organizationId: string;
   caseNumber: number | null;
+  /** How many animals this case record covers (≥ 1). */
+  caseCount: number;
   animalTag: string | null;
   sex: LivestockCaseSex;
   diagnosis: string | null;
@@ -279,6 +287,7 @@ export interface CattleCaseRow {
   cattle_batch_id: string;
   organization_id: string;
   case_number: number | string | null;
+  case_count?: number | string | null;
   animal_tag: string | null;
   sex: string;
   diagnosis: string | null;
@@ -298,6 +307,7 @@ export function rowToCattleCase(r: CattleCaseRow, imageUrl: string | null): Catt
     cattleBatchId: r.cattle_batch_id,
     organizationId: r.organization_id,
     caseNumber: r.case_number === null ? null : Number(r.case_number),
+    caseCount: r.case_count == null ? 1 : Number(r.case_count),
     animalTag: r.animal_tag,
     sex: r.sex as LivestockCaseSex,
     diagnosis: r.diagnosis,
@@ -313,6 +323,7 @@ export function rowToCattleCase(r: CattleCaseRow, imageUrl: string | null): Catt
 }
 
 export interface CreateCattleCaseInput {
+  caseCount?: number;
   animalTag?: string | null;
   sex?: LivestockCaseSex;
   diagnosis?: string | null;

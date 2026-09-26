@@ -86,6 +86,10 @@ export const ORG_PERMISSION_KEYS = [
   // explicit per-membership SUPERVISOR grant (the "Responsible Supervisor").
   'farm.subscription.read',
   'farm.subscription.manage',
+  // --- Farm financials — estimated profit + expected sale price. Granted to
+  // NOBODY by default (OWNER override / ADMIN): a farm's vets and employees see
+  // operational data only; an owner may grant it to a supervisor explicitly.
+  'farm.financials.read',
   // --- Veterinary store products (Phase 10; extended to Veterinary Offices) —
   // VETERINARY_STORE / VETERINARY_OFFICE organizations ---
   // Stock changes are `product.inventory.adjust`, NOT `product.update` — a
@@ -209,6 +213,7 @@ export const ORG_PERMISSION_DEFINITIONS: Record<OrgPermissionKey, string> = {
   'farm.subscription.read': 'View this farm’s subscription period and renewal requests',
   'farm.subscription.manage':
     'Set this farm’s subscription period and approve/reject its renewal requests',
+  'farm.financials.read': 'See the farm’s estimated profit and expected sale prices',
   'product.read': 'View this store/office’s products',
   'product.create': 'Add a product to this store/office',
   'product.update': 'Update this store/office’s products (profile fields, not stock)',

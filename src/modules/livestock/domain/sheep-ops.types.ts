@@ -1,3 +1,8 @@
+import {
+  toDailyRecordExtras,
+  type DailyRecordExtras,
+  type DailyRecordRowExtras,
+} from '../../farms/domain/daily-record.js';
 import type {
   LivestockActivity,
   LivestockAppetite,
@@ -34,7 +39,7 @@ function iso(v: Date): string {
 // Sheep daily records
 // =====================================================================
 
-export interface SheepDailyRecord {
+export interface SheepDailyRecord extends DailyRecordExtras {
   id: string;
   sheepBatchId: string;
   organizationId: string;
@@ -56,7 +61,7 @@ export interface SheepDailyRecord {
   updatedAt: string;
 }
 
-export interface SheepDailyRecordRow {
+export interface SheepDailyRecordRow extends DailyRecordRowExtras {
   id: string;
   sheep_batch_id: string;
   organization_id: string;
@@ -99,6 +104,7 @@ export function rowToSheepDailyRecord(r: SheepDailyRecordRow): SheepDailyRecord 
     createdByUserId: r.created_by_user_id,
     createdAt: iso(r.created_at),
     updatedAt: iso(r.updated_at),
+    ...toDailyRecordExtras(r),
   };
 }
 
@@ -261,6 +267,8 @@ export interface SheepCase {
   sheepBatchId: string;
   organizationId: string;
   caseNumber: number | null;
+  /** How many animals this case record covers (≥ 1). */
+  caseCount: number;
   animalTag: string | null;
   sex: LivestockCaseSex;
   diagnosis: string | null;
@@ -279,6 +287,7 @@ export interface SheepCaseRow {
   sheep_batch_id: string;
   organization_id: string;
   case_number: number | string | null;
+  case_count?: number | string | null;
   animal_tag: string | null;
   sex: string;
   diagnosis: string | null;
@@ -298,6 +307,7 @@ export function rowToSheepCase(r: SheepCaseRow, imageUrl: string | null): SheepC
     sheepBatchId: r.sheep_batch_id,
     organizationId: r.organization_id,
     caseNumber: r.case_number === null ? null : Number(r.case_number),
+    caseCount: r.case_count == null ? 1 : Number(r.case_count),
     animalTag: r.animal_tag,
     sex: r.sex as LivestockCaseSex,
     diagnosis: r.diagnosis,
@@ -313,6 +323,7 @@ export function rowToSheepCase(r: SheepCaseRow, imageUrl: string | null): SheepC
 }
 
 export interface CreateSheepCaseInput {
+  caseCount?: number;
   animalTag?: string | null;
   sex?: LivestockCaseSex;
   diagnosis?: string | null;

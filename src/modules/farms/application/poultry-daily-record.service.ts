@@ -1,3 +1,5 @@
+import { DAILY_RECORDS_PER_BATCH } from '../domain/daily-record.js';
+import { businessToday } from '../../../shared/time/business-date.js';
 import type { Knex } from 'knex';
 import type { Logger } from 'pino';
 import { BadRequestError, ConflictError, NotFoundError } from '../../../shared/errors/app-error.js';
@@ -95,24 +97,30 @@ export class PoultryDailyRecordService {
   async create(
     organizationId: string,
     flockId: string,
-    input: CreateDailyRecordInput,
+    /** `recordDate` is NOT client-controlled — the server assigns today's business date. */
+    input: Omit<CreateDailyRecordInput, 'recordDate'>,
     actor: FarmActor,
   ): Promise<PoultryDailyRecord> {
     const flock = await this.loadFlock(organizationId, flockId);
     PoultryFlockPolicy.assertFlockMutable(flock);
-    if (new Date(`${input.recordDate}T00:00:00Z`) > new Date()) {
-      throw new BadRequestError('recordDate cannot be in the future');
-    }
-    const existing = await this.records.findByFlockAndDate(flockId, input.recordDate);
-    if (existing) {
-      throw new ConflictError('A daily record already exists for that date', {
-        code: ErrorCode.POULTRY_DAILY_RECORD_DUPLICATE_DATE,
-      });
-    }
+    const recordDate = businessToday();
 
     const record = await this.db.transaction(async (tx) => {
+      // Serialise concurrent submissions on the batch row, then enforce the
+      // one-record-per-day and seven-days-per-batch rules under that lock.
+      const existingCount = await this.records.lockBatchAndCount(flockId, tx);
+      if (existingCount >= DAILY_RECORDS_PER_BATCH) {
+        throw new ConflictError('This batch already has its seven daily records', {
+          code: ErrorCode.DAILY_RECORD_LIMIT_REACHED,
+        });
+      }
+      if (await this.records.findByFlockAndDate(flockId, recordDate, tx)) {
+        throw new ConflictError('A daily record already exists for today', {
+          code: ErrorCode.POULTRY_DAILY_RECORD_DUPLICATE_DATE,
+        });
+      }
       const created = await this.records.create(
-        { ...input, poultryFlockId: flockId, organizationId, createdByUserId: actor.actorUserId },
+        { ...input, recordDate, poultryFlockId: flockId, organizationId, createdByUserId: actor.actorUserId },
         tx,
       );
       // Keep the flock's headline average weight in step with the latest record.
@@ -125,7 +133,7 @@ export class PoultryDailyRecordService {
           entityType: PoultryOpsAuditEntity.POULTRY_DAILY_RECORD,
           entityId: created.id,
           actorUserId: actor.actorUserId,
-          metadata: { organizationId, poultryFlockId: flockId, recordDate: input.recordDate },
+          metadata: { organizationId, poultryFlockId: flockId, recordDate },
           context: actor.context,
         },
         tx,
@@ -138,7 +146,8 @@ export class PoultryDailyRecordService {
       organizationId,
       recordId: record.id,
     });
-    return record;
+    // Re-read through the enriched query: day number + creator name.
+    return (await this.records.findByIdForFlock(record.id, flockId)) ?? record;
   }
 
   async update(
@@ -171,7 +180,7 @@ export class PoultryDailyRecordService {
       );
       return r;
     });
-    return updated;
+    return (await this.records.findByIdForFlock(recordId, flockId)) ?? updated;
   }
 
   async delete(

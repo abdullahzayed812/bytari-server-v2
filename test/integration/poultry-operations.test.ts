@@ -10,7 +10,9 @@ import {
   registerAdmin,
   registerApprovedVet,
   registerUser,
+  seedDailyRecordRow,
 } from '../helpers/factories.js';
+import { businessToday } from '../../src/shared/time/business-date.js';
 
 const { app } = buildTestApp();
 
@@ -47,7 +49,6 @@ describe('poultry daily records', () => {
       .post(daily(farm.id, flock.id))
       .set(bearer(vet.accessToken))
       .send({
-        recordDate: '2026-02-02',
         feedKg: 240,
         waterLiters: 2000,
         appetite: 'GOOD',
@@ -62,7 +63,8 @@ describe('poultry daily records', () => {
     const id = create.body.data.id as string;
     expect(create.body.data).toMatchObject({
       poultryFlockId: flock.id,
-      recordDate: '2026-02-02',
+      recordDate: businessToday(),
+      dayNumber: 1,
       feedKg: '240.00',
       mortalityCount: 20,
     });
@@ -87,7 +89,7 @@ describe('poultry daily records', () => {
 
   it('rejects a second record for the same date (409)', async () => {
     const { vet, farm, flock } = await setup();
-    const body = { recordDate: '2026-02-03', feedKg: 10 };
+    const body = { feedKg: 10 };
     await request(app).post(daily(farm.id, flock.id)).set(bearer(vet.accessToken)).send(body);
     const dup = await request(app)
       .post(daily(farm.id, flock.id))
@@ -97,13 +99,14 @@ describe('poultry daily records', () => {
     expect(dup.body.error.code).toBe('POULTRY_DAILY_RECORD_DUPLICATE_DATE');
   });
 
-  it('rejects a future record date (422)', async () => {
+  it('ignores a client-supplied recordDate — the server records today', async () => {
     const { vet, farm, flock } = await setup();
     const res = await request(app)
       .post(daily(farm.id, flock.id))
       .set(bearer(vet.accessToken))
       .send({ recordDate: '2999-01-01' });
-    expect(res.status).toBe(422);
+    expect(res.status).toBe(201);
+    expect(res.body.data.recordDate).toBe(businessToday());
   });
 
   it('STAFF can read but not write daily records', async () => {
@@ -111,14 +114,14 @@ describe('poultry daily records', () => {
     await request(app)
       .post(daily(farm.id, flock.id))
       .set(bearer(vet.accessToken))
-      .send({ recordDate: '2026-02-02', feedKg: 5 });
+      .send({ feedKg: 5 });
 
     const read = await request(app).get(daily(farm.id, flock.id)).set(bearer(staff.accessToken));
     expect(read.status).toBe(200);
     const write = await request(app)
       .post(daily(farm.id, flock.id))
       .set(bearer(staff.accessToken))
-      .send({ recordDate: '2026-02-04', feedKg: 5 });
+      .send({ feedKg: 5 });
     expect(write.status).toBe(403);
   });
 
@@ -131,20 +134,19 @@ describe('poultry daily records', () => {
 });
 
 describe('batch summary + weekly summary (server-computed)', () => {
-  it('derives current count, mortality and estimated profit from the records', async () => {
-    const { vet, farm, flock } = await setup();
+  it('derives current count, mortality and estimated profit from the records (owner only)', async () => {
+    const { vet, owner, farm, flock } = await setup();
     // target price + weight so profit is computable
     await request(app)
       .patch(`/api/v1/organizations/${farm.id}/poultry/flocks/${flock.id}`)
-      .set(bearer(vet.accessToken))
+      .set(bearer(owner.accessToken))
       .send({ targetPricePerKg: 3, averageWeightGrams: 2000, initialBirdCount: 5000 });
 
     for (const [d, m] of [
       ['2026-02-02', 30],
       ['2026-02-03', 20],
     ] as const) {
-      await request(app).post(daily(farm.id, flock.id)).set(bearer(vet.accessToken)).send({
-        recordDate: d,
+      await seedDailyRecordRow('poultry', flock.id, farm.id, d, {
         mortalityCount: m,
         feedKg: 100,
         waterLiters: 900,
@@ -154,7 +156,7 @@ describe('batch summary + weekly summary (server-computed)', () => {
 
     const summary = await request(app)
       .get(`/api/v1/organizations/${farm.id}/poultry/flocks/${flock.id}/summary`)
-      .set(bearer(vet.accessToken));
+      .set(bearer(owner.accessToken));
     expect(summary.status).toBe(200);
     expect(summary.body.data).toMatchObject({
       initialBirdCount: 5000,
@@ -164,6 +166,19 @@ describe('batch summary + weekly summary (server-computed)', () => {
     });
     // revenue 4950 * 2kg * 3 = 29700 ; expenses 1000 ; profit 28700
     expect(summary.body.data.estimatedProfit).toBe(28700);
+    expect(summary.body.data.financialsVisible).toBe(true);
+
+    // A farm veterinarian sees the operational numbers but NOT the profit / sale price.
+    const vetView = await request(app)
+      .get(`/api/v1/organizations/${farm.id}/poultry/flocks/${flock.id}/summary`)
+      .set(bearer(vet.accessToken));
+    expect(vetView.status).toBe(200);
+    expect(vetView.body.data).toMatchObject({
+      financialsVisible: false,
+      estimatedProfit: null,
+      targetPricePerKg: null,
+    });
+    expect(vetView.body.data.totalMortality).toBe(summary.body.data.totalMortality);
     expect(summary.body.data.totalExpenses).toBe(1000);
   });
 
@@ -175,10 +190,11 @@ describe('batch summary + weekly summary (server-computed)', () => {
       ['2026-02-03', 120],
       ['2026-02-04', 140],
     ] as const) {
-      await request(app)
-        .post(daily(farm.id, flock.id))
-        .set(bearer(vet.accessToken))
-        .send({ recordDate: d, feedKg: feed, waterLiters: 1000, mortalityCount: 10 });
+      await seedDailyRecordRow('poultry', flock.id, farm.id, d, {
+        feedKg: feed,
+        waterLiters: 1000,
+        mortalityCount: 10,
+      });
     }
     const res = await request(app)
       .get(

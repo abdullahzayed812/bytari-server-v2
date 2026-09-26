@@ -47,11 +47,12 @@ import {
  *     → [withCattleBatch for batch-scoped] → controller
  */
 export function createCattleBatchRouter(c: Container): Router {
-  const batchCtrl = new CattleBatchController(c.cattleBatchService, c.organizationService);
+  const batchCtrl = new CattleBatchController(c.cattleBatchService, c.organizationService, c.authorizationService);
   const opsCtrl = new CattleOpsController(
     c.cattleDailyRecordService,
     c.cattleHealthEventService,
     c.cattleCaseService,
+    c.authorizationService,
   );
   const { withOrganization, authorizeOrg } = createOrganizationMiddleware({
     organizations: c.organizationRepository,

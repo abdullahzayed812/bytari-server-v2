@@ -6,6 +6,8 @@ import { validatedBody, validatedParams, validatedQuery } from '../../../shared/
 import { auditContextFromRequest, type AuditContextResult } from '../../audit/audit-context.js';
 import { requireAuth } from '../../auth/authenticate.middleware.js';
 import { requireOrganization } from '../../organizations/presentation/organization.middleware.js';
+import { applyFinancialVisibility, canSeeFarmFinancials } from './farm-financials.js';
+import type { AuthorizationService } from '../../authorization/authorization.service.js';
 import type { FarmAppointmentService } from '../application/farm-appointment.service.js';
 import type { FarmExpenseService } from '../application/farm-expense.service.js';
 import type { FarmProfileService } from '../application/farm-profile.service.js';
@@ -52,6 +54,7 @@ export class PoultryOpsController {
     private readonly appointments: FarmAppointmentService,
     private readonly cases: PoultryCaseService,
     private readonly subscription: FarmSubscriptionService,
+    private readonly authz: AuthorizationService,
   ) {}
 
   private actor(req: Request): { actorUserId: string; context: AuditContextResult } {
@@ -127,7 +130,10 @@ export class PoultryOpsController {
   };
 
   batchSummary = async (req: Request, res: Response): Promise<void> => {
-    sendSuccess(res, await this.daily.batchSummary(this.orgId(req), this.flockId(req)));
+    const orgId = this.orgId(req);
+    const summary = await this.daily.batchSummary(orgId, this.flockId(req));
+    const visible = await canSeeFarmFinancials(this.authz, req, orgId);
+    sendSuccess(res, applyFinancialVisibility(summary, visible));
   };
 
   weeklySummary = async (req: Request, res: Response): Promise<void> => {

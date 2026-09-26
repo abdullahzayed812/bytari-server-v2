@@ -1,3 +1,8 @@
+import {
+  toDailyRecordExtras,
+  type DailyRecordExtras,
+  type DailyRecordRowExtras,
+} from './daily-record.js';
 import type {
   FarmAppointmentCategory,
   FarmAppointmentStatus,
@@ -125,7 +130,7 @@ export interface UpdateFarmProfileInput {
 // Poultry daily records
 // =====================================================================
 
-export interface PoultryDailyRecord {
+export interface PoultryDailyRecord extends DailyRecordExtras {
   id: string;
   poultryFlockId: string;
   organizationId: string;
@@ -145,7 +150,7 @@ export interface PoultryDailyRecord {
   updatedAt: string;
 }
 
-export interface PoultryDailyRecordRow {
+export interface PoultryDailyRecordRow extends DailyRecordRowExtras {
   id: string;
   poultry_flock_id: string;
   organization_id: string;
@@ -184,6 +189,7 @@ export function rowToDailyRecord(r: PoultryDailyRecordRow): PoultryDailyRecord {
     createdByUserId: r.created_by_user_id,
     createdAt: iso(r.created_at),
     updatedAt: iso(r.updated_at),
+    ...toDailyRecordExtras(r),
   };
 }
 
@@ -494,6 +500,8 @@ export interface PoultryCase {
   poultryFlockId: string;
   organizationId: string;
   caseNumber: number | null;
+  /** How many animals this case record covers (≥ 1). */
+  caseCount: number;
   animalTag: string | null;
   sex: PoultryCaseSex;
   diagnosis: string | null;
@@ -512,6 +520,7 @@ export interface PoultryCaseRow {
   poultry_flock_id: string;
   organization_id: string;
   case_number: number | string | null;
+  case_count?: number | string | null;
   animal_tag: string | null;
   sex: string;
   diagnosis: string | null;
@@ -531,6 +540,7 @@ export function rowToCase(r: PoultryCaseRow, imageUrl: string | null): PoultryCa
     poultryFlockId: r.poultry_flock_id,
     organizationId: r.organization_id,
     caseNumber: r.case_number === null ? null : Number(r.case_number),
+    caseCount: r.case_count == null ? 1 : Number(r.case_count),
     animalTag: r.animal_tag,
     sex: r.sex as PoultryCaseSex,
     diagnosis: r.diagnosis,
@@ -546,6 +556,7 @@ export function rowToCase(r: PoultryCaseRow, imageUrl: string | null): PoultryCa
 }
 
 export interface CreatePoultryCaseInput {
+  caseCount?: number;
   animalTag?: string | null;
   sex?: PoultryCaseSex;
   diagnosis?: string | null;
