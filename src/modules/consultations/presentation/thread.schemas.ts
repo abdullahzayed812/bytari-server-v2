@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { paginationQuerySchema } from '../../../shared/http/pagination.js';
 import {
+  CONSULTATION_ANIMAL_TYPES,
+  INQUIRY_CATEGORIES,
   MAX_MESSAGE_IMAGE_BYTES,
   MAX_MESSAGE_IMAGES,
   MESSAGE_BODY_MAX,
@@ -20,13 +22,21 @@ const imageKeys = z.array(z.string().trim().min(1).max(1024)).max(MAX_MESSAGE_IM
 export const createConsultationBodySchema = z
   .object({
     body: z.string().trim().min(1).max(MESSAGE_BODY_MAX),
+    /** Optional — one of the creator's OWNED animals (ownership verified server-side). */
     animalId: z.string().uuid().nullable().optional(),
+    /** Optional generic animal type — lets a user consult about ANY animal, owned or not. */
+    animalType: z.enum(CONSULTATION_ANIMAL_TYPES).nullable().optional(),
     imageKeys,
   })
   .strict();
 
 export const createInquiryBodySchema = z
-  .object({ body: z.string().trim().min(1).max(MESSAGE_BODY_MAX), imageKeys })
+  .object({
+    body: z.string().trim().min(1).max(MESSAGE_BODY_MAX),
+    /** Defaults to GENERAL when omitted (older clients); any other value must be a known category. */
+    category: z.enum(INQUIRY_CATEGORIES).default('GENERAL'),
+    imageKeys,
+  })
   .strict();
 
 /** "تواصل معنا" — a support message. Body only; no animal, no recipient. */
@@ -40,6 +50,8 @@ export const sendThreadMessageBodySchema = z
 
 export const listThreadsQuerySchema = paginationQuerySchema.extend({
   status: z.enum(THREAD_STATUSES).optional(),
+  /** Inquiries only — ignored for other kinds. */
+  category: z.enum(INQUIRY_CATEGORIES).optional(),
 });
 
 export const listAdminThreadsQuerySchema = listThreadsQuerySchema.extend({

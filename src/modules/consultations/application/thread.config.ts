@@ -9,6 +9,10 @@ export interface ThreadKindConfig {
   messageTable: string;
   /** Consultations may reference an owned animal; inquiries never do. */
   hasAnimal: boolean;
+  /** Consultations may name a generic animal type (`consultations.animal_type`). */
+  hasAnimalType: boolean;
+  /** Inquiries carry a category (`inquiries.category`). */
+  hasCategory: boolean;
   aiSettingKey: AiSettingKey;
   /** Actor eligible to CREATE: 'ANY_USER' (pet owner) | 'APPROVED_VET'. */
   createEligibility: 'ANY_USER' | 'APPROVED_VET';
@@ -52,6 +56,8 @@ export const CONSULTATION_CONFIG: ThreadKindConfig = {
   threadTable: 'consultations',
   messageTable: 'consultation_messages',
   hasAnimal: true,
+  hasAnimalType: true,
+  hasCategory: false,
   aiSettingKey: 'CONSULTATION_AI',
   createEligibility: 'ANY_USER',
   responderRequiresApprovedVet: true,
@@ -85,6 +91,8 @@ export const INQUIRY_CONFIG: ThreadKindConfig = {
   threadTable: 'inquiries',
   messageTable: 'inquiry_messages',
   hasAnimal: false,
+  hasAnimalType: false,
+  hasCategory: true,
   aiSettingKey: 'INQUIRY_AI',
   createEligibility: 'APPROVED_VET',
   responderRequiresApprovedVet: true,
@@ -123,6 +131,8 @@ export const SUPPORT_CONFIG: ThreadKindConfig = {
   threadTable: 'support_threads',
   messageTable: 'support_thread_messages',
   hasAnimal: false,
+  hasAnimalType: false,
+  hasCategory: false,
   aiSettingKey: 'SUPPORT_AI',
   createEligibility: 'ANY_USER',
   responderRequiresApprovedVet: false,

@@ -12,7 +12,12 @@ import type { AuditService } from '../../audit/audit.service.js';
 import type { AuthorizationService } from '../../authorization/authorization.service.js';
 import type { AuthPrincipal } from '../../authorization/authorization.types.js';
 import type { AnimalOwnershipRepository } from '../../animals/infrastructure/animal-ownership.repository.js';
-import type { MessageSource, ThreadSide } from '../domain/thread.constants.js';
+import type {
+  ConsultationAnimalType,
+  InquiryCategory,
+  MessageSource,
+  ThreadSide,
+} from '../domain/thread.constants.js';
 import { ThreadPolicy } from '../domain/thread.policy.js';
 import {
   toThreadDTO,
@@ -127,7 +132,13 @@ export class SupportThreadService {
 
   async create(
     actor: ThreadActor,
-    input: { body: string; animalId?: string | null; imageKeys?: string[] },
+    input: {
+      body: string;
+      animalId?: string | null;
+      animalType?: ConsultationAnimalType | null;
+      category?: InquiryCategory | null;
+      imageKeys?: string[];
+    },
   ): Promise<ThreadDTO> {
     if (this.cfg.createEligibility === 'APPROVED_VET') {
       this.authz.assertApprovedVeterinarian(actor.principal);
@@ -153,7 +164,12 @@ export class SupportThreadService {
     const now = new Date();
     const thread = await this.db.transaction(async (tx) => {
       const created = await this.repo.create(
-        { createdByUserId: actor.principal.userId, animalId },
+        {
+          createdByUserId: actor.principal.userId,
+          animalId,
+          animalType: this.cfg.hasAnimalType ? (input.animalType ?? null) : null,
+          category: this.cfg.hasCategory ? (input.category ?? 'GENERAL') : null,
+        },
         tx,
       );
       const messageData: CreateThreadMessageData = {
@@ -174,6 +190,8 @@ export class SupportThreadService {
           metadata: {
             [`${this.cfg.kind.toLowerCase()}Id`]: created.id,
             animalId,
+            animalType: this.cfg.hasAnimalType ? (input.animalType ?? null) : undefined,
+            category: this.cfg.hasCategory ? (input.category ?? 'GENERAL') : undefined,
             imageCount: imageKeys.length,
           },
           context: actor.context,

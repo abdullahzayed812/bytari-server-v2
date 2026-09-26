@@ -51,6 +51,9 @@ export class ThreadController {
     const dto = await this.service.create(this.actor(req), {
       body: body.body,
       animalId: this.cfg.hasAnimal && 'animalId' in body ? (body.animalId ?? null) : null,
+      animalType:
+        this.cfg.hasAnimalType && 'animalType' in body ? (body.animalType ?? null) : null,
+      category: this.cfg.hasCategory && 'category' in body ? body.category : null,
       imageKeys: 'imageKeys' in body ? body.imageKeys : undefined,
     });
     sendSuccess(res, dto, StatusCodes.CREATED);
@@ -72,6 +75,7 @@ export class ThreadController {
       page: q.page,
       pageSize: q.pageSize,
       status: q.status,
+      category: this.cfg.hasCategory ? q.category : undefined,
     });
     sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
   };
@@ -83,6 +87,7 @@ export class ThreadController {
       pageSize: q.pageSize,
       status: q.status,
       createdByUserId: q.createdBy,
+      category: this.cfg.hasCategory ? q.category : undefined,
     });
     sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
   };

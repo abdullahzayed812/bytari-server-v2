@@ -1,5 +1,10 @@
 import type { Knex } from 'knex';
-import type { MessageSource } from '../domain/thread.constants.js';
+import {
+  THREAD_PREVIEW_CHARS,
+  type ConsultationAnimalType,
+  type InquiryCategory,
+  type MessageSource,
+} from '../domain/thread.constants.js';
 import {
   rowToThread,
   rowToThreadMessage,
@@ -14,11 +19,15 @@ export interface ThreadRepositoryConfig {
   threadTable: string;
   messageTable: string;
   hasAnimal: boolean;
+  hasAnimalType: boolean;
+  hasCategory: boolean;
 }
 
 export interface CreateThreadData {
   createdByUserId: string;
   animalId: string | null;
+  animalType?: ConsultationAnimalType | null;
+  category?: InquiryCategory | null;
 }
 
 export interface CreateThreadMessageData {
@@ -49,14 +58,36 @@ export class ThreadRepository {
     return trx ?? this.db;
   }
 
+  /**
+   * `t.*` plus the opening message's excerpt as `first_message_preview` — one
+   * correlated sub-select per row (indexed by `thread_id`), so list pages stay
+   * a single query. A soft-deleted opener yields `null`.
+   */
+  private selectWithPreview(conn: Knex | Knex.Transaction): Knex.QueryBuilder {
+    const msg = this.cfg.messageTable;
+    return conn(`${this.cfg.threadTable} as t`).select(
+      't.*',
+      conn.raw(
+        `(SELECT CASE WHEN m.deleted_at IS NULL THEN left(m.body, ?) END
+            FROM ?? AS m WHERE m.thread_id = t.id
+            ORDER BY m.created_at ASC, m.id ASC LIMIT 1) AS first_message_preview`,
+        [THREAD_PREVIEW_CHARS, msg],
+      ),
+    );
+  }
+
   async findById(id: string, trx?: Knex.Transaction): Promise<SupportThread | null> {
-    const row = await this.conn(trx)<ThreadRow>(this.cfg.threadTable).where({ id }).first();
+    const row = (await this.selectWithPreview(this.conn(trx)).where('t.id', id).first()) as
+      | ThreadRow
+      | undefined;
     return row ? rowToThread(row) : null;
   }
 
   async create(data: CreateThreadData, trx: Knex.Transaction): Promise<SupportThread> {
     const insert: Record<string, unknown> = { created_by_user_id: data.createdByUserId };
     if (this.cfg.hasAnimal) insert.animal_id = data.animalId;
+    if (this.cfg.hasAnimalType) insert.animal_type = data.animalType ?? null;
+    if (this.cfg.hasCategory) insert.category = data.category ?? null;
     const [row] = (await trx(this.cfg.threadTable).insert(insert).returning('*')) as ThreadRow[];
     if (!row) throw new Error('thread insert returned no row');
     return rowToThread(row);
@@ -105,8 +136,9 @@ export class ThreadRepository {
   }
 
   private applyList(qb: Knex.QueryBuilder, filter: ListThreadsFilter): Knex.QueryBuilder {
-    if (filter.status) qb.where('status', filter.status);
-    if (filter.createdByUserId) qb.where('created_by_user_id', filter.createdByUserId);
+    if (filter.status) qb.where('t.status', filter.status);
+    if (filter.createdByUserId) qb.where('t.created_by_user_id', filter.createdByUserId);
+    if (filter.category && this.cfg.hasCategory) qb.where('t.category', filter.category);
     return qb;
   }
 
@@ -114,19 +146,19 @@ export class ThreadRepository {
     filter: ListThreadsFilter,
     trx?: Knex.Transaction,
   ): Promise<{ items: SupportThread[]; total: number }> {
-    const countRow = await this.applyList(this.conn(trx)<ThreadRow>(this.cfg.threadTable), filter)
-      .count<{ count: string }>({ count: '*' })
-      .first();
-    const total = Number(countRow?.count ?? 0);
-
-    const rows: ThreadRow[] = await this.applyList(
-      this.conn(trx)<ThreadRow>(this.cfg.threadTable),
+    const countRow = (await this.applyList(
+      this.conn(trx)(`${this.cfg.threadTable} as t`),
       filter,
     )
-      .orderByRaw('last_message_at desc nulls last')
-      .orderBy('created_at', 'desc')
+      .count({ count: '*' })
+      .first()) as { count: string } | undefined;
+    const total = Number(countRow?.count ?? 0);
+
+    const rows = (await this.applyList(this.selectWithPreview(this.conn(trx)), filter)
+      .orderByRaw('t.last_message_at desc nulls last')
+      .orderBy('t.created_at', 'desc')
       .limit(filter.pageSize)
-      .offset((filter.page - 1) * filter.pageSize);
+      .offset((filter.page - 1) * filter.pageSize)) as ThreadRow[];
 
     return { items: rows.map(rowToThread), total };
   }

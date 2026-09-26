@@ -1,4 +1,10 @@
-import type { MessageSource, ThreadKind, ThreadStatus } from './thread.constants.js';
+import type {
+  ConsultationAnimalType,
+  InquiryCategory,
+  MessageSource,
+  ThreadKind,
+  ThreadStatus,
+} from './thread.constants.js';
 
 // --- internal aggregates -------------------------------------------
 
@@ -6,6 +12,12 @@ export interface SupportThread {
   id: string;
   createdByUserId: string;
   animalId: string | null;
+  /** CONSULTATION only — generic animal type (may be set without an owned animal). */
+  animalType: ConsultationAnimalType | null;
+  /** INQUIRY only. */
+  category: InquiryCategory | null;
+  /** Excerpt of the first (opening) message, when the query loaded it. */
+  preview: string | null;
   status: ThreadStatus;
   senderBlockedAt: string | null;
   aiResponded: boolean;
@@ -36,6 +48,13 @@ export interface ThreadDTO {
   status: ThreadStatus;
   createdByUserId: string;
   animalId: string | null;
+  animalType: ConsultationAnimalType | null;
+  category: InquiryCategory | null;
+  /**
+   * Card title — threads have no separate title field, so the card shows the
+   * beginning of the opening message (null for a soft-deleted opener).
+   */
+  preview: string | null;
   senderBlocked: boolean;
   aiResponded: boolean;
   lastMessageAt: string | null;
@@ -63,6 +82,12 @@ export interface ThreadRow {
   id: string;
   created_by_user_id: string;
   animal_id?: string | null;
+  /** Only on `consultations`. */
+  animal_type?: string | null;
+  /** Only on `inquiries`. */
+  category?: string | null;
+  /** Computed by the list/find queries (sub-select), not a column. */
+  first_message_preview?: string | null;
   status: string;
   sender_blocked_at: Date | null;
   ai_responded: boolean;
@@ -90,6 +115,9 @@ export function rowToThread(row: ThreadRow): SupportThread {
     id: row.id,
     createdByUserId: row.created_by_user_id,
     animalId: row.animal_id ?? null,
+    animalType: (row.animal_type as ConsultationAnimalType | null | undefined) ?? null,
+    category: (row.category as InquiryCategory | null | undefined) ?? null,
+    preview: row.first_message_preview ?? null,
     status: row.status as ThreadStatus,
     senderBlockedAt: row.sender_blocked_at ? row.sender_blocked_at.toISOString() : null,
     aiResponded: row.ai_responded,
@@ -121,6 +149,9 @@ export function toThreadDTO(kind: ThreadKind, t: SupportThread): ThreadDTO {
     status: t.status,
     createdByUserId: t.createdByUserId,
     animalId: t.animalId,
+    animalType: t.animalType,
+    category: t.category,
+    preview: t.preview,
     senderBlocked: t.senderBlockedAt !== null,
     aiResponded: t.aiResponded,
     lastMessageAt: t.lastMessageAt,
@@ -153,4 +184,6 @@ export interface ListThreadsFilter {
   pageSize: number;
   status?: ThreadStatus;
   createdByUserId?: string;
+  /** INQUIRY only. */
+  category?: InquiryCategory;
 }

@@ -71,3 +71,27 @@ export const AI_PERMISSION_KEYS = ['ai.settings.manage'] as const;
 
 export const AI_SETTING_KEYS = ['CONSULTATION_AI', 'INQUIRY_AI', 'SUPPORT_AI'] as const;
 export type AiSettingKey = (typeof AI_SETTING_KEYS)[number];
+
+/**
+ * Generic animal type a CONSULTATION may name instead of an owned animal —
+ * deliberately the SAME vocabulary the vet-services marketplace already uses
+ * (`VET_SERVICE_ANIMAL_TYPES`), not a new one. DB CHECK
+ * `chk_consultations_animal_type` re-encodes it.
+ */
+export { VET_SERVICE_ANIMAL_TYPES as CONSULTATION_ANIMAL_TYPES } from '../../vet-services/domain/vet-service.constants.js';
+export type { VetServiceAnimalType as ConsultationAnimalType } from '../../vet-services/domain/vet-service.constants.js';
+
+/** INQUIRY categories. DB CHECK `chk_inquiries_category` re-encodes it. */
+export const INQUIRY_CATEGORIES = [
+  'EMERGENCY',
+  'GENERAL',
+  'SURGERY',
+  'MEDICATION',
+  'DISEASES',
+  'NUTRITION',
+  'OTHER',
+] as const;
+export type InquiryCategory = (typeof INQUIRY_CATEGORIES)[number];
+
+/** Characters of the first message shown as a list-card excerpt. */
+export const THREAD_PREVIEW_CHARS = 140;
