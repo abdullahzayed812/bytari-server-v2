@@ -20,6 +20,8 @@ export function rowToUser(row: UserRow): User {
     phone: row.phone,
     gender: (row.gender as Gender | null) ?? null,
     country: row.country,
+    governorate: row.governorate ?? null,
+    specialization: row.specialization ?? null,
     avatarKey: row.avatar_key,
     status: row.status as UserStatus,
     veterinarianStatus: row.veterinarian_status as VeterinarianStatus,
@@ -46,6 +48,8 @@ export function toPublicUser(user: User, avatarUrl: string | null = null): Publi
     phone: user.phone,
     gender: user.gender,
     country: user.country,
+    governorate: user.governorate,
+    specialization: user.specialization,
     avatarUrl,
     status: user.status,
     veterinarianStatus: user.veterinarianStatus,
@@ -64,6 +68,7 @@ export function toUserSummary(user: User, avatarUrl: string | null = null): User
     lastName: user.lastName,
     veterinarianStatus: user.veterinarianStatus,
     traderStatus: user.traderStatus,
+    specialization: user.specialization,
     avatarUrl,
   };
 }

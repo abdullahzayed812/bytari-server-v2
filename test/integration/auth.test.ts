@@ -22,7 +22,7 @@ describe('POST /auth/register', () => {
     const email = uniqueEmail();
     const res = await request(app)
       .post('/api/v1/auth/register')
-      .send({ email, password: 'a-very-strong-password', firstName: 'Sam', lastName: 'Doe' });
+      .send({ email, password: 'a-very-strong-password', firstName: 'Sam', lastName: 'Doe', phone: '+9647700000001' });
 
     expect(res.status).toBe(201);
     expect(res.body.data.user).toMatchObject({
@@ -53,7 +53,7 @@ describe('POST /auth/register', () => {
     const email = uniqueEmail();
     const res = await request(app)
       .post('/api/v1/auth/register')
-      .send({ email, password: 'a-very-strong-password', firstName: 'Sam', lastName: 'Doe' });
+      .send({ email, password: 'a-very-strong-password', firstName: 'Sam', lastName: 'Doe', phone: '+9647700000001' });
 
     const animals = await request(app)
       .get('/api/v1/animals')
@@ -66,7 +66,7 @@ describe('POST /auth/register', () => {
     const email = uniqueEmail();
     await request(app)
       .post('/api/v1/auth/register')
-      .send({ email, password: 'plaintext-secret-123', firstName: 'A', lastName: 'B' });
+      .send({ email, password: 'plaintext-secret-123', firstName: 'A', lastName: 'B', phone: '+9647700000001' });
 
     const row = (await getTestDb()('users').where({ email }).first()) as { password_hash: string };
     expect(row.password_hash.startsWith('$argon2id$')).toBe(true);
@@ -75,7 +75,13 @@ describe('POST /auth/register', () => {
 
   it('rejects a duplicate email with 409', async () => {
     const email = uniqueEmail();
-    const body = { email, password: 'a-very-strong-password', firstName: 'A', lastName: 'B' };
+    const body = {
+      email,
+      password: 'a-very-strong-password',
+      firstName: 'A',
+      lastName: 'B',
+      phone: '+9647700000001',
+    };
     await request(app).post('/api/v1/auth/register').send(body);
     const res = await request(app).post('/api/v1/auth/register').send(body);
     expect(res.status).toBe(409);
@@ -100,6 +106,7 @@ describe('POST /auth/register', () => {
         password: 'a-very-strong-password',
         firstName: 'A',
         lastName: 'B',
+        phone: '+9647700000001',
         role: 'ADMIN',
         roles: ['ADMIN'],
         isVeterinarian: true,
@@ -124,19 +131,22 @@ describe('POST /auth/register', () => {
     expect(me.body.data.user.avatarUrl).toBeNull();
   });
 
-  it('accepts optional gender / country and round-trips them through GET /auth/me and verify-email', async () => {
+  it('accepts optional gender / country + governorate and round-trips them through GET /auth/me and verify-email', async () => {
     const email = uniqueEmail();
     const res = await request(app).post('/api/v1/auth/register').send({
       email,
       password: 'a-very-strong-password',
       firstName: 'A',
       lastName: 'B',
+      phone: '+9647700000001',
       gender: 'FEMALE',
       country: 'jo',
+      governorate: 'Amman',
     });
     expect(res.status).toBe(201);
     expect(res.body.data.user.gender).toBe('FEMALE');
     expect(res.body.data.user.country).toBe('JO'); // auto-uppercased
+    expect(res.body.data.user.governorate).toBe('Amman'); // free text outside Iraq
 
     const me = await request(app)
       .get('/api/v1/auth/me')
@@ -158,6 +168,7 @@ describe('POST /auth/register', () => {
       password: 'a-very-strong-password',
       firstName: 'A',
       lastName: 'B',
+      phone: '+9647700000001',
       gender: 'OTHER',
     });
     expect(res.status).toBe(422);
@@ -170,6 +181,7 @@ describe('POST /auth/register', () => {
       password: 'a-very-strong-password',
       firstName: 'A',
       lastName: 'B',
+      phone: '+9647700000001',
       country: 'jor', // 3 letters — still invalid after auto-uppercasing
     });
     expect(res.status).toBe(422);
@@ -184,7 +196,15 @@ describe('GET /users/:id', () => {
     const res = await request(app).get(`/api/v1/users/${u.id}`).set(bearer(viewer.accessToken));
     expect(res.status).toBe(200);
     expect(Object.keys(res.body.data).sort()).toEqual(
-      ['avatarUrl', 'firstName', 'id', 'lastName', 'veterinarianStatus', 'traderStatus'].sort(),
+      [
+        'avatarUrl',
+        'firstName',
+        'id',
+        'lastName',
+        'specialization',
+        'veterinarianStatus',
+        'traderStatus',
+      ].sort(),
     );
     expect(res.body.data.avatarUrl).toBeNull();
   });

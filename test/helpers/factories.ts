@@ -74,6 +74,7 @@ export async function registerUser(
       password,
       firstName: overrides.firstName ?? 'Test',
       lastName: overrides.lastName ?? 'User',
+      phone: '+9647700000000',
     });
   if (res.status !== 201) {
     throw new Error(`registerUser failed: ${res.status} ${JSON.stringify(res.body)}`);
@@ -303,6 +304,30 @@ export async function addOrganizationMember(
   organizationId: string,
   input: { userId: string; role: 'VETERINARIAN' | 'STAFF' },
 ): Promise<{ id: string; roleKey: string }> {
+  // A FARM takes veterinarians ONLY through its join code / QR — the direct
+  // add endpoint rejects it (see farm-join.test / farm-vet-join-code.test).
+  // Suites that merely need "a vet of this farm" get the same membership row
+  // the join flow creates, seeded directly.
+  const db = getTestDb();
+  const org = (await db('organizations').where({ id: organizationId }).first()) as
+    | { type: string }
+    | undefined;
+  if (org?.type === 'FARM' && input.role === 'VETERINARIAN') {
+    const role = (await db('organization_roles').where({ key: 'VETERINARIAN' }).first()) as {
+      id: string;
+    };
+    const [row] = (await db('organization_memberships')
+      .insert({
+        organization_id: organizationId,
+        user_id: input.userId,
+        organization_role_id: role.id,
+        status: 'ACTIVE',
+      })
+      .onConflict(['organization_id', 'user_id'])
+      .merge({ organization_role_id: role.id, status: 'ACTIVE' })
+      .returning('id')) as Array<{ id: string }>;
+    return { id: (row as { id: string }).id, roleKey: 'VETERINARIAN' };
+  }
   const res = await request(app)
     .post(`/api/v1/organizations/${organizationId}/members`)
     .set(bearer(actorToken))
@@ -2010,4 +2035,37 @@ export async function createSyndicate(
     throw new Error(`createSyndicate failed: ${res.status} ${JSON.stringify(res.body)}`);
   }
   return { id: res.body.data.id as string, name: res.body.data.name as string };
+}
+
+// --- farm daily records (server-dated) --------------------------
+
+const DAILY_RECORD_TABLES = {
+  poultry: { table: 'poultry_daily_records', fk: 'poultry_flock_id' },
+  sheep: { table: 'sheep_daily_records', fk: 'sheep_batch_id' },
+  cattle: { table: 'cattle_daily_records', fk: 'cattle_batch_id' },
+} as const;
+
+/**
+ * Insert a HISTORICAL daily record directly (test setup only). The API no
+ * longer accepts a client `recordDate` — it always records "today" — so
+ * multi-day fixtures (summaries, the seven-day cap) are seeded here.
+ */
+export async function seedDailyRecordRow(
+  kind: keyof typeof DAILY_RECORD_TABLES,
+  batchId: string,
+  organizationId: string,
+  recordDate: string,
+  fields: { feedKg?: number; waterLiters?: number; mortalityCount?: number; expenseAmount?: number } = {},
+): Promise<void> {
+  const { table, fk } = DAILY_RECORD_TABLES[kind];
+  await getTestDb()(table).insert({
+    [fk]: batchId,
+    organization_id: organizationId,
+    organization_type: 'FARM',
+    record_date: recordDate,
+    feed_kg: fields.feedKg ?? 0,
+    water_liters: fields.waterLiters ?? 0,
+    mortality_count: fields.mortalityCount ?? 0,
+    expense_amount: fields.expenseAmount ?? 0,
+  });
 }

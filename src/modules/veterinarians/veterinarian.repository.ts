@@ -17,6 +17,8 @@ export interface PendingApplicationRecord extends VeterinarianApplicationRecord 
     email: string;
     firstName: string;
     lastName: string;
+    phone: string | null;
+    specialization: string | null;
   };
 }
 
@@ -101,7 +103,13 @@ export class VeterinarianRepository {
     const total = Number(countRow?.count ?? 0);
 
     const rows: Array<
-      VeterinarianApplicationRow & { u_email: string; u_first_name: string; u_last_name: string }
+      VeterinarianApplicationRow & {
+        u_email: string;
+        u_first_name: string;
+        u_last_name: string;
+        u_phone: string | null;
+        u_specialization: string | null;
+      }
     > = await this.conn(trx)(`${TABLE} as a`)
       .join('users as u', 'u.id', 'a.user_id')
       .where('a.status', 'PENDING')
@@ -113,6 +121,8 @@ export class VeterinarianRepository {
         'u.email as u_email',
         'u.first_name as u_first_name',
         'u.last_name as u_last_name',
+        'u.phone as u_phone',
+        'u.specialization as u_specialization',
       );
 
     const items = rows.map((row) => {
@@ -123,6 +133,8 @@ export class VeterinarianRepository {
           email: row.u_email,
           firstName: row.u_first_name,
           lastName: row.u_last_name,
+          phone: row.u_phone,
+          specialization: row.u_specialization,
         },
       };
     });

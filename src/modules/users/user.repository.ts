@@ -43,6 +43,8 @@ export class UserRepository {
         phone: data.phone ?? null,
         gender: data.gender ?? null,
         country: data.country ?? null,
+        governorate: data.governorate ?? null,
+        specialization: data.specialization ?? null,
         // Omitted → the column default (`ACTIVE`) applies. Only
         // `AuthService.register()` passes `PENDING_VERIFICATION` explicitly.
         ...(data.status !== undefined ? { status: data.status } : {}),
@@ -59,6 +61,8 @@ export class UserRepository {
     if (patch.phone !== undefined) dbPatch.phone = patch.phone;
     if (patch.gender !== undefined) dbPatch.gender = patch.gender;
     if (patch.country !== undefined) dbPatch.country = patch.country;
+    if (patch.governorate !== undefined) dbPatch.governorate = patch.governorate;
+    if (patch.specialization !== undefined) dbPatch.specialization = patch.specialization;
     if (patch.avatarKey !== undefined) dbPatch.avatar_key = patch.avatarKey;
     if (patch.status !== undefined) dbPatch.status = patch.status;
     if (patch.veterinarianStatus !== undefined)

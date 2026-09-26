@@ -23,6 +23,7 @@ import type {
   AuthResult,
   AuthTokens,
   LoginInput,
+  PasswordResetRequestResult,
   RegisterInput,
   RegisterResult,
   ResendVerificationResult,
@@ -49,6 +50,12 @@ export class AuthService {
     private readonly audit: AuditService,
     private readonly emailVerification: EmailVerificationService,
     logger: Logger,
+    /**
+     * Same one-time-code service, bound to the `PASSWORD_RESET` purpose (see
+     * `email_verifications.purpose`). Optional only so narrow unit harnesses
+     * need not build it; the container always injects it.
+     */
+    private readonly passwordResetCodes: EmailVerificationService | null = null,
   ) {
     this.log = logger.child({ component: 'auth-service' });
   }
@@ -84,6 +91,9 @@ export class AuthService {
           phone: input.phone ?? null,
           gender: input.gender ?? null,
           country: input.country ?? null,
+          governorate: input.country ? (input.governorate ?? null) : null,
+          // Specialization is a veterinarian attribute — a Pet Owner signup never stores one.
+          specialization: isVeterinarian ? (input.specialization ?? null) : null,
           status: isVeterinarian ? 'ACTIVE' : 'PENDING_VERIFICATION',
           registrationType: isVeterinarian ? 'VETERINARIAN' : 'PET_OWNER',
         },
@@ -186,6 +196,84 @@ export class AuthService {
       codeExpiresInSeconds: this.emailVerification.codeTtlSeconds,
       resendAvailableInSeconds: this.emailVerification.resendCooldownSeconds,
     };
+  }
+
+  /**
+   * Forgot password, step 1. Uniform response for an unknown / inactive email
+   * (no account-enumeration signal); only a real `ACTIVE` account gets a code.
+   * A resend inside the cooldown is a 429 — same contract as
+   * `resendVerification`. Issuing a code invalidates any previous reset code.
+   */
+  async requestPasswordReset(email: string, ctx: AuditContext): Promise<PasswordResetRequestResult> {
+    const codes = this.requirePasswordResetCodes();
+    const user = await this.users.findByEmail(email);
+    if (user && user.status === 'ACTIVE') {
+      const waitSeconds = await codes.resendAvailableInSeconds(user.id);
+      if (waitSeconds > 0) {
+        throw new RateLimitError(`Please wait ${waitSeconds}s before requesting another code`, {
+          code: ErrorCode.RATE_LIMITED,
+        });
+      }
+      const { code } = await this.db.transaction((tx) => codes.issueCode(user.id, tx));
+      await codes.sendCodeEmail(user.email, user.firstName, code);
+      await this.audit.recordSafe({
+        action: AuditAction.PASSWORD_RESET_REQUESTED,
+        entityType: AuditEntityType.USER,
+        entityId: user.id,
+        actorUserId: null,
+        context: ctx,
+      });
+    }
+    return {
+      codeExpiresInSeconds: codes.codeTtlSeconds,
+      resendAvailableInSeconds: codes.resendCooldownSeconds,
+    };
+  }
+
+  /**
+   * Forgot password, step 2: check the code (expiry / attempt lockout /
+   * one-time use — `EmailVerificationService.verify`), set the new Argon2id
+   * hash, and revoke EVERY refresh session so any stolen / old login is cut
+   * off. No tokens are issued — the user signs in with the new password.
+   * An unknown email is indistinguishable from a wrong code.
+   */
+  async resetPassword(
+    input: { email: string; code: string; newPassword: string },
+    ctx: AuditContext,
+  ): Promise<{ revokedSessions: number }> {
+    const codes = this.requirePasswordResetCodes();
+    const user = await this.users.findByEmail(input.email);
+    if (!user || user.status !== 'ACTIVE') {
+      throw new BadRequestError('Invalid or expired verification code', {
+        code: ErrorCode.INVALID_VERIFICATION_CODE,
+      });
+    }
+
+    await codes.verify(user.id, input.code);
+    const passwordHash = await this.passwords.hash(input.newPassword);
+
+    return this.db.transaction(async (tx) => {
+      await this.users.setPasswordHash(user.id, passwordHash, tx);
+      await codes.invalidateAll(user.id, tx);
+      const revokedSessions = await this.sessions.revokeAllForUserInTransaction(user.id, tx);
+      await this.audit.record(
+        {
+          action: AuditAction.PASSWORD_RESET_COMPLETED,
+          entityType: AuditEntityType.USER,
+          entityId: user.id,
+          actorUserId: user.id,
+          metadata: { revokedSessions },
+          context: ctx,
+        },
+        tx,
+      );
+      return { revokedSessions };
+    });
+  }
+
+  private requirePasswordResetCodes(): EmailVerificationService {
+    if (!this.passwordResetCodes) throw new InternalError('Password reset is not configured');
+    return this.passwordResetCodes;
   }
 
   /**

@@ -49,7 +49,7 @@ const PROTECTED_CALLS: Array<{ method: 'get' | 'post'; path: string; body?: obje
 async function registerAs(accountType: 'PET_OWNER' | 'VETERINARIAN', email = uniqueEmail(accountType.toLowerCase())) {
   const res = await request(app)
     .post(api('/auth/register'))
-    .send({ email, password: PASSWORD, firstName: 'Onboard', lastName: 'Tester', accountType });
+    .send({ email, password: PASSWORD, firstName: 'Onboard', lastName: 'Tester', phone: '+9647700000001', accountType });
   expect(res.status).toBe(201);
   return { email, res, token: res.body.data.tokens.accessToken as string, userId: res.body.data.user.id as string };
 }

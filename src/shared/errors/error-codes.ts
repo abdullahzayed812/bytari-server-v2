@@ -80,6 +80,10 @@ export const ErrorCode = {
   POULTRY_FLOCK_NOT_ACTIVE: 'POULTRY_FLOCK_NOT_ACTIVE',
   /** A daily record already exists for that flock + calendar day. */
   POULTRY_DAILY_RECORD_DUPLICATE_DATE: 'POULTRY_DAILY_RECORD_DUPLICATE_DATE',
+  /** A batch already has its seven daily records (Day 1…Day 7) — farm types share it. */
+  DAILY_RECORD_LIMIT_REACHED: 'DAILY_RECORD_LIMIT_REACHED',
+  /** Farms take veterinarians only through the join code / QR, never by direct add. */
+  FARM_VETERINARIAN_REQUIRES_JOIN_CODE: 'FARM_VETERINARIAN_REQUIRES_JOIN_CODE',
 
   // --- Sheep & Cattle Farms ---
   /** The sheep batch is CLOSED — updates are refused. */

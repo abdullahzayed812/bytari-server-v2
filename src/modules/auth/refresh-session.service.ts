@@ -205,4 +205,13 @@ export class RefreshSessionService {
       return count;
     });
   }
+
+  /**
+   * Revoke every session inside the CALLER's transaction, without its own
+   * audit row — for flows (password reset) that audit the whole operation
+   * atomically themselves.
+   */
+  async revokeAllForUserInTransaction(userId: string, trx: Knex.Transaction): Promise<number> {
+    return this.repo.revokeAllForUser(userId, trx);
+  }
 }

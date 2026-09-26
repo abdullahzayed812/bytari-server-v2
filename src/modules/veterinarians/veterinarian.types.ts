@@ -46,6 +46,8 @@ export interface PendingApplicationSummary extends VeterinarianApplication {
     email: string;
     firstName: string;
     lastName: string;
+    phone: string | null;
+    specialization: string | null;
   };
   /** Admin-only view of documents, including a short-lived signed download URL. */
   documents: AdminVeterinarianApplicationDocument[];

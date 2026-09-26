@@ -15,6 +15,18 @@ export interface EmailVerificationConfig {
   resendCooldownSeconds: number;
 }
 
+/** Subject + wording of the email that carries the code. */
+export interface OneTimeCodeEmailCopy {
+  subject: string;
+  /** Sentence introducing the code, e.g. "Your Bytari verification code is:". */
+  intro: string;
+}
+
+const DEFAULT_COPY: OneTimeCodeEmailCopy = {
+  subject: 'Your Bytari verification code',
+  intro: 'Your Bytari verification code is:',
+};
+
 export interface EmailVerificationActor {
   actorUserId: string | null;
   context?: AuditContext;
@@ -49,6 +61,7 @@ export class EmailVerificationService {
     private readonly audit: AuditService,
     private readonly config: EmailVerificationConfig,
     logger: Logger,
+    private readonly copy: OneTimeCodeEmailCopy = DEFAULT_COPY,
   ) {
     this.log = logger.child({ component: 'email-verification' });
   }
@@ -81,14 +94,14 @@ export class EmailVerificationService {
     const minutes = Math.round(this.config.codeTtlSeconds / 60);
     await this.email.send({
       to,
-      subject: 'Your Bytari verification code',
+      subject: this.copy.subject,
       text:
         `Hi ${firstName},\n\n` +
-        `Your Bytari verification code is: ${code}\n\n` +
+        `${this.copy.intro} ${code}\n\n` +
         `This code expires in ${minutes} minutes. If you did not request this, you can ignore this email.`,
       html:
         `<p>Hi ${firstName},</p>` +
-        `<p>Your Bytari verification code is:</p>` +
+        `<p>${this.copy.intro}</p>` +
         `<p style="font-size:28px;font-weight:bold;letter-spacing:4px;">${code}</p>` +
         `<p>This code expires in ${minutes} minutes. If you did not request this, you can ignore this email.</p>`,
     });
@@ -139,7 +152,19 @@ export class EmailVerificationService {
         code: ErrorCode.INVALID_VERIFICATION_CODE,
       });
     }
-    await this.repo.markConsumed(current.id);
+    // Conditional consume: a concurrent request that already used this code
+    // wins, and this one fails exactly like a stale code would.
+    const consumed = await this.repo.markConsumed(current.id);
+    if (!consumed) {
+      throw new BadRequestError('Invalid or expired verification code', {
+        code: ErrorCode.INVALID_VERIFICATION_CODE,
+      });
+    }
+  }
+
+  /** Invalidate every outstanding code of this purpose for the user. */
+  async invalidateAll(userId: string, trx?: Knex.Transaction): Promise<void> {
+    await this.repo.consumeAllForUser(userId, trx);
   }
 
   /** Audit trail — called by `AuthService` after a successful send/verify (never on a failed attempt; matches `login()` not auditing wrong passwords). */

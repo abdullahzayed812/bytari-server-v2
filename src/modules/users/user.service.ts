@@ -156,6 +156,16 @@ export class UserService {
   }
 
   /**
+   * Replace the password hash. Hashing + authorisation (a verified reset code)
+   * are the caller's job (`AuthService.resetPassword`); this only persists.
+   */
+  async setPasswordHash(id: string, passwordHash: string, trx: Knex.Transaction): Promise<void> {
+    const existing = await this.users.findById(id, trx);
+    if (!existing) throw new NotFoundError('User not found');
+    await this.users.update(id, { passwordHash }, trx);
+  }
+
+  /**
    * Change account status. SUSPENDED / DEACTIVATED also revoke every active
    * refresh session so the account cannot continue an existing login.
    */
@@ -220,6 +230,11 @@ export class UserService {
     trx: Knex.Transaction,
   ): Promise<User> {
     return this.users.update(id, { veterinarianStatus: status }, trx);
+  }
+
+  /** Set the (optional) veterinarian specialization. Used by the vet application inside its trx. */
+  applySpecialization(id: string, specialization: string | null, trx: Knex.Transaction): Promise<User> {
+    return this.users.update(id, { specialization }, trx);
   }
 
   /** Apply a trader-status transition. Used by the trader workflow inside its own trx. */

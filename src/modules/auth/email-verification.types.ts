@@ -1,3 +1,7 @@
+/** What a one-time code in `email_verifications` is for. */
+export const ONE_TIME_CODE_PURPOSES = ['EMAIL_VERIFICATION', 'PASSWORD_RESET'] as const;
+export type OneTimeCodePurpose = (typeof ONE_TIME_CODE_PURPOSES)[number];
+
 export interface EmailVerificationRow {
   id: string;
   user_id: string;
@@ -6,6 +10,7 @@ export interface EmailVerificationRow {
   attempts: number;
   consumed_at: Date | null;
   created_at: Date;
+  purpose: OneTimeCodePurpose;
 }
 
 export interface EmailVerificationRecord {

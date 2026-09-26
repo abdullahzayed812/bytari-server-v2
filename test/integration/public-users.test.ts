@@ -32,6 +32,8 @@ describe('GET /users/:id — authenticated name summary', () => {
       lastName: 'Adel',
       veterinarianStatus: 'NOT_APPLIED',
       traderStatus: 'NOT_REGISTERED',
+      // public professional info (veterinarian specialization) — null when unset
+      specialization: null,
       // resolved avatar URL (null until the user uploads one) — never the key
       avatarUrl: null,
     });

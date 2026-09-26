@@ -117,7 +117,12 @@ export class VeterinarianService {
 
   async apply(
     userId: string,
-    input: { note?: string | null; subType: VetApplicationSubType; documents: ApplyDocumentInput[] },
+    input: {
+      note?: string | null;
+      subType: VetApplicationSubType;
+      documents: ApplyDocumentInput[];
+      specialization?: string | null;
+    },
     ctx: AuditContext,
   ): Promise<VeterinarianApplication> {
     const user = await this.users.getById(userId);
@@ -164,6 +169,9 @@ export class VeterinarianService {
         await this.documents.create(data, tx);
       }
       await this.users.applyVeterinarianStatus(userId, 'PENDING', tx);
+      if (input.specialization !== undefined && input.specialization !== null) {
+        await this.users.applySpecialization(userId, input.specialization, tx);
+      }
       await this.audit.record(
         {
           action: AuditAction.VETERINARIAN_APPLICATION_CREATED,

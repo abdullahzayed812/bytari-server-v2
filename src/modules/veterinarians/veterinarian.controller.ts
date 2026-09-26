@@ -28,7 +28,12 @@ export class VeterinarianController {
     const body = validatedBody<ApplyBody>(req);
     const application = await this.vets.apply(
       auth.userId,
-      { note: body.note, subType: body.subType, documents: body.documents },
+      {
+        note: body.note,
+        subType: body.subType,
+        documents: body.documents,
+        specialization: body.specialization,
+      },
       auditContextFromRequest(req),
     );
     sendSuccess(res, application, StatusCodes.CREATED);

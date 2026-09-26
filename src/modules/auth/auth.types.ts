@@ -21,6 +21,8 @@ export interface RegisterInput {
   phone?: string | null;
   gender?: 'MALE' | 'FEMALE' | null;
   country?: string | null;
+  governorate?: string | null;
+  specialization?: string | null;
   /** Onboarding path — see `registerBodySchema.accountType`. Defaults to `PET_OWNER`. */
   accountType?: RegistrationType;
 }
@@ -47,6 +49,11 @@ export interface VerifyEmailInput {
 }
 
 export interface ResendVerificationResult {
+  codeExpiresInSeconds: number;
+  resendAvailableInSeconds: number;
+}
+
+export interface PasswordResetRequestResult {
   codeExpiresInSeconds: number;
   resendAvailableInSeconds: number;
 }

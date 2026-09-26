@@ -48,6 +48,8 @@ export const applyBodySchema = z
   .object({
     note: z.string().trim().max(1000).optional(),
     subType: z.enum(VET_APPLICATION_SUB_TYPES).default('VETERINARIAN'),
+    /** Optional specialization ("التخصص") — stored on the applicant's profile. */
+    specialization: z.string().trim().min(1).max(150).optional(),
     documents: z.array(applyDocument).max(2).default([]),
   })
   .superRefine((v, ctx) => {

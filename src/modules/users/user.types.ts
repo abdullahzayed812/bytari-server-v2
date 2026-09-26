@@ -42,6 +42,10 @@ export interface User {
   gender: Gender | null;
   /** ISO 3166-1 alpha-2, uppercase. */
   country: string | null;
+  /** Governorate / state / province within `country` (free text; Iraq validated against a list). */
+  governorate: string | null;
+  /** Optional veterinarian specialization ("التخصص"). */
+  specialization: string | null;
   /** Object-storage key of the avatar image, or `null`. */
   avatarKey: string | null;
   status: UserStatus;
@@ -61,6 +65,8 @@ export interface PublicUser {
   phone: string | null;
   gender: Gender | null;
   country: string | null;
+  governorate: string | null;
+  specialization: string | null;
   /**
    * Client-usable avatar URL — the public CDN URL when the bucket is public,
    * else a short-lived signed GET URL. The raw R2 key (`User.avatarKey`) is
@@ -91,6 +97,8 @@ export interface UserSummary {
   lastName: string;
   veterinarianStatus: VeterinarianStatus;
   traderStatus: TraderStatus;
+  /** Veterinarian specialization, when set — public professional info, not contact data. */
+  specialization: string | null;
   /** Same resolution rule as {@link PublicUser.avatarUrl}; never the raw key. */
   avatarUrl: string | null;
 }
@@ -103,6 +111,8 @@ export interface CreateUserData {
   phone?: string | null;
   gender?: Gender | null;
   country?: string | null;
+  governorate?: string | null;
+  specialization?: string | null;
   /**
    * Defaults to the DB column default (`ACTIVE`) when omitted — every caller
    * except `AuthService.register()` (which explicitly passes
@@ -119,6 +129,8 @@ export interface UpdateUserData {
   phone?: string | null;
   gender?: Gender | null;
   country?: string | null;
+  governorate?: string | null;
+  specialization?: string | null;
   avatarKey?: string | null;
   status?: UserStatus;
   veterinarianStatus?: VeterinarianStatus;
@@ -146,6 +158,8 @@ export interface UserRow {
   phone: string | null;
   gender: string | null;
   country: string | null;
+  governorate: string | null;
+  specialization: string | null;
   avatar_key: string | null;
   status: string;
   veterinarian_status: string;

@@ -33,6 +33,7 @@ import { OrganizationRepository } from './modules/organizations/infrastructure/o
 import { MembershipRepository } from './modules/organizations/infrastructure/membership.repository.js';
 import { OrganizationRbacRepository } from './modules/organizations/infrastructure/organization-rbac.repository.js';
 import { OrganizationFollowRepository } from './modules/organizations/infrastructure/organization-follow.repository.js';
+import { OrganizationLikeRepository } from './modules/organizations/infrastructure/organization-like.repository.js';
 import { OrganizationReviewRepository } from './modules/organizations/infrastructure/organization-review.repository.js';
 import { OrganizationService } from './modules/organizations/application/organization.service.js';
 import { MembershipService } from './modules/organizations/application/membership.service.js';
@@ -527,6 +528,20 @@ export function createContainer(deps: ContainerDeps): Container {
     config.auth.emailVerification,
     logger,
   );
+  // Same one-time-code machinery (TTL / attempts / cooldown), scoped to the
+  // PASSWORD_RESET purpose so reset and verification codes never interact.
+  const passwordResetCodeService = new EmailVerificationService(
+    db,
+    new EmailVerificationRepository(db, 'PASSWORD_RESET'),
+    emailService,
+    auditService,
+    config.auth.emailVerification,
+    logger,
+    {
+      subject: 'Reset your Bytari password',
+      intro: 'Your Bytari password reset code is:',
+    },
+  );
 
   // --- users -------------------------------------------------------
   const userRepository = new UserRepository(db);
@@ -551,6 +566,7 @@ export function createContainer(deps: ContainerDeps): Container {
     auditService,
     emailVerificationService,
     logger,
+    passwordResetCodeService,
   );
 
   // --- veterinarian workflow -----------------------------------
@@ -614,6 +630,10 @@ export function createContainer(deps: ContainerDeps): Container {
     organizationFollowRepository,
     organizationReviewRepository,
     logger,
+    new OrganizationLikeRepository(db),
+    membershipRepository,
+    auditService,
+    db,
   );
   const organizationBroadcastService = new OrganizationBroadcastService(
     organizationRepository,
@@ -1136,16 +1156,22 @@ export function createContainer(deps: ContainerDeps): Container {
     threadTable: 'consultations',
     messageTable: 'consultation_messages',
     hasAnimal: true,
+    hasAnimalType: true,
+    hasCategory: false,
   });
   const inquiryRepository = new ThreadRepository(db, {
     threadTable: 'inquiries',
     messageTable: 'inquiry_messages',
     hasAnimal: false,
+    hasAnimalType: false,
+    hasCategory: true,
   });
   const supportRepository = new ThreadRepository(db, {
     threadTable: 'support_threads',
     messageTable: 'support_thread_messages',
     hasAnimal: false,
+    hasAnimalType: false,
+    hasCategory: false,
   });
   const consultationAttachmentMedia = new ThreadAttachmentMedia(
     objectStorage,

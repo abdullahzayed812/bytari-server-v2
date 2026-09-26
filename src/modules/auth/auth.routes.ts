@@ -5,11 +5,13 @@ import type { Container } from '../../container.js';
 import { AuthController } from './auth.controller.js';
 import { authRateLimiter } from './auth.rate-limit.js';
 import {
+  forgotPasswordBodySchema,
   loginBodySchema,
   logoutBodySchema,
   refreshBodySchema,
   registerBodySchema,
   resendVerificationBodySchema,
+  resetPasswordBodySchema,
   verifyEmailBodySchema,
 } from './auth.schemas.js';
 
@@ -47,6 +49,19 @@ export function createAuthRouter(c: Container): Router {
     limiter,
     validate({ body: resendVerificationBodySchema }),
     asyncHandler(controller.resendVerification),
+  );
+  // Forgot password — public, rate-limited, anti-enumeration (uniform 200).
+  router.post(
+    '/forgot-password',
+    limiter,
+    validate({ body: forgotPasswordBodySchema }),
+    asyncHandler(controller.forgotPassword),
+  );
+  router.post(
+    '/reset-password',
+    limiter,
+    validate({ body: resetPasswordBodySchema }),
+    asyncHandler(controller.resetPassword),
   );
   router.post(
     '/refresh',

@@ -27,7 +27,7 @@ async function registerPending(overrides: { email?: string } = {}): Promise<{
   const password = 'a-very-strong-password';
   const res = await request(app)
     .post('/api/v1/auth/register')
-    .send({ email, password, firstName: 'Pending', lastName: 'User' });
+    .send({ email, password, firstName: 'Pending', lastName: 'User', phone: '+9647700000001' });
   if (res.status !== 201) {
     throw new Error(`registerPending failed: ${res.status} ${JSON.stringify(res.body)}`);
   }
@@ -246,7 +246,7 @@ describe('expiry & resend-cooldown — real elapsed time, short TTLs', () => {
     const email = uniqueEmail();
     const res = await request(shortApp)
       .post('/api/v1/auth/register')
-      .send({ email, password: 'a-very-strong-password', firstName: 'A', lastName: 'B' });
+      .send({ email, password: 'a-very-strong-password', firstName: 'A', lastName: 'B', phone: '+9647700000001' });
     expect(res.status).toBe(201);
     const code = extractVerificationCode(shortApp, email);
 
@@ -262,7 +262,7 @@ describe('expiry & resend-cooldown — real elapsed time, short TTLs', () => {
     const email = uniqueEmail();
     await request(shortApp)
       .post('/api/v1/auth/register')
-      .send({ email, password: 'a-very-strong-password', firstName: 'A', lastName: 'B' });
+      .send({ email, password: 'a-very-strong-password', firstName: 'A', lastName: 'B', phone: '+9647700000001' });
 
     await new Promise((resolve) => setTimeout(resolve, 1_200));
 
@@ -281,7 +281,7 @@ describe('expiry & resend-cooldown — real elapsed time, short TTLs', () => {
     const email = uniqueEmail();
     await request(shortApp)
       .post('/api/v1/auth/register')
-      .send({ email, password: 'a-very-strong-password', firstName: 'A', lastName: 'B' });
+      .send({ email, password: 'a-very-strong-password', firstName: 'A', lastName: 'B', phone: '+9647700000001' });
     const firstCode = extractVerificationCode(shortApp, email);
 
     await new Promise((resolve) => setTimeout(resolve, 1_200)); // clear the resend cooldown
