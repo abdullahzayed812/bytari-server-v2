@@ -43,7 +43,7 @@ export function ensureSchema(): Promise<void> {
  */
 export async function resetDb(): Promise<void> {
   const knex = getTestDb();
-  await knex.raw('TRUNCATE TABLE users RESTART IDENTITY CASCADE');
+  await truncateUsersRetryingDeadlocks(knex);
   // `pet_owner_store_categories` / `veterinarian_store_categories` are standalone
   // catalogue tables with no FK to `users`, so the cascade above never reaches
   // them — truncate explicitly so fixed-slug category fixtures start from a
@@ -57,6 +57,26 @@ export async function resetDb(): Promise<void> {
   await knex.raw('DELETE FROM role_permissions');
   await knex.raw('DELETE FROM organization_role_permissions');
   await seedCatalogues(knex);
+}
+
+/**
+ * Post-commit event handlers (notifications, realtime fan-out) are
+ * fire-and-forget, so a previous test's background insert can still be
+ * running when the next `beforeEach` truncates. Postgres then aborts one side
+ * with a deadlock (SQLSTATE 40P01) — it is the reset that loses, never an
+ * assertion. Retry just that case, briefly; anything else is rethrown.
+ */
+async function truncateUsersRetryingDeadlocks(knex: Knex, attempts = 4): Promise<void> {
+  for (let i = 1; ; i += 1) {
+    try {
+      await knex.raw('TRUNCATE TABLE users RESTART IDENTITY CASCADE');
+      return;
+    } catch (error) {
+      const code = (error as { code?: string }).code;
+      if (code !== '40P01' || i >= attempts) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 200 * i));
+    }
+  }
 }
 
 export async function closeTestDb(): Promise<void> {
