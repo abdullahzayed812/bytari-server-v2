@@ -17,8 +17,7 @@ import {
 const { app } = buildTestApp();
 
 const API = '/api/v1';
-const soon = (days: number): string =>
-  new Date(Date.now() + days * 86_400_000).toISOString();
+const soon = (days: number): string => new Date(Date.now() + days * 86_400_000).toISOString();
 
 async function book(
   token: string,

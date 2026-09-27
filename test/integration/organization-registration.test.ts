@@ -11,6 +11,7 @@ import {
   registerApprovedVet,
   registerPendingVet,
   registerUser,
+  fixtureBytes,
 } from '../helpers/factories.js';
 
 const { app, container } = buildTestApp();
@@ -123,7 +124,7 @@ describe('organization registration — gallery + license documents while PENDIN
       .send({ filename: 'a.jpg', mimeType: 'image/jpeg', size: 1024 });
     expect(upload.status).toBe(201);
     const storageKey = upload.body.data.storageKey as string;
-    await container.objectStorage.put(storageKey, Buffer.from('fake-bytes'), {
+    await container.objectStorage.put(storageKey, fixtureBytes('image/jpeg', 1024), {
       contentType: 'image/jpeg',
     });
 
@@ -144,7 +145,7 @@ describe('organization registration — gallery + license documents while PENDIN
       .set(bearer(owner.accessToken))
       .send({ filename: 'a.jpg', mimeType: 'image/jpeg', size: 1024 });
     const storageKey = upload.body.data.storageKey as string;
-    await container.objectStorage.put(storageKey, Buffer.from('fake-bytes'), {
+    await container.objectStorage.put(storageKey, fixtureBytes('image/jpeg', 1024), {
       contentType: 'image/jpeg',
     });
     await request(app)
@@ -160,7 +161,9 @@ describe('organization registration — gallery + license documents while PENDIN
     // The removal endpoint is keyed by storageKey — prove the key we read back
     // actually works, closing the loop the mobile edit screen depends on.
     const removed = await request(app)
-      .delete(`/api/v1/organizations/${org.id}/gallery?storageKey=${encodeURIComponent(storageKey)}`)
+      .delete(
+        `/api/v1/organizations/${org.id}/gallery?storageKey=${encodeURIComponent(storageKey)}`,
+      )
       .set(bearer(owner.accessToken));
     expect(removed.status).toBe(200);
     expect(removed.body.data.details.galleryUrls).toHaveLength(0);
@@ -169,14 +172,17 @@ describe('organization registration — gallery + license documents while PENDIN
 
   it('GET /organizations (listMine) exposes galleryUrls as a logo fallback — registration never sets a logo', async () => {
     const owner = await registerApprovedVet(app);
-    const org = await createOrganization(app, owner.accessToken, { type: 'VETERINARY_OFFICE', name: 'مكتب' });
+    const org = await createOrganization(app, owner.accessToken, {
+      type: 'VETERINARY_OFFICE',
+      name: 'مكتب',
+    });
 
     const upload = await request(app)
       .post(`/api/v1/organizations/${org.id}/gallery/upload-url`)
       .set(bearer(owner.accessToken))
       .send({ filename: 'a.jpg', mimeType: 'image/jpeg', size: 1024 });
     const storageKey = upload.body.data.storageKey as string;
-    await container.objectStorage.put(storageKey, Buffer.from('fake-bytes'), {
+    await container.objectStorage.put(storageKey, fixtureBytes('image/jpeg', 1024), {
       contentType: 'image/jpeg',
     });
     await request(app)
@@ -184,9 +190,7 @@ describe('organization registration — gallery + license documents while PENDIN
       .set(bearer(owner.accessToken))
       .send({ storageKey, mimeType: 'image/jpeg' });
 
-    const mine = await request(app)
-      .get('/api/v1/organizations')
-      .set(bearer(owner.accessToken));
+    const mine = await request(app).get('/api/v1/organizations').set(bearer(owner.accessToken));
     expect(mine.status).toBe(200);
     const row = mine.body.data.find((o: { id: string }) => o.id === org.id);
     expect(row).toBeDefined();
@@ -208,7 +212,7 @@ describe('organization registration — gallery + license documents while PENDIN
       .send({ filename: 'logo.jpg', mimeType: 'image/jpeg', size: 1024 });
     expect(upload.status).toBe(201);
     const storageKey = upload.body.data.storageKey as string;
-    await container.objectStorage.put(storageKey, Buffer.from('fake-bytes'), {
+    await container.objectStorage.put(storageKey, fixtureBytes('image/jpeg', 1024), {
       contentType: 'image/jpeg',
     });
 
@@ -241,7 +245,7 @@ describe('organization registration — gallery + license documents while PENDIN
       .send({ filename: 'logo.jpg', mimeType: 'image/jpeg', size: 1024 });
     expect(upload.status).toBe(201);
     const storageKey = upload.body.data.storageKey as string;
-    await container.objectStorage.put(storageKey, Buffer.from('fake-bytes'), {
+    await container.objectStorage.put(storageKey, fixtureBytes('image/jpeg', 1024), {
       contentType: 'image/jpeg',
     });
 
@@ -265,7 +269,7 @@ describe('organization registration — gallery + license documents while PENDIN
         .send({ filename: `doc${i}.jpg`, mimeType: 'image/jpeg', size: 1024 });
       expect(upload.status).toBe(201);
       const storageKey = upload.body.data.storageKey as string;
-      await container.objectStorage.put(storageKey, Buffer.from('fake-bytes'), {
+      await container.objectStorage.put(storageKey, fixtureBytes('image/jpeg', 1024), {
         contentType: 'image/jpeg',
       });
       const register = await request(app)

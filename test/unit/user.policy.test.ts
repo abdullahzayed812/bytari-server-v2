@@ -4,9 +4,7 @@ import type { AppError } from '../../src/shared/errors/app-error.js';
 
 describe('UserPolicy.assertAvatarUploadRequest', () => {
   it('accepts an allowed image MIME within the size limit', () => {
-    expect(() =>
-      UserPolicy.assertAvatarUploadRequest('image/png', 1024),
-    ).not.toThrow();
+    expect(() => UserPolicy.assertAvatarUploadRequest('image/png', 1024)).not.toThrow();
   });
 
   it('accepts exactly the 5 MiB boundary', () => {

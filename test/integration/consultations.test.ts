@@ -397,9 +397,21 @@ describe('consultations — AI response flow', () => {
     const id = c.body.data.id as string;
     expect(ai.calls).toBe(1);
 
-    const f1 = await sendThreadMessage(app, owner.accessToken, 'consultations', id, 'still limping');
+    const f1 = await sendThreadMessage(
+      app,
+      owner.accessToken,
+      'consultations',
+      id,
+      'still limping',
+    );
     expect(f1.status).toBe(201);
-    const f2 = await sendThreadMessage(app, owner.accessToken, 'consultations', id, 'and not eating');
+    const f2 = await sendThreadMessage(
+      app,
+      owner.accessToken,
+      'consultations',
+      id,
+      'and not eating',
+    );
     expect(f2.status).toBe(201);
     expect(ai.calls).toBe(3);
 
@@ -423,12 +435,22 @@ describe('consultations — AI response flow', () => {
     const id = c.body.data.id as string;
     expect(ai.calls).toBe(1); // the creation only
 
-    const reply = await sendThreadMessage(app, admin.accessToken, 'consultations', id, 'admin here');
+    const reply = await sendThreadMessage(
+      app,
+      admin.accessToken,
+      'consultations',
+      id,
+      'admin here',
+    );
     expect(reply.status).toBe(201);
     expect(ai.calls).toBe(1); // unchanged — no AI turn after a responder
 
     const list = await listThreadMessages(app, owner.accessToken, 'consultations', id);
-    expect(list.body.data.map((m: { source: string }) => m.source)).toEqual(['USER', 'AI', 'ADMIN']);
+    expect(list.body.data.map((m: { source: string }) => m.source)).toEqual([
+      'USER',
+      'AI',
+      'ADMIN',
+    ]);
   });
 
   it('AI failure does not corrupt the consultation (thread + first message still there)', async () => {

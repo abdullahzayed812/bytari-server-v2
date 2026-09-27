@@ -10,6 +10,7 @@ import {
   createPublicationInteraction,
   registerAdmin,
   registerUser,
+  fixtureBytes,
 } from '../helpers/factories.js';
 
 const { app, container } = buildTestApp();
@@ -34,7 +35,7 @@ async function uploadAnimalPhoto(
     .send(input);
   if (urlRes.status !== 201) return urlRes;
   const storageKey = urlRes.body.data.storageKey as string;
-  await container.objectStorage.put(storageKey, Buffer.alloc(input.size, 1), {
+  await container.objectStorage.put(storageKey, fixtureBytes(input.mimeType, input.size), {
     contentType: input.mimeType,
   });
   return request(app)

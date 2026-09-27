@@ -11,6 +11,7 @@ import {
   createVetStoreProduct,
   registerAdmin,
   registerUser,
+  fixtureBytes,
 } from '../helpers/factories.js';
 
 const { app, container } = buildTestApp();
@@ -111,7 +112,7 @@ describe('Veterinarian Store — admin catalogue management', () => {
     const storageKey = urlRes.body.data.storageKey as string;
     expect(storageKey.startsWith('veterinarian-store/products/')).toBe(true);
 
-    await container.objectStorage.put(storageKey, Buffer.alloc(4096, 1), {
+    await container.objectStorage.put(storageKey, fixtureBytes('image/png', 4096), {
       contentType: 'image/png',
     });
 

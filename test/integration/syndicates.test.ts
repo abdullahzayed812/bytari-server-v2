@@ -30,11 +30,15 @@ describe('Veterinary Syndicates — creation (ADMIN only)', () => {
     expect(denied.status).toBe(403);
 
     const admin = await registerAdmin(app);
-    const main = await createSyndicate(app, admin.accessToken, { name: 'نقابة الأطباء البيطريين العراقية' });
+    const main = await createSyndicate(app, admin.accessToken, {
+      name: 'نقابة الأطباء البيطريين العراقية',
+    });
     expect(main.id).toBeTruthy();
 
     const other = await registerUser(app);
-    const get = await request(app).get(api(`/${main.id}`)).set(bearer(other.accessToken));
+    const get = await request(app)
+      .get(api(`/${main.id}`))
+      .set(bearer(other.accessToken));
     expect(get.status).toBe(200);
     expect(get.body.data.name).toBe('نقابة الأطباء البيطريين العراقية');
     expect(get.body.data.parentOrganizationId).toBeNull();
@@ -83,7 +87,11 @@ describe('Veterinary Syndicates — per-syndicate scoped supervisors', () => {
     const supervisor = await registerApprovedVet(app);
     await assignOrganizationSupervisor(app, admin.accessToken, mainA.id, {
       userId: supervisor.id,
-      permissions: ['syndicate.announcement.manage', 'syndicate.submission.read', 'syndicate.submission.respond'],
+      permissions: [
+        'syndicate.announcement.manage',
+        'syndicate.submission.read',
+        'syndicate.submission.respond',
+      ],
     });
     return { admin, mainA, mainB, supervisor };
   }
@@ -103,7 +111,9 @@ describe('Veterinary Syndicates — per-syndicate scoped supervisors', () => {
       .send({ type: 'ANNOUNCEMENT', title: 'إعلان آخر', body: 'نص الإعلان' });
     expect(denied.status).toBe(403);
 
-    const publicList = await request(app).get(api(`/${mainA.id}/announcements`)).set(bearer(supervisor.accessToken));
+    const publicList = await request(app)
+      .get(api(`/${mainA.id}/announcements`))
+      .set(bearer(supervisor.accessToken));
     expect(publicList.body.data).toHaveLength(1);
   });
 
@@ -190,7 +200,9 @@ describe('Veterinary Syndicates — requests & inquiries (submitter-facing)', ()
       .set(bearer(stranger.accessToken));
     expect(strangerGet.status).toBe(404);
 
-    const mine = await request(app).get(api('/submissions/mine')).set(bearer(submitter.accessToken));
+    const mine = await request(app)
+      .get(api('/submissions/mine'))
+      .set(bearer(submitter.accessToken));
     expect(mine.body.data).toHaveLength(1);
 
     // Admin (org-owner override) can read it directly.
@@ -207,7 +219,9 @@ describe('Veterinary Syndicates — following (reuses the generic organization f
     const main = await createSyndicate(app, admin.accessToken);
     const user = await registerUser(app);
 
-    const before = await request(app).get(api(`/${main.id}`)).set(bearer(user.accessToken));
+    const before = await request(app)
+      .get(api(`/${main.id}`))
+      .set(bearer(user.accessToken));
     expect(before.body.data.isFollowing).toBe(false);
 
     const follow = await request(app)
@@ -215,7 +229,9 @@ describe('Veterinary Syndicates — following (reuses the generic organization f
       .set(bearer(user.accessToken));
     expect(follow.status).toBe(200);
 
-    const after = await request(app).get(api(`/${main.id}`)).set(bearer(user.accessToken));
+    const after = await request(app)
+      .get(api(`/${main.id}`))
+      .set(bearer(user.accessToken));
     expect(after.body.data.isFollowing).toBe(true);
     expect(after.body.data.followersCount).toBe(1);
   });
@@ -232,7 +248,9 @@ describe('Veterinary Syndicates — my-access ("what can I do here?")', () => {
     });
     const plainUser = await registerUser(app);
 
-    const asAdmin = await request(app).get(api(`/${main.id}/my-access`)).set(bearer(admin.accessToken));
+    const asAdmin = await request(app)
+      .get(api(`/${main.id}/my-access`))
+      .set(bearer(admin.accessToken));
     expect(asAdmin.status).toBe(200);
     expect(asAdmin.body.data).toMatchObject({
       isAdmin: true,

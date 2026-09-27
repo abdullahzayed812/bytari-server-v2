@@ -140,14 +140,18 @@ describe('Veterinarian Jobs — job-seeker profiles ("باحثون عن عمل")
     expect(created.id).toBeTruthy();
 
     const otherUser = await registerUser(app);
-    const beforeApproval = await request(app).get(api('/seekers')).set(bearer(otherUser.accessToken));
+    const beforeApproval = await request(app)
+      .get(api('/seekers'))
+      .set(bearer(otherUser.accessToken));
     expect(beforeApproval.body.data).toHaveLength(0);
 
     const admin = await registerAdmin(app);
     const approve = await approveVetJobSeekerProfile(app, admin.accessToken, created.id);
     expect(approve.status).toBe(200);
 
-    const afterApproval = await request(app).get(api('/seekers')).set(bearer(otherUser.accessToken));
+    const afterApproval = await request(app)
+      .get(api('/seekers'))
+      .set(bearer(otherUser.accessToken));
     expect(afterApproval.body.data).toHaveLength(1);
   });
 
@@ -258,7 +262,7 @@ describe('Veterinarian Jobs — applications (veterinarian → offer)', () => {
     expect(reject.body.data.status).toBe('REJECTED');
   });
 
-  it("applications are private to the poster and the applicant; My Applications / My Ads lists scope correctly", async () => {
+  it('applications are private to the poster and the applicant; My Applications / My Ads lists scope correctly', async () => {
     const poster = await registerUser(app);
     const offer = await approvedOffer(poster.accessToken);
     const applicant = await registerApprovedVet(app);
@@ -270,7 +274,9 @@ describe('Veterinarian Jobs — applications (veterinarian → offer)', () => {
       .set(bearer(stranger.accessToken));
     expect(strangerGet.status).toBe(404);
 
-    const mine = await request(app).get(api('/applications/mine')).set(bearer(applicant.accessToken));
+    const mine = await request(app)
+      .get(api('/applications/mine'))
+      .set(bearer(applicant.accessToken));
     expect(mine.body.data).toHaveLength(1);
     expect(mine.body.data[0].offer.id).toBe(offer.id);
 

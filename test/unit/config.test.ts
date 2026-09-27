@@ -100,9 +100,9 @@ describe('loadConfig', () => {
         JWT_ACCESS_SECRET: 'a-production-grade-secret-at-least-32-chars',
       };
       expect(() => loadConfig({ ...prod, CORS_ORIGINS: '*' })).toThrowError(/CORS_ORIGINS/);
-      expect(loadConfig({ ...prod, CORS_ORIGINS: 'https://baytari.com' }).http.corsOrigins).toEqual([
-        'https://baytari.com',
-      ]);
+      expect(loadConfig({ ...prod, CORS_ORIGINS: 'https://baytari.com' }).http.corsOrigins).toEqual(
+        ['https://baytari.com'],
+      );
     });
 
     it('requires JWT_ACCESS_SECRET in production', () => {

@@ -76,8 +76,8 @@ describe('veterinarian-store payment + stock guards', () => {
   });
 
   it('order numbers match VTS-<yyyymmdd>-<6 digits>', () => {
-    expect(
-      VeterinarianStorePolicy.generateOrderNumber(new Date('2026-09-07T00:00:00Z')),
-    ).toMatch(/^VTS-20260907-\d{6}$/);
+    expect(VeterinarianStorePolicy.generateOrderNumber(new Date('2026-09-07T00:00:00Z'))).toMatch(
+      /^VTS-20260907-\d{6}$/,
+    );
   });
 });

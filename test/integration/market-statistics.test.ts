@@ -66,7 +66,9 @@ describe('market statistics (governorate distribution)', () => {
 
   it('requires an approved trader or admin (403 for a plain user)', async () => {
     const u = await registerUser(app);
-    const res = await request(app).get('/api/v1/poultry-market/statistics').set(bearer(u.accessToken));
+    const res = await request(app)
+      .get('/api/v1/poultry-market/statistics')
+      .set(bearer(u.accessToken));
     expect(res.status).toBe(403);
   });
 

@@ -20,10 +20,7 @@ async function requestUploadUrl(
   token: string,
   body: { filename: string; mimeType: string; size: number },
 ): Promise<request.Response> {
-  return request(app)
-    .post('/api/v1/users/me/avatar/upload-url')
-    .set(bearer(token))
-    .send(body);
+  return request(app).post('/api/v1/users/me/avatar/upload-url').set(bearer(token)).send(body);
 }
 
 async function finalizeAvatar(

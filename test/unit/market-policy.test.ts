@@ -5,9 +5,7 @@ import { AppError } from '../../src/shared/errors/app-error.js';
 describe('MarketPolicy', () => {
   describe('assertOwner', () => {
     it('passes when the actor is the offer owner', () => {
-      expect(() =>
-        MarketPolicy.assertOwner({ traderUserId: 'u1' }, 'u1'),
-      ).not.toThrow();
+      expect(() => MarketPolicy.assertOwner({ traderUserId: 'u1' }, 'u1')).not.toThrow();
     });
 
     it('throws when the actor is not the offer owner', () => {

@@ -14,6 +14,7 @@ import {
   registerApprovedVet,
   registerUser,
   seedStorageObject,
+  fixtureBytes,
 } from '../helpers/factories.js';
 
 const { app, container } = buildTestApp();
@@ -31,7 +32,7 @@ async function uploadAnimalPhoto(ownerToken: string, animalId: string): Promise<
     .send(input);
   expect(urlRes.status).toBe(201);
   const storageKey = urlRes.body.data.storageKey as string;
-  await container.objectStorage.put(storageKey, Buffer.alloc(input.size, 1), {
+  await container.objectStorage.put(storageKey, fixtureBytes(input.mimeType, input.size), {
     contentType: input.mimeType,
   });
   const done = await request(app)
@@ -119,7 +120,7 @@ describe('admin farm screens — the farm photo reaches the admin', () => {
     // the farm-profile presign responds 200 (unlike the 201 the animal gallery uses)
     expect(urlRes.status).toBe(200);
     const storageKey = urlRes.body.data.storageKey as string;
-    await container.objectStorage.put(storageKey, Buffer.alloc(input.size, 1), {
+    await container.objectStorage.put(storageKey, fixtureBytes(input.mimeType, input.size), {
       contentType: input.mimeType,
     });
     const done = await request(app)
@@ -132,7 +133,9 @@ describe('admin farm screens — the farm photo reaches the admin', () => {
   it('the admin farm list exposes a resolved imageUrl and never the raw imageKey', async () => {
     const admin = await registerAdmin(app);
     const owner = await registerApprovedVet(app);
-    const farm = await createFarm(app, owner.accessToken, admin.accessToken, { name: 'Photo Farm' });
+    const farm = await createFarm(app, owner.accessToken, admin.accessToken, {
+      name: 'Photo Farm',
+    });
     await uploadFarmPhoto(owner.accessToken, farm.id);
 
     const res = await request(app)
@@ -164,7 +167,9 @@ describe('admin farm screens — the farm photo reaches the admin', () => {
   it('GET /admin/organizations/:id attaches the FARM photo as details.imageUrl', async () => {
     const admin = await registerAdmin(app);
     const owner = await registerApprovedVet(app);
-    const farm = await createFarm(app, owner.accessToken, admin.accessToken, { name: 'Detail Farm' });
+    const farm = await createFarm(app, owner.accessToken, admin.accessToken, {
+      name: 'Detail Farm',
+    });
     await uploadFarmPhoto(owner.accessToken, farm.id);
 
     const res = await request(app)
@@ -227,7 +232,7 @@ describe('replaced images are not orphaned in R2', () => {
       .send(input);
     expect([200, 201]).toContain(res.status);
     const storageKey = res.body.data.storageKey as string;
-    await container.objectStorage.put(storageKey, Buffer.alloc(input.size, 1), {
+    await container.objectStorage.put(storageKey, fixtureBytes(input.mimeType, input.size), {
       contentType: input.mimeType,
     });
     return storageKey;

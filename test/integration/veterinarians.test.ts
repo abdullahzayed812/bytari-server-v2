@@ -260,7 +260,12 @@ describe('veterinarian applications — sub-type & documents', () => {
     const res = await request(app)
       .post('/api/v1/veterinarians/documents/upload-url')
       .set(bearer(u.accessToken))
-      .send({ kind: 'LICENSE_OR_ID', filename: 'license.pdf', mimeType: 'application/pdf', size: 1024 });
+      .send({
+        kind: 'LICENSE_OR_ID',
+        filename: 'license.pdf',
+        mimeType: 'application/pdf',
+        size: 1024,
+      });
     expect(res.status).toBe(201);
     expect(res.body.data.storageKey.startsWith(`${StoragePrefix.veterinarianDocuments}/`)).toBe(
       true,

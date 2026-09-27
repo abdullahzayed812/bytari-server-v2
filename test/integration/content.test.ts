@@ -18,6 +18,7 @@ import {
   registerUser,
   assignSystemSupervisor,
   uploadContentFile,
+  fixtureBytes,
 } from '../helpers/factories.js';
 
 const storage = new InMemoryObjectStorage(null);
@@ -382,7 +383,9 @@ describe('content — books / magazines & files', () => {
     expect(key.startsWith('content/books/')).toBe(true);
     expect(urlRes.body.data.method).toBe('PUT');
 
-    await storage.put(key, Buffer.alloc(1234, 7), { contentType: 'application/pdf' });
+    await storage.put(key, fixtureBytes('application/pdf', 1234), {
+      contentType: 'application/pdf',
+    });
 
     const reg = await request(app)
       .post(`/api/v1/admin/content/${id}/files`)

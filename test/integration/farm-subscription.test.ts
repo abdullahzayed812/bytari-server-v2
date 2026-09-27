@@ -162,7 +162,9 @@ describe('farm subscription renewal requests', () => {
       startDate: '2020-01-01',
       endDate: '2020-06-01',
     });
-    const created = await requestFarmRenewal(app, owner.accessToken, farm.id, { note: 'please renew' });
+    const created = await requestFarmRenewal(app, owner.accessToken, farm.id, {
+      note: 'please renew',
+    });
 
     const approve = await request(app)
       .post(

@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_DOCUMENT_BYTES, VeterinarianPolicy } from '../../src/modules/veterinarians/veterinarian.policy.js';
+import {
+  MAX_DOCUMENT_BYTES,
+  VeterinarianPolicy,
+} from '../../src/modules/veterinarians/veterinarian.policy.js';
 import type { AppError } from '../../src/shared/errors/app-error.js';
 
 describe('VeterinarianPolicy.assertDocumentUploadRequest', () => {
   it('LICENSE_OR_ID / ADDITIONAL_ID accept images and PDF', () => {
     for (const kind of ['LICENSE_OR_ID', 'ADDITIONAL_ID'] as const) {
-      expect(() => VeterinarianPolicy.assertDocumentUploadRequest(kind, 'image/png', 1024)).not.toThrow();
+      expect(() =>
+        VeterinarianPolicy.assertDocumentUploadRequest(kind, 'image/png', 1024),
+      ).not.toThrow();
       expect(() =>
         VeterinarianPolicy.assertDocumentUploadRequest(kind, 'application/pdf', 1024),
       ).not.toThrow();
@@ -14,7 +19,9 @@ describe('VeterinarianPolicy.assertDocumentUploadRequest', () => {
 
   it('STUDENT_ID_FRONT / STUDENT_ID_BACK accept images only, reject PDF', () => {
     for (const kind of ['STUDENT_ID_FRONT', 'STUDENT_ID_BACK'] as const) {
-      expect(() => VeterinarianPolicy.assertDocumentUploadRequest(kind, 'image/jpeg', 1024)).not.toThrow();
+      expect(() =>
+        VeterinarianPolicy.assertDocumentUploadRequest(kind, 'image/jpeg', 1024),
+      ).not.toThrow();
       try {
         VeterinarianPolicy.assertDocumentUploadRequest(kind, 'application/pdf', 1024);
         throw new Error('expected throw');
@@ -26,7 +33,11 @@ describe('VeterinarianPolicy.assertDocumentUploadRequest', () => {
 
   it('accepts exactly the 5 MiB boundary for every kind', () => {
     expect(() =>
-      VeterinarianPolicy.assertDocumentUploadRequest('LICENSE_OR_ID', 'application/pdf', MAX_DOCUMENT_BYTES),
+      VeterinarianPolicy.assertDocumentUploadRequest(
+        'LICENSE_OR_ID',
+        'application/pdf',
+        MAX_DOCUMENT_BYTES,
+      ),
     ).not.toThrow();
   });
 

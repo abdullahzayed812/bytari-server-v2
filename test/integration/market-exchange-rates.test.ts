@@ -2,7 +2,12 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { buildTestApp } from '../helpers/app.js';
 import { closeTestDb, ensureSchema, resetDb } from '../helpers/db.js';
-import { assignSystemSupervisor, bearer, registerAdmin, registerUser } from '../helpers/factories.js';
+import {
+  assignSystemSupervisor,
+  bearer,
+  registerAdmin,
+  registerUser,
+} from '../helpers/factories.js';
 
 const { app } = buildTestApp();
 

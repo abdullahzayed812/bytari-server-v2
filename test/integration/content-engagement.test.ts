@@ -46,7 +46,11 @@ describe('content — book detail fields (language / pageCount / publishYear)', 
       publishYear: 2023,
     });
     expect(create.status).toBe(201);
-    expect(create.body.data).toMatchObject({ language: 'العربية', pageCount: 560, publishYear: 2023 });
+    expect(create.body.data).toMatchObject({
+      language: 'العربية',
+      pageCount: 560,
+      publishYear: 2023,
+    });
     const id = create.body.data.id as string;
     await publishContent(app, admin.accessToken, id);
 
@@ -59,7 +63,11 @@ describe('content — book detail fields (language / pageCount / publishYear)', 
       .set(bearer(admin.accessToken))
       .send({ pageCount: 600 });
     expect(updated.status).toBe(200);
-    expect(updated.body.data).toMatchObject({ pageCount: 600, language: 'العربية', publishYear: 2023 });
+    expect(updated.body.data).toMatchObject({
+      pageCount: 600,
+      language: 'العربية',
+      publishYear: 2023,
+    });
   });
 
   it('rejects an out-of-range publishYear / non-positive pageCount (422)', async () => {
@@ -85,7 +93,10 @@ describe('content — bookmarks', () => {
     const user = await registerUser(app);
     const id = await seedPublished(admin.accessToken);
 
-    await request(app).post(`/api/v1/content/${id}/bookmark`).set(bearer(user.accessToken)).expect(200);
+    await request(app)
+      .post(`/api/v1/content/${id}/bookmark`)
+      .set(bearer(user.accessToken))
+      .expect(200);
     await request(app)
       .post(`/api/v1/content/${id}/bookmark`)
       .set(bearer(user.accessToken))
@@ -149,8 +160,8 @@ describe('content — likes', () => {
     ).toBe(2);
     // u1 un-likes
     expect(
-      (await request(app).delete(`/api/v1/content/${id}/like`).set(bearer(u1.accessToken))).body.data
-        .likeCount,
+      (await request(app).delete(`/api/v1/content/${id}/like`).set(bearer(u1.accessToken))).body
+        .data.likeCount,
     ).toBe(1);
 
     const detail = await request(app).get(`/api/v1/content/${id}`).set(bearer(u2.accessToken));

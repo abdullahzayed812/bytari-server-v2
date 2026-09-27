@@ -71,10 +71,11 @@ describe('Content reporting — submit / admin moderation queue', () => {
 
   it('rejects a report against a non-existent message with 404', async () => {
     const user = await registerUser(app);
-    const res = await request(app)
-      .post('/api/v1/reports')
-      .set(bearer(user.accessToken))
-      .send({ targetType: 'MESSAGE', targetId: '00000000-0000-0000-0000-000000000000', reason: 'OTHER' });
+    const res = await request(app).post('/api/v1/reports').set(bearer(user.accessToken)).send({
+      targetType: 'MESSAGE',
+      targetId: '00000000-0000-0000-0000-000000000000',
+      reason: 'OTHER',
+    });
     expect(res.status).toBe(404);
   });
 });

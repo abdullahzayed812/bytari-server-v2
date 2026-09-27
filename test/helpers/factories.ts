@@ -5,6 +5,25 @@ import type { NoopEmailProvider } from '../../src/infra/email/index.js';
 import { getTestDb } from './db.js';
 import { containerFor } from './app.js';
 
+/**
+ * Fixture file bytes with a REAL signature for `mimeType`, padded to `size`.
+ * Object storage verifies declared image/video/PDF types against magic bytes
+ * (`ContentSniffingObjectStorage`, active whenever R2 is configured), so
+ * fixture uploads must look like the type they claim.
+ */
+export function fixtureBytes(mimeType: string, size = 1024): Buffer {
+  const headers: Record<string, Buffer> = {
+    'image/jpeg': Buffer.from([0xff, 0xd8, 0xff, 0xe0]),
+    'image/png': Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    'image/webp': Buffer.from('RIFF\0\0\0\0WEBPVP8 ', 'latin1'),
+    'image/gif': Buffer.from('GIF89a', 'latin1'),
+    'application/pdf': Buffer.from('%PDF-1.7\n', 'latin1'),
+    'video/mp4': Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from('ftypisom', 'latin1')]),
+  };
+  const header = headers[mimeType.toLowerCase()] ?? Buffer.alloc(0);
+  return Buffer.concat([header, Buffer.alloc(Math.max(0, size - header.length), 1)]);
+}
+
 export interface RegisteredUser {
   id: string;
   email: string;
@@ -1348,7 +1367,7 @@ export async function uploadContentFile(
     .send(input);
   if (urlRes.status !== 201) return urlRes;
   const storageKey = urlRes.body.data.storageKey as string;
-  await container.objectStorage.put(storageKey, Buffer.alloc(input.size, 1), {
+  await container.objectStorage.put(storageKey, fixtureBytes(input.mimeType, input.size), {
     contentType: input.mimeType,
   });
   return request(app)
@@ -1377,7 +1396,13 @@ export async function seedStorageObject(
 ): Promise<{ storageKey: string }> {
   seq += 1;
   const storageKey = `${prefix}/seed/${Date.now()}.${seq}`;
-  await storage.put(storageKey, buffer, { contentType });
+  // Stamp the real signature for verifiable types (same length) — see `fixtureBytes`.
+  const signature = fixtureBytes(contentType, 0);
+  const body =
+    signature.length > 0 && buffer.length >= signature.length
+      ? Buffer.concat([signature, buffer.subarray(signature.length)])
+      : buffer;
+  await storage.put(storageKey, body, { contentType });
   return { storageKey };
 }
 
@@ -1505,7 +1530,7 @@ export async function uploadAdSlideImage(
     .send(input);
   if (urlRes.status !== 201) return urlRes;
   const storageKey = urlRes.body.data.storageKey as string;
-  await container.objectStorage.put(storageKey, Buffer.alloc(input.size, 1), {
+  await container.objectStorage.put(storageKey, fixtureBytes(input.mimeType, input.size), {
     contentType: input.mimeType,
   });
   return request(app)
@@ -1605,7 +1630,7 @@ export async function uploadTipCover(
     .send(input);
   if (urlRes.status !== 201) return urlRes;
   const storageKey = urlRes.body.data.storageKey as string;
-  await container.objectStorage.put(storageKey, Buffer.alloc(input.size, 1), {
+  await container.objectStorage.put(storageKey, fixtureBytes(input.mimeType, input.size), {
     contentType: input.mimeType,
   });
   return request(app)

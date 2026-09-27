@@ -30,7 +30,11 @@ afterAll(() => closeTestDb());
 describe('support messages — "تواصل معنا" (create)', () => {
   it('any signed-in user creates a support message with body only; it starts OPEN', async () => {
     const user = await registerUser(app);
-    const res = await createSupportMessage(app, user.accessToken, 'التطبيق يتوقف عند فتح الإشعارات');
+    const res = await createSupportMessage(
+      app,
+      user.accessToken,
+      'التطبيق يتوقف عند فتح الإشعارات',
+    );
 
     expect(res.status).toBe(201);
     expect(res.body.data).toMatchObject({
@@ -73,9 +77,7 @@ describe('support messages — reply thread & ownership isolation', () => {
     const otherList = await request(app).get(`${API}/support-messages`).set(bearer(b.accessToken));
     expect(otherList.body.data).toHaveLength(0);
 
-    const peek = await request(app)
-      .get(`${API}/support-messages/${id}`)
-      .set(bearer(b.accessToken));
+    const peek = await request(app).get(`${API}/support-messages/${id}`).set(bearer(b.accessToken));
     expect(peek.status).toBe(404);
   });
 

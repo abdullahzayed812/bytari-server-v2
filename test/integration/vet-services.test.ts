@@ -45,10 +45,14 @@ const REQUEST = {
 };
 
 async function approveListing(app_: typeof app, adminToken: string, id: string) {
-  return request(app_).post(`${API}/admin/vet-service-listings/${id}/approve`).set(bearer(adminToken));
+  return request(app_)
+    .post(`${API}/admin/vet-service-listings/${id}/approve`)
+    .set(bearer(adminToken));
 }
 async function approveRequest(app_: typeof app, adminToken: string, id: string) {
-  return request(app_).post(`${API}/admin/vet-service-requests/${id}/approve`).set(bearer(adminToken));
+  return request(app_)
+    .post(`${API}/admin/vet-service-requests/${id}/approve`)
+    .set(bearer(adminToken));
 }
 
 describe('vet services — listings (vet-published, moderated)', () => {
@@ -116,7 +120,10 @@ describe('vet services — listings (vet-published, moderated)', () => {
       .set(bearer(admin.accessToken))
       .send({ reason: 'المعلومات غير كافية' });
     expect(rej.status).toBe(200);
-    expect(rej.body.data).toMatchObject({ status: 'REJECTED', rejectionReason: 'المعلومات غير كافية' });
+    expect(rej.body.data).toMatchObject({
+      status: 'REJECTED',
+      rejectionReason: 'المعلومات غير كافية',
+    });
 
     // a VET_SERVICE supervisor (non-admin) can also moderate
     const sup = await registerUser(app);
@@ -161,14 +168,22 @@ describe('vet services — pet-owner requests + vet offers (Flow B)', () => {
     const offer = await request(app)
       .post(`${API}/vet-services/requests/${requestId}/offers`)
       .set(bearer(vet.accessToken))
-      .send({ proposedAmount: '150000', expectedDuration: 'ساعتان', details: 'أشمل زيارة ميدانية' });
+      .send({
+        proposedAmount: '150000',
+        expectedDuration: 'ساعتان',
+        details: 'أشمل زيارة ميدانية',
+      });
     expect(offer.status).toBe(201);
     const offerId = offer.body.data.id;
 
     // the request owner sees the offer; a stranger does not
     const stranger = await registerUser(app);
     expect(
-      (await request(app).get(`${API}/vet-services/requests/${requestId}/offers`).set(bearer(stranger.accessToken))).status,
+      (
+        await request(app)
+          .get(`${API}/vet-services/requests/${requestId}/offers`)
+          .set(bearer(stranger.accessToken))
+      ).status,
     ).toBe(404);
     const owned = await request(app)
       .get(`${API}/vet-services/requests/${requestId}/offers`)
@@ -202,7 +217,11 @@ describe('vet services — pet-owner requests + vet offers (Flow B)', () => {
 
     // a stranger cannot read the conversation
     expect(
-      (await request(app).get(`${API}/conversations/${conversationId}`).set(bearer(stranger.accessToken))).status,
+      (
+        await request(app)
+          .get(`${API}/conversations/${conversationId}`)
+          .set(bearer(stranger.accessToken))
+      ).status,
     ).toBe(404);
 
     // "إنهاء الطلب" — the vet completes it
@@ -217,7 +236,9 @@ describe('vet services — pet-owner requests + vet offers (Flow B)', () => {
     expect(convAfter.body.data.status).toBe('COMPLETED');
 
     // "إيقاف المحادثة" then messaging is blocked
-    await request(app).post(`${API}/conversations/${conversationId}/close`).set(bearer(owner.accessToken));
+    await request(app)
+      .post(`${API}/conversations/${conversationId}/close`)
+      .set(bearer(owner.accessToken));
     const blocked = await request(app)
       .post(`${API}/conversations/${conversationId}/messages`)
       .set(bearer(vet.accessToken))
@@ -230,7 +251,10 @@ describe('vet services — pet-owner requests + vet offers (Flow B)', () => {
     const owner = await registerUser(app);
     const vetA = await registerApprovedVet(app);
     const vetB = await registerApprovedVet(app);
-    const rc = await request(app).post(`${API}/vet-services/requests`).set(bearer(owner.accessToken)).send(REQUEST);
+    const rc = await request(app)
+      .post(`${API}/vet-services/requests`)
+      .set(bearer(owner.accessToken))
+      .send(REQUEST);
     const requestId = rc.body.data.id;
     await approveRequest(app, admin.accessToken, requestId);
 
@@ -243,7 +267,9 @@ describe('vet services — pet-owner requests + vet offers (Flow B)', () => {
       .set(bearer(vetB.accessToken))
       .send({ proposedAmount: '140000' });
 
-    await request(app).post(`${API}/vet-services/offers/${oA.body.data.id}/accept`).set(bearer(owner.accessToken));
+    await request(app)
+      .post(`${API}/vet-services/offers/${oA.body.data.id}/accept`)
+      .set(bearer(owner.accessToken));
 
     const bAfter = await request(app)
       .get(`${API}/vet-services/offers/${oB.body.data.id}`)
@@ -258,7 +284,10 @@ describe('vet services — pet-owner requests a listing (Flow A)', () => {
     const vet = await registerApprovedVet(app);
     const owner = await registerUser(app);
 
-    const lc = await request(app).post(`${API}/vet-services/listings`).set(bearer(vet.accessToken)).send(LISTING);
+    const lc = await request(app)
+      .post(`${API}/vet-services/listings`)
+      .set(bearer(vet.accessToken))
+      .send(LISTING);
     const listingId = lc.body.data.id;
     await approveListing(app, admin.accessToken, listingId);
 
@@ -272,7 +301,13 @@ describe('vet services — pet-owner requests a listing (Flow A)', () => {
     const lr = await request(app)
       .post(`${API}/vet-services/listings/${listingId}/requests`)
       .set(bearer(owner.accessToken))
-      .send({ animalType: 'POULTRY', animalCount: 1000, animalAge: '35 يوم', needsFieldVisit: true, previousVisit: true });
+      .send({
+        animalType: 'POULTRY',
+        animalCount: 1000,
+        animalAge: '35 يوم',
+        needsFieldVisit: true,
+        previousVisit: true,
+      });
     expect(lr.status).toBe(201);
     const listingRequestId = lr.body.data.id;
 
@@ -300,7 +335,10 @@ describe('vet services — pet-owner requests a listing (Flow A)', () => {
     const admin = await registerAdmin(app);
     const vet = await registerApprovedVet(app);
     const owner = await registerUser(app);
-    const lc = await request(app).post(`${API}/vet-services/listings`).set(bearer(vet.accessToken)).send(LISTING);
+    const lc = await request(app)
+      .post(`${API}/vet-services/listings`)
+      .set(bearer(vet.accessToken))
+      .send(LISTING);
     await approveListing(app, admin.accessToken, lc.body.data.id);
 
     const conv = await request(app)

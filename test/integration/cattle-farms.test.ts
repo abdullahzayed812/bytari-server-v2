@@ -26,7 +26,10 @@ async function setup() {
   const vet = await registerApprovedVet(app);
   const staff = await registerUser(app);
   const farm = await createFarm(app, owner.accessToken, admin.accessToken, { name: 'Cattle Co' });
-  await addOrganizationMember(app, owner.accessToken, farm.id, { userId: vet.id, role: 'VETERINARIAN' });
+  await addOrganizationMember(app, owner.accessToken, farm.id, {
+    userId: vet.id,
+    role: 'VETERINARIAN',
+  });
   await addOrganizationMember(app, owner.accessToken, farm.id, { userId: staff.id, role: 'STAFF' });
   return { admin, owner, vet, staff, farm };
 }
@@ -52,7 +55,11 @@ describe('POST /organizations/cattle-farms — Add Cattle Farm', () => {
         contactPhone: '+9647701234567',
       });
     expect(create.status).toBe(201);
-    expect(create.body.data).toMatchObject({ type: 'FARM', status: 'PENDING', ownerUserId: owner.id });
+    expect(create.body.data).toMatchObject({
+      type: 'FARM',
+      status: 'PENDING',
+      ownerUserId: owner.id,
+    });
     const orgId = create.body.data.id as string;
 
     await request(app)
@@ -163,7 +170,10 @@ describe('cattle batches — CRUD', () => {
       { name: 'x', headCount: 1, arrivalDate: '2999-01-01' },
       { name: '', headCount: 1, arrivalDate: '2026-01-01' },
     ]) {
-      const res = await request(app).post(batchPath(farm.id)).set(bearer(vet.accessToken)).send(bad);
+      const res = await request(app)
+        .post(batchPath(farm.id))
+        .set(bearer(vet.accessToken))
+        .send(bad);
       expect(res.status).toBe(422);
     }
   });
@@ -288,7 +298,10 @@ describe('cattle batches — cross-farm isolation (IDOR)', () => {
     const ownerB = await registerApprovedVet(app);
     const vetB = await registerApprovedVet(app);
     const farmB = await createFarm(app, ownerB.accessToken, admin2.accessToken, { name: 'Farm B' });
-    await addOrganizationMember(app, ownerB.accessToken, farmB.id, { userId: vetB.id, role: 'VETERINARIAN' });
+    await addOrganizationMember(app, ownerB.accessToken, farmB.id, {
+      userId: vetB.id,
+      role: 'VETERINARIAN',
+    });
 
     const res = await request(app).get(batchPath(farmA.id)).set(bearer(vetB.accessToken));
     expect(res.status).toBe(403);
@@ -302,9 +315,14 @@ describe('cattle batches — cross-farm isolation (IDOR)', () => {
     const ownerB = await registerApprovedVet(app);
     const vetB = await registerApprovedVet(app);
     const farmB = await createFarm(app, ownerB.accessToken, admin2.accessToken, { name: 'Farm B' });
-    await addOrganizationMember(app, ownerB.accessToken, farmB.id, { userId: vetB.id, role: 'VETERINARIAN' });
+    await addOrganizationMember(app, ownerB.accessToken, farmB.id, {
+      userId: vetB.id,
+      role: 'VETERINARIAN',
+    });
 
-    const res = await request(app).get(batchPath(farmB.id, batchA.id)).set(bearer(vetB.accessToken));
+    const res = await request(app)
+      .get(batchPath(farmB.id, batchA.id))
+      .set(bearer(vetB.accessToken));
     expect(res.status).toBe(404);
 
     const patch = await request(app)

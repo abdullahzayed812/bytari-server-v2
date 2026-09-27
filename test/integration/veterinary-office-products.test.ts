@@ -99,7 +99,10 @@ describe('veterinary office products — CRUD', () => {
       { name: 'x', productType: 'MEDICINE', price: '12.999' },
       { name: '', productType: 'MEDICINE' },
     ]) {
-      const res = await request(app).post(pPath(office.id)).set(bearer(owner.accessToken)).send(bad);
+      const res = await request(app)
+        .post(pPath(office.id))
+        .set(bearer(owner.accessToken))
+        .send(bad);
       expect(res.status).toBe(422);
     }
     const prod = await createVeterinaryOfficeProduct(app, owner.accessToken, office.id);
@@ -400,11 +403,19 @@ describe('veterinary office products — inventory', () => {
       stockQuantity: 3,
     });
 
-    const res = await adjustVeterinaryOfficeProductStock(app, owner.accessToken, office.id, prod.id, -10);
+    const res = await adjustVeterinaryOfficeProductStock(
+      app,
+      owner.accessToken,
+      office.id,
+      prod.id,
+      -10,
+    );
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('INSUFFICIENT_STOCK');
 
-    const row = (await getTestDb()('veterinary_office_products').where({ id: prod.id }).first()) as {
+    const row = (await getTestDb()('veterinary_office_products')
+      .where({ id: prod.id })
+      .first()) as {
       stock_quantity: number;
     };
     expect(Number(row.stock_quantity)).toBe(3);
@@ -413,7 +424,13 @@ describe('veterinary office products — inventory', () => {
   it('rejects a zero delta with 422', async () => {
     const { owner, office } = await setup();
     const prod = await createVeterinaryOfficeProduct(app, owner.accessToken, office.id);
-    const res = await adjustVeterinaryOfficeProductStock(app, owner.accessToken, office.id, prod.id, 0);
+    const res = await adjustVeterinaryOfficeProductStock(
+      app,
+      owner.accessToken,
+      office.id,
+      prod.id,
+      0,
+    );
     expect(res.status).toBe(422);
   });
 

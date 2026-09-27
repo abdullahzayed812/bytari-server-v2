@@ -115,7 +115,7 @@ describe('audit log', () => {
     expect(res.body.meta.total).toBe(1);
   });
 
-  it('enriches each entry with the actor\'s name, and null for a system/no-actor entry', async () => {
+  it("enriches each entry with the actor's name, and null for a system/no-actor entry", async () => {
     const admin = await registerAdmin(app);
     const u = await registerUser(app);
     await request(app)

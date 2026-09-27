@@ -17,6 +17,7 @@ import {
   registerUser,
   requestFarmRenewal,
   setFarmSubscriptionAsAdmin,
+  fixtureBytes,
 } from '../helpers/factories.js';
 
 const { app, container } = buildTestApp();
@@ -262,7 +263,9 @@ describe('admin Poultry Farms management list', () => {
   it('lists FARM organizations with owner, subscription dates/status and an open-renewal flag', async () => {
     const admin = await registerAdmin(app);
     const owner = await registerApprovedVet(app);
-    const farm = await createFarm(app, owner.accessToken, admin.accessToken, { name: 'Listed Farm' });
+    const farm = await createFarm(app, owner.accessToken, admin.accessToken, {
+      name: 'Listed Farm',
+    });
     await setFarmSubscriptionAsAdmin(app, admin.accessToken, farm.id, {
       startDate: '2020-01-01',
       endDate: '2020-06-01',
@@ -401,7 +404,7 @@ describe('admin organizations list — logoUrl thumbnail', () => {
       .set(bearer(owner.accessToken))
       .send({ filename: 'logo.jpg', mimeType: 'image/jpeg', size: 1024 });
     const storageKey = upload.body.data.storageKey as string;
-    await container.objectStorage.put(storageKey, Buffer.from('fake-bytes'), {
+    await container.objectStorage.put(storageKey, fixtureBytes('image/jpeg', 1024), {
       contentType: 'image/jpeg',
     });
     await request(app)

@@ -25,20 +25,17 @@ const adminApi = (p: string): string => `/api/v1/admin${p}`;
 describe('Veterinarian Courses & Seminars — courses (approved veterinarian only, moderated)', () => {
   it('a plain user cannot create a course; an approved veterinarian can, and it starts PENDING', async () => {
     const plainUser = await registerUser(app);
-    const denied = await request(app)
-      .post(api(''))
-      .set(bearer(plainUser.accessToken))
-      .send({
-        type: 'COURSE',
-        title: 'دورة تجريبية',
-        description: 'وصف الدورة التجريبية لأغراض الاختبار.',
-        organizingBody: 'جهة تجريبية',
-        instructorName: 'د. تجريبي',
-        startDate: '2999-01-01',
-        endDate: '2999-01-02',
-        locationMode: 'ONLINE',
-        locationDetails: 'أونلاين',
-      });
+    const denied = await request(app).post(api('')).set(bearer(plainUser.accessToken)).send({
+      type: 'COURSE',
+      title: 'دورة تجريبية',
+      description: 'وصف الدورة التجريبية لأغراض الاختبار.',
+      organizingBody: 'جهة تجريبية',
+      instructorName: 'د. تجريبي',
+      startDate: '2999-01-01',
+      endDate: '2999-01-02',
+      locationMode: 'ONLINE',
+      locationDetails: 'أونلاين',
+    });
     expect(denied.status).toBe(403);
 
     const vet = await registerApprovedVet(app);
@@ -120,7 +117,9 @@ describe('Veterinarian Courses & Seminars — courses (approved veterinarian onl
     const created = await createVetCourse(app, vet.accessToken);
     await approveVetCourse(app, admin.accessToken, created.id);
 
-    const cancel = await request(app).post(api(`/${created.id}/cancel`)).set(bearer(vet.accessToken));
+    const cancel = await request(app)
+      .post(api(`/${created.id}/cancel`))
+      .set(bearer(vet.accessToken));
     expect(cancel.status).toBe(200);
 
     const publicList = await request(app).get(api('')).set(bearer(other.accessToken));
@@ -178,7 +177,9 @@ describe('Veterinarian Courses & Seminars — registration (approved veterinaria
 
   it('cannot register once the registration deadline has passed', async () => {
     const creator = await registerApprovedVet(app);
-    const course = await approvedCourse(creator.accessToken, { registrationDeadline: '2000-01-01' });
+    const course = await approvedCourse(creator.accessToken, {
+      registrationDeadline: '2000-01-01',
+    });
     const registrant = await registerApprovedVet(app);
     const res = await registerForVetCourse(app, registrant.accessToken, course.id);
     expect(res.status).toBe(409);
@@ -324,7 +325,9 @@ describe('Veterinarian Courses & Seminars — admin oversight', () => {
     // No `status` — the admin UI's "All" chip — defaults to PENDING, exactly
     // like `AdminVetServiceListingsScreen`'s own "All" chip. This is what
     // `AdminDashboardService`'s badge count relies on.
-    const noFilter = await request(app).get(adminApi('/vet-courses')).set(bearer(admin.accessToken));
+    const noFilter = await request(app)
+      .get(adminApi('/vet-courses'))
+      .set(bearer(admin.accessToken));
     expect(noFilter.body.data.map((c: { id: string }) => c.id)).toEqual([pending.id]);
   });
 
@@ -348,8 +351,14 @@ describe('Seminars — admin create → moderate → publish → register (same 
   it('admin-created Course and Seminar both start PENDING, stay private, and publish only on approval', async () => {
     const admin = await registerAdmin(app);
     const viewer = await registerApprovedVet(app);
-    const course = await createVetCourse(app, admin.accessToken, { type: 'COURSE', title: 'دورة الإدارة' });
-    const seminar = await createVetCourse(app, admin.accessToken, { type: 'SEMINAR', title: 'ندوة الإدارة' });
+    const course = await createVetCourse(app, admin.accessToken, {
+      type: 'COURSE',
+      title: 'دورة الإدارة',
+    });
+    const seminar = await createVetCourse(app, admin.accessToken, {
+      type: 'SEMINAR',
+      title: 'ندوة الإدارة',
+    });
 
     const pending = await request(app)
       .get(adminApi('/vet-courses'))
@@ -358,12 +367,22 @@ describe('Seminars — admin create → moderate → publish → register (same 
     expect(pending.body.data.map((c: { id: string }) => c.id)).toEqual([seminar.id]);
     expect(pending.body.data[0].status).toBe('PENDING');
 
-    const detail = await request(app).get(adminApi(`/vet-courses/${seminar.id}`)).set(bearer(admin.accessToken));
+    const detail = await request(app)
+      .get(adminApi(`/vet-courses/${seminar.id}`))
+      .set(bearer(admin.accessToken));
     expect(detail.status).toBe(200);
     expect(detail.body.data.type).toBe('SEMINAR');
 
-    expect((await request(app).get(api('')).set(bearer(viewer.accessToken))).body.data).toHaveLength(0);
-    expect((await request(app).get(api(`/${seminar.id}`)).set(bearer(viewer.accessToken))).status).toBe(404);
+    expect(
+      (await request(app).get(api('')).set(bearer(viewer.accessToken))).body.data,
+    ).toHaveLength(0);
+    expect(
+      (
+        await request(app)
+          .get(api(`/${seminar.id}`))
+          .set(bearer(viewer.accessToken))
+      ).status,
+    ).toBe(404);
 
     expect((await approveVetCourse(app, admin.accessToken, course.id)).status).toBe(200);
     expect((await approveVetCourse(app, admin.accessToken, seminar.id)).status).toBe(200);
@@ -379,7 +398,10 @@ describe('Seminars — admin create → moderate → publish → register (same 
 
   it('a rejected Seminar never appears publicly and cannot accept registrations', async () => {
     const admin = await registerAdmin(app);
-    const seminar = await createVetCourse(app, admin.accessToken, { type: 'SEMINAR', capacity: 10 });
+    const seminar = await createVetCourse(app, admin.accessToken, {
+      type: 'SEMINAR',
+      capacity: 10,
+    });
     const reject = await request(app)
       .post(adminApi(`/vet-courses/${seminar.id}/reject`))
       .set(bearer(admin.accessToken))
@@ -387,8 +409,16 @@ describe('Seminars — admin create → moderate → publish → register (same 
     expect(reject.body.data.status).toBe('REJECTED');
 
     const vet = await registerApprovedVet(app);
-    expect((await request(app).get(api('')).set(bearer(vet.accessToken))).body.data).toHaveLength(0);
-    expect((await request(app).get(api(`/${seminar.id}`)).set(bearer(vet.accessToken))).status).toBe(404);
+    expect((await request(app).get(api('')).set(bearer(vet.accessToken))).body.data).toHaveLength(
+      0,
+    );
+    expect(
+      (
+        await request(app)
+          .get(api(`/${seminar.id}`))
+          .set(bearer(vet.accessToken))
+      ).status,
+    ).toBe(404);
     const res = await registerForVetCourse(app, vet.accessToken, seminar.id);
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('VET_COURSE_NOT_OPEN');
@@ -396,9 +426,14 @@ describe('Seminars — admin create → moderate → publish → register (same 
 
   it('a cancelled Seminar rejects registrations', async () => {
     const admin = await registerAdmin(app);
-    const seminar = await createVetCourse(app, admin.accessToken, { type: 'SEMINAR', capacity: 10 });
+    const seminar = await createVetCourse(app, admin.accessToken, {
+      type: 'SEMINAR',
+      capacity: 10,
+    });
     await approveVetCourse(app, admin.accessToken, seminar.id);
-    await request(app).post(adminApi(`/vet-courses/${seminar.id}/cancel`)).set(bearer(admin.accessToken));
+    await request(app)
+      .post(adminApi(`/vet-courses/${seminar.id}/cancel`))
+      .set(bearer(admin.accessToken));
 
     const vet = await registerApprovedVet(app);
     const res = await registerForVetCourse(app, vet.accessToken, seminar.id);
@@ -409,9 +444,15 @@ describe('Seminars — admin create → moderate → publish → register (same 
     const admin = await registerAdmin(app);
     const seminar = await createVetCourse(app, admin.accessToken, { type: 'SEMINAR', capacity: 2 });
     await approveVetCourse(app, admin.accessToken, seminar.id);
-    const [a, b, c] = [await registerApprovedVet(app), await registerApprovedVet(app), await registerApprovedVet(app)];
+    const [a, b, c] = [
+      await registerApprovedVet(app),
+      await registerApprovedVet(app),
+      await registerApprovedVet(app),
+    ];
 
-    const before = await request(app).get(api(`/${seminar.id}`)).set(bearer(a.accessToken));
+    const before = await request(app)
+      .get(api(`/${seminar.id}`))
+      .set(bearer(a.accessToken));
     expect(before.body.data).toMatchObject({
       capacity: 2,
       registrationCount: 0,
@@ -421,8 +462,15 @@ describe('Seminars — admin create → moderate → publish → register (same 
     });
 
     expect((await registerForVetCourse(app, a.accessToken, seminar.id)).status).toBe(201);
-    const asA = await request(app).get(api(`/${seminar.id}`)).set(bearer(a.accessToken));
-    expect(asA.body.data).toMatchObject({ registrationCount: 1, remainingSeats: 1, isRegistered: true, registrationState: 'REGISTERED' });
+    const asA = await request(app)
+      .get(api(`/${seminar.id}`))
+      .set(bearer(a.accessToken));
+    expect(asA.body.data).toMatchObject({
+      registrationCount: 1,
+      remainingSeats: 1,
+      isRegistered: true,
+      registrationState: 'REGISTERED',
+    });
 
     const dup = await registerForVetCourse(app, a.accessToken, seminar.id);
     expect(dup.status).toBe(409);
@@ -432,7 +480,11 @@ describe('Seminars — admin create → moderate → publish → register (same 
 
     // The browse list carries the same caller-relative state as the details endpoint.
     const listAsC = await request(app).get(api('')).set(bearer(c.accessToken));
-    expect(listAsC.body.data[0]).toMatchObject({ registrationCount: 2, remainingSeats: 0, registrationState: 'FULL' });
+    expect(listAsC.body.data[0]).toMatchObject({
+      registrationCount: 2,
+      remainingSeats: 0,
+      registrationState: 'FULL',
+    });
     const listAsB = await request(app).get(api('')).set(bearer(b.accessToken));
     expect(listAsB.body.data[0].registrationState).toBe('REGISTERED');
 
@@ -440,8 +492,14 @@ describe('Seminars — admin create → moderate → publish → register (same 
     expect(full.status).toBe(409);
     expect(full.body.error.code).toBe('VET_COURSE_CAPACITY_FULL');
 
-    const adminView = await request(app).get(adminApi(`/vet-courses/${seminar.id}`)).set(bearer(admin.accessToken));
-    expect(adminView.body.data).toMatchObject({ capacity: 2, registrationCount: 2, remainingSeats: 0 });
+    const adminView = await request(app)
+      .get(adminApi(`/vet-courses/${seminar.id}`))
+      .set(bearer(admin.accessToken));
+    expect(adminView.body.data).toMatchObject({
+      capacity: 2,
+      registrationCount: 2,
+      remainingSeats: 0,
+    });
   });
 
   it('the last seat can only be taken once under concurrent registrations', async () => {
@@ -450,7 +508,9 @@ describe('Seminars — admin create → moderate → publish → register (same 
     await approveVetCourse(app, admin.accessToken, seminar.id);
     const vets = await Promise.all(Array.from({ length: 6 }, () => registerApprovedVet(app)));
 
-    const results = await Promise.all(vets.map((v) => registerForVetCourse(app, v.accessToken, seminar.id)));
+    const results = await Promise.all(
+      vets.map((v) => registerForVetCourse(app, v.accessToken, seminar.id)),
+    );
     const statuses = results.map((r) => r.status).sort();
     expect(statuses.filter((s) => s === 201)).toHaveLength(1);
     expect(statuses.filter((s) => s === 409)).toHaveLength(5);
@@ -467,7 +527,10 @@ describe('Seminars — admin create → moderate → publish → register (same 
 
   it('concurrent duplicate registrations by the same user produce exactly one registration', async () => {
     const admin = await registerAdmin(app);
-    const seminar = await createVetCourse(app, admin.accessToken, { type: 'SEMINAR', capacity: 10 });
+    const seminar = await createVetCourse(app, admin.accessToken, {
+      type: 'SEMINAR',
+      capacity: 10,
+    });
     await approveVetCourse(app, admin.accessToken, seminar.id);
     const vet = await registerApprovedVet(app);
 
@@ -477,7 +540,9 @@ describe('Seminars — admin create → moderate → publish → register (same 
     expect(results.filter((r) => r.status === 201)).toHaveLength(1);
     expect(results.filter((r) => r.status === 409)).toHaveLength(3);
 
-    const seats = await request(app).get(api(`/${seminar.id}`)).set(bearer(vet.accessToken));
+    const seats = await request(app)
+      .get(api(`/${seminar.id}`))
+      .set(bearer(vet.accessToken));
     expect(seats.body.data).toMatchObject({ registrationCount: 1, remainingSeats: 9 });
   });
 
@@ -509,15 +574,22 @@ describe('Seminars — admin create → moderate → publish → register (same 
     const plain = await registerUser(app);
     expect((await approveVetCourse(app, plain.accessToken, own.id)).status).toBe(403);
     expect(
-      (await request(app).get(adminApi(`/vet-courses/${own.id}/registrations`)).set(bearer(plain.accessToken))).status,
+      (
+        await request(app)
+          .get(adminApi(`/vet-courses/${own.id}/registrations`))
+          .set(bearer(plain.accessToken))
+      ).status,
     ).toBe(403);
-    expect((await request(app).get(adminApi('/vet-courses')).set(bearer(plain.accessToken))).status).toBe(403);
+    expect(
+      (await request(app).get(adminApi('/vet-courses')).set(bearer(plain.accessToken))).status,
+    ).toBe(403);
   });
 });
 
 describe('ManagementScreen — separate Courses / Seminars badge counts', () => {
   const summary = async (token: string) =>
-    (await request(app).get('/api/v1/admin/dashboard/summary').set(bearer(token))).body.data.cards as {
+    (await request(app).get('/api/v1/admin/dashboard/summary').set(bearer(token))).body.data
+      .cards as {
       id: string;
       count: number;
       activeCount: number;

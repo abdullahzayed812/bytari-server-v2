@@ -9,6 +9,7 @@ import {
   registerAdmin,
   registerApprovedVet,
   registerUser,
+  fixtureBytes,
 } from '../helpers/factories.js';
 
 const { app, container } = buildTestApp();
@@ -136,7 +137,7 @@ describe('product images', () => {
 
     // Simulate the client's direct-to-R2 PUT by writing through the in-memory
     // storage the test app is configured with.
-    await container.objectStorage.put(storageKey, Buffer.from('fake-image-bytes'), {
+    await container.objectStorage.put(storageKey, fixtureBytes('image/jpeg', 1024), {
       contentType: 'image/jpeg',
     });
 
