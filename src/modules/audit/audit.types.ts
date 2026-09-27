@@ -26,6 +26,10 @@ export const AuditAction = {
   EMAIL_VERIFIED: 'EMAIL_VERIFIED',
   PASSWORD_RESET_REQUESTED: 'PASSWORD_RESET_REQUESTED',
   PASSWORD_RESET_COMPLETED: 'PASSWORD_RESET_COMPLETED',
+  /** An ADMIN set a new password for another account (sessions revoked; the password is never logged). */
+  PASSWORD_SET_BY_ADMIN: 'PASSWORD_SET_BY_ADMIN',
+  /** An ADMIN sent a password-reset code to another account's email. */
+  PASSWORD_RESET_SENT_BY_ADMIN: 'PASSWORD_RESET_SENT_BY_ADMIN',
 
   // --- Organizations (Phase 3) ---
   ORGANIZATION_CREATED: 'ORGANIZATION_CREATED',
@@ -100,6 +104,8 @@ export const AuditAction = {
   MATING_REJECTED: 'MATING_REJECTED',
   /** Owner deletes their own listing, or an ADMIN / ANIMAL supervisor removes one. */
   ANIMAL_PUBLICATION_DELETED: 'ANIMAL_PUBLICATION_DELETED',
+  /** An ADMIN / ANIMAL supervisor edits a listing's fields and/or its moderation status. */
+  ANIMAL_PUBLICATION_UPDATED: 'ANIMAL_PUBLICATION_UPDATED',
 
   // --- Veterinary Store products (Phase 10) — VETERINARY_STORE organizations only ---
   VETERINARY_STORE_PRODUCT_CREATED: 'VETERINARY_STORE_PRODUCT_CREATED',

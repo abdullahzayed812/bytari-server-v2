@@ -16,8 +16,10 @@ import { resolveStorageUrlOrNull } from '../../shared/storage/media-url.js';
 import { toPublicUser, toUserSummary } from './user.mapper.js';
 import { UserPolicy } from './user.policy.js';
 import type { UserRepository } from './user.repository.js';
+import { isValidGovernorate } from '../../shared/validation/geography.js';
 import type {
   CreateUserData,
+  Gender,
   ListUsersFilter,
   PublicUser,
   TraderStatus,
@@ -130,14 +132,45 @@ export class UserService {
     return user;
   }
 
+  /**
+   * Admin profile edit. Only this explicit field allow-list is writable —
+   * status / roles / veterinarian status / password have their own audited
+   * endpoints, so nothing protected can ride in by mass assignment. An email
+   * change is uniqueness-checked; a governorate is validated against the
+   * resulting country's fixed list (Iraq) exactly like registration.
+   */
   async updateProfile(
     id: string,
-    patch: { firstName?: string; lastName?: string; phone?: string | null },
+    patch: {
+      firstName?: string;
+      lastName?: string;
+      phone?: string | null;
+      email?: string;
+      gender?: Gender | null;
+      country?: string | null;
+      governorate?: string | null;
+      specialization?: string | null;
+    },
     actor: ActorContext,
   ): Promise<User> {
     return this.db.transaction(async (tx) => {
       const existing = await this.users.findById(id, tx);
       if (!existing) throw new NotFoundError('User not found');
+
+      if (patch.email !== undefined && patch.email !== existing.email) {
+        const taken = await this.users.findByEmail(patch.email, tx);
+        if (taken && taken.id !== id) {
+          throw new ConflictError('An account with this email already exists');
+        }
+      }
+      const country = patch.country !== undefined ? patch.country : existing.country;
+      const governorate =
+        patch.governorate !== undefined ? patch.governorate : existing.governorate;
+      if (country && governorate && !isValidGovernorate(country, governorate)) {
+        throw new BadRequestError('governorate is not valid for the selected country', {
+          details: [{ path: 'body.governorate', message: 'not valid for country' }],
+        });
+      }
 
       const updated = await this.users.update(id, patch, tx);
       await this.audit.record(

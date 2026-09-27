@@ -5,10 +5,14 @@ import type { OrganizationService } from '../../organizations/application/organi
 import type { FarmSubscriptionRenewalRepository } from '../../farms/infrastructure/farm-subscription-renewal.repository.js';
 import type { AnimalService } from '../../animals/application/animal.service.js';
 import type { VeterinarianService } from '../../veterinarians/veterinarian.service.js';
-import type { VetServiceListingService, VetServiceRequestService } from '../../vet-services/index.js';
+import type {
+  VetServiceListingService,
+  VetServiceRequestService,
+} from '../../vet-services/index.js';
 import type { VetJobOfferService, VetJobSeekerProfileService } from '../../vet-jobs/index.js';
 import type { VetCourseService } from '../../vet-courses/index.js';
 import type { ContentService } from '../../content/application/content.service.js';
+import type { AnimalPublicationRepository } from '../../animals/infrastructure/animal-publication.repository.js';
 import type { AdvertisementService } from '../../advertisements/application/advertisement.service.js';
 import type { PetStoreAdminService } from '../../pet-owner-store/application/pet-owner-store-admin.service.js';
 import type { VeterinarianStoreAdminService } from '../../veterinarian-store/application/veterinarian-store-admin.service.js';
@@ -80,6 +84,7 @@ export interface AdminDashboardServiceDeps {
   conversations: ConversationRepository;
   audit: AuditService;
   seen: AdminDashboardSeenRepository;
+  animalPublications: AnimalPublicationRepository;
 }
 
 /**
@@ -156,6 +161,12 @@ export class AdminDashboardService {
       consultationsActive,
       inquiriesActive,
       userMessagesActive,
+      adoptionPending,
+      matingPending,
+      lostPending,
+      adoptionActive,
+      matingActive,
+      lostActive,
     ] = await Promise.all([
       this.deps.seen.getSeenMap(userId),
       this.deps.farmSubscriptionRenewals.listFarmsForAdmin({
@@ -201,7 +212,10 @@ export class AdminDashboardService {
       this.deps.audit.list({ ...WINDOW, action: 'ADMIN_NOTIFICATION_SENT' }),
       this.deps.audit.list({ page: 1, pageSize: RECENT_ACTIVITY_SIZE }),
       this.deps.organizations.listPendingForAdmin(1, CARD_WINDOW_SIZE),
-      this.deps.farmSubscriptionRenewals.listAllPendingForAdmin({ page: 1, pageSize: CARD_WINDOW_SIZE }),
+      this.deps.farmSubscriptionRenewals.listAllPendingForAdmin({
+        page: 1,
+        pageSize: CARD_WINDOW_SIZE,
+      }),
       this.deps.farmSubscriptionRenewals.listFarmsForAdmin({
         page: 1,
         pageSize: 1,
@@ -214,20 +228,40 @@ export class AdminDashboardService {
         speciesGroup: 'LIVESTOCK',
         status: 'ACTIVE',
       }),
-      this.deps.organizations.listForAdmin({ page: 1, pageSize: 1, type: 'CLINIC', status: 'ACTIVE' }),
+      this.deps.organizations.listForAdmin({
+        page: 1,
+        pageSize: 1,
+        type: 'CLINIC',
+        status: 'ACTIVE',
+      }),
       this.deps.organizations.listForAdmin({
         page: 1,
         pageSize: 1,
         type: 'VETERINARY_OFFICE',
         status: 'ACTIVE',
       }),
-      this.deps.organizations.listForAdmin({ page: 1, pageSize: 1, type: 'SYNDICATE', status: 'ACTIVE' }),
+      this.deps.organizations.listForAdmin({
+        page: 1,
+        pageSize: 1,
+        type: 'SYNDICATE',
+        status: 'ACTIVE',
+      }),
       this.deps.users.list({ page: 1, pageSize: 1, veterinarianStatus: 'APPROVED' }),
       this.deps.users.list({ page: 1, pageSize: 1, role: 'PET_OWNER', status: 'ACTIVE' }),
       this.deps.users.list({ page: 1, pageSize: 1, role: 'VETERINARIAN', status: 'ACTIVE' }),
       this.deps.users.list({ page: 1, pageSize: 1, status: 'ACTIVE' }),
-      this.deps.vetCourses.listForModeration({ page: 1, pageSize: 1, status: 'APPROVED', type: 'COURSE' }),
-      this.deps.vetCourses.listForModeration({ page: 1, pageSize: 1, status: 'APPROVED', type: 'SEMINAR' }),
+      this.deps.vetCourses.listForModeration({
+        page: 1,
+        pageSize: 1,
+        status: 'APPROVED',
+        type: 'COURSE',
+      }),
+      this.deps.vetCourses.listForModeration({
+        page: 1,
+        pageSize: 1,
+        status: 'APPROVED',
+        type: 'SEMINAR',
+      }),
       this.deps.vetServiceListings.listForModeration({ page: 1, pageSize: 1, status: 'APPROVED' }),
       this.deps.vetServiceRequests.listForModeration({ page: 1, pageSize: 1, status: 'APPROVED' }),
       this.deps.content.listAdmin({ page: 1, pageSize: 1, type: 'MAGAZINE', status: 'PUBLISHED' }),
@@ -239,11 +273,49 @@ export class AdminDashboardService {
       this.deps.consultations.list({ page: 1, pageSize: 1, status: 'OPEN' }),
       this.deps.inquiries.list({ page: 1, pageSize: 1, status: 'OPEN' }),
       this.deps.supportMessages.list({ page: 1, pageSize: 1, status: 'OPEN' }),
+      // badge = new PENDING submissions; main stat = APPROVED (live) listings
+      this.deps.animalPublications.listForModeration({
+        ...WINDOW,
+        kind: 'ADOPTION',
+        status: 'PENDING',
+      }),
+      this.deps.animalPublications.listForModeration({
+        ...WINDOW,
+        kind: 'MATING',
+        status: 'PENDING',
+      }),
+      this.deps.animalPublications.listForModeration({
+        ...WINDOW,
+        kind: 'LOST',
+        status: 'PENDING',
+      }),
+      this.deps.animalPublications.listForModeration({
+        page: 1,
+        pageSize: 1,
+        kind: 'ADOPTION',
+        status: 'APPROVED',
+      }),
+      this.deps.animalPublications.listForModeration({
+        page: 1,
+        pageSize: 1,
+        kind: 'MATING',
+        status: 'APPROVED',
+      }),
+      this.deps.animalPublications.listForModeration({
+        page: 1,
+        pageSize: 1,
+        kind: 'LOST',
+        status: 'APPROVED',
+      }),
     ]);
 
     const since = (id: AdminDashboardCardId) => seenMap.get(id);
     const cards: AdminDashboardCard[] = [
-      { id: 'poultry', count: countNew(poultry.items, since('poultry')), activeCount: poultryActive.total },
+      {
+        id: 'poultry',
+        count: countNew(poultry.items, since('poultry')),
+        activeCount: poultryActive.total,
+      },
       {
         id: 'livestock',
         count: countNew(livestock.items, since('livestock')),
@@ -261,8 +333,16 @@ export class AdminDashboardService {
         activeCount: inquiriesActive.total,
       },
       { id: 'ads', count: countNew(ads.items, since('ads')), activeCount: ads.total },
-      { id: 'clinics', count: countNew(clinics.items, since('clinics')), activeCount: clinicsActive.total },
-      { id: 'offices', count: countNew(offices.items, since('offices')), activeCount: officesActive.total },
+      {
+        id: 'clinics',
+        count: countNew(clinics.items, since('clinics')),
+        activeCount: clinicsActive.total,
+      },
+      {
+        id: 'offices',
+        count: countNew(offices.items, since('offices')),
+        activeCount: officesActive.total,
+      },
       {
         id: 'vetApprovals',
         count: countNew(vetApplicationsPending.items, since('vetApprovals')),
@@ -328,7 +408,11 @@ export class AdminDashboardService {
         count: countNew(veterinarianStoreProducts.items, since('veterinarianStore')),
         activeCount: veterinarianStoreProductsActive.total,
       },
-      { id: 'users', count: countNew(allUsers.items, since('users')), activeCount: usersActive.total },
+      {
+        id: 'users',
+        count: countNew(allUsers.items, since('users')),
+        activeCount: usersActive.total,
+      },
       {
         id: 'userMessages',
         count: countNew(userMessages.items, since('userMessages')),
@@ -338,6 +422,31 @@ export class AdminDashboardService {
         id: 'broadcasts',
         count: countNew(broadcasts.items, since('broadcasts')),
         activeCount: broadcasts.total,
+      },
+      {
+        id: 'books',
+        count: countNew(contentBooks.items, since('books')),
+        activeCount: contentBooksActive.total,
+      },
+      {
+        id: 'magazines',
+        count: countNew(contentMagazines.items, since('magazines')),
+        activeCount: contentMagazinesActive.total,
+      },
+      {
+        id: 'adoption',
+        count: countNew(adoptionPending.items, since('adoption')),
+        activeCount: adoptionActive.total,
+      },
+      {
+        id: 'mating',
+        count: countNew(matingPending.items, since('mating')),
+        activeCount: matingActive.total,
+      },
+      {
+        id: 'lostAnimals',
+        count: countNew(lostPending.items, since('lostAnimals')),
+        activeCount: lostActive.total,
       },
     ];
 
@@ -366,9 +475,22 @@ export class AdminDashboardService {
   }
 
   private buildPendingTasks(
-    vetApplications: { items: Array<{ id: string; createdAt: string; user: { firstName: string; lastName: string } }> },
+    vetApplications: {
+      items: Array<{
+        id: string;
+        createdAt: string;
+        user: { firstName: string; lastName: string };
+      }>;
+    },
     organizations: { items: Array<{ id: string; name: string; createdAt: string }> },
-    renewals: { items: Array<{ id: string; organizationId: string; organizationName: string; createdAt: string }> },
+    renewals: {
+      items: Array<{
+        id: string;
+        organizationId: string;
+        organizationName: string;
+        createdAt: string;
+      }>;
+    },
   ): AdminPendingTask[] {
     const tasks: AdminPendingTask[] = [
       ...vetApplications.items.map((a) => ({

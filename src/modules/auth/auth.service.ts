@@ -242,6 +242,75 @@ export class AuthService {
   }
 
   /**
+   * ADMIN: set a new password for another account. Hashed with the same
+   * `PasswordService` as every other path; ALL of the target's refresh
+   * sessions are revoked in the same transaction so an attacker holding a
+   * stolen session is cut off. The plaintext is never stored, logged,
+   * audited or returned — and there is no endpoint that can read a password.
+   */
+  async adminSetPassword(
+    targetUserId: string,
+    newPassword: string,
+    actor: { actorUserId: string; context?: AuditContext },
+  ): Promise<{ revokedSessions: number }> {
+    if (targetUserId === actor.actorUserId) {
+      throw new ForbiddenError('Use the change-password flow for your own account');
+    }
+    await this.users.getById(targetUserId); // 404 when unknown
+    const passwordHash = await this.passwords.hash(newPassword);
+    return this.db.transaction(async (tx) => {
+      await this.users.setPasswordHash(targetUserId, passwordHash, tx);
+      const revokedSessions = await this.sessions.revokeAllForUserInTransaction(targetUserId, tx);
+      await this.audit.record(
+        {
+          action: AuditAction.PASSWORD_SET_BY_ADMIN,
+          entityType: AuditEntityType.USER,
+          entityId: targetUserId,
+          actorUserId: actor.actorUserId,
+          metadata: { revokedSessions },
+          context: actor.context,
+        },
+        tx,
+      );
+      return { revokedSessions };
+    });
+  }
+
+  /**
+   * ADMIN: email the target a one-time password-reset code (the same
+   * `PASSWORD_RESET` code flow as "forgot password"), so the user sets their
+   * own new password. Refused for a non-ACTIVE account.
+   */
+  async adminSendPasswordReset(
+    targetUserId: string,
+    actor: { actorUserId: string; context?: AuditContext },
+  ): Promise<{ codeExpiresInSeconds: number }> {
+    const codes = this.requirePasswordResetCodes();
+    const user = await this.users.getById(targetUserId);
+    if (user.status !== 'ACTIVE') {
+      throw new BadRequestError('Password reset can only be sent to an ACTIVE account', {
+        code: ErrorCode.ACCOUNT_INACTIVE,
+      });
+    }
+    const waitSeconds = await codes.resendAvailableInSeconds(user.id);
+    if (waitSeconds > 0) {
+      throw new RateLimitError(`Please wait ${waitSeconds}s before sending another code`, {
+        code: ErrorCode.RATE_LIMITED,
+      });
+    }
+    const { code } = await this.db.transaction((tx) => codes.issueCode(user.id, tx));
+    await codes.sendCodeEmail(user.email, user.firstName, code);
+    await this.audit.recordSafe({
+      action: AuditAction.PASSWORD_RESET_SENT_BY_ADMIN,
+      entityType: AuditEntityType.USER,
+      entityId: user.id,
+      actorUserId: actor.actorUserId,
+      context: actor.context,
+    });
+    return { codeExpiresInSeconds: codes.codeTtlSeconds };
+  }
+
+  /**
    * Forgot password, step 2: check the code (expiry / attempt lockout /
    * one-time use — `EmailVerificationService.verify`), set the new Argon2id
    * hash, and revoke EVERY refresh session so any stolen / old login is cut

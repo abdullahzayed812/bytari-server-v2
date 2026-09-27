@@ -126,6 +126,7 @@ import { ExchangeRateService } from './modules/poultryMarket/application/exchang
 import { PoultryMarketStatisticsService } from './modules/poultryMarket/application/poultry-market-statistics.service.js';
 import { ConversationRepository } from './modules/chat/infrastructure/conversation.repository.js';
 import { MessageRepository } from './modules/chat/infrastructure/message.repository.js';
+import { ChatAttachmentMedia } from './modules/chat/application/chat-attachment-media.js';
 import { ChatService } from './modules/chat/application/chat.service.js';
 import { ThreadRepository } from './modules/consultations/infrastructure/thread.repository.js';
 import { AiSettingsRepository } from './modules/consultations/infrastructure/ai-settings.repository.js';
@@ -1103,6 +1104,7 @@ export function createContainer(deps: ContainerDeps): Container {
     auditService,
     eventBus,
     logger,
+    new ChatAttachmentMedia(objectStorage),
   );
 
   // --- Global Chat rooms — public discussion rooms (an `organizations` row
@@ -1466,6 +1468,7 @@ export function createContainer(deps: ContainerDeps): Container {
     supervisors: supervisorService,
     conversations: conversationRepository,
     audit: auditService,
+    animalPublications: animalPublicationRepository,
   });
 
   const authenticateDeps = { tokens: tokenService, users: userService, roles: roleRepository };

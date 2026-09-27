@@ -66,11 +66,18 @@ export class AnimalTransferRequestService {
       });
     }
 
-    const target = await this.users.getByIdOrNull(input.toUserId);
+    // Resolve the recipient by email (the app's path) or id; the same
+    // target rules apply to both (unknown 404 / inactive 400 / self 409).
+    const target = input.toEmail
+      ? await this.users.findByEmail(input.toEmail.trim().toLowerCase())
+      : await this.users.getByIdOrNull(input.toUserId as string);
     AnimalPolicy.assertValidTransferTarget(
       target ? { id: target.id, status: target.status } : null,
       actor.actorUserId,
     );
+
+    // `assertValidTransferTarget` throws on a missing target, so it is set here.
+    const toUserId = (target as { id: string }).id;
 
     const open = await this.requests.findOpenForAnimal(animal.id);
     if (open) {
@@ -82,7 +89,7 @@ export class AnimalTransferRequestService {
     const created = await this.requests.create({
       animalId: animal.id,
       fromUserId: actor.actorUserId,
-      toUserId: input.toUserId,
+      toUserId: toUserId,
       reason: input.reason?.trim() || null,
     });
 
@@ -91,7 +98,7 @@ export class AnimalTransferRequestService {
       entityType: AuditEntityType.ANIMAL_OWNERSHIP,
       entityId: animal.id,
       actorUserId: actor.actorUserId,
-      metadata: { animalId: animal.id, toUserId: input.toUserId },
+      metadata: { animalId: animal.id, toUserId: toUserId },
       context: actor.context,
     });
 
@@ -99,7 +106,7 @@ export class AnimalTransferRequestService {
       requestId: created.id,
       animalId: animal.id,
       fromUserId: actor.actorUserId,
-      toUserId: input.toUserId,
+      toUserId,
     });
 
     return this.mustGetDTO(created.id);

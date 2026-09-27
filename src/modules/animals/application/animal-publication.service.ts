@@ -1,6 +1,6 @@
 import type { Knex } from 'knex';
 import type { Logger } from 'pino';
-import { ConflictError, NotFoundError } from '../../../shared/errors/app-error.js';
+import { BadRequestError, ConflictError, NotFoundError } from '../../../shared/errors/app-error.js';
 import { ErrorCode } from '../../../shared/errors/error-codes.js';
 import type { EventBus } from '../../../shared/events/index.js';
 import type { ObjectStorage } from '../../../infra/storage/index.js';
@@ -23,7 +23,50 @@ import {
   type PublicListFilter,
   type PublicPublicationDTO,
 } from '../domain/publication.types.js';
-import type { AnimalPublicationRepository } from '../infrastructure/animal-publication.repository.js';
+import type {
+  AdminUpdatePublicationData,
+  AnimalPublicationRepository,
+} from '../infrastructure/animal-publication.repository.js';
+import type { PublicationKind } from '../domain/publication.constants.js';
+
+/** Which editable fields belong to which kind — mirrors the per-kind create schemas. */
+const EDITABLE_FIELDS_BY_KIND: Record<PublicationKind, readonly string[]> = {
+  LOST: [
+    'note',
+    'contactName',
+    'contactPhone',
+    'lostDate',
+    'lostTime',
+    'lostGovernorate',
+    'lostDistrict',
+    'lostLocationDetail',
+    'healthNotes',
+  ],
+  ADOPTION: [
+    'note',
+    'extraNotes',
+    'contactName',
+    'contactPhone',
+    'city',
+    'healthStatus',
+    'vaccinationStatus',
+    'isSterilized',
+  ],
+  MATING: [
+    'note',
+    'extraNotes',
+    'contactName',
+    'contactPhone',
+    'city',
+    'healthStatus',
+    'vaccinationStatus',
+  ],
+};
+
+export type AdminUpdatePublicationInput = Omit<AdminUpdatePublicationData, 'review'> & {
+  status?: 'APPROVED' | 'REJECTED';
+  rejectionReason?: string;
+};
 
 const IMAGE_URL_TTL_SECONDS = 3600;
 
@@ -310,6 +353,105 @@ export class AnimalPublicationService {
       actorUserId: actor.actorUserId,
     });
     return toPublicationDTO(updated);
+  }
+
+  /**
+   * Moderator edit (ADMIN / ANIMAL supervisor via `animal.update`): corrects a
+   * listing's fields and/or reverses a moderation decision (APPROVED ↔
+   * REJECTED). Kind, animal and creator are immutable; fields foreign to the
+   * kind are refused. A status change publishes the kind's approved/rejected
+   * event (post-commit) so the owner is notified exactly as on first review.
+   */
+  async adminUpdate(
+    publicationId: string,
+    input: AdminUpdatePublicationInput,
+    actor: PublicationActor,
+  ): Promise<ModerationPublicationDTO> {
+    const existing = await this.publications.findById(publicationId);
+    if (!existing) throw new NotFoundError('Publication not found');
+
+    const { status, rejectionReason, ...fields } = input;
+    const allowed = EDITABLE_FIELDS_BY_KIND[existing.kind];
+    const foreign = Object.keys(fields).filter(
+      (k) => fields[k as keyof typeof fields] !== undefined && !allowed.includes(k),
+    );
+    if (foreign.length > 0) {
+      throw new BadRequestError(`Fields not applicable to a ${existing.kind} listing`, {
+        details: foreign.map((f) => ({
+          path: `body.${f}`,
+          message: 'not applicable to this kind',
+        })),
+      });
+    }
+    if (existing.kind === 'ADOPTION' && fields.note !== undefined && fields.note.length === 0) {
+      throw new BadRequestError('note is required for an ADOPTION listing', {
+        details: [{ path: 'body.note', message: 'required' }],
+      });
+    }
+
+    const statusChanged = status !== undefined && status !== existing.status;
+    if (statusChanged && status === 'REJECTED' && !rejectionReason) {
+      throw new BadRequestError('rejectionReason is required to reject a listing', {
+        details: [{ path: 'body.rejectionReason', message: 'required' }],
+      });
+    }
+    const changedFields = Object.keys(fields).filter(
+      (k) => fields[k as keyof typeof fields] !== undefined,
+    );
+    if (changedFields.length === 0 && !statusChanged) {
+      return this.getForModeration(publicationId);
+    }
+
+    await this.db.transaction(async (tx) => {
+      await this.publications.adminUpdate(
+        publicationId,
+        {
+          ...fields,
+          review: statusChanged
+            ? {
+                status,
+                reviewedByUserId: actor.actorUserId,
+                rejectionReason: status === 'REJECTED' ? (rejectionReason ?? null) : null,
+              }
+            : undefined,
+        },
+        tx,
+      );
+      await this.audit.record(
+        {
+          action: AuditAction.ANIMAL_PUBLICATION_UPDATED,
+          entityType: AuditEntityType.ANIMAL_PUBLICATION,
+          entityId: publicationId,
+          actorUserId: actor.actorUserId,
+          metadata: {
+            animalId: existing.animalId,
+            publicationId,
+            kind: existing.kind,
+            fields: changedFields,
+            ...(statusChanged ? { fromStatus: existing.status, toStatus: status } : {}),
+          },
+          context: actor.context,
+        },
+        tx,
+      );
+    });
+
+    if (statusChanged) {
+      const kind = existing.kind;
+      this.events.publish(
+        status === 'APPROVED'
+          ? PUBLICATION_EVENTS[kind].approved
+          : PUBLICATION_EVENTS[kind].rejected,
+        {
+          publicationId,
+          animalId: existing.animalId,
+          kind,
+          createdByUserId: existing.createdByUserId,
+          actorUserId: actor.actorUserId,
+        },
+      );
+    }
+    return this.getForModeration(publicationId);
   }
 
   // --- public browse (any authenticated user) ------------------

@@ -38,6 +38,24 @@ export interface ReviewPublicationData {
   rejectionReason: string | null;
 }
 
+export interface AdminUpdatePublicationData {
+  note?: string;
+  extraNotes?: string | null;
+  contactName?: string;
+  contactPhone?: string;
+  city?: string;
+  healthStatus?: string;
+  vaccinationStatus?: string;
+  isSterilized?: boolean;
+  lostDate?: string;
+  lostTime?: string | null;
+  lostGovernorate?: string;
+  lostDistrict?: string;
+  lostLocationDetail?: string | null;
+  healthNotes?: string | null;
+  review?: ReviewPublicationData;
+}
+
 interface JoinedRow extends AnimalPublicationRow {
   a_id: string;
   a_name: string;
@@ -166,6 +184,45 @@ export class AnimalPublicationRepository {
       })
       .returning('*')) as AnimalPublicationRow[];
     if (!row) throw new Error('publication not found after review');
+    return rowToPublication(row);
+  }
+
+  /** Moderator edit — only the provided columns change; `undefined` keys are skipped. */
+  async adminUpdate(
+    id: string,
+    data: AdminUpdatePublicationData,
+    trx: Knex.Transaction,
+  ): Promise<AnimalPublication> {
+    const patch: Record<string, unknown> = {
+      note: data.note,
+      extra_notes: data.extraNotes,
+      contact_name: data.contactName,
+      contact_phone: data.contactPhone,
+      city: data.city,
+      health_status: data.healthStatus,
+      vaccination_status: data.vaccinationStatus,
+      is_sterilized: data.isSterilized,
+      lost_date: data.lostDate,
+      lost_time: data.lostTime,
+      lost_governorate: data.lostGovernorate,
+      lost_district: data.lostDistrict,
+      lost_location_detail: data.lostLocationDetail,
+      health_notes: data.healthNotes,
+      updated_at: new Date(),
+    };
+    if (data.review) {
+      patch.status = data.review.status;
+      patch.reviewed_by_user_id = data.review.reviewedByUserId;
+      patch.reviewed_at = new Date();
+      patch.rejection_reason =
+        data.review.status === 'REJECTED' ? data.review.rejectionReason : null;
+    }
+    for (const k of Object.keys(patch)) if (patch[k] === undefined) delete patch[k];
+    const [row] = (await trx(TABLE)
+      .where({ id })
+      .update(patch)
+      .returning('*')) as AnimalPublicationRow[];
+    if (!row) throw new Error('publication not found after admin update');
     return rowToPublication(row);
   }
 

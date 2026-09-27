@@ -9,6 +9,7 @@ import { AdminPublicationController } from './admin-publication.controller.js';
 import { PublicationController } from './publication.controller.js';
 import { animalIdParamSchema, createAnimalMiddleware, requireAnimal } from './animal.middleware.js';
 import {
+  adminUpdatePublicationBodySchema,
   animalPublicationParamSchema,
   createInteractionBodySchema,
   createPublicationBodySchema,
@@ -166,6 +167,13 @@ export function createAdminAnimalPublicationRouter(c: Container): Router {
     authorize('animal.read'),
     validate({ params: publicationIdParamSchema }),
     asyncHandler(ctrl.getOne),
+  );
+  // Moderator edit: listing fields + APPROVED ↔ REJECTED reversal.
+  r.patch(
+    '/:publicationId',
+    authorize('animal.update'),
+    validate({ params: publicationIdParamSchema, body: adminUpdatePublicationBodySchema }),
+    asyncHandler(ctrl.update),
   );
   r.post(
     '/:publicationId/approve',

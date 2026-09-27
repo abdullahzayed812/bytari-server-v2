@@ -39,6 +39,11 @@ const EXPECTED_CARD_IDS = [
   'users',
   'userMessages',
   'broadcasts',
+  'books',
+  'magazines',
+  'adoption',
+  'mating',
+  'lostAnimals',
 ];
 
 beforeAll(() => ensureSchema());
@@ -51,7 +56,10 @@ describe('admin dashboard summary — GET /admin/dashboard/summary', () => {
     const vetOwner = await registerApprovedVet(app);
     // A PENDING clinic feeds the "clinics" badge (new requests awaiting approval);
     // a separately-approved one feeds its activeCount (currently-active clinics).
-    await createOrganization(app, vetOwner.accessToken, { type: 'CLINIC', name: 'Pending Test Clinic' });
+    await createOrganization(app, vetOwner.accessToken, {
+      type: 'CLINIC',
+      name: 'Pending Test Clinic',
+    });
     await createActiveOrganization(app, vetOwner.accessToken, admin.accessToken, {
       type: 'CLINIC',
       name: 'Dashboard Test Clinic',
@@ -154,7 +162,9 @@ describe('admin dashboard card counts — new/unseen, not totals (spec §4-§8)'
     const afterNew = await request(app)
       .get('/api/v1/admin/dashboard/summary')
       .set(bearer(admin.accessToken));
-    const clinicsAfterNew = afterNew.body.data.cards.find((c: { id: string }) => c.id === 'clinics');
+    const clinicsAfterNew = afterNew.body.data.cards.find(
+      (c: { id: string }) => c.id === 'clinics',
+    );
     expect(clinicsAfterNew.count).toBe(1);
   });
 

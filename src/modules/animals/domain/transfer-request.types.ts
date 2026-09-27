@@ -43,7 +43,9 @@ export interface AnimalTransferRequestDTO {
 }
 
 export interface CreateTransferRequestInput {
-  toUserId: string;
+  /** Exactly one of `toUserId` / `toEmail` (validated by the route schema). */
+  toUserId?: string;
+  toEmail?: string;
   reason?: string;
 }
 

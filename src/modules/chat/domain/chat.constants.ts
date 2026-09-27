@@ -70,6 +70,44 @@ export type MessageType = (typeof MESSAGE_TYPES)[number];
 
 export const MESSAGE_BODY_MAX = 4000;
 
+// --- chat media (one optional attachment per message) ------------------
+
+export const CHAT_ATTACHMENT_KINDS = ['IMAGE', 'VIDEO', 'FILE'] as const;
+export type ChatAttachmentKind = (typeof CHAT_ATTACHMENT_KINDS)[number];
+
+/**
+ * MIME allow-list per kind. Checked on the declared type at presign AND on the
+ * stored object's verified (magic-byte) type at send.
+ */
+export const CHAT_ATTACHMENT_MIME: Record<ChatAttachmentKind, readonly string[]> = {
+  IMAGE: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
+  VIDEO: ['video/mp4', 'video/quicktime', 'video/3gpp', 'video/webm'],
+  FILE: [
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-powerpoint',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'text/plain',
+    'text/csv',
+  ],
+};
+
+/** Per-kind byte ceilings. */
+export const CHAT_ATTACHMENT_MAX_BYTES: Record<ChatAttachmentKind, number> = {
+  IMAGE: 10 * 1024 * 1024,
+  VIDEO: 50 * 1024 * 1024,
+  FILE: 20 * 1024 * 1024,
+};
+
+export const CHAT_ATTACHMENT_FILENAME_MAX = 255;
+/** Presigned PUT lifetime. */
+export const CHAT_ATTACHMENT_UPLOAD_TTL_SECONDS = 600;
+/** Signed GET lifetime for rendering / downloading an attachment. */
+export const CHAT_ATTACHMENT_URL_TTL_SECONDS = 3600;
+
 /**
  * Global permission keys (seeded from the RBAC constants). Chat access is
  * RELATIONSHIP-scoped — these exist for the ADMIN override and a future

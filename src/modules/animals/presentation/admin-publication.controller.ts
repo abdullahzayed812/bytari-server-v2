@@ -6,7 +6,11 @@ import { validatedBody, validatedParams, validatedQuery } from '../../../shared/
 import { auditContextFromRequest, type AuditContextResult } from '../../audit/audit-context.js';
 import { requireAuth } from '../../auth/authenticate.middleware.js';
 import type { AnimalPublicationService } from '../application/animal-publication.service.js';
-import type { ModerationPublicationsQuery, RejectPublicationBody } from './publication.schemas.js';
+import type {
+  AdminUpdatePublicationBody,
+  ModerationPublicationsQuery,
+  RejectPublicationBody,
+} from './publication.schemas.js';
 
 /** Moderation of Lost / Adoption / Mating publications (ADMIN or ANIMAL supervisor). */
 export class AdminPublicationController {
@@ -35,6 +39,12 @@ export class AdminPublicationController {
   approve = async (req: Request, res: Response): Promise<void> => {
     const { publicationId } = validatedParams<{ publicationId: string }>(req);
     sendSuccess(res, await this.publications.approve(publicationId, this.actor(req)));
+  };
+
+  update = async (req: Request, res: Response): Promise<void> => {
+    const { publicationId } = validatedParams<{ publicationId: string }>(req);
+    const body = validatedBody<AdminUpdatePublicationBody>(req);
+    sendSuccess(res, await this.publications.adminUpdate(publicationId, body, this.actor(req)));
   };
 
   reject = async (req: Request, res: Response): Promise<void> => {

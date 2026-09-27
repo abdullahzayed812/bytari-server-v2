@@ -10,8 +10,19 @@ export const listSupervisorsQuerySchema = paginationQuerySchema.extend({
 });
 export type ListSupervisorsQuery = z.infer<typeof listSupervisorsQuerySchema>;
 
-export const assignSupervisorBodySchema = z.object({
-  userId: z.string().uuid(),
-  domain: z.enum(SUPERVISOR_DOMAINS),
-});
+/**
+ * The UI assigns by EMAIL (the admin types the person's email — no manual
+ * UUID entry); `userId` stays accepted for internal / scripted callers.
+ * Exactly one of the two.
+ */
+export const assignSupervisorBodySchema = z
+  .object({
+    userId: z.string().uuid().optional(),
+    email: z.string().trim().toLowerCase().email().optional(),
+    domain: z.enum(SUPERVISOR_DOMAINS),
+  })
+  .refine((v) => Boolean(v.userId) !== Boolean(v.email), {
+    message: 'Provide exactly one of userId or email',
+    path: ['email'],
+  });
 export type AssignSupervisorBody = z.infer<typeof assignSupervisorBodySchema>;

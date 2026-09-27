@@ -6,8 +6,9 @@ import {
   passwordSchema,
   phoneSchema,
 } from '../../shared/validation/common.js';
+import { countryCodeSchema, governorateSchema } from '../../shared/validation/geography.js';
 import { ROLE_KEYS } from '../rbac/rbac.constants.js';
-import { USER_STATUSES, VETERINARIAN_STATUSES } from './user.types.js';
+import { GENDERS, USER_STATUSES, VETERINARIAN_STATUSES } from './user.types.js';
 
 export const listUsersQuerySchema = paginationQuerySchema.extend({
   status: z.enum(USER_STATUSES).optional(),
@@ -28,12 +29,23 @@ export const createUserBodySchema = z.object({
 });
 export type CreateUserBody = z.infer<typeof createUserBodySchema>;
 
+/**
+ * Admin profile edit — an explicit allow-list (`.strict()`): status, roles,
+ * veterinarian/trader status, avatar and password are NOT writable here (each
+ * has its own audited endpoint), so no protected field can be mass-assigned.
+ */
 export const updateUserBodySchema = z
   .object({
     firstName: nameSchema.optional(),
     lastName: nameSchema.optional(),
     phone: phoneSchema.nullable().optional(),
+    email: emailSchema.optional(),
+    gender: z.enum(GENDERS).nullable().optional(),
+    country: countryCodeSchema.nullable().optional(),
+    governorate: governorateSchema.nullable().optional(),
+    specialization: z.string().trim().min(1).max(120).nullable().optional(),
   })
+  .strict()
   .refine((v) => Object.keys(v).length > 0, { message: 'At least one field is required' });
 export type UpdateUserBody = z.infer<typeof updateUserBodySchema>;
 
@@ -51,3 +63,13 @@ export const roleKeyParamSchema = z.object({
   id: z.string().uuid(),
   roleKey: z.enum(ROLE_KEYS),
 });
+
+/** `POST /admin/users/:id/password` — the admin chooses the new password (never read back). */
+export const adminSetPasswordBodySchema = z.object({ newPassword: passwordSchema }).strict();
+export type AdminSetPasswordBody = z.infer<typeof adminSetPasswordBodySchema>;
+
+/** `POST /admin/users/:id/messages` — opens a support thread owned by the user. */
+export const adminMessageUserBodySchema = z
+  .object({ body: z.string().trim().min(1).max(4000) })
+  .strict();
+export type AdminMessageUserBody = z.infer<typeof adminMessageUserBodySchema>;

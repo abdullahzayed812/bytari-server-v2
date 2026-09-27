@@ -212,6 +212,8 @@ missing API URL is found in the bundle.
 
 ## 9. Deployments
 
+> Step-by-step checklist for publishing a new version: [`RELEASE.md`](./RELEASE.md).
+
 ### Automatic (CI/CD) [Implemented]
 
 ```

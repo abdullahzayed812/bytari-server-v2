@@ -6,6 +6,8 @@ import { createOrganizationMiddleware } from '../../organizations/presentation/o
 import { ChatController } from './chat.controller.js';
 import { createChatMiddleware } from './chat.middleware.js';
 import {
+  attachmentUploadUrlBodySchema,
+  conversationMessageParamSchema,
   conversationIdParamSchema,
   createConversationBodySchema,
   listConversationsQuerySchema,
@@ -58,6 +60,20 @@ export function createChatRouter(c: Container): Router {
     validate({ params: conversationIdParamSchema, body: sendMessageBodySchema }),
     withConversation,
     asyncHandler(ctrl.sendMessage),
+  );
+  // Chat media: presigned upload scoped to this conversation, then send the
+  // message with `attachment`. Reading an attachment re-checks access.
+  r.post(
+    '/:conversationId/attachments/upload-url',
+    validate({ params: conversationIdParamSchema, body: attachmentUploadUrlBodySchema }),
+    withConversation,
+    asyncHandler(ctrl.requestAttachmentUpload),
+  );
+  r.get(
+    '/:conversationId/messages/:messageId/attachment',
+    validate({ params: conversationMessageParamSchema }),
+    withConversation,
+    asyncHandler(ctrl.getAttachment),
   );
   r.post(
     '/:conversationId/read',

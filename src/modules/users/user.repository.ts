@@ -58,6 +58,7 @@ export class UserRepository {
 
   async update(id: string, patch: UpdateUserData, trx?: Knex.Transaction): Promise<User> {
     const dbPatch: Record<string, unknown> = { updated_at: new Date() };
+    if (patch.email !== undefined) dbPatch.email = patch.email;
     if (patch.firstName !== undefined) dbPatch.first_name = patch.firstName;
     if (patch.lastName !== undefined) dbPatch.last_name = patch.lastName;
     if (patch.phone !== undefined) dbPatch.phone = patch.phone;

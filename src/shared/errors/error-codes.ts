@@ -131,6 +131,14 @@ export const ErrorCode = {
   /** No object exists at the storage key being registered. */
   STORAGE_OBJECT_MISSING: 'STORAGE_OBJECT_MISSING',
 
+  // --- Advertisements ---
+  /**
+   * `POST /admin/ads/:id/activate` refused: the campaign is deleted, or none of
+   * its slides has a registered image yet (nothing renderable). `details[0].rule`
+   * is `NO_IMAGED_SLIDE` or `CAMPAIGN_DELETED`.
+   */
+  AD_CAMPAIGN_NOT_ACTIVATABLE: 'AD_CAMPAIGN_NOT_ACTIVATABLE',
+
   // --- Notifications & FCM (Phase 15) ---
   /** Admin broadcast would target more users than the synchronous limit allows. */
   BROADCAST_TOO_LARGE: 'BROADCAST_TOO_LARGE',

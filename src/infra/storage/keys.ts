@@ -37,6 +37,8 @@ export const StoragePrefix = {
   veterinaryOfficeProductImages: 'veterinary-office/products',
   organizationBroadcastImages: 'organizations/broadcasts',
   organizationLicenseDocuments: 'organizations/license-documents',
+  /** Private chat media — always `chat/attachments/<conversationId>/…`, served only via signed URLs. */
+  chatAttachments: 'chat/attachments',
   misc: 'misc',
 } as const;
 

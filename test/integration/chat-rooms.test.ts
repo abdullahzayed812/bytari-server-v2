@@ -10,14 +10,48 @@ beforeAll(() => ensureSchema());
 beforeEach(() => resetDb());
 afterAll(() => closeTestDb());
 
-async function createRoom(adminToken: string, overrides: Partial<{ name: string; rules: string }> = {}) {
+async function createRoom(
+  adminToken: string,
+  overrides: Partial<{ name: string; rules: string }> = {},
+) {
   const res = await request(app)
     .post('/api/v1/admin/chat-rooms')
     .set(bearer(adminToken))
-    .send({ name: overrides.name ?? 'الأغنام والماعز', description: 'كل ما يخص رعاية الأغنام', rules: overrides.rules });
-  if (res.status !== 201) throw new Error(`createRoom failed: ${res.status} ${JSON.stringify(res.body)}`);
+    .send({
+      name: overrides.name ?? 'الأغنام والماعز',
+      description: 'كل ما يخص رعاية الأغنام',
+      rules: overrides.rules,
+    });
+  if (res.status !== 201)
+    throw new Error(`createRoom failed: ${res.status} ${JSON.stringify(res.body)}`);
   return res.body.data as { id: string; conversationId: string; memberCount: number };
 }
+
+describe('Global Chat rooms — conversations inbox', () => {
+  it('a joined room appears in GET /conversations (vet or pet owner alike); leaving removes it; strangers never see it', async () => {
+    const admin = await registerAdmin(app);
+    const room = await createRoom(admin.accessToken);
+    const member = await registerUser(app);
+    const stranger = await registerUser(app);
+
+    await request(app).post(`/api/v1/chat-rooms/${room.id}/join`).set(bearer(member.accessToken));
+    const inbox = await request(app).get('/api/v1/conversations').set(bearer(member.accessToken));
+    expect(inbox.status).toBe(200);
+    const entry = inbox.body.data.find((c: { id: string }) => c.id === room.conversationId);
+    expect(entry).toMatchObject({
+      type: 'CHAT_ROOM',
+      organizationId: room.id,
+      viewerSide: 'ROOM_MEMBER',
+    });
+
+    const other = await request(app).get('/api/v1/conversations').set(bearer(stranger.accessToken));
+    expect(other.body.data.map((c: { id: string }) => c.id)).not.toContain(room.conversationId);
+
+    await request(app).post(`/api/v1/chat-rooms/${room.id}/leave`).set(bearer(member.accessToken));
+    const after = await request(app).get('/api/v1/conversations').set(bearer(member.accessToken));
+    expect(after.body.data.map((c: { id: string }) => c.id)).not.toContain(room.conversationId);
+  });
+});
 
 describe('Global Chat rooms — create / browse / join / leave / mute', () => {
   it('only an admin can create a room; a plain user gets 403', async () => {
@@ -35,9 +69,7 @@ describe('Global Chat rooms — create / browse / join / leave / mute', () => {
     expect(room.memberCount).toBe(1);
     expect(room.conversationId).toBeTruthy();
 
-    const list = await request(app)
-      .get('/api/v1/chat-rooms')
-      .set(bearer(admin.accessToken));
+    const list = await request(app).get('/api/v1/chat-rooms').set(bearer(admin.accessToken));
     expect(list.status).toBe(200);
     const found = list.body.data.find((r: { id: string }) => r.id === room.id);
     expect(found).toBeTruthy();
@@ -170,7 +202,9 @@ describe('Global Chat rooms — moderation (chat_room.rules.manage / chat_room.m
     const room = await createRoom(admin.accessToken);
     const moderator = await registerUser(app);
     const member = await registerUser(app);
-    await request(app).post(`/api/v1/chat-rooms/${room.id}/join`).set(bearer(moderator.accessToken));
+    await request(app)
+      .post(`/api/v1/chat-rooms/${room.id}/join`)
+      .set(bearer(moderator.accessToken));
     await request(app).post(`/api/v1/chat-rooms/${room.id}/join`).set(bearer(member.accessToken));
 
     const assign = await request(app)

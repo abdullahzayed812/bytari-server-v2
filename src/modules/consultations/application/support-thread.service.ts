@@ -214,6 +214,76 @@ export class SupportThreadService {
   }
 
   /**
+   * RESPONDER-initiated thread ("مراسلة المستخدم" from admin user management):
+   * opens a thread OWNED BY `targetUserId` — so it lands in that user's own
+   * support inbox exactly like one they started — whose first message is the
+   * responder's (source ADMIN / SUPERVISOR). Reuses the thread kernel: same
+   * tables, same access rules, same realtime/notification events (the
+   * `message` event, so the user is notified of a staff reply). The caller
+   * must hold this kind's `respond` permission; the target must exist.
+   */
+  async openForUser(
+    actor: ThreadActor,
+    targetUserId: string,
+    body: string,
+    targetExists: (userId: string) => Promise<boolean>,
+  ): Promise<ThreadDTO> {
+    if (!(await this.authz.can(actor.principal, this.cfg.perms.respond))) {
+      throw new ForbiddenError(`You cannot open a ${this.cfg.kind.toLowerCase()} thread`, {
+        code: ErrorCode.PERMISSION_DENIED,
+      });
+    }
+    if (targetUserId === actor.principal.userId) {
+      throw new BadRequestError('You cannot message yourself');
+    }
+    if (!(await targetExists(targetUserId))) throw new NotFoundError('User not found');
+
+    const source: MessageSource = this.authz.isAdmin(actor.principal) ? 'ADMIN' : 'SUPERVISOR';
+    const now = new Date();
+    const { thread, messageId } = await this.db.transaction(async (tx) => {
+      const created = await this.repo.create(
+        {
+          createdByUserId: targetUserId,
+          animalId: null,
+          animalType: null,
+          category: this.cfg.hasCategory ? 'GENERAL' : null,
+        },
+        tx,
+      );
+      const message = await this.repo.createMessage(
+        { threadId: created.id, senderUserId: actor.principal.userId, source, body },
+        tx,
+      );
+      await this.repo.touchLastMessageAt(created.id, now, tx);
+      await this.audit.record(
+        {
+          action: this.cfg.auditActions.created,
+          entityType: this.entityType,
+          entityId: created.id,
+          actorUserId: actor.principal.userId,
+          metadata: {
+            [`${this.cfg.kind.toLowerCase()}Id`]: created.id,
+            openedByResponder: true,
+            targetUserId,
+          },
+          context: actor.context,
+        },
+        tx,
+      );
+      return { thread: created, messageId: message.id };
+    });
+
+    this.events.publish(this.cfg.events.message, {
+      [this.cfg.parentIdField]: thread.id,
+      messageId,
+      source,
+    });
+
+    const fresh = (await this.repo.findById(thread.id)) ?? thread;
+    return toThreadDTO(this.cfg.kind, fresh);
+  }
+
+  /**
    * If AI is enabled for this kind, ask the abstraction for a reply and persist
    * it as an `AI` message in its own transaction. A provider error is logged
    * and swallowed — the original thread must stay intact.

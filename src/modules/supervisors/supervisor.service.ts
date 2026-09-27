@@ -37,6 +37,17 @@ export class SupervisorService {
     this.log = logger.child({ component: 'supervisor-service' });
   }
 
+  /** Assign by email — resolves the account server-side, then the same rules as {@link assign}. */
+  async assignByEmail(
+    email: string,
+    domain: SupervisorDomain,
+    actor: SupervisorActor,
+  ): Promise<SupervisorAssignment> {
+    const target = await this.users.findByEmail(email.trim().toLowerCase());
+    if (!target) throw new NotFoundError('No account exists with that email address');
+    return this.assign(target.id, domain, actor);
+  }
+
   async assign(
     targetUserId: string,
     domain: SupervisorDomain,

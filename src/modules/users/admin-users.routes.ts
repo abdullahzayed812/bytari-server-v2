@@ -5,6 +5,8 @@ import { idParamSchema } from '../../shared/validation/common.js';
 import type { Container } from '../../container.js';
 import { AdminUsersController } from './admin-users.controller.js';
 import {
+  adminMessageUserBodySchema,
+  adminSetPasswordBodySchema,
   assignRoleBodySchema,
   createUserBodySchema,
   listUsersQuerySchema,
@@ -15,7 +17,14 @@ import {
 
 /** Mounts `/admin/users/*`. Every route requires authentication + a permission. */
 export function createAdminUsersRouter(c: Container): Router {
-  const ctrl = new AdminUsersController(c.userService, c.rbacService, c.authService);
+  const ctrl = new AdminUsersController(
+    c.userService,
+    c.rbacService,
+    c.authService,
+    c.veterinarianService,
+    c.organizationService,
+    c.supportService,
+  );
   const { authorize } = c.authorization;
   const r = Router();
 
@@ -44,6 +53,28 @@ export function createAdminUsersRouter(c: Container): Router {
     authorize('user.update'),
     validate({ params: idParamSchema, body: updateUserBodySchema }),
     asyncHandler(ctrl.update),
+  );
+  // Password management — set a new one, or email the user a reset code.
+  // There is deliberately NO endpoint that reads a password (only hashes exist).
+  r.post(
+    '/:id/password',
+    authorize('user.update'),
+    validate({ params: idParamSchema, body: adminSetPasswordBodySchema }),
+    asyncHandler(ctrl.setPassword),
+  );
+  r.post(
+    '/:id/password-reset',
+    authorize('user.update'),
+    validate({ params: idParamSchema }),
+    asyncHandler(ctrl.sendPasswordReset),
+  );
+  // "مراسلة المستخدم" — reuses the SUPPORT thread system (the service also
+  // requires `support.respond`: ADMIN or an ACTIVE SUPPORT supervisor).
+  r.post(
+    '/:id/messages',
+    authorize('user.read'),
+    validate({ params: idParamSchema, body: adminMessageUserBodySchema }),
+    asyncHandler(ctrl.message),
   );
   r.post(
     '/:id/suspend',

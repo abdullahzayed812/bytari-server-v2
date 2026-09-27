@@ -1,5 +1,10 @@
 import type { Knex } from 'knex';
-import { rowToMessage, type Message, type MessageRow } from '../domain/chat.types.js';
+import {
+  rowToMessage,
+  type Message,
+  type MessageAttachment,
+  type MessageRow,
+} from '../domain/chat.types.js';
 
 const TABLE = 'messages';
 
@@ -8,6 +13,7 @@ export interface CreateMessageData {
   senderUserId: string;
   body: string;
   type: 'TEXT' | 'SYSTEM';
+  attachment?: MessageAttachment | null;
 }
 
 export class MessageRepository {
@@ -24,6 +30,11 @@ export class MessageRepository {
         sender_user_id: data.senderUserId,
         body: data.body,
         type: data.type,
+        attachment_kind: data.attachment?.kind ?? null,
+        attachment_storage_key: data.attachment?.storageKey ?? null,
+        attachment_file_name: data.attachment?.fileName ?? null,
+        attachment_mime_type: data.attachment?.mimeType ?? null,
+        attachment_size_bytes: data.attachment?.sizeBytes ?? null,
       })
       .returning('*')) as MessageRow[];
     if (!row) throw new Error('message insert returned no row');
@@ -67,6 +78,14 @@ export class MessageRepository {
       .offset((filter.page - 1) * filter.pageSize);
 
     return { items: rows.map(rowToMessage), total };
+  }
+
+  /** Whether any message (deleted or not) already references this object. */
+  async attachmentKeyInUse(storageKey: string, trx?: Knex.Transaction): Promise<boolean> {
+    const row = await this.conn(trx)(TABLE)
+      .where({ attachment_storage_key: storageKey })
+      .first('id');
+    return Boolean(row);
   }
 
   async softDelete(id: string, deletedByUserId: string, trx: Knex.Transaction): Promise<Message> {

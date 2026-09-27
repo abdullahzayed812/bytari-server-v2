@@ -1,4 +1,5 @@
 import type {
+  ChatAttachmentKind,
   ConversationSide,
   ConversationStatus,
   ConversationSubjectType,
@@ -40,12 +41,22 @@ export interface Participant {
   notificationsMuted: boolean;
 }
 
+export interface MessageAttachment {
+  kind: ChatAttachmentKind;
+  /** Private object key — NEVER leaves the service layer. */
+  storageKey: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+}
+
 export interface Message {
   id: string;
   conversationId: string;
   senderUserId: string;
   body: string;
   type: MessageType;
+  attachment: MessageAttachment | null;
   deletedAt: string | null;
   createdAt: string;
 }
@@ -71,13 +82,25 @@ export interface ConversationDTO {
   updatedAt: string;
 }
 
+/** Client view of an attachment — no storage key; `url` is a short-lived signed GET. */
+export interface MessageAttachmentDTO {
+  kind: ChatAttachmentKind;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  url: string;
+  urlExpiresInSeconds: number;
+}
+
 export interface MessageDTO {
   id: string;
   conversationId: string;
   senderUserId: string;
-  /** `null` for a soft-deleted message; `deletedAt` is then set. */
+  /** `null` for a soft-deleted message; `deletedAt` is then set. May be `''` for an attachment-only message. */
   body: string | null;
   type: MessageType;
+  /** `null` when there is none, or the message is deleted. */
+  attachment: MessageAttachmentDTO | null;
   deletedAt: string | null;
   createdAt: string;
 }
@@ -106,6 +129,11 @@ export interface MessageRow {
   sender_user_id: string;
   body: string;
   type: string;
+  attachment_kind: string | null;
+  attachment_storage_key: string | null;
+  attachment_file_name: string | null;
+  attachment_mime_type: string | null;
+  attachment_size_bytes: string | number | null;
   deleted_at: Date | null;
   created_at: Date;
 }
@@ -144,19 +172,34 @@ export function rowToMessage(row: MessageRow): Message {
     conversationId: row.conversation_id,
     senderUserId: row.sender_user_id,
     body: row.body,
+    attachment:
+      row.attachment_kind && row.attachment_storage_key
+        ? {
+            kind: row.attachment_kind as ChatAttachmentKind,
+            storageKey: row.attachment_storage_key,
+            fileName: row.attachment_file_name ?? 'file',
+            mimeType: row.attachment_mime_type ?? 'application/octet-stream',
+            sizeBytes: Number(row.attachment_size_bytes ?? 0),
+          }
+        : null,
     type: row.type as MessageType,
     deletedAt: row.deleted_at ? row.deleted_at.toISOString() : null,
     createdAt: row.created_at.toISOString(),
   };
 }
 
-export function toMessageDTO(m: Message): MessageDTO {
+/** `attachment` is resolved by the service (signed URL) AFTER the access check. */
+export function toMessageDTO(
+  m: Message,
+  attachment: MessageAttachmentDTO | null = null,
+): MessageDTO {
   return {
     id: m.id,
     conversationId: m.conversationId,
     senderUserId: m.senderUserId,
     body: m.deletedAt ? null : m.body,
     type: m.type,
+    attachment: m.deletedAt ? null : attachment,
     deletedAt: m.deletedAt,
     createdAt: m.createdAt,
   };

@@ -129,6 +129,8 @@ export interface CreateUserData {
 }
 
 export interface UpdateUserData {
+  /** Admin-only (`PATCH /admin/users/:id`); already normalised to lowercase. */
+  email?: string;
   firstName?: string;
   lastName?: string;
   phone?: string | null;

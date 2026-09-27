@@ -9,6 +9,7 @@ import { requireOrganization } from '../../organizations/presentation/organizati
 import type { ChatService } from '../application/chat.service.js';
 import { requireConversation } from './chat.middleware.js';
 import type {
+  AttachmentUploadUrlBody,
   CreateConversationBody,
   ListConversationsQuery,
   ListMessagesQuery,
@@ -73,8 +74,27 @@ export class ChatController {
   sendMessage = async (req: Request, res: Response): Promise<void> => {
     const conversation = requireConversation(req);
     const body = validatedBody<SendMessageBody>(req);
-    const message = await this.chat.sendMessage(this.actor(req), conversation.id, body.body);
+    const message = await this.chat.sendMessage(this.actor(req), conversation.id, {
+      body: body.body,
+      attachment: body.attachment,
+    });
     sendSuccess(res, message, StatusCodes.CREATED);
+  };
+
+  /** POST /conversations/:conversationId/attachments/upload-url */
+  requestAttachmentUpload = async (req: Request, res: Response): Promise<void> => {
+    const { userId } = requireAuth(req);
+    const conversation = requireConversation(req);
+    const body = validatedBody<AttachmentUploadUrlBody>(req);
+    sendSuccess(res, await this.chat.requestAttachmentUpload(userId, conversation.id, body));
+  };
+
+  /** GET /conversations/:conversationId/messages/:messageId/attachment */
+  getAttachment = async (req: Request, res: Response): Promise<void> => {
+    const { userId } = requireAuth(req);
+    const conversation = requireConversation(req);
+    const { messageId } = validatedParams<{ messageId: string }>(req);
+    sendSuccess(res, await this.chat.getAttachmentUrl(userId, conversation.id, messageId));
   };
 
   /** POST /conversations/:conversationId/read */

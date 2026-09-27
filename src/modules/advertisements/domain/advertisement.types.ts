@@ -58,6 +58,8 @@ export interface AdCampaignDTO {
   slides: AdSlideDTO[];
   createdAt: string;
   updatedAt: string;
+  /** Soft-delete timestamp (admin only) — a deleted campaign cannot be activated. */
+  deletedAt: string | null;
 }
 
 /** Public projection — no lifecycle metadata, only what the app renders. */

@@ -12,17 +12,24 @@ import type { AuditService } from '../../audit/audit.service.js';
 import type { MembershipRepository } from '../../organizations/infrastructure/membership.repository.js';
 import type { OrganizationRepository } from '../../organizations/infrastructure/organization.repository.js';
 import type { UserService } from '../../users/user.service.js';
-import type { ConversationSide, ConversationSubjectType } from '../domain/chat.constants.js';
+import type {
+  ChatAttachmentKind,
+  ConversationSide,
+  ConversationSubjectType,
+} from '../domain/chat.constants.js';
 import { ChatPolicy } from '../domain/chat.policy.js';
 import {
   toMessageDTO,
   type Conversation,
   type ConversationDTO,
   type ListConversationsFilter,
+  type Message,
+  type MessageAttachmentDTO,
   type MessageDTO,
 } from '../domain/chat.types.js';
 import type { ConversationRepository } from '../infrastructure/conversation.repository.js';
 import type { MessageRepository } from '../infrastructure/message.repository.js';
+import type { ChatAttachmentMedia, ChatAttachmentPresign } from './chat-attachment-media.js';
 
 export interface ChatActor {
   actorUserId: string;
@@ -69,8 +76,69 @@ export class ChatService {
     private readonly audit: AuditService,
     private readonly events: EventBus,
     logger: Logger,
+    /** Chat media (image / video / file). Optional only for narrow harnesses; the container injects it. */
+    private readonly media: ChatAttachmentMedia | null = null,
   ) {
     this.log = logger.child({ component: 'chat-service' });
+  }
+
+  /** Message → DTO; the attachment's signed URL is minted only here, after an access check. */
+  private async messageDto(m: Message): Promise<MessageDTO> {
+    const attachment =
+      m.attachment && !m.deletedAt && this.media ? await this.media.toDTO(m.attachment) : null;
+    return toMessageDTO(m, attachment);
+  }
+
+  /** Conversation-level "may new messages be posted here" rule (shared by send + attachment upload). */
+  private async assertWritable(conversation: Conversation): Promise<void> {
+    if (conversation.type === 'PET_OWNER_VETERINARIAN') {
+      if (conversation.status === 'CLOSED') {
+        throw new ForbiddenError('This conversation has been closed — messaging is disabled', {
+          code: ErrorCode.CONVERSATION_CLOSED,
+        });
+      }
+      return;
+    }
+    const org = conversation.organizationId
+      ? await this.organizations.findById(conversation.organizationId)
+      : null;
+    if (!org || org.status !== 'ACTIVE') {
+      throw new ForbiddenError('The organization is not active — messaging is disabled', {
+        code: ErrorCode.ORGANIZATION_NOT_ACTIVE,
+      });
+    }
+  }
+
+  private requireMedia(): ChatAttachmentMedia {
+    if (!this.media) throw new BadRequestError('chat attachments are not available');
+    return this.media;
+  }
+
+  /** Step 1 of sending media: a presigned PUT, scoped to this conversation. */
+  async requestAttachmentUpload(
+    userId: string,
+    conversationId: string,
+    input: { kind: ChatAttachmentKind; filename: string; mimeType: string; size: number },
+  ): Promise<ChatAttachmentPresign> {
+    const conversation = await this.load(conversationId);
+    await this.assertAccess(userId, conversation);
+    await this.assertWritable(conversation);
+    return this.requireMedia().presignUpload(conversation.id, input);
+  }
+
+  /** Fresh signed URL for one message's attachment (e.g. after the list URL expired). */
+  async getAttachmentUrl(
+    userId: string,
+    conversationId: string,
+    messageId: string,
+  ): Promise<MessageAttachmentDTO> {
+    const conversation = await this.load(conversationId);
+    await this.assertAccess(userId, conversation);
+    const message = await this.messages.findByIdInConversation(messageId, conversation.id);
+    if (!message || message.deletedAt || !message.attachment) {
+      throw new NotFoundError('Attachment not found');
+    }
+    return this.requireMedia().toDTO(message.attachment);
   }
 
   // --- authorization core ------------------------------------------------
@@ -87,7 +155,10 @@ export class ChatService {
       if (userId === conversation.veterinarianUserId) return 'VETERINARIAN';
       return null;
     }
-    if (conversation.type === 'PET_OWNER_CLINIC' || conversation.type === 'PET_OWNER_VETERINARY_OFFICE') {
+    if (
+      conversation.type === 'PET_OWNER_CLINIC' ||
+      conversation.type === 'PET_OWNER_VETERINARY_OFFICE'
+    ) {
       if (userId === conversation.petOwnerUserId) return 'PET_OWNER';
       if (!conversation.organizationId) return null;
       const m = await this.memberships.findByUserAndOrg(userId, conversation.organizationId);
@@ -338,7 +409,11 @@ export class ChatService {
             entityType: AuditEntityType.CONVERSATION,
             entityId: created.id,
             actorUserId: actor.actorUserId,
-            metadata: { conversationId: created.id, organizationId, type: 'PET_OWNER_VETERINARY_OFFICE' },
+            metadata: {
+              conversationId: created.id,
+              organizationId,
+              type: 'PET_OWNER_VETERINARY_OFFICE',
+            },
             context: actor.context,
           },
           tx,
@@ -677,31 +752,41 @@ export class ChatService {
       page,
       pageSize,
     });
-    return { items: items.map(toMessageDTO), total };
+    return { items: await Promise.all(items.map((m) => this.messageDto(m))), total };
   }
 
   // --- writes --------------------------------------------------------
 
-  async sendMessage(actor: ChatActor, conversationId: string, body: string): Promise<MessageDTO> {
+  /**
+   * Send a text and/or one attachment. An attachment must first be uploaded via
+   * {@link requestAttachmentUpload}; here it is verified (same conversation,
+   * real object, verified type + size, not linked elsewhere) before the row is
+   * written. Text may be empty only when an attachment is present.
+   */
+  async sendMessage(
+    actor: ChatActor,
+    conversationId: string,
+    input:
+      | string
+      | {
+          body?: string;
+          attachment?: { kind: ChatAttachmentKind; storageKey: string; fileName: string };
+        },
+  ): Promise<MessageDTO> {
+    const { body = '', attachment: attachmentInput } =
+      typeof input === 'string' ? { body: input, attachment: undefined } : input;
     const conversation = await this.load(conversationId);
     const side = await this.assertAccess(actor.actorUserId, conversation);
+    await this.assertWritable(conversation);
 
-    if (conversation.type === 'PET_OWNER_VETERINARIAN') {
-      if (conversation.status === 'CLOSED') {
-        throw new ForbiddenError('This conversation has been closed — messaging is disabled', {
-          code: ErrorCode.CONVERSATION_CLOSED,
-        });
-      }
-    } else {
-      const org = conversation.organizationId
-        ? await this.organizations.findById(conversation.organizationId)
-        : null;
-      if (!org || org.status !== 'ACTIVE') {
-        throw new ForbiddenError('The organization is not active — messaging is disabled', {
-          code: ErrorCode.ORGANIZATION_NOT_ACTIVE,
-        });
-      }
+    if (!body.trim() && !attachmentInput) {
+      throw new BadRequestError('A message needs text or an attachment');
     }
+    const attachment = attachmentInput
+      ? await this.requireMedia().verify(conversation.id, attachmentInput, (key) =>
+          this.messages.attachmentKeyInUse(key),
+        )
+      : null;
 
     const now = new Date();
     const message = await this.db.transaction(async (tx) => {
@@ -709,8 +794,9 @@ export class ChatService {
         {
           conversationId: conversation.id,
           senderUserId: actor.actorUserId,
-          body,
+          body: body.trim(),
           type: 'TEXT',
+          attachment,
         },
         tx,
       );
@@ -732,7 +818,7 @@ export class ChatService {
       messageId: message.id,
       senderUserId: actor.actorUserId,
     });
-    return toMessageDTO(message);
+    return this.messageDto(message);
   }
 
   async markRead(
@@ -767,7 +853,7 @@ export class ChatService {
     if (message.senderUserId !== actor.actorUserId) {
       throw new ForbiddenError('You can only delete your own messages');
     }
-    if (message.deletedAt) return toMessageDTO(message);
+    if (message.deletedAt) return this.messageDto(message);
 
     const updated = await this.db.transaction(async (tx) => {
       const deleted = await this.messages.softDelete(messageId, actor.actorUserId, tx);
@@ -789,7 +875,16 @@ export class ChatService {
       conversationId: conversation.id,
       messageId,
     });
-    return toMessageDTO(updated);
+    // The attachment is gone with the message — remove the object (best effort;
+    // the DTO already hides it, so a failed delete only leaves an orphan).
+    if (updated.attachment && this.media) {
+      try {
+        await this.media.deleteObject(updated.attachment.storageKey);
+      } catch (err) {
+        this.log.error({ err, messageId }, 'failed to delete chat attachment object');
+      }
+    }
+    return this.messageDto(updated);
   }
 
   // --- DTO assembly -------------------------------------------------
@@ -806,13 +901,14 @@ export class ChatService {
     unreadCount: number | null,
   ): ConversationDTO {
     let counterpartUserId: string | null;
-    if (conversation.type === 'PET_OWNER_CLINIC' || conversation.type === 'PET_OWNER_VETERINARY_OFFICE') {
+    if (
+      conversation.type === 'PET_OWNER_CLINIC' ||
+      conversation.type === 'PET_OWNER_VETERINARY_OFFICE'
+    ) {
       counterpartUserId = conversation.petOwnerUserId;
     } else if (conversation.type === 'PET_OWNER_VETERINARIAN') {
       counterpartUserId =
-        side === 'PET_OWNER'
-          ? conversation.veterinarianUserId
-          : conversation.petOwnerUserId;
+        side === 'PET_OWNER' ? conversation.veterinarianUserId : conversation.petOwnerUserId;
     } else {
       counterpartUserId = conversation.memberUserId;
     }

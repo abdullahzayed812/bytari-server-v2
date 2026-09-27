@@ -144,7 +144,9 @@ describe('veterinary store products — CRUD', () => {
       type: 'VETERINARY_STORE',
       name: 'Other Store',
     });
-    const prod = await createVeterinaryStoreProduct(app, owner.accessToken, store.id, { stockQuantity: 5 });
+    const prod = await createVeterinaryStoreProduct(app, owner.accessToken, store.id, {
+      stockQuantity: 5,
+    });
 
     const res = await request(app)
       .patch(pPath(store.id, prod.id))
@@ -198,7 +200,9 @@ describe('veterinary store products — organization type gate', () => {
       .send({ name: 'Antibiotic', productType: 'MEDICINE', price: '25000' });
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('ORGANIZATION_TYPE_NOT_SUPPORTED');
-    expect(await getTestDb()('veterinary_store_products').where({ organization_id: office.id })).toHaveLength(0);
+    expect(
+      await getTestDb()('veterinary_store_products').where({ organization_id: office.id }),
+    ).toHaveLength(0);
   });
 
   it('the database composite FK refuses a product pointing at a non-store organization', async () => {
@@ -271,7 +275,13 @@ describe('veterinary store products — authorization', () => {
       .set(bearer(supervisor.accessToken));
     expect(del.status).toBe(403);
 
-    const stock = await adjustVeterinaryStoreProductStock(app, supervisor.accessToken, store.id, prod.id, 5);
+    const stock = await adjustVeterinaryStoreProductStock(
+      app,
+      supervisor.accessToken,
+      store.id,
+      prod.id,
+      5,
+    );
     expect(stock.status).toBe(403);
   });
 
@@ -340,13 +350,28 @@ describe('veterinary store products — cross-store IDOR', () => {
 describe('veterinary store products — inventory', () => {
   it('adjusts stock by a signed delta and records the movement in the audit metadata', async () => {
     const { owner, store } = await setup();
-    const prod = await createVeterinaryStoreProduct(app, owner.accessToken, store.id, { stockQuantity: 10 });
+    const prod = await createVeterinaryStoreProduct(app, owner.accessToken, store.id, {
+      stockQuantity: 10,
+    });
 
-    const up = await adjustVeterinaryStoreProductStock(app, owner.accessToken, store.id, prod.id, 15, 'restock');
+    const up = await adjustVeterinaryStoreProductStock(
+      app,
+      owner.accessToken,
+      store.id,
+      prod.id,
+      15,
+      'restock',
+    );
     expect(up.status).toBe(200);
     expect(up.body.data.stockQuantity).toBe(25);
 
-    const down = await adjustVeterinaryStoreProductStock(app, owner.accessToken, store.id, prod.id, -5);
+    const down = await adjustVeterinaryStoreProductStock(
+      app,
+      owner.accessToken,
+      store.id,
+      prod.id,
+      -5,
+    );
     expect(down.status).toBe(200);
     expect(down.body.data.stockQuantity).toBe(20);
 
@@ -371,9 +396,17 @@ describe('veterinary store products — inventory', () => {
 
   it('refuses an adjustment that would take stock below zero (409)', async () => {
     const { owner, store } = await setup();
-    const prod = await createVeterinaryStoreProduct(app, owner.accessToken, store.id, { stockQuantity: 3 });
+    const prod = await createVeterinaryStoreProduct(app, owner.accessToken, store.id, {
+      stockQuantity: 3,
+    });
 
-    const res = await adjustVeterinaryStoreProductStock(app, owner.accessToken, store.id, prod.id, -10);
+    const res = await adjustVeterinaryStoreProductStock(
+      app,
+      owner.accessToken,
+      store.id,
+      prod.id,
+      -10,
+    );
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('INSUFFICIENT_STOCK');
 
@@ -386,13 +419,21 @@ describe('veterinary store products — inventory', () => {
   it('rejects a zero delta with 422', async () => {
     const { owner, store } = await setup();
     const prod = await createVeterinaryStoreProduct(app, owner.accessToken, store.id);
-    const res = await adjustVeterinaryStoreProductStock(app, owner.accessToken, store.id, prod.id, 0);
+    const res = await adjustVeterinaryStoreProductStock(
+      app,
+      owner.accessToken,
+      store.id,
+      prod.id,
+      0,
+    );
     expect(res.status).toBe(422);
   });
 
   it('a generic PATCH cannot change stock', async () => {
     const { owner, store } = await setup();
-    const prod = await createVeterinaryStoreProduct(app, owner.accessToken, store.id, { stockQuantity: 7 });
+    const prod = await createVeterinaryStoreProduct(app, owner.accessToken, store.id, {
+      stockQuantity: 7,
+    });
     const res = await request(app)
       .patch(pPath(store.id, prod.id))
       .set(bearer(owner.accessToken))
@@ -464,7 +505,9 @@ describe('veterinary store products — images', () => {
     expect(upload.status).toBe(200);
     const storageKey = upload.body.data.storageKey as string;
 
-    await container.objectStorage.put(storageKey, Buffer.from('fake-image-bytes'), {
+    // Real JPEG signature — object storage verifies magic bytes against the declared type.
+    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46, 0x49, 0x46]);
+    await container.objectStorage.put(storageKey, jpeg, {
       contentType: 'image/jpeg',
     });
 

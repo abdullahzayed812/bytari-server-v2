@@ -422,7 +422,9 @@ describe('organization logo upload', () => {
     const { storageKey } = upload.body.data as { storageKey: string };
     expect(storageKey).toMatch(/^organizations\//);
 
-    await container.objectStorage.put(storageKey, Buffer.from('fake-png'), {
+    // Real PNG signature — object storage verifies magic bytes against the declared type.
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d]);
+    await container.objectStorage.put(storageKey, png, {
       contentType: 'image/png',
     });
 

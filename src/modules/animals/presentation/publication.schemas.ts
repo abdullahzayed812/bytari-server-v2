@@ -122,6 +122,37 @@ export const rejectPublicationBodySchema = z.object({
 });
 export type RejectPublicationBody = z.infer<typeof rejectPublicationBodySchema>;
 
+// --- moderation: admin edit (fields + status) -----------------
+//
+// One flat, all-optional shape. The service rejects fields that do not apply
+// to the publication's kind (e.g. `lostDate` on an ADOPTION) — `kind`, the
+// animal and the creator are immutable. `status` lets a moderator reverse a
+// decision (APPROVED ↔ REJECTED, e.g. hide a published listing); PENDING is
+// never a target (only owner submission creates it). `rejectionReason` is
+// required when moving to REJECTED.
+export const adminUpdatePublicationBodySchema = z
+  .object({
+    note: noteField.optional(),
+    extraNotes: extraNotesField.nullable().optional(),
+    contactName: contactName.optional(),
+    contactPhone: contactPhone.optional(),
+    city: cityField.optional(),
+    healthStatus: z.enum(HEALTH_STATUSES).optional(),
+    vaccinationStatus: z.enum(VACCINATION_STATUSES).optional(),
+    isSterilized: z.boolean().optional(),
+    lostDate: dateField.optional(),
+    lostTime: timeField.nullable().optional(),
+    lostGovernorate: z.string().trim().min(1).max(120).optional(),
+    lostDistrict: z.string().trim().min(1).max(120).optional(),
+    lostLocationDetail: z.string().trim().max(500).nullable().optional(),
+    healthNotes: z.string().trim().max(1000).nullable().optional(),
+    status: z.enum(['APPROVED', 'REJECTED']).optional(),
+    rejectionReason: z.string().trim().min(1).max(1000).optional(),
+  })
+  .strict()
+  .refine((v) => Object.keys(v).length > 0, { message: 'Provide at least one field to update' });
+export type AdminUpdatePublicationBody = z.infer<typeof adminUpdatePublicationBodySchema>;
+
 // --- interactions: "طلب التبني" / "طلب تزاوج" / "ابلاغ عن مشاهدة" -----
 
 export const createInteractionBodySchema = z

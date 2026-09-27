@@ -96,6 +96,23 @@ export class R2ObjectStorage implements ObjectStorage {
     }
   }
 
+  /** First `n` bytes via a ranged GET — used to verify the real content type. */
+  async readPrefix(key: string, n: number): Promise<Buffer> {
+    const id = sanitizeKey(key);
+    const res = await this.client.send(
+      new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: id,
+        Range: `bytes=0-${Math.max(0, n - 1)}`,
+      }),
+    );
+    if (!res.Body) return Buffer.alloc(0);
+    const bytes = await (
+      res.Body as { transformToByteArray(): Promise<Uint8Array> }
+    ).transformToByteArray();
+    return Buffer.from(bytes).subarray(0, n);
+  }
+
   async head(key: string): Promise<ObjectMetadata | null> {
     const id = sanitizeKey(key);
     try {

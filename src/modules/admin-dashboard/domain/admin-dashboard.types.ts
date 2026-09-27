@@ -30,6 +30,13 @@ export const ADMIN_DASHBOARD_CARD_IDS = [
   'users',
   'userMessages',
   'broadcasts',
+  // Dedicated cards for sections that also live inside a hub (content hub /
+  // pets): books, magazines and the three animal-publication kinds.
+  'books',
+  'magazines',
+  'adoption',
+  'mating',
+  'lostAnimals',
 ] as const;
 export type AdminDashboardCardId = (typeof ADMIN_DASHBOARD_CARD_IDS)[number];
 

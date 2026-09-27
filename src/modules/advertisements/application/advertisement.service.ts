@@ -164,6 +164,7 @@ export class AdvertisementService {
       slides: await Promise.all(slides.map((s) => this.slideDto(s))),
       createdAt: campaign.createdAt,
       updatedAt: campaign.updatedAt,
+      deletedAt: campaign.deletedAt,
     };
   }
 
@@ -248,8 +249,17 @@ export class AdvertisementService {
   async setCampaignActive(actor: AdActor, id: string, isActive: boolean): Promise<AdCampaignDTO> {
     const existing = await this.loadCampaign(id);
     const slides = await this.slides.listByCampaign(id);
+    if (isActive && existing.deletedAt) {
+      throw new BadRequestError('cannot activate a deleted campaign — restore it first', {
+        code: ErrorCode.AD_CAMPAIGN_NOT_ACTIVATABLE,
+        details: [{ rule: 'CAMPAIGN_DELETED', message: 'campaign is deleted' }],
+      });
+    }
     if (isActive && !slides.some((s) => s.imageStorageKey)) {
-      throw new BadRequestError('cannot activate a campaign with no imaged slide');
+      throw new BadRequestError('cannot activate a campaign with no imaged slide', {
+        code: ErrorCode.AD_CAMPAIGN_NOT_ACTIVATABLE,
+        details: [{ rule: 'NO_IMAGED_SLIDE', message: 'no slide has an image' }],
+      });
     }
     if (existing.isActive === isActive) return this.campaignDto(existing, slides);
 

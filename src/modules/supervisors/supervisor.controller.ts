@@ -32,7 +32,9 @@ export class SupervisorController {
 
   assign = async (req: Request, res: Response): Promise<void> => {
     const body = validatedBody<AssignSupervisorBody>(req);
-    const assignment = await this.supervisors.assign(body.userId, body.domain, this.actor(req));
+    const assignment = body.email
+      ? await this.supervisors.assignByEmail(body.email, body.domain, this.actor(req))
+      : await this.supervisors.assign(body.userId as string, body.domain, this.actor(req));
     sendSuccess(res, assignment, StatusCodes.CREATED);
   };
 

@@ -352,15 +352,59 @@ describe('advertisements — slide images & activation', () => {
     const id = c.body.data.id as string;
     const slideId = (await addAdSlide(app, admin.accessToken, id, { title: 's' })).body.data
       .id as string;
-    expect(
-      (await request(app).post(`/api/v1/admin/ads/${id}/activate`).set(bearer(admin.accessToken)))
-        .status,
-    ).toBe(400);
+    const refused = await request(app)
+      .post(`/api/v1/admin/ads/${id}/activate`)
+      .set(bearer(admin.accessToken));
+    expect(refused.status).toBe(400);
+    expect(refused.body.error.code).toBe('AD_CAMPAIGN_NOT_ACTIVATABLE');
+    expect(refused.body.error.details[0].rule).toBe('NO_IMAGED_SLIDE');
     await uploadAdSlideImage(app, container, admin.accessToken, id, slideId);
+    const ok = await request(app)
+      .post(`/api/v1/admin/ads/${id}/activate`)
+      .set(bearer(admin.accessToken));
+    expect(ok.status).toBe(200);
+    expect(ok.body.data.isActive).toBe(true);
+
+    // already active → idempotent 200, still active
+    const again = await request(app)
+      .post(`/api/v1/admin/ads/${id}/activate`)
+      .set(bearer(admin.accessToken));
+    expect(again.status).toBe(200);
+    expect(again.body.data.isActive).toBe(true);
+  });
+
+  it('activation: unauthorized / unknown id / deleted campaign are refused', async () => {
+    const admin = await registerAdmin(app);
+    const user = await registerUser(app);
+    const c = await createAdCampaign(app, admin.accessToken, {
+      placement: 'HOME',
+      type: 'BANNER',
+      title: 'B',
+    });
+    const id = c.body.data.id as string;
+    const slideId = (await addAdSlide(app, admin.accessToken, id, { title: 's' })).body.data
+      .id as string;
+    await uploadAdSlideImage(app, container, admin.accessToken, id, slideId);
+
     expect(
-      (await request(app).post(`/api/v1/admin/ads/${id}/activate`).set(bearer(admin.accessToken)))
+      (await request(app).post(`/api/v1/admin/ads/${id}/activate`).set(bearer(user.accessToken)))
         .status,
-    ).toBe(200);
+    ).toBe(403);
+    expect((await request(app).post(`/api/v1/admin/ads/${id}/activate`)).status).toBe(401);
+    expect(
+      (
+        await request(app)
+          .post('/api/v1/admin/ads/7cac6e9c-c914-4fbd-ad2c-07a6cbe4fc02/activate')
+          .set(bearer(admin.accessToken))
+      ).status,
+    ).toBe(404);
+
+    await request(app).delete(`/api/v1/admin/ads/${id}`).set(bearer(admin.accessToken));
+    const deleted = await request(app)
+      .post(`/api/v1/admin/ads/${id}/activate`)
+      .set(bearer(admin.accessToken));
+    expect(deleted.status).toBe(400);
+    expect(deleted.body.error.details[0].rule).toBe('CAMPAIGN_DELETED');
   });
 });
 
