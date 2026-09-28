@@ -53,15 +53,13 @@ export class VetServiceListingRequestService {
     this.log = logger.child({ component: 'vet-service-listing-request-service' });
   }
 
-  private async toDTO(
-    data: VetServiceListingRequestJoined,
-  ): Promise<VetServiceListingRequestDTO> {
+  private async toDTO(data: VetServiceListingRequestJoined): Promise<VetServiceListingRequestDTO> {
     const { imageKeys, ...rest } = data.listingRequest;
     return {
       ...rest,
       petOwner: data.petOwner,
       listing: data.listing,
-      imageUrls: await this.media.resolveUrls(imageKeys),
+      imageUrls: await this.media.resolveSignedUrls(imageKeys),
     };
   }
 
@@ -190,6 +188,31 @@ export class VetServiceListingRequestService {
       throw new NotFoundError('Request not found');
     }
     return this.toDTO(data);
+  }
+
+  /**
+   * "تواصل" from a request / offer — EITHER party (the pet owner or the vet of
+   * this engagement, nobody else) opens or reuses their direct deal chat, at
+   * any stage (not only after acceptance). Reuses the existing
+   * PET_OWNER_VETERINARIAN conversation — no separate messaging system.
+   */
+  async openConversationForParty(
+    id: string,
+    actor: VetServiceActor,
+  ): Promise<{ conversationId: string }> {
+    const data = await this.listingRequests.findJoinedById(id);
+    if (!data) throw new NotFoundError('Request not found');
+    const uid = actor.principal.userId;
+    const petOwnerUserId = data.listingRequest.petOwnerUserId;
+    const veterinarianUserId = data.listing.veterinarianUserId;
+    if (uid !== petOwnerUserId && uid !== veterinarianUserId) {
+      throw new NotFoundError('Request not found');
+    }
+    const { conversation } = await this.chat.getOrCreateDeal(
+      { actorUserId: uid, context: actor.context },
+      { petOwnerUserId, veterinarianUserId },
+    );
+    return { conversationId: conversation.id };
   }
 
   // --- responses ----------------------------------------

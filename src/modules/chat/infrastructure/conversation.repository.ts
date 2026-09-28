@@ -1,5 +1,9 @@
 import type { Knex } from 'knex';
-import type { ConversationSubjectType, ConversationType, ParticipantRole } from '../domain/chat.constants.js';
+import type {
+  ConversationSubjectType,
+  ConversationType,
+  ParticipantRole,
+} from '../domain/chat.constants.js';
 import {
   rowToConversation,
   type Conversation,
@@ -78,6 +82,21 @@ export class ConversationRepository {
         type: 'PET_OWNER_VETERINARY_OFFICE',
         organization_id: organizationId,
         pet_owner_user_id: petOwnerUserId,
+      })
+      .first();
+    return row ? rowToConversation(row) : null;
+  }
+
+  async findSyndicateMember(
+    organizationId: string,
+    memberUserId: string,
+    trx?: Knex.Transaction,
+  ): Promise<Conversation | null> {
+    const row = await this.conn(trx)<ConversationRow>(T_CONV)
+      .where({
+        type: 'SYNDICATE_MEMBER',
+        organization_id: organizationId,
+        pet_owner_user_id: memberUserId,
       })
       .first();
     return row ? rowToConversation(row) : null;
@@ -231,14 +250,22 @@ export class ConversationRepository {
   }
 
   /** Soft-leave — marks the participant row `left_at`, does not delete it. */
-  async leaveParticipant(conversationId: string, userId: string, trx: Knex.Transaction): Promise<void> {
+  async leaveParticipant(
+    conversationId: string,
+    userId: string,
+    trx: Knex.Transaction,
+  ): Promise<void> {
     await trx(T_PART)
       .where({ conversation_id: conversationId, user_id: userId })
       .update({ left_at: trx.fn.now(), updated_at: trx.fn.now() });
   }
 
   /** Re-activates a participant row that previously left (rejoining a room). */
-  async rejoinParticipant(conversationId: string, userId: string, trx: Knex.Transaction): Promise<void> {
+  async rejoinParticipant(
+    conversationId: string,
+    userId: string,
+    trx: Knex.Transaction,
+  ): Promise<void> {
     await trx(T_PART)
       .where({ conversation_id: conversationId, user_id: userId })
       .update({ left_at: null, updated_at: trx.fn.now() });
@@ -292,11 +319,11 @@ export class ConversationRepository {
       })
       .select('c.id as id');
 
-    // Org-side-resolved-live types (no participant row for that side) — CLINIC
-    // and VETERINARY_OFFICE, same shape.
+    // Org-side-resolved-live types (no participant row for that side) — CLINIC,
+    // VETERINARY_OFFICE and SYNDICATE_MEMBER, same shape.
     const viaOrgMembership = conn(`${T_CONV} as c`)
       .join('organization_memberships as m', 'm.organization_id', 'c.organization_id')
-      .whereIn('c.type', ['PET_OWNER_CLINIC', 'PET_OWNER_VETERINARY_OFFICE'])
+      .whereIn('c.type', ['PET_OWNER_CLINIC', 'PET_OWNER_VETERINARY_OFFICE', 'SYNDICATE_MEMBER'])
       .andWhere('m.user_id', userId)
       .andWhere('m.status', 'ACTIVE')
       .modify((qb) => {
@@ -304,10 +331,7 @@ export class ConversationRepository {
       })
       .select('c.id as id');
 
-    const idRows: Array<{ id: string }> = await viaParticipant.unionAll(
-      [viaOrgMembership],
-      true,
-    );
+    const idRows: Array<{ id: string }> = await viaParticipant.unionAll([viaOrgMembership], true);
 
     const ids = [...new Set(idRows.map((r) => r.id))];
     if (ids.length === 0) return [];
@@ -360,14 +384,16 @@ export class ConversationRepository {
   ): Promise<{ items: Conversation[]; total: number }> {
     const conn = this.conn(trx);
 
-    const countRow = await conn<ConversationRow>(T_CONV).count<{ count: string }>({ count: '*' }).first();
+    const countRow = await conn<ConversationRow>(T_CONV)
+      .count<{ count: string }>({ count: '*' })
+      .first();
     const total = Number(countRow?.count ?? 0);
 
-    const rows = (await conn<ConversationRow>(T_CONV)
+    const rows = await conn<ConversationRow>(T_CONV)
       .orderByRaw('last_message_at desc nulls last')
       .orderBy('created_at', 'desc')
       .limit(filter.pageSize)
-      .offset((filter.page - 1) * filter.pageSize));
+      .offset((filter.page - 1) * filter.pageSize);
 
     return { items: rows.map(rowToConversation), total };
   }

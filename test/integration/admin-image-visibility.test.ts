@@ -9,6 +9,7 @@ import {
   createAnimalPublication,
   createFarm,
   createVetCourse,
+  assignSystemSupervisor,
   registerAdmin,
   registerAnimalSupervisor,
   registerApprovedVet,
@@ -240,6 +241,13 @@ describe('replaced images are not orphaned in R2', () => {
 
   it('replacing a vet-course cover deletes the previous R2 object', async () => {
     const vet = await registerApprovedVet(app);
+    // Courses are created from Admin management — the creator is a VET_COURSES supervisor.
+    await assignSystemSupervisor(
+      app,
+      (await registerAdmin(app)).accessToken,
+      vet.id,
+      'VET_COURSES',
+    );
     const first = await uploadCourseCover(vet.accessToken);
     const course = await createVetCourse(app, vet.accessToken);
 
@@ -263,6 +271,12 @@ describe('replaced images are not orphaned in R2', () => {
 
   it('re-sending the SAME cover key keeps the object (no self-delete)', async () => {
     const vet = await registerApprovedVet(app);
+    await assignSystemSupervisor(
+      app,
+      (await registerAdmin(app)).accessToken,
+      vet.id,
+      'VET_COURSES',
+    );
     const key = await uploadCourseCover(vet.accessToken);
     const course = await createVetCourse(app, vet.accessToken);
 
@@ -280,6 +294,12 @@ describe('replaced images are not orphaned in R2', () => {
 
   it('a patch that does not touch the cover leaves the existing object alone', async () => {
     const vet = await registerApprovedVet(app);
+    await assignSystemSupervisor(
+      app,
+      (await registerAdmin(app)).accessToken,
+      vet.id,
+      'VET_COURSES',
+    );
     const key = await uploadCourseCover(vet.accessToken);
     const course = await createVetCourse(app, vet.accessToken);
     await request(app)

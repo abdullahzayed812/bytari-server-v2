@@ -36,9 +36,10 @@ export interface ThreadKindConfig {
    */
   aiAutoRespond: boolean;
   /**
-   * Max image attachments allowed on the initial message. `0` disables
-   * attachments entirely for this kind (SUPPORT) — `SupportThreadService`
-   * rejects any `imageKeys` and the upload-url endpoint 400s.
+   * Max image attachments allowed per message (the initial one and replies).
+   * `0` would disable attachments for the kind — `SupportThreadService`
+   * rejects any `imageKeys` and the upload-url endpoint 400s. Every kind,
+   * SUPPORT included, now allows them.
    */
   maxAttachmentImages: number;
   perms: { read: string; respond: string; close: string; adminRead: string };
@@ -143,7 +144,7 @@ export const SUPPORT_CONFIG: ThreadKindConfig = {
   // "تواصل معنا" is human-only — no automatic AI reply.
   aiAutoRespond: false,
   // Support messages do not get image attachments — see the file header.
-  maxAttachmentImages: 0,
+  maxAttachmentImages: MAX_MESSAGE_IMAGES,
   perms: {
     read: 'support.read',
     respond: 'support.respond',

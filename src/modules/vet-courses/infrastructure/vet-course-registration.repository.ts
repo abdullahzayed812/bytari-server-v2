@@ -13,6 +13,7 @@ const T = 'vet_course_registrations';
 interface JoinedRow extends VetCourseRegistrationRow {
   registrant_first_name: string;
   registrant_last_name: string;
+  registrant_avatar_key?: string | null;
   course_title?: string;
   course_type?: string;
   course_start_date?: string | Date;
@@ -26,6 +27,8 @@ interface JoinedRow extends VetCourseRegistrationRow {
 export interface VetCourseRegistrationJoined {
   registration: VetCourseRegistration;
   registrant: VetCourseUserSummary;
+  /** Raw avatar key — resolved to `registrant.avatarUrl` by the service, never shipped. */
+  registrantAvatarKey: string | null;
   course?: {
     id: string;
     title: string;
@@ -49,7 +52,12 @@ export class VetCourseRegistrationRepository {
   private joined(trx?: Knex.Transaction, withCourse = false): Knex.QueryBuilder {
     const qb = this.conn(trx)(`${T} as r`)
       .join('users as u', 'u.id', 'r.registrant_user_id')
-      .select('r.*', 'u.first_name as registrant_first_name', 'u.last_name as registrant_last_name');
+      .select(
+        'r.*',
+        'u.first_name as registrant_first_name',
+        'u.last_name as registrant_last_name',
+        'u.avatar_key as registrant_avatar_key',
+      );
     if (withCourse) {
       qb.join('vet_courses as c', 'c.id', 'r.course_id').select(
         'c.title as course_title',
@@ -68,6 +76,7 @@ export class VetCourseRegistrationRepository {
   private map(row: JoinedRow): VetCourseRegistrationJoined {
     return {
       registration: rowToRegistration(row),
+      registrantAvatarKey: row.registrant_avatar_key ?? null,
       registrant: {
         id: row.registrant_user_id,
         firstName: row.registrant_first_name,
@@ -116,7 +125,10 @@ export class VetCourseRegistrationRepository {
     return rowToRegistration(row);
   }
 
-  async findJoinedById(id: string, trx?: Knex.Transaction): Promise<VetCourseRegistrationJoined | null> {
+  async findJoinedById(
+    id: string,
+    trx?: Knex.Transaction,
+  ): Promise<VetCourseRegistrationJoined | null> {
     const row = (await this.joined(trx, true).where('r.id', id).first()) as JoinedRow | undefined;
     return row ? this.map(row) : null;
   }

@@ -1,8 +1,4 @@
-import {
-  buildObjectKey,
-  StoragePrefix,
-  type ObjectStorage,
-} from '../../../infra/storage/index.js';
+import { buildObjectKey, StoragePrefix, type ObjectStorage } from '../../../infra/storage/index.js';
 import { BadRequestError } from '../../../shared/errors/app-error.js';
 import { ErrorCode } from '../../../shared/errors/error-codes.js';
 import { VET_SERVICE_IMAGE_URL_TTL_SECONDS } from '../domain/vet-service.constants.js';
@@ -105,5 +101,22 @@ export class VetServiceMedia {
       ),
     );
     return urls.filter((u): u is string => u !== null);
+  }
+
+  /**
+   * Private images (an owner's request on a listing, a vet's offer) — ALWAYS
+   * short-lived signed URLs, never the public CDN URL, so only the parties the
+   * endpoint authorizes can ever load them.
+   */
+  async resolveSignedUrls(keys: string[]): Promise<string[]> {
+    if (keys.length === 0) return [];
+    return Promise.all(
+      keys.map((key) =>
+        this.storage.getSignedUrl(key, {
+          operation: 'get',
+          expiresIn: VET_SERVICE_IMAGE_URL_TTL_SECONDS,
+        }),
+      ),
+    );
   }
 }

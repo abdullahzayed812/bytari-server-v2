@@ -116,6 +116,12 @@ export const ORG_PERMISSION_KEYS = [
   'syndicate.announcement.manage',
   'syndicate.submission.read',
   'syndicate.submission.respond',
+  // Registered members ("التسجيل في النقابة", `syndicate_registrations`) —
+  // view the member list/details, remove a registration, and message members
+  // (one-to-one SYNDICATE_MEMBER chat + the "رسالة إلى الأعضاء" broadcast).
+  'syndicate.member.read',
+  'syndicate.member.manage',
+  'syndicate.member.message',
   // --- Organization → followers broadcast (Veterinary Office Dashboard "إرسال
   // رسالة للمتابعين") — generic across any organization type with followers, so a
   // future Clinic Dashboard can reuse it without a second broadcast system. Granted
@@ -226,6 +232,10 @@ export const ORG_PERMISSION_DEFINITIONS: Record<OrgPermissionKey, string> = {
   'syndicate.announcement.manage': 'Create, update and delete this syndicate’s announcements',
   'syndicate.submission.read': 'View this syndicate’s requests and inquiries',
   'syndicate.submission.respond': 'Respond to and close this syndicate’s requests and inquiries',
+  'syndicate.member.read': 'View this syndicate’s registered members and their basic details',
+  'syndicate.member.manage': 'Remove a member’s registration from this syndicate',
+  'syndicate.member.message':
+    'Message this syndicate’s registered members (one-to-one or all at once)',
   'organization.broadcast.send': 'Send a message to everyone following this organization',
   'chat_room.rules.manage': 'Update this chat room’s rules, image and pinned message',
   'chat_room.message.delete': 'Delete another member’s inappropriate message in this chat room',

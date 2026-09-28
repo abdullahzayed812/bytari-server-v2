@@ -24,6 +24,7 @@ export function createAdminUsersRouter(c: Container): Router {
     c.veterinarianService,
     c.organizationService,
     c.supportService,
+    c.authorizationService,
   );
   const { authorize } = c.authorization;
   const r = Router();

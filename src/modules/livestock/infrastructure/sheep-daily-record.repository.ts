@@ -1,9 +1,11 @@
 import type { Knex } from 'knex';
 import {
-  lockBatchAndCountRecords,
+  listWeekSummaries,
+  lockBatchAndNextSlot,
   selectRecordsWithDayAndCreator,
   type DailyRecordTables,
 } from '../../farms/infrastructure/daily-record-common.js';
+import type { DailyRecordSlot, DailyRecordWeekSummary } from '../../farms/domain/daily-record.js';
 import {
   rowToSheepDailyRecord,
   type CreateSheepDailyRecordInput,
@@ -18,6 +20,7 @@ const TABLES: DailyRecordTables = {
   batchTable: 'sheep_batches',
   recordTable: TABLE,
   batchFk: 'sheep_batch_id',
+  weightColumn: 'average_weight_kg',
 };
 
 export interface SheepDailyRecordAggregates {
@@ -62,6 +65,8 @@ export class SheepDailyRecordRepository {
       sheepBatchId: string;
       organizationId: string;
       createdByUserId: string;
+      weekNumber: number;
+      dayInWeek: number;
     },
     trx: Knex.Transaction,
   ): Promise<SheepDailyRecord> {
@@ -84,6 +89,8 @@ export class SheepDailyRecordRepository {
         average_weight_kg: data.averageWeightKg ?? null,
         notes: data.notes ?? null,
         created_by_user_id: data.createdByUserId,
+        week_number: data.weekNumber,
+        day_in_week: data.dayInWeek,
       })
       .returning('*')) as SheepDailyRecordRow[];
     if (!row) throw new Error('daily record insert did not return a row');
@@ -129,6 +136,7 @@ export class SheepDailyRecordRepository {
       const qb = this.db<SheepDailyRecordRow>(TABLE).where('sheep_batch_id', batchId);
       if (filter.from) qb.andWhere('record_date', '>=', filter.from);
       if (filter.to) qb.andWhere('record_date', '<=', filter.to);
+      if (filter.week) qb.andWhere('week_number', filter.week);
       return qb;
     };
     const countRow = await base().count<{ count: string }>({ count: '*' }).first();
@@ -136,8 +144,10 @@ export class SheepDailyRecordRepository {
     const numbered = selectRecordsWithDayAndCreator(this.db, TABLES, batchId);
     if (filter.from) numbered.andWhere('r.record_date', '>=', filter.from);
     if (filter.to) numbered.andWhere('r.record_date', '<=', filter.to);
+    if (filter.week) numbered.andWhere('r.week_number', filter.week);
     const rows = (await numbered
-      .orderBy('r.record_date', 'desc')
+      .orderBy('r.week_number', 'desc')
+      .orderBy('r.day_in_week', 'desc')
       .limit(filter.pageSize)
       .offset((filter.page - 1) * filter.pageSize)) as SheepDailyRecordRow[];
     return { items: rows.map(rowToSheepDailyRecord), total };
@@ -190,8 +200,13 @@ export class SheepDailyRecordRepository {
     return row ? String(row.average_weight_kg) : null;
   }
 
-  /** Lock the batch row and return its daily-record count (see `lockBatchAndCountRecords`). */
-  lockBatchAndCount(batchId: string, trx: Knex.Transaction): Promise<number> {
-    return lockBatchAndCountRecords(trx, TABLES, batchId);
+  /** Lock the batch row and return its next free weekly slot (see `lockBatchAndNextSlot`). */
+  lockBatchAndNextSlot(batchId: string, trx: Knex.Transaction): Promise<DailyRecordSlot> {
+    return lockBatchAndNextSlot(trx, TABLES, batchId);
+  }
+
+  /** Week history (newest first) + the next slot — the "completed weeks" section. */
+  listWeeks(batchId: string): Promise<{ weeks: DailyRecordWeekSummary[]; next: DailyRecordSlot }> {
+    return listWeekSummaries(this.db, TABLES, batchId);
   }
 }

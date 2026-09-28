@@ -62,10 +62,10 @@ export class VetCourseRegistrationService {
   }
 
   private async toDTO(data: VetCourseRegistrationJoined): Promise<VetCourseRegistrationDTO> {
-    const { registration, registrant, course } = data;
+    const { registration, registrant, course, registrantAvatarKey } = data;
     return {
       ...registration,
-      registrant,
+      registrant: { ...registrant, avatarUrl: await this.media.resolveUrl(registrantAvatarKey) },
       course: course
         ? {
             id: course.id,

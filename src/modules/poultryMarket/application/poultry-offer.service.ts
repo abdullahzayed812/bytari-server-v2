@@ -61,9 +61,7 @@ export class PoultryOfferService {
     return urls.filter((u): u is string => u !== null);
   }
 
-  async requestUploadUrl(
-    input: { filename: string; mimeType: string; size: number },
-  ): Promise<{
+  async requestUploadUrl(input: { filename: string; mimeType: string; size: number }): Promise<{
     storageKey: string;
     uploadUrl: string;
     method: 'PUT';
@@ -144,7 +142,9 @@ export class PoultryOfferService {
     return toPoultryOfferDTO(offer, await this.resolveImageUrls(offer.galleryKeys));
   }
 
-  async list(filter: ListPoultryOffersFilter): Promise<{ items: PoultryOfferDTO[]; total: number }> {
+  async list(
+    filter: ListPoultryOffersFilter,
+  ): Promise<{ items: PoultryOfferDTO[]; total: number }> {
     const { items, total } = await this.offers.list(filter);
     const dtos = await Promise.all(
       items.map(async (o) => toPoultryOfferDTO(o, await this.resolveImageUrls(o.galleryKeys))),
@@ -196,5 +196,55 @@ export class PoultryOfferService {
       items.map(async (o) => toPoultryOfferDTO(o, await this.resolveImageUrls(o.galleryKeys))),
     );
     return { items: dtos, total };
+  }
+
+  /**
+   * Moderation of a PENDING advertisement (ADMIN or MARKET supervisor —
+   * `market.offer.admin.moderate`, enforced on the route). 409 when already
+   * decided.
+   */
+  async moderate(
+    offerId: string,
+    status: 'APPROVED' | 'REJECTED',
+    reason: string | null,
+    actor: MarketActor,
+  ): Promise<PoultryOfferDTO> {
+    const existing = await this.offers.findById(offerId);
+    if (!existing) throw new NotFoundError('Offer not found');
+    const updated = await this.db.transaction(async (tx) => {
+      const u = await this.offers.moderate(
+        offerId,
+        { status, reason, reviewerUserId: actor.actorUserId },
+        tx,
+      );
+      if (!u) {
+        throw new ConflictError('This advertisement has already been reviewed', {
+          code: ErrorCode.MARKET_OFFER_NOT_PENDING,
+        });
+      }
+      await this.audit.record(
+        {
+          action:
+            status === 'APPROVED'
+              ? AuditAction.POULTRY_OFFER_APPROVED
+              : AuditAction.POULTRY_OFFER_REJECTED,
+          entityType: AuditEntityType.POULTRY_OFFER,
+          entityId: offerId,
+          actorUserId: actor.actorUserId,
+          metadata: { offerId, reason },
+          context: actor.context,
+        },
+        tx,
+      );
+      return u;
+    });
+    this.events.publish(
+      status === 'APPROVED' ? 'poultry-offer.approved' : 'poultry-offer.rejected',
+      {
+        offerId,
+        traderUserId: updated.traderUserId,
+      },
+    );
+    return toPoultryOfferDTO(updated, await this.resolveImageUrls(updated.galleryKeys));
   }
 }

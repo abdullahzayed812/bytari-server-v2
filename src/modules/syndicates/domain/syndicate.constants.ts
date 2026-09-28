@@ -64,12 +64,18 @@ export const SyndicateAuditAction = {
   SUBMISSION_CREATED: 'SYNDICATE_SUBMISSION_CREATED',
   SUBMISSION_RESPONDED: 'SYNDICATE_SUBMISSION_RESPONDED',
   SUBMISSION_CLOSED: 'SYNDICATE_SUBMISSION_CLOSED',
+  DELETED: 'SYNDICATE_DELETED',
+  MEMBER_REGISTERED: 'SYNDICATE_MEMBER_REGISTERED',
+  MEMBER_REGISTRATION_ENDED: 'SYNDICATE_MEMBER_REGISTRATION_ENDED',
+  MEMBERS_MESSAGED: 'SYNDICATE_MEMBERS_MESSAGED',
+  ADMIN_ASSIGNED: 'SYNDICATE_ADMIN_ASSIGNED',
 } as const;
 
 export const SyndicateAuditEntity = {
   SYNDICATE: 'SYNDICATE',
   ANNOUNCEMENT: 'SYNDICATE_ANNOUNCEMENT',
   SUBMISSION: 'SYNDICATE_SUBMISSION',
+  REGISTRATION: 'SYNDICATE_REGISTRATION',
 } as const;
 
 export const SyndicateEvent = {
@@ -77,6 +83,8 @@ export const SyndicateEvent = {
   ANNOUNCEMENT_PUBLISHED: 'syndicate.announcement.published',
   SUBMISSION_CREATED: 'syndicate.submission.created',
   SUBMISSION_RESPONDED: 'syndicate.submission.responded',
+  DELETED: 'syndicate.deleted',
+  MEMBER_REGISTERED: 'syndicate.member.registered',
 } as const;
 
 /**
@@ -91,4 +99,21 @@ export const SYNDICATE_PERMISSION_KEYS = [
   'syndicate.announcement.manage',
   'syndicate.submission.read',
   'syndicate.submission.respond',
+  'syndicate.member.read',
+  'syndicate.member.manage',
+  'syndicate.member.message',
 ] as const;
+
+/**
+ * "مسؤول النقابة" — the full syndicate-scoped permission set a syndicate admin
+ * receives (never global Admin rights). Assigned through the ordinary
+ * supervisor flow; `POST /syndicates/:organizationId/admins` applies exactly
+ * this set.
+ */
+export const SYNDICATE_ADMIN_PERMISSION_KEYS = [
+  'organization.read',
+  ...SYNDICATE_PERMISSION_KEYS,
+] as const;
+
+export const SYNDICATE_REGISTRATION_STATUSES = ['ACTIVE', 'CANCELLED', 'REMOVED'] as const;
+export type SyndicateRegistrationStatus = (typeof SYNDICATE_REGISTRATION_STATUSES)[number];

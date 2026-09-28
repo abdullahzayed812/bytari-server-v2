@@ -6,7 +6,11 @@ import { validatedBody, validatedParams, validatedQuery } from '../../shared/htt
 import { auditContextFromRequest } from '../audit/audit-context.js';
 import { requireAuth } from '../auth/authenticate.middleware.js';
 import type { SupervisorService } from './supervisor.service.js';
-import type { AssignSupervisorBody, ListSupervisorsQuery } from './supervisor.schemas.js';
+import type {
+  AssignSupervisorBody,
+  ListSupervisorsQuery,
+  SetSupervisorDomainsBody,
+} from './supervisor.schemas.js';
 
 export class SupervisorController {
   constructor(private readonly supervisors: SupervisorService) {}
@@ -36,6 +40,19 @@ export class SupervisorController {
       ? await this.supervisors.assignByEmail(body.email, body.domain, this.actor(req))
       : await this.supervisors.assign(body.userId as string, body.domain, this.actor(req));
     sendSuccess(res, assignment, StatusCodes.CREATED);
+  };
+
+  /** PUT /admin/supervisors/domains — the exact set of sections for one user. */
+  setDomains = async (req: Request, res: Response): Promise<void> => {
+    const body = validatedBody<SetSupervisorDomainsBody>(req);
+    sendSuccess(
+      res,
+      await this.supervisors.setDomains(
+        { userId: body.userId, email: body.email },
+        body.domains,
+        this.actor(req),
+      ),
+    );
   };
 
   remove = async (req: Request, res: Response): Promise<void> => {

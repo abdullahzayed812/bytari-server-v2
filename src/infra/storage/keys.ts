@@ -21,6 +21,8 @@ export const StoragePrefix = {
   advertisements: 'advertisements',
   consultationAttachments: 'consultations/attachments',
   inquiryAttachments: 'inquiries/attachments',
+  /** "تواصل معنا" (admin ↔ user) message photos — private, served via signed URLs only. */
+  supportAttachments: 'support/attachments',
   poultryOfferImages: 'market/poultry-offers',
   eggOfferImages: 'market/egg-offers',
   petOwnerStoreProducts: 'pet-owner-store/products',

@@ -59,7 +59,7 @@ export class VetServiceOfferService {
       ...rest,
       veterinarian: data.veterinarian,
       request: data.request,
-      imageUrls: await this.media.resolveUrls(imageKeys),
+      imageUrls: await this.media.resolveSignedUrls(imageKeys),
     };
   }
 
@@ -182,6 +182,31 @@ export class VetServiceOfferService {
       throw new NotFoundError('Offer not found');
     }
     return this.toDTO(data);
+  }
+
+  /**
+   * "تواصل" from a request / offer — EITHER party (the pet owner or the vet of
+   * this engagement, nobody else) opens or reuses their direct deal chat, at
+   * any stage (not only after acceptance). Reuses the existing
+   * PET_OWNER_VETERINARIAN conversation — no separate messaging system.
+   */
+  async openConversationForParty(
+    id: string,
+    actor: VetServiceActor,
+  ): Promise<{ conversationId: string }> {
+    const data = await this.offers.findJoinedById(id);
+    if (!data) throw new NotFoundError('Offer not found');
+    const uid = actor.principal.userId;
+    const petOwnerUserId = data.request.petOwnerUserId;
+    const veterinarianUserId = data.offer.veterinarianUserId;
+    if (uid !== petOwnerUserId && uid !== veterinarianUserId) {
+      throw new NotFoundError('Offer not found');
+    }
+    const { conversation } = await this.chat.getOrCreateDeal(
+      { actorUserId: uid, context: actor.context },
+      { petOwnerUserId, veterinarianUserId },
+    );
+    return { conversationId: conversation.id };
   }
 
   // --- responses ------------------------------------------

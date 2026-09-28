@@ -64,6 +64,7 @@ export function createPoultryOpsRouter(c: Container): Router {
     c.poultryCaseService,
     c.farmSubscriptionService,
     c.authorizationService,
+    c.userNameDirectory,
   );
   const { withOrganization, authorizeOrg } = createOrganizationMiddleware({
     organizations: c.organizationRepository,
@@ -158,6 +159,15 @@ export function createPoultryOpsRouter(c: Container): Router {
     authorizeOrg('farm.daily_record.create'),
     withPoultryFlock,
     asyncHandler(ctrl.createDailyRecord),
+  );
+  // Mounted before `/:recordId` so "weeks" is never parsed as a record id.
+  r.get(
+    `${dailyBase}/weeks`,
+    validate({ params: flockScopeParamSchema }),
+    ...flockOp,
+    authorizeOrg('farm.daily_record.read'),
+    withPoultryFlock,
+    asyncHandler(ctrl.listDailyRecordWeeks),
   );
   r.get(
     `${dailyBase}/:recordId`,

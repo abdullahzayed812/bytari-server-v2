@@ -216,6 +216,28 @@ export class VeterinarianService {
     };
   }
 
+  /**
+   * Admin view of a user's latest application WITH its identity / licence
+   * documents as short-lived signed URLs (private objects — never a public
+   * URL, never the storage key). Callers must hold `veterinarian.read`.
+   */
+  async getLatestApplicationDocumentsForAdmin(
+    userId: string,
+  ): Promise<AdminVeterinarianApplicationDocument[]> {
+    const application = await this.applications.findLatestByUser(userId);
+    if (!application) return [];
+    const docs = await this.documents.listForApplication(application.id);
+    return Promise.all(
+      docs.map(async (d) => ({
+        ...toApplicantDocumentDTO(d),
+        downloadUrl: await this.storage.getSignedUrl(d.storageKey, {
+          operation: 'get',
+          expiresIn: DOCUMENT_DOWNLOAD_URL_TTL_SECONDS,
+        }),
+      })),
+    );
+  }
+
   async listPending(
     page: number,
     pageSize: number,

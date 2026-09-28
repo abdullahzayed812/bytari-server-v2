@@ -7,6 +7,7 @@ import { auditContextFromRequest, type AuditContextResult } from '../../audit/au
 import { requireAuth } from '../../auth/authenticate.middleware.js';
 import type { TraderService } from '../application/trader.service.js';
 import type {
+  AdminUpdateTraderBody,
   ListTradersQuery,
   RegisterTraderBody,
   RejectTraderBody,
@@ -75,5 +76,17 @@ export class TraderController {
   reactivate = async (req: Request, res: Response): Promise<void> => {
     const { userId } = validatedParams<{ userId: string }>(req);
     sendSuccess(res, await this.traders.reactivate(userId, this.actor(req)));
+  };
+
+  update = async (req: Request, res: Response): Promise<void> => {
+    const { userId } = validatedParams<{ userId: string }>(req);
+    const body = validatedBody<AdminUpdateTraderBody>(req);
+    sendSuccess(res, await this.traders.adminUpdate(userId, body, this.actor(req)));
+  };
+
+  remove = async (req: Request, res: Response): Promise<void> => {
+    const { userId } = validatedParams<{ userId: string }>(req);
+    await this.traders.adminRemove(userId, this.actor(req));
+    sendSuccess(res, { removed: true });
   };
 }

@@ -87,10 +87,22 @@ export class SyndicateDetailsRepository {
     return rowToSyndicateDetails(row);
   }
 
-  /** Number of subordinate/branch syndicates under a main syndicate. */
+  /** Number of (ACTIVE) subordinate/branch syndicates under a main syndicate. */
   async countBranches(parentOrganizationId: string, trx?: Knex.Transaction): Promise<number> {
-    const row = await this.conn(trx)(T)
-      .where({ parent_organization_id: parentOrganizationId })
+    const row = await this.conn(trx)(`${T} as d`)
+      .join('organizations as o', 'o.id', 'd.organization_id')
+      .where({ 'd.parent_organization_id': parentOrganizationId, 'o.status': 'ACTIVE' })
+      .count<{ count: string }>({ count: '*' })
+      .first();
+    return Number(row?.count ?? 0);
+  }
+
+  /** Branches that are not deleted — blocks deleting their main syndicate. */
+  async countActiveBranches(parentOrganizationId: string): Promise<number> {
+    const row = await this.db(`${T} as d`)
+      .join('organizations as o', 'o.id', 'd.organization_id')
+      .where('d.parent_organization_id', parentOrganizationId)
+      .whereNot('o.status', 'DEACTIVATED')
       .count<{ count: string }>({ count: '*' })
       .first();
     return Number(row?.count ?? 0);
@@ -119,7 +131,7 @@ export class SyndicateDetailsRepository {
     trx?: Knex.Transaction,
   ): Promise<{ ids: string[]; total: number }> {
     const scope = (qb: Knex.QueryBuilder): Knex.QueryBuilder => {
-      qb.where('d.parent_organization_id', parentOrganizationId);
+      qb.where('d.parent_organization_id', parentOrganizationId).andWhere('o.status', 'ACTIVE');
       if (filter.search) {
         const s = `%${filter.search}%`;
         qb.andWhere((w) => {
@@ -146,7 +158,7 @@ export class SyndicateDetailsRepository {
     trx?: Knex.Transaction,
   ): Promise<{ ids: string[]; total: number }> {
     const scope = (qb: Knex.QueryBuilder): Knex.QueryBuilder => {
-      qb.whereNull('d.parent_organization_id');
+      qb.whereNull('d.parent_organization_id').andWhere('o.status', 'ACTIVE');
       if (filter.search) {
         const s = `%${filter.search}%`;
         qb.andWhere((w) => {

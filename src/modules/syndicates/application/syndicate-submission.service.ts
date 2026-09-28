@@ -6,7 +6,11 @@ import type { AuditContext } from '../../audit/audit.types.js';
 import type { AuditService } from '../../audit/audit.service.js';
 import type { AuthPrincipal } from '../../authorization/authorization.types.js';
 import type { UserService } from '../../users/user.service.js';
-import { SyndicateAuditAction, SyndicateAuditEntity, SyndicateEvent } from '../domain/syndicate.constants.js';
+import {
+  SyndicateAuditAction,
+  SyndicateAuditEntity,
+  SyndicateEvent,
+} from '../domain/syndicate.constants.js';
 import { SyndicatePolicy } from '../domain/syndicate.policy.js';
 import type {
   CreateSubmissionInput,
@@ -22,6 +26,15 @@ import type { SyndicateService } from './syndicate.service.js';
 export interface SyndicateActor {
   principal: AuthPrincipal;
   context?: AuditContext;
+}
+
+/**
+ * Port onto the notification read-state: clears one officer's "new
+ * submission" notifications for a submission once they open / act on it —
+ * this is what decrements the syndicate card's unread counters.
+ */
+export interface EntityNotificationReads {
+  markReadForEntity(userId: string, entityType: string, entityId: string): Promise<void>;
 }
 
 /**
@@ -43,8 +56,19 @@ export class SyndicateSubmissionService {
     private readonly audit: AuditService,
     private readonly events: EventBus,
     logger: Logger,
+    private readonly notificationReads: EntityNotificationReads | null = null,
   ) {
     this.log = logger.child({ component: 'syndicate-submission-service' });
+  }
+
+  /** Best-effort — a read-state failure never fails the request itself. */
+  private async markSeen(userId: string, submissionId: string): Promise<void> {
+    if (!this.notificationReads) return;
+    try {
+      await this.notificationReads.markReadForEntity(userId, 'SYNDICATE_SUBMISSION', submissionId);
+    } catch (err) {
+      this.log.warn({ err, submissionId }, 'failed to mark submission notifications read');
+    }
   }
 
   private async toDTO(submission: SyndicateSubmission): Promise<SyndicateSubmissionDTO> {
@@ -56,7 +80,11 @@ export class SyndicateSubmissionService {
     return {
       ...rest,
       attachmentUrls: await this.media.resolveUrls(attachmentStorageKeys),
-      submittedBy: { id: submitter.id, firstName: submitter.firstName, lastName: submitter.lastName },
+      submittedBy: {
+        id: submitter.id,
+        firstName: submitter.firstName,
+        lastName: submitter.lastName,
+      },
       syndicateName: org?.name ?? '',
     };
   }
@@ -70,7 +98,9 @@ export class SyndicateSubmissionService {
   ): Promise<SyndicateSubmissionDTO> {
     const org = await this.syndicates.loadOrganizationContext(organizationId);
     if (!org || org.type !== 'SYNDICATE') throw new NotFoundError('Syndicate not found');
-    const attachmentStorageKeys = await this.media.validateAttachmentKeys(input.attachmentStorageKeys);
+    const attachmentStorageKeys = await this.media.validateAttachmentKeys(
+      input.attachmentStorageKeys,
+    );
 
     const created = await this.db.transaction(async (tx) => {
       const s = await this.submissions.create(
@@ -121,12 +151,25 @@ export class SyndicateSubmissionService {
     return { items: await Promise.all(items.map((s) => this.toDTO(s))), total };
   }
 
-  async getForActor(id: string, actor: SyndicateActor, isOrgAuthorized: boolean): Promise<SyndicateSubmissionDTO> {
+  /**
+   * `authorizedOrganizationId` — set when the caller came through the
+   * org-scoped route (`authorizeOrg('syndicate.submission.read')` on THAT
+   * syndicate): the submission must belong to it, so an officer of one
+   * syndicate can never read another syndicate's submission by id.
+   */
+  async getForActor(
+    id: string,
+    actor: SyndicateActor,
+    authorizedOrganizationId: string | null,
+  ): Promise<SyndicateSubmissionDTO> {
     const existing = await this.submissions.findById(id);
     if (!existing) throw new NotFoundError('Submission not found');
+    const isOrgAuthorized =
+      authorizedOrganizationId !== null && existing.organizationId === authorizedOrganizationId;
     if (existing.submittedByUserId !== actor.principal.userId && !isOrgAuthorized) {
       throw new NotFoundError('Submission not found');
     }
+    if (isOrgAuthorized) await this.markSeen(actor.principal.userId, id);
     return this.toDTO(existing);
   }
 
@@ -174,10 +217,15 @@ export class SyndicateSubmissionService {
       submittedByUserId: existing.submittedByUserId,
       actorUserId: actor.principal.userId,
     });
+    await this.markSeen(actor.principal.userId, id);
     return this.toDTO(updated);
   }
 
-  async close(organizationId: string, id: string, actor: SyndicateActor): Promise<SyndicateSubmissionDTO> {
+  async close(
+    organizationId: string,
+    id: string,
+    actor: SyndicateActor,
+  ): Promise<SyndicateSubmissionDTO> {
     const existing = await this.submissions.findById(id);
     if (!existing || existing.organizationId !== organizationId) {
       throw new NotFoundError('Submission not found');
@@ -198,6 +246,7 @@ export class SyndicateSubmissionService {
       );
       return s;
     });
+    await this.markSeen(actor.principal.userId, id);
     return this.toDTO(updated);
   }
 }

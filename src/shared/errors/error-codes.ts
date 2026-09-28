@@ -204,6 +204,14 @@ export const ErrorCode = {
   SYNDICATE_ATTACHMENT_INVALID: 'SYNDICATE_ATTACHMENT_INVALID',
   /** More than the allowed number of attachments were submitted. */
   SYNDICATE_TOO_MANY_ATTACHMENTS: 'SYNDICATE_TOO_MANY_ATTACHMENTS',
+  /** The caller already holds an ACTIVE registration with this syndicate. */
+  SYNDICATE_ALREADY_REGISTERED: 'SYNDICATE_ALREADY_REGISTERED',
+  /** "Message all members" on a syndicate with no registered members. */
+  SYNDICATE_NO_MEMBERS: 'SYNDICATE_NO_MEMBERS',
+  /** A main syndicate cannot be deleted while it still has active branches. */
+  SYNDICATE_HAS_BRANCHES: 'SYNDICATE_HAS_BRANCHES',
+  /** Approve / reject on a market advertisement that is no longer PENDING. */
+  MARKET_OFFER_NOT_PENDING: 'MARKET_OFFER_NOT_PENDING',
 } as const;
 
 export type ErrorCodeValue = (typeof ErrorCode)[keyof typeof ErrorCode];

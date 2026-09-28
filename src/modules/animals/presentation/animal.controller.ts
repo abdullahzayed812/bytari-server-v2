@@ -38,6 +38,10 @@ export class AnimalController {
         sex: body.sex,
         dateOfBirth: body.dateOfBirth,
         notes: body.notes,
+        color: body.color,
+        distinguishingFeatures: body.distinguishingFeatures,
+        ageEstimate: body.ageEstimate,
+        listingOnly: body.listingOnly,
       },
       this.actor(req),
     );

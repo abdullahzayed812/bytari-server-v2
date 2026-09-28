@@ -16,6 +16,7 @@ import {
   createOrganization,
   createVetCourse,
   createVetJobOffer,
+  assignSystemSupervisor,
   registerAdmin,
   registerApprovedVet,
   registerDevice,
@@ -219,6 +220,8 @@ describe('course capacity + cancellation notifications', () => {
   it('the organizer gets one RECEIVED per registration and CAPACITY_REACHED exactly once; cancelling notifies registrants', async () => {
     const admin = await registerAdmin(app);
     const organizer = await registerApprovedVet(app);
+    // Courses are created from Admin management — the organizer is a VET_COURSES supervisor.
+    await assignSystemSupervisor(app, admin.accessToken, organizer.id, 'VET_COURSES');
     const a = await registerApprovedVet(app);
     const b = await registerApprovedVet(app);
 

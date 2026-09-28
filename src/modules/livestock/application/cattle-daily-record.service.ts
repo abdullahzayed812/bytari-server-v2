@@ -1,4 +1,4 @@
-import { DAILY_RECORDS_PER_BATCH } from '../../farms/domain/daily-record.js';
+import type { DailyRecordWeeksDTO } from '../../farms/domain/daily-record.js';
 import { businessToday } from '../../../shared/time/business-date.js';
 import type { Knex } from 'knex';
 import type { Logger } from 'pino';
@@ -79,6 +79,13 @@ export class CattleDailyRecordService {
     return this.records.listForBatch(batchId, filter);
   }
 
+  /** Week history (newest first) + the next slot — "الأسابيع المكتملة" under the batch card. */
+  async listWeeks(organizationId: string, batchId: string): Promise<DailyRecordWeeksDTO> {
+    await this.loadBatch(organizationId, batchId);
+    const { weeks, next } = await this.records.listWeeks(batchId);
+    return { currentWeek: next.weekNumber, nextDay: next.dayInWeek, weeks };
+  }
+
   async get(organizationId: string, batchId: string, recordId: string): Promise<CattleDailyRecord> {
     await this.loadBatch(organizationId, batchId);
     const record = await this.records.findByIdForBatch(recordId, batchId);
@@ -98,14 +105,11 @@ export class CattleDailyRecordService {
     const recordDate = businessToday();
 
     const record = await this.db.transaction(async (tx) => {
-      // Serialise concurrent submissions on the batch row, then enforce the
-      // one-record-per-day and seven-days-per-batch rules under that lock.
-      const existingCount = await this.records.lockBatchAndCount(batchId, tx);
-      if (existingCount >= DAILY_RECORDS_PER_BATCH) {
-        throw new ConflictError('This batch already has its seven daily records', {
-          code: ErrorCode.DAILY_RECORD_LIMIT_REACHED,
-        });
-      }
+      // Serialise concurrent submissions on the batch row, then take the next
+      // weekly slot (Day 7 rolls over into Day 1 of the next week — daily data
+      // continues for the batch's whole lifetime) and enforce one record per
+      // day, all under that lock.
+      const slot = await this.records.lockBatchAndNextSlot(batchId, tx);
       if (await this.records.findByBatchAndDate(batchId, recordDate, tx)) {
         throw new ConflictError('A daily record already exists for today', {
           code: ErrorCode.CATTLE_DAILY_RECORD_DUPLICATE_DATE,
@@ -118,6 +122,8 @@ export class CattleDailyRecordService {
           cattleBatchId: batchId,
           organizationId,
           createdByUserId: actor.actorUserId,
+          weekNumber: slot.weekNumber,
+          dayInWeek: slot.dayInWeek,
         },
         tx,
       );

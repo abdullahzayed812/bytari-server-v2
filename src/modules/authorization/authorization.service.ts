@@ -1,7 +1,11 @@
 import type { Logger } from 'pino';
 import { ForbiddenError } from '../../shared/errors/app-error.js';
 import { ErrorCode } from '../../shared/errors/error-codes.js';
-import { ADMIN_ROLE_KEY, SUPERVISOR_DOMAIN_PERMISSIONS } from '../rbac/rbac.constants.js';
+import {
+  ADMIN_ROLE_KEY,
+  SUPERVISOR_DOMAIN_ORG_TYPES,
+  SUPERVISOR_DOMAIN_PERMISSIONS,
+} from '../rbac/rbac.constants.js';
 import type { SupervisorDomain } from '../rbac/rbac.constants.js';
 import type { PermissionRepository } from '../rbac/permission.repository.js';
 import type { RoleRepository } from '../rbac/role.repository.js';
@@ -69,6 +73,9 @@ export class AuthorizationService {
     for (const d of domains) {
       for (const p of SUPERVISOR_DOMAIN_PERMISSIONS[d as SupervisorDomain] ?? []) out.add(p);
     }
+    // Any active supervisor may open the Admin dashboard (ManagementScreen);
+    // the sections themselves stay gated by their own keys.
+    if (domains.length > 0) out.add('dashboard.admin.read');
     return out;
   }
 
@@ -103,6 +110,32 @@ export class AuthorizationService {
     if (held.includes(permission)) return true;
     // Fallback: a permission implied by an ACTIVE system-supervisor domain.
     return (await this.supervisorDomainPermissions(principal.userId)).has(permission);
+  }
+
+  /**
+   * Organization-admin permissions (`organization.admin.*`) held only through
+   * a system-supervisor domain are TYPE-SCOPED: a CLINIC supervisor may act on
+   * clinic / office / store organizations, FARMS on farms, SYNDICATE on
+   * syndicates (`SUPERVISOR_DOMAIN_ORG_TYPES`). ADMIN and role-granted keys
+   * (e.g. MODERATOR's read) apply to every type. `orgType === null` (an
+   * all-types listing) is allowed only for ADMIN / role holders.
+   */
+  async canForOrganizationType(
+    principal: AuthPrincipal,
+    permission: string,
+    orgType: string | null,
+  ): Promise<boolean> {
+    if (this.isAdmin(principal)) return true;
+    const held = await this.roles.getPermissionKeysForUser(principal.userId);
+    if (held.includes(permission)) return true;
+    if (!this.supervisors || orgType === null) return false;
+    const domains = await this.supervisors.getActiveDomainsForUser(principal.userId);
+    return domains.some(
+      (d) =>
+        (SUPERVISOR_DOMAIN_PERMISSIONS[d as SupervisorDomain] ?? []).includes(
+          permission as never,
+        ) && (SUPERVISOR_DOMAIN_ORG_TYPES[d as SupervisorDomain] ?? []).includes(orgType),
+    );
   }
 
   /** Throws {@link ForbiddenError} unless the principal holds `permission`. */

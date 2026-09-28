@@ -1,4 +1,9 @@
-import type { ContentFileKind, ContentSort, ContentStatus, ContentType } from './content.constants.js';
+import type {
+  ContentFileKind,
+  ContentSort,
+  ContentStatus,
+  ContentType,
+} from './content.constants.js';
 
 // --- internal aggregates -----------------------------------------
 
@@ -103,6 +108,12 @@ export interface ContentDTO {
   isLiked: boolean;
   categories: Category[];
   files: AdminContentFileDTO[] | PublicContentFileDTO[];
+  /**
+   * Resolved URL of the active COVER image (public CDN URL, else a signed GET)
+   * so list cards / detail headers can render it without a per-item download
+   * call. `null` when the item has no cover.
+   */
+  coverUrl: string | null;
   createdByUserId: string | null;
   updatedByUserId: string | null;
   deletedAt: string | null;

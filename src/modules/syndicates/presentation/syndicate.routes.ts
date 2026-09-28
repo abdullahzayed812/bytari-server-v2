@@ -8,10 +8,15 @@ import {
   SyndicateAnnouncementController,
   SyndicateController,
   SyndicateMediaController,
+  SyndicateMemberController,
   SyndicateSubmissionController,
 } from './syndicate.controllers.js';
 import {
   announcementListQuerySchema,
+  assignSyndicateAdminBodySchema,
+  memberListQuerySchema,
+  messageMembersBodySchema,
+  organizationAndUserParamSchema,
   createAnnouncementBodySchema,
   createSubmissionBodySchema,
   createSyndicateBodySchema,
@@ -47,6 +52,7 @@ export function createSyndicateRouter(c: Container): Router {
   const syndicates = new SyndicateController(c.syndicateService);
   const announcements = new SyndicateAnnouncementController(c.syndicateAnnouncementService);
   const submissions = new SyndicateSubmissionController(c.syndicateSubmissionService);
+  const members = new SyndicateMemberController(c.syndicateMemberService);
   const { withOrganization, authorizeOrg } = createOrganizationMiddleware({
     organizations: c.organizationRepository,
     authz: c.authorizationService,
@@ -56,7 +62,11 @@ export function createSyndicateRouter(c: Container): Router {
   r.use(c.authenticate);
 
   // --- media -----------------------------------------------------
-  r.post('/media/upload-url', validate({ body: uploadUrlBodySchema }), asyncHandler(media.uploadUrl));
+  r.post(
+    '/media/upload-url',
+    validate({ body: uploadUrlBodySchema }),
+    asyncHandler(media.uploadUrl),
+  );
 
   // The caller's own submissions, across every syndicate — mounted BEFORE
   // `/:organizationId` so "submissions" is never parsed as a uuid param
@@ -173,6 +183,71 @@ export function createSyndicateRouter(c: Container): Router {
     asyncHandler(submissions.close),
   );
 
+  // --- registration ("التسجيل في النقابة") — any authenticated user ------
+  r.post(
+    '/:organizationId/registration',
+    validate({ params: organizationIdParamSchema }),
+    asyncHandler(members.register),
+  );
+  r.get(
+    '/:organizationId/registration',
+    validate({ params: organizationIdParamSchema }),
+    asyncHandler(members.getMine),
+  );
+  r.delete(
+    '/:organizationId/registration',
+    validate({ params: organizationIdParamSchema }),
+    asyncHandler(members.cancelMine),
+  );
+
+  // --- registered members (syndicate.member.*, org-scoped) --------------
+  // `/members/broadcast` is mounted before `/members/:userId`.
+  r.post(
+    '/:organizationId/members/broadcast',
+    validate({ params: organizationIdParamSchema, body: messageMembersBodySchema }),
+    withOrganization,
+    authorizeOrg('syndicate.member.message'),
+    asyncHandler(members.messageAll),
+  );
+  r.get(
+    '/:organizationId/members',
+    validate({ params: organizationIdParamSchema, query: memberListQuerySchema }),
+    withOrganization,
+    authorizeOrg('syndicate.member.read'),
+    asyncHandler(members.list),
+  );
+  r.get(
+    '/:organizationId/members/:userId',
+    validate({ params: organizationAndUserParamSchema }),
+    withOrganization,
+    authorizeOrg('syndicate.member.read'),
+    asyncHandler(members.getOne),
+  );
+  r.delete(
+    '/:organizationId/members/:userId',
+    validate({ params: organizationAndUserParamSchema }),
+    withOrganization,
+    authorizeOrg('syndicate.member.manage'),
+    asyncHandler(members.remove),
+  );
+  r.post(
+    '/:organizationId/members/:userId/conversation',
+    validate({ params: organizationAndUserParamSchema }),
+    withOrganization,
+    authorizeOrg('syndicate.member.message'),
+    asyncHandler(members.openConversation),
+  );
+
+  // --- syndicate admins ("مسؤول النقابة") — a SUPERVISOR membership with the
+  // full syndicate permission set; same guard as the generic supervisor flow.
+  r.post(
+    '/:organizationId/admins',
+    validate({ params: organizationIdParamSchema, body: assignSyndicateAdminBodySchema }),
+    withOrganization,
+    authorizeOrg('supervisor.assign'),
+    asyncHandler(members.assignAdmin),
+  );
+
   return r;
 }
 
@@ -186,6 +261,12 @@ export function createAdminSyndicateRouter(c: Container): Router {
     c.authorization.authorize('syndicate.admin.create'),
     validate({ body: createSyndicateBodySchema }),
     asyncHandler(ctrl.create),
+  );
+  r.delete(
+    '/syndicates/:organizationId',
+    c.authorization.authorize('syndicate.admin.delete'),
+    validate({ params: organizationIdParamSchema }),
+    asyncHandler(ctrl.remove),
   );
   return r;
 }

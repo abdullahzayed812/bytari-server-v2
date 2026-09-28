@@ -1,4 +1,9 @@
-import type { SyndicateAnnouncementType, SyndicateRequestType, SyndicateSubmissionKind, SyndicateSubmissionStatus } from './syndicate.constants.js';
+import type {
+  SyndicateAnnouncementType,
+  SyndicateRequestType,
+  SyndicateSubmissionKind,
+  SyndicateSubmissionStatus,
+} from './syndicate.constants.js';
 
 export interface SyndicateUserSummary {
   id: string;
@@ -79,7 +84,48 @@ export interface PublicSyndicateDTO {
   branchCount: number;
   isFollowing: boolean;
   followersCount: number;
+  /** Viewer-relative: does the caller hold an ACTIVE registration here? */
+  isRegistered: boolean;
+  /** ACTIVE registered members. */
+  membersCount: number;
+  /**
+   * Card counters for a viewer who may read this syndicate's submissions
+   * (owner / syndicate admin / global Admin); `null` for everyone else.
+   */
+  counters: SyndicateCountersDTO | null;
   createdAt: string;
+}
+
+export interface SyndicateCountersDTO {
+  unreadRequests: number;
+  unreadInquiries: number;
+  pendingRequests: number;
+  pendingInquiries: number;
+}
+
+/** A registered member as a syndicate admin sees them — basic, non-sensitive fields only. */
+export interface SyndicateMemberDTO {
+  registrationId: string;
+  userId: string;
+  firstName: string;
+  lastName: string;
+  avatarUrl: string | null;
+  email: string;
+  phone: string | null;
+  country: string | null;
+  governorate: string | null;
+  specialization: string | null;
+  isVeterinarian: boolean;
+  status: string;
+  registeredAt: string;
+}
+
+/** The caller's own registration with a syndicate. */
+export interface MySyndicateRegistrationDTO {
+  registrationId: string;
+  organizationId: string;
+  status: string;
+  registeredAt: string;
 }
 
 export interface CreateSyndicateInput {
@@ -133,6 +179,12 @@ export interface MySyndicateAccessDTO {
   canManageAnnouncements: boolean;
   canReadSubmissions: boolean;
   canRespondSubmissions: boolean;
+  canReadMembers: boolean;
+  canManageMembers: boolean;
+  canMessageMembers: boolean;
+  /** Global Admin only — `DELETE /admin/syndicates/:organizationId`. */
+  canDelete: boolean;
+  isRegistered: boolean;
 }
 
 // ==================================================================

@@ -23,3 +23,12 @@ export default defineConfig({
     testTimeout: 30_000,
   },
 });
+
+// git push origin main
+
+// Then wait until CI on main is green in GitHub → Actions.
+
+// 2. Tag it, which deploys the web app
+
+// git tag -a v1.2.1 -m "v1.2.1: fix upload size (422 on image uploads)"
+// git push origin v1.2.1

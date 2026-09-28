@@ -116,7 +116,12 @@ export class ThreadController {
   sendMessage = async (req: Request, res: Response): Promise<void> => {
     const { threadId } = validatedParams<{ threadId: string }>(req);
     const body = validatedBody<SendThreadMessageBody>(req);
-    const message = await this.service.sendMessage(this.actor(req), threadId, body.body);
+    const message = await this.service.sendMessage(
+      this.actor(req),
+      threadId,
+      body.body,
+      body.imageKeys,
+    );
     sendSuccess(res, this.mapMessage(message), StatusCodes.CREATED);
   };
 

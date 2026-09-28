@@ -22,6 +22,14 @@ export const CONVERSATION_TYPES = [
    * room with potentially hundreds of members.
    */
   'CHAT_ROOM',
+  /**
+   * Syndicate admin ↔ one registered syndicate member. Same shape as
+   * PET_OWNER_VETERINARY_OFFICE: `organization_id` is the SYNDICATE (org side
+   * resolved live from ACTIVE membership, no participant row) and
+   * `pet_owner_user_id` holds the member (participant role `SYNDICATE_MEMBER`).
+   * Only ever opened by an officer holding `syndicate.member.message`.
+   */
+  'SYNDICATE_MEMBER',
 ] as const;
 export type ConversationType = (typeof CONVERSATION_TYPES)[number];
 
@@ -38,6 +46,7 @@ export const PARTICIPANT_ROLES = [
   'FARM_MEMBER',
   'VETERINARIAN',
   'ROOM_MEMBER',
+  'SYNDICATE_MEMBER',
 ] as const;
 export type ParticipantRole = (typeof PARTICIPANT_ROLES)[number];
 
@@ -50,6 +59,8 @@ export const CONVERSATION_SIDES = [
   'VETERINARIAN',
   'VETERINARY_OFFICE',
   'ROOM_MEMBER',
+  'SYNDICATE',
+  'SYNDICATE_MEMBER',
 ] as const;
 export type ConversationSide = (typeof CONVERSATION_SIDES)[number];
 

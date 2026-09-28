@@ -188,6 +188,8 @@ describe('roles ↔ permissions', () => {
     expect(keys).toContain('syndicate.admin.create');
     expect(keys).toContain('chat_room.admin.create');
     expect(keys).toContain('content_report.admin.manage');
-    expect(keys.length).toBe(86);
+    expect(keys).toContain('market.offer.admin.moderate');
+    expect(keys).toContain('syndicate.admin.delete');
+    expect(keys.length).toBe(88);
   });
 });

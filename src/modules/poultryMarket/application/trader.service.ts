@@ -6,7 +6,11 @@ import { AuditAction, AuditEntityType, type AuditContext } from '../../audit/aud
 import type { AuditService } from '../../audit/audit.service.js';
 import type { UserService } from '../../users/user.service.js';
 import type { TraderRepository } from '../infrastructure/trader.repository.js';
-import type { RegisterTraderInput, TraderApplicationSummary, TraderProfile } from '../domain/trader.types.js';
+import type {
+  RegisterTraderInput,
+  TraderApplicationSummary,
+  TraderProfile,
+} from '../domain/trader.types.js';
 import type { TraderStatus } from '../domain/trader.constants.js';
 
 export interface TraderActor {
@@ -242,5 +246,68 @@ export class TraderService {
 
     this.events.publish('trader.reactivated', { userId: targetUserId });
     return decided;
+  }
+
+  /** Admin edit of a trader's registration details (`trader.admin.approve`). */
+  async adminUpdate(
+    targetUserId: string,
+    patch: Parameters<TraderRepository['updateFields']>[1],
+    actor: TraderActor,
+  ): Promise<TraderProfile> {
+    const profile = await this.traders.findByUserId(targetUserId);
+    if (!profile) throw new NotFoundError('No trader registration for this user');
+    return this.db.transaction(async (tx) => {
+      const updated = await this.traders.updateFields(targetUserId, patch, tx);
+      await this.audit.record(
+        {
+          action: AuditAction.TRADER_UPDATED,
+          entityType: AuditEntityType.TRADER_PROFILE,
+          entityId: profile.id,
+          actorUserId: actor.actorUserId,
+          metadata: { targetUserId, fields: Object.keys(patch) },
+          context: actor.context,
+        },
+        tx,
+      );
+      return updated;
+    });
+  }
+
+  /**
+   * Admin "حذف التاجر": the registration is removed (the user goes back to
+   * NOT_REGISTERED and may register again later) and every live poultry / egg
+   * advertisement of theirs is taken down (status REMOVED — kept for history),
+   * in one transaction. The user account itself is untouched.
+   */
+  async adminRemove(targetUserId: string, actor: TraderActor): Promise<void> {
+    if (targetUserId === actor.actorUserId) {
+      throw new ForbiddenError('You cannot remove your own trader registration');
+    }
+    const profile = await this.traders.findByUserId(targetUserId);
+    if (!profile) throw new NotFoundError('No trader registration for this user');
+    await this.db.transaction(async (tx) => {
+      const offersRemoved = {
+        poultry: await tx('poultry_offers')
+          .where({ trader_user_id: targetUserId, status: 'ACTIVE' })
+          .update({ status: 'REMOVED', updated_at: tx.fn.now() }),
+        egg: await tx('egg_offers')
+          .where({ trader_user_id: targetUserId, status: 'ACTIVE' })
+          .update({ status: 'REMOVED', updated_at: tx.fn.now() }),
+      };
+      await this.traders.deleteByUserId(targetUserId, tx);
+      await this.users.applyTraderStatus(targetUserId, 'NOT_REGISTERED', tx);
+      await this.audit.record(
+        {
+          action: AuditAction.TRADER_REMOVED,
+          entityType: AuditEntityType.TRADER_PROFILE,
+          entityId: profile.id,
+          actorUserId: actor.actorUserId,
+          metadata: { targetUserId, previousStatus: profile.status, offersRemoved },
+          context: actor.context,
+        },
+        tx,
+      );
+    });
+    this.events.publish('trader.removed', { userId: targetUserId });
   }
 }

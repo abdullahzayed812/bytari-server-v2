@@ -150,11 +150,19 @@ export const removeGalleryImageQuerySchema = z.object({
 });
 export type RemoveGalleryImageQuery = z.infer<typeof removeGalleryImageQuerySchema>;
 
-/** Same shape as the logo upload flow — one license document at a time. */
-export const licenseDocumentUploadUrlBodySchema = logoUploadUrlBodySchema;
+/**
+ * Same shape as the logo upload flow — one license document at a time.
+ * `replacesStorageKey` swaps an existing document in place (allowed even when
+ * the 3-document cap is reached, since the count does not grow).
+ */
+export const licenseDocumentUploadUrlBodySchema = logoUploadUrlBodySchema
+  .extend({ replacesStorageKey: z.string().trim().min(1).max(1024).optional() })
+  .strict();
 export type LicenseDocumentUploadUrlBody = z.infer<typeof licenseDocumentUploadUrlBodySchema>;
 
-export const finalizeLicenseDocumentBodySchema = finalizeLogoBodySchema;
+export const finalizeLicenseDocumentBodySchema = finalizeLogoBodySchema
+  .extend({ replacesStorageKey: z.string().trim().min(1).max(1024).optional() })
+  .strict();
 export type FinalizeLicenseDocumentBody = z.infer<typeof finalizeLicenseDocumentBodySchema>;
 
 export const removeLicenseDocumentQuerySchema = z.object({

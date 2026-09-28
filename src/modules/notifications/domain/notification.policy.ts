@@ -5,6 +5,7 @@ import type { MembershipRepository } from '../../organizations/infrastructure/me
 import type { OrganizationFollowRepository } from '../../organizations/infrastructure/organization-follow.repository.js';
 import type { OrganizationRepository } from '../../organizations/infrastructure/organization.repository.js';
 import type { SupervisorRepository } from '../../supervisors/supervisor.repository.js';
+import type { SyndicateRegistrationRepository } from '../../syndicates/infrastructure/syndicate-registration.repository.js';
 import type { NotificationRecipientRepository } from '../infrastructure/recipient.repository.js';
 import type { NotificationType } from './notification.constants.js';
 import { NOTIFICATION_COPY } from './notification.copy.js';
@@ -20,10 +21,13 @@ export interface NotificationPolicyDeps {
   supervisors: SupervisorRepository;
   organizationFollows: OrganizationFollowRepository;
   recipients: NotificationRecipientRepository;
+  syndicateRegistrations: Pick<SyndicateRegistrationRepository, 'listActiveUserIds'>;
 }
 
 /** Fan-out cap for a single domain event (clinic staff / domain supervisors). */
 const RECIPIENT_FANOUT_CAP = 200;
+/** A syndicate's "رسالة إلى الأعضاء" reaches every registered member, not a staff-sized set. */
+const MEMBER_BROADCAST_FANOUT_CAP = 10_000;
 
 type P = Record<string, unknown>;
 
@@ -296,6 +300,15 @@ export class NotificationPolicy {
           str(p.submissionId),
           str(p.submittedByUserId),
         );
+      case 'syndicate.member.registered':
+        return this.syndicateOrgMembers(
+          'SYNDICATE_MEMBER_REGISTERED',
+          event.name,
+          str(p.organizationId),
+          str(p.registrationId),
+          str(p.userId),
+          'SYNDICATE_REGISTRATION',
+        );
       case 'syndicate.submission.responded':
         return this.vetServiceToUser('SYNDICATE_SUBMISSION_RESPONDED', event.name, p, {
           userId: str(p.submittedByUserId),
@@ -314,6 +327,7 @@ export class NotificationPolicy {
           str(p.body),
           typeof p.imageUrl === 'string' ? p.imageUrl : null,
           str(p.actorUserId),
+          p.audience === 'SYNDICATE_MEMBERS' ? 'SYNDICATE_MEMBERS' : 'FOLLOWERS',
         );
 
       // --- account -------------------------------------------------
@@ -956,14 +970,21 @@ export class NotificationPolicy {
     body: string,
     imageUrl: string | null,
     actorUserId: string,
+    audience: 'FOLLOWERS' | 'SYNDICATE_MEMBERS',
   ): Promise<NotificationSpec[]> {
     if (!organizationId || !broadcastId) return [];
-    const followerIds = await this.deps.organizationFollows.listFollowerUserIds(
-      organizationId,
-      RECIPIENT_FANOUT_CAP,
-    );
+    const recipientIds =
+      audience === 'SYNDICATE_MEMBERS'
+        ? await this.deps.syndicateRegistrations.listActiveUserIds(
+            organizationId,
+            MEMBER_BROADCAST_FANOUT_CAP,
+          )
+        : await this.deps.organizationFollows.listFollowerUserIds(
+            organizationId,
+            RECIPIENT_FANOUT_CAP,
+          );
     const key = `${eventName}:${broadcastId}`;
-    return followerIds
+    return recipientIds
       .filter((id) => id !== actorUserId)
       .map((uid) => ({
         recipientUserId: uid,
@@ -973,6 +994,7 @@ export class NotificationPolicy {
         data: {
           type: 'ORGANIZATION_BROADCAST',
           organizationId,
+          audience,
           ...(imageUrl ? { imageUrl } : {}),
         },
         actorUserId: actorUserId || null,
@@ -990,6 +1012,7 @@ export class NotificationPolicy {
     organizationId: string,
     submissionId: string,
     submitterUserId: string,
+    entityType: 'SYNDICATE_SUBMISSION' | 'SYNDICATE_REGISTRATION' = 'SYNDICATE_SUBMISSION',
   ): Promise<NotificationSpec[]> {
     if (!organizationId || !submissionId) return [];
     const { items } = await this.deps.memberships.listForOrg(organizationId, {
@@ -1004,10 +1027,12 @@ export class NotificationPolicy {
         this.spec(
           type,
           m.userId,
-          { organizationId, submissionId },
+          entityType === 'SYNDICATE_SUBMISSION'
+            ? { organizationId, submissionId }
+            : { organizationId, registrationId: submissionId },
           {
             actorUserId: submitterUserId || null,
-            entityType: 'SYNDICATE_SUBMISSION',
+            entityType,
             entityId: submissionId,
             sourceEventKey: key,
           },

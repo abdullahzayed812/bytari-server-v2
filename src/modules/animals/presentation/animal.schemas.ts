@@ -31,6 +31,11 @@ export const createAnimalBodySchema = z.object({
   color: colorSchema.optional(),
   distinguishingFeatures: distinguishingFeaturesSchema.optional(),
   ageEstimate: z.enum(ANIMAL_AGE_ESTIMATES).optional(),
+  /**
+   * Set by the adoption / mating / lost listing flow: the animal is only the
+   * listing's subject and must not appear among the owner's registered pets.
+   */
+  listingOnly: z.boolean().optional(),
 });
 export type CreateAnimalBody = z.infer<typeof createAnimalBodySchema>;
 

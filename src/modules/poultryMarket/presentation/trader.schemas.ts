@@ -29,3 +29,17 @@ export const listTradersQuerySchema = paginationQuerySchema.extend({
   status: z.enum(TRADER_STATUSES).optional(),
 });
 export type ListTradersQuery = z.infer<typeof listTradersQuerySchema>;
+
+export const adminUpdateTraderBodySchema = z
+  .object({
+    displayName: z.string().trim().min(2).max(160).optional(),
+    traderType: z.enum(TRADER_TYPES).optional(),
+    governorate: z.string().trim().min(1).max(120).optional(),
+    district: z.string().trim().max(120).nullable().optional(),
+    phone: phoneSchema.optional(),
+    whatsapp: phoneSchema.nullable().optional(),
+    bio: z.string().trim().max(2000).nullable().optional(),
+  })
+  .strict()
+  .refine((v) => Object.keys(v).length > 0, { message: 'At least one field is required' });
+export type AdminUpdateTraderBody = z.infer<typeof adminUpdateTraderBodySchema>;

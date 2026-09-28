@@ -1,6 +1,10 @@
 import type { Knex } from 'knex';
 import type { Logger } from 'pino';
-import { BadRequestError, ForbiddenError, NotFoundError } from '../../../shared/errors/app-error.js';
+import {
+  BadRequestError,
+  ForbiddenError,
+  NotFoundError,
+} from '../../../shared/errors/app-error.js';
 import { ErrorCode } from '../../../shared/errors/error-codes.js';
 import type { EventBus } from '../../../shared/events/index.js';
 import { AuditAction, AuditEntityType, type AuditContext } from '../../audit/audit.types.js';
@@ -79,6 +83,9 @@ function prefixFor(type: ContentType): string {
  * back (§28). An abandoned presigned upload (URL issued, never registered)
  * leaves an unreferenced object — swept by a future retention job (documented).
  */
+/** Signed cover-image URL lifetime on list/detail DTOs. */
+const COVER_URL_TTL_SECONDS = 3600;
+
 export class ContentService {
   private readonly log: Logger;
 
@@ -126,14 +133,28 @@ export class ContentService {
     return this.assemble(content, cats, fileList, admin, ratingAgg, { isBookmarked, isLiked });
   }
 
-  private assemble(
+  /** The active COVER file → a client-usable URL (never the raw storage key). */
+  private async resolveCoverUrl(fileList: ContentFile[]): Promise<string | null> {
+    const cover = fileList.find((f) => f.kind === 'COVER' && f.deletedAt === null);
+    if (!cover) return null;
+    return (
+      this.storage.getPublicUrl(cover.storageKey) ??
+      (await this.storage.getSignedUrl(cover.storageKey, {
+        operation: 'get',
+        // Longer than a file download link — list screens stay open a while.
+        expiresIn: COVER_URL_TTL_SECONDS,
+      }))
+    );
+  }
+
+  private async assemble(
     content: Content,
     cats: Category[],
     fileList: ContentFile[],
     admin: boolean,
     rating: ContentRatingAggregate,
     viewer: { isBookmarked: boolean; isLiked: boolean },
-  ): ContentDTO {
+  ): Promise<ContentDTO> {
     return {
       id: content.id,
       type: content.type,
@@ -154,6 +175,7 @@ export class ContentService {
       isLiked: viewer.isLiked,
       categories: cats,
       files: admin ? fileList.map(toAdminFileDTO) : fileList.map(toPublicFileDTO),
+      coverUrl: await this.resolveCoverUrl(fileList),
       createdByUserId: content.createdByUserId,
       updatedByUserId: content.updatedByUserId,
       deletedAt: content.deletedAt,
@@ -216,7 +238,15 @@ export class ContentService {
     if (categoriesChanged) await this.assertCategoriesExist(input.categoryIds ?? []);
 
     const fieldKeys = (
-      ['title', 'description', 'body', 'authorName', 'language', 'pageCount', 'publishYear'] as const
+      [
+        'title',
+        'description',
+        'body',
+        'authorName',
+        'language',
+        'pageCount',
+        'publishYear',
+      ] as const
     ).filter((k) => input[k] !== undefined);
 
     const updated = await this.db.transaction(async (tx) => {

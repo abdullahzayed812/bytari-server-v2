@@ -47,7 +47,10 @@ export type VeterinarianStoreOrderStatus = (typeof VETERINARIAN_STORE_ORDER_STAT
  * Allowed forward transitions for an order's status. `CANCELLED` is reachable
  * from any non-terminal state; `DELIVERED` and `CANCELLED` are terminal.
  */
-export const VETERINARIAN_STORE_ORDER_TRANSITIONS: Record<VeterinarianStoreOrderStatus, VeterinarianStoreOrderStatus[]> = {
+export const VETERINARIAN_STORE_ORDER_TRANSITIONS: Record<
+  VeterinarianStoreOrderStatus,
+  VeterinarianStoreOrderStatus[]
+> = {
   PENDING: ['CONFIRMED', 'PROCESSING', 'CANCELLED'],
   CONFIRMED: ['PROCESSING', 'SHIPPED', 'CANCELLED'],
   PROCESSING: ['SHIPPED', 'CANCELLED'],
@@ -56,9 +59,14 @@ export const VETERINARIAN_STORE_ORDER_TRANSITIONS: Record<VeterinarianStoreOrder
   CANCELLED: [],
 };
 
-/** Free delivery for now — reference shows "توصيل مجاني". */
+/**
+ * The platform does not compute a delivery fee at checkout yet — it is
+ * settled on delivery (Cash on Delivery), so `0.00` here means "not included
+ * in the total", NOT free delivery. Clients must not advertise free delivery.
+ */
 export const VETERINARIAN_STORE_DELIVERY_FEE = '0.00';
-export const VETERINARIAN_STORE_CURRENCY = 'SAR';
+/** Iraqi Dinar — every price, cart and order total in this store. */
+export const VETERINARIAN_STORE_CURRENCY = 'IQD';
 
 /** Per-line and per-cart quantity ceilings (guards abuse, not a business rule). */
 export const VETERINARIAN_STORE_MAX_ITEM_QUANTITY = 99;
@@ -70,7 +78,11 @@ export const VETERINARIAN_STORE_UPLOAD_URL_TTL_SECONDS = 600;
 
 /** 5 MiB — product photos. */
 export const VETERINARIAN_STORE_MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-export const VETERINARIAN_STORE_ALLOWED_IMAGE_MIME = ['image/png', 'image/jpeg', 'image/webp'] as const;
+export const VETERINARIAN_STORE_ALLOWED_IMAGE_MIME = [
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+] as const;
 export type VeterinarianStoreImageMime = (typeof VETERINARIAN_STORE_ALLOWED_IMAGE_MIME)[number];
 
 /** Max gallery images per product. */

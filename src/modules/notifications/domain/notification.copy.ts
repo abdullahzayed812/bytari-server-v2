@@ -217,6 +217,10 @@ export const NOTIFICATION_COPY: Record<NotificationType, { title: string; body: 
     title: 'تم الرد على طلبك',
     body: 'ردّت النقابة على طلبك أو استفسارك.',
   },
+  SYNDICATE_MEMBER_REGISTERED: {
+    title: 'عضو جديد في النقابة',
+    body: 'سجّل عضو جديد في النقابة.',
+  },
   // content / admin
   CONTENT_PUBLISHED: { title: 'محتوى جديد', body: 'يتوفر محتوى جديد.' },
   ADMIN_ANNOUNCEMENT: { title: 'إعلان', body: 'لديك إعلان جديد.' },

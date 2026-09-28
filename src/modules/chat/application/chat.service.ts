@@ -165,6 +165,12 @@ export class ChatService {
       if (m?.status !== 'ACTIVE') return null;
       return conversation.type === 'PET_OWNER_CLINIC' ? 'CLINIC' : 'VETERINARY_OFFICE';
     }
+    if (conversation.type === 'SYNDICATE_MEMBER') {
+      if (userId === conversation.petOwnerUserId) return 'SYNDICATE_MEMBER';
+      if (!conversation.organizationId) return null;
+      const m = await this.memberships.findByUserAndOrg(userId, conversation.organizationId);
+      return m?.status === 'ACTIVE' ? 'SYNDICATE' : null;
+    }
     if (conversation.type === 'CHAT_ROOM') {
       // Every room member has an explicit participant row (`ChatRoomService.join`)
       // — no live membership lookup needed, unlike CLINIC/OFFICE above.
@@ -442,6 +448,83 @@ export class ChatService {
       organizationId,
       type: conversation.type,
       participantUserIds: [petOwnerUserId],
+    });
+    const side = await this.assertAccess(actor.actorUserId, conversation);
+    return {
+      conversation: await this.decorate(actor.actorUserId, conversation, side),
+      created: true,
+    };
+  }
+
+  /**
+   * Syndicate admin ↔ registered member ("مراسلة العضو"). The caller has
+   * already been authorized (`syndicate.member.message` on this syndicate) and
+   * the member's ACTIVE registration verified by `SyndicateMemberService` —
+   * this only finds-or-creates the conversation (idempotent, race-safe).
+   */
+  async getOrCreateSyndicateMember(
+    actor: ChatActor,
+    organizationId: string,
+    memberUserId: string,
+  ): Promise<{ conversation: ConversationDTO; created: boolean }> {
+    const existing = await this.conversations.findSyndicateMember(organizationId, memberUserId);
+    if (existing) {
+      const side = await this.assertAccess(actor.actorUserId, existing);
+      return {
+        conversation: await this.decorate(actor.actorUserId, existing, side),
+        created: false,
+      };
+    }
+
+    let conversation: Conversation;
+    try {
+      conversation = await this.db.transaction(async (tx) => {
+        const created = await this.conversations.create(
+          {
+            type: 'SYNDICATE_MEMBER',
+            organizationId,
+            petOwnerUserId: memberUserId,
+            memberUserId: null,
+            createdByUserId: actor.actorUserId,
+          },
+          tx,
+        );
+        await this.conversations.addParticipants(
+          [{ conversationId: created.id, userId: memberUserId, role: 'SYNDICATE_MEMBER' }],
+          tx,
+        );
+        await this.audit.record(
+          {
+            action: AuditAction.CONVERSATION_CREATED,
+            entityType: AuditEntityType.CONVERSATION,
+            entityId: created.id,
+            actorUserId: actor.actorUserId,
+            metadata: { conversationId: created.id, organizationId, type: 'SYNDICATE_MEMBER' },
+            context: actor.context,
+          },
+          tx,
+        );
+        return created;
+      });
+    } catch (err) {
+      if (isUniqueViolation(err)) {
+        const raced = await this.conversations.findSyndicateMember(organizationId, memberUserId);
+        if (raced) {
+          const side = await this.assertAccess(actor.actorUserId, raced);
+          return {
+            conversation: await this.decorate(actor.actorUserId, raced, side),
+            created: false,
+          };
+        }
+      }
+      throw err;
+    }
+
+    this.events.publish('chat.conversation.created', {
+      conversationId: conversation.id,
+      organizationId,
+      type: conversation.type,
+      participantUserIds: [memberUserId],
     });
     const side = await this.assertAccess(actor.actorUserId, conversation);
     return {
@@ -890,8 +973,8 @@ export class ChatService {
   // --- DTO assembly -------------------------------------------------
 
   private unreadFor(side: ConversationSide, count: number | undefined): number | null {
-    // Dynamic clinic/office side has no per-member read state.
-    if (side === 'CLINIC' || side === 'VETERINARY_OFFICE') return null;
+    // Dynamic clinic/office/syndicate side has no per-member read state.
+    if (side === 'CLINIC' || side === 'VETERINARY_OFFICE' || side === 'SYNDICATE') return null;
     return count ?? 0;
   }
 
@@ -903,7 +986,8 @@ export class ChatService {
     let counterpartUserId: string | null;
     if (
       conversation.type === 'PET_OWNER_CLINIC' ||
-      conversation.type === 'PET_OWNER_VETERINARY_OFFICE'
+      conversation.type === 'PET_OWNER_VETERINARY_OFFICE' ||
+      conversation.type === 'SYNDICATE_MEMBER'
     ) {
       counterpartUserId = conversation.petOwnerUserId;
     } else if (conversation.type === 'PET_OWNER_VETERINARIAN') {

@@ -93,6 +93,7 @@ export const NOTIFICATION_TYPES = [
   'SYNDICATE_ANNOUNCEMENT_PUBLISHED',
   'SYNDICATE_SUBMISSION_CREATED',
   'SYNDICATE_SUBMISSION_RESPONDED',
+  'SYNDICATE_MEMBER_REGISTERED',
   // content (catalogue entry only — no automatic broadcast; used by admin sends)
   'CONTENT_PUBLISHED',
   // animal lifecycle publications (lost / adoption / mating) — moderation

@@ -282,7 +282,7 @@ describe('Pet Owners Store — checkout & orders', () => {
       paymentStatus: 'UNPAID',
       subtotalAmount: '141.00',
       totalAmount: '141.00',
-      currency: 'SAR',
+      currency: 'IQD',
       recipientName: 'أحمد محمد',
       city: 'الرياض',
     });

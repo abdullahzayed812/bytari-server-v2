@@ -60,6 +60,7 @@ export function createSheepBatchRouter(c: Container): Router {
     c.sheepHealthEventService,
     c.sheepCaseService,
     c.authorizationService,
+    c.userNameDirectory,
   );
   const { withOrganization, authorizeOrg } = createOrganizationMiddleware({
     organizations: c.organizationRepository,
@@ -163,6 +164,15 @@ export function createSheepBatchRouter(c: Container): Router {
     authorizeOrg('farm.daily_record.create'),
     withSheepBatch,
     asyncHandler(opsCtrl.createDailyRecord),
+  );
+  // Mounted before `/:recordId` so "weeks" is never parsed as a record id.
+  r.get(
+    `${dailyBase}/weeks`,
+    validate({ params: batchParamSchema }),
+    ...batchOp,
+    authorizeOrg('farm.daily_record.read'),
+    withSheepBatch,
+    asyncHandler(opsCtrl.listDailyRecordWeeks),
   );
   r.get(
     `${dailyBase}/:recordId`,

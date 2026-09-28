@@ -4,16 +4,25 @@ export { SyndicatePolicy } from './domain/syndicate.policy.js';
 export { SyndicateDetailsRepository } from './infrastructure/syndicate-details.repository.js';
 export { SyndicateAnnouncementRepository } from './infrastructure/syndicate-announcement.repository.js';
 export { SyndicateSubmissionRepository } from './infrastructure/syndicate-submission.repository.js';
+export { SyndicateRegistrationRepository } from './infrastructure/syndicate-registration.repository.js';
 export { SyndicateMedia } from './application/syndicate-media.js';
 export { SyndicateService, type SyndicateActor } from './application/syndicate.service.js';
 export { SyndicateAnnouncementService } from './application/syndicate-announcement.service.js';
-export { SyndicateSubmissionService } from './application/syndicate-submission.service.js';
+export {
+  SyndicateSubmissionService,
+  type EntityNotificationReads,
+} from './application/syndicate-submission.service.js';
+export { SyndicateMemberService } from './application/syndicate-member.service.js';
 export {
   SyndicateController,
   SyndicateMediaController,
   AdminSyndicateController,
   SyndicateAnnouncementController,
   SyndicateSubmissionController,
+  SyndicateMemberController,
 } from './presentation/syndicate.controllers.js';
 export * from './presentation/syndicate.schemas.js';
-export { createSyndicateRouter, createAdminSyndicateRouter } from './presentation/syndicate.routes.js';
+export {
+  createSyndicateRouter,
+  createAdminSyndicateRouter,
+} from './presentation/syndicate.routes.js';

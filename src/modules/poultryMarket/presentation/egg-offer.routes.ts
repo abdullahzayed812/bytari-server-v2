@@ -7,6 +7,7 @@ import { createMarketMiddleware } from './market.middleware.js';
 import {
   createEggOfferBodySchema,
   eggOfferParamSchema,
+  rejectEggOfferBodySchema,
   eggOfferUploadUrlBodySchema,
   listAdminEggOffersQuerySchema,
   listEggOffersQuerySchema,
@@ -18,7 +19,7 @@ import {
  * `admin` → `/admin/egg-offers/*`  (moderation: view all / delete any)
  */
 export function createEggOfferRouters(c: Container): { self: Router; admin: Router } {
-  const ctrl = new EggOfferController(c.eggOfferService);
+  const ctrl = new EggOfferController(c.eggOfferService, c.authorizationService);
   const { authorize, requireApprovedTrader } = c.authorization;
   const { withEggOffer, requireEggOwnerOrPermission } = createMarketMiddleware({
     poultryOffers: c.poultryOfferRepository,
@@ -68,6 +69,20 @@ export function createEggOfferRouters(c: Container): { self: Router; admin: Rout
     authorize('market.offer.admin.read'),
     validate({ query: listAdminEggOffersQuerySchema }),
     asyncHandler(ctrl.adminList),
+  );
+  admin.post(
+    '/:offerId/approve',
+    authorize('market.offer.admin.moderate'),
+    validate({ params: eggOfferParamSchema }),
+    withEggOffer,
+    asyncHandler(ctrl.approve),
+  );
+  admin.post(
+    '/:offerId/reject',
+    authorize('market.offer.admin.moderate'),
+    validate({ params: eggOfferParamSchema, body: rejectEggOfferBodySchema }),
+    withEggOffer,
+    asyncHandler(ctrl.reject),
   );
   admin.delete(
     '/:offerId',

@@ -87,6 +87,7 @@ export class AnimalService {
           color: input.color ?? null,
           distinguishingFeatures: input.distinguishingFeatures ?? null,
           ageEstimate: input.ageEstimate ?? null,
+          listingOnly: input.listingOnly ?? false,
         },
         tx,
       );

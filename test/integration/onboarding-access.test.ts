@@ -247,12 +247,15 @@ describe('Veterinarian onboarding — no email verification, admin approval requ
       expect(after.body.data.roles).toContain('VETERINARIAN');
       expect((await request(app).get(api('/vet-courses')).set(bearer(t))).status).toBe(200);
     }
-    // …and veterinarian-only RBAC now passes (creating a course requires an approved vet).
-    const course = await request(app)
-      .post(api('/vet-courses'))
+    // …and the approved-veterinarian guard now passes: joining a farm by code is
+    // approved-vet-only, so an unknown code reaches the service (404), not a 403.
+    // (Course creation is no longer a vet capability — admin / VET_COURSES supervisor only.)
+    const join = await request(app)
+      .post(api('/organizations/join'))
       .set(bearer(token))
-      .send(VALID_COURSE);
-    expect(course.status).toBe(201);
+      .send({ joinCode: 'FARM-NOPE99' });
+    expect(join.status).toBe(404);
+    expect(join.body.error.code).toBe('INVALID_JOIN_CODE');
   });
 
   it('a REJECTED veterinarian stays blocked, sees the rejection, and may re-apply', async () => {

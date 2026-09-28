@@ -7,6 +7,7 @@ import { TraderController } from './trader.controller.js';
 import {
   listTradersQuerySchema,
   registerTraderBodySchema,
+  adminUpdateTraderBodySchema,
   rejectTraderBodySchema,
   suspendTraderBodySchema,
 } from './trader.schemas.js';
@@ -21,11 +22,7 @@ export function createTraderRouters(c: Container): { self: Router; admin: Router
 
   const self = Router();
   self.use(c.authenticate);
-  self.post(
-    '/register',
-    validate({ body: registerTraderBodySchema }),
-    asyncHandler(ctrl.register),
-  );
+  self.post('/register', validate({ body: registerTraderBodySchema }), asyncHandler(ctrl.register));
   self.get('/me', asyncHandler(ctrl.myStatus));
 
   const admin = Router();
@@ -41,6 +38,18 @@ export function createTraderRouters(c: Container): { self: Router; admin: Router
     authorize('trader.admin.read'),
     validate({ params: userIdParamSchema }),
     asyncHandler(ctrl.getOne),
+  );
+  admin.patch(
+    '/:userId',
+    authorize('trader.admin.approve'),
+    validate({ params: userIdParamSchema, body: adminUpdateTraderBodySchema }),
+    asyncHandler(ctrl.update),
+  );
+  admin.delete(
+    '/:userId',
+    authorize('trader.admin.suspend'),
+    validate({ params: userIdParamSchema }),
+    asyncHandler(ctrl.remove),
   );
   admin.post(
     '/:userId/approve',

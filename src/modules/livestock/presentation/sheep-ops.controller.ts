@@ -10,6 +10,7 @@ import {
   applyFinancialVisibility,
   canSeeFarmFinancials,
 } from '../../farms/presentation/farm-financials.js';
+import type { UserNameDirectory } from '../../users/user-name-directory.js';
 import type { AuthorizationService } from '../../authorization/authorization.service.js';
 import type { SheepCaseService } from '../application/sheep-case.service.js';
 import type { SheepDailyRecordService } from '../application/sheep-daily-record.service.js';
@@ -36,6 +37,8 @@ export class SheepOpsController {
     private readonly healthEvents: SheepHealthEventService,
     private readonly cases: SheepCaseService,
     private readonly authz: AuthorizationService,
+    /** "أضيف بواسطة" — creator names for records that store only `createdByUserId`. */
+    private readonly creators: UserNameDirectory,
   ) {}
 
   private actor(req: Request): { actorUserId: string; context: AuditContextResult } {
@@ -59,19 +62,38 @@ export class SheepOpsController {
       pageSize: q.pageSize,
       from: q.from,
       to: q.to,
+      week: q.week,
     });
-    sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
+    sendSuccess(
+      res,
+      await this.creators.attach(items),
+      StatusCodes.OK,
+      pageMeta(q.page, q.pageSize, total),
+    );
+  };
+
+  /** Week history + where the next daily record goes ("الأسابيع المكتملة"). */
+  listDailyRecordWeeks = async (req: Request, res: Response): Promise<void> => {
+    sendSuccess(
+      res,
+      await this.creators.attach(await this.daily.listWeeks(this.orgId(req), this.batchId(req))),
+    );
   };
 
   getDailyRecord = async (req: Request, res: Response): Promise<void> => {
     const { recordId } = validatedParams<{ recordId: string }>(req);
-    sendSuccess(res, await this.daily.get(this.orgId(req), this.batchId(req), recordId));
+    sendSuccess(
+      res,
+      await this.creators.attach(
+        await this.daily.get(this.orgId(req), this.batchId(req), recordId),
+      ),
+    );
   };
 
   createDailyRecord = async (req: Request, res: Response): Promise<void> => {
     const body = validatedBody<CreateDailyRecordBody>(req);
     const dto = await this.daily.create(this.orgId(req), this.batchId(req), body, this.actor(req));
-    sendSuccess(res, dto, StatusCodes.CREATED);
+    sendSuccess(res, await this.creators.attach(dto), StatusCodes.CREATED);
   };
 
   updateDailyRecord = async (req: Request, res: Response): Promise<void> => {
@@ -79,7 +101,15 @@ export class SheepOpsController {
     const body = validatedBody<UpdateDailyRecordBody>(req);
     sendSuccess(
       res,
-      await this.daily.update(this.orgId(req), this.batchId(req), recordId, body, this.actor(req)),
+      await this.creators.attach(
+        await this.daily.update(
+          this.orgId(req),
+          this.batchId(req),
+          recordId,
+          body,
+          this.actor(req),
+        ),
+      ),
     );
   };
 
@@ -93,12 +123,17 @@ export class SheepOpsController {
     const orgId = this.orgId(req);
     const summary = await this.daily.batchSummary(orgId, this.batchId(req));
     const visible = await canSeeFarmFinancials(this.authz, req, orgId);
-    sendSuccess(res, applyFinancialVisibility(summary, visible));
+    sendSuccess(res, await this.creators.attach(applyFinancialVisibility(summary, visible)));
   };
 
   weeklySummary = async (req: Request, res: Response): Promise<void> => {
     const q = validatedQuery<WeeklySummaryQuery>(req);
-    sendSuccess(res, await this.daily.weeklySummary(this.orgId(req), this.batchId(req), q.weekOf));
+    sendSuccess(
+      res,
+      await this.creators.attach(
+        await this.daily.weeklySummary(this.orgId(req), this.batchId(req), q.weekOf),
+      ),
+    );
   };
 
   // --- health events -------------------------------------
@@ -111,19 +146,31 @@ export class SheepOpsController {
       kind: q.kind,
       status: q.status,
     });
-    sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
+    sendSuccess(
+      res,
+      await this.creators.attach(items),
+      StatusCodes.OK,
+      pageMeta(q.page, q.pageSize, total),
+    );
   };
 
   getHealthEvent = async (req: Request, res: Response): Promise<void> => {
     const { eventId } = validatedParams<{ eventId: string }>(req);
-    sendSuccess(res, await this.healthEvents.get(this.orgId(req), this.batchId(req), eventId));
+    sendSuccess(
+      res,
+      await this.creators.attach(
+        await this.healthEvents.get(this.orgId(req), this.batchId(req), eventId),
+      ),
+    );
   };
 
   createHealthEvent = async (req: Request, res: Response): Promise<void> => {
     const body = validatedBody<CreateHealthEventBody>(req);
     sendSuccess(
       res,
-      await this.healthEvents.create(this.orgId(req), this.batchId(req), body, this.actor(req)),
+      await this.creators.attach(
+        await this.healthEvents.create(this.orgId(req), this.batchId(req), body, this.actor(req)),
+      ),
       StatusCodes.CREATED,
     );
   };
@@ -133,12 +180,14 @@ export class SheepOpsController {
     const body = validatedBody<UpdateHealthEventBody>(req);
     sendSuccess(
       res,
-      await this.healthEvents.update(
-        this.orgId(req),
-        this.batchId(req),
-        eventId,
-        body,
-        this.actor(req),
+      await this.creators.attach(
+        await this.healthEvents.update(
+          this.orgId(req),
+          this.batchId(req),
+          eventId,
+          body,
+          this.actor(req),
+        ),
       ),
     );
   };
@@ -158,23 +207,36 @@ export class SheepOpsController {
       pageSize: q.pageSize,
       status: q.status,
     });
-    sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
+    sendSuccess(
+      res,
+      await this.creators.attach(items),
+      StatusCodes.OK,
+      pageMeta(q.page, q.pageSize, total),
+    );
   };
 
   caseSummary = async (req: Request, res: Response): Promise<void> => {
-    sendSuccess(res, await this.cases.summary(this.orgId(req), this.batchId(req)));
+    sendSuccess(
+      res,
+      await this.creators.attach(await this.cases.summary(this.orgId(req), this.batchId(req))),
+    );
   };
 
   getCase = async (req: Request, res: Response): Promise<void> => {
     const { caseId } = validatedParams<{ caseId: string }>(req);
-    sendSuccess(res, await this.cases.get(this.orgId(req), this.batchId(req), caseId));
+    sendSuccess(
+      res,
+      await this.creators.attach(await this.cases.get(this.orgId(req), this.batchId(req), caseId)),
+    );
   };
 
   createCase = async (req: Request, res: Response): Promise<void> => {
     const body = validatedBody<CreateCaseBody>(req);
     sendSuccess(
       res,
-      await this.cases.create(this.orgId(req), this.batchId(req), body, this.actor(req)),
+      await this.creators.attach(
+        await this.cases.create(this.orgId(req), this.batchId(req), body, this.actor(req)),
+      ),
       StatusCodes.CREATED,
     );
   };
@@ -184,7 +246,9 @@ export class SheepOpsController {
     const body = validatedBody<UpdateCaseBody>(req);
     sendSuccess(
       res,
-      await this.cases.update(this.orgId(req), this.batchId(req), caseId, body, this.actor(req)),
+      await this.creators.attach(
+        await this.cases.update(this.orgId(req), this.batchId(req), caseId, body, this.actor(req)),
+      ),
     );
   };
 
@@ -199,7 +263,9 @@ export class SheepOpsController {
     const body = validatedBody<ImageUploadUrlBody>(req);
     sendSuccess(
       res,
-      await this.cases.requestImageUploadUrl(this.orgId(req), this.batchId(req), caseId, body),
+      await this.creators.attach(
+        await this.cases.requestImageUploadUrl(this.orgId(req), this.batchId(req), caseId, body),
+      ),
     );
   };
 
@@ -208,12 +274,14 @@ export class SheepOpsController {
     const body = validatedBody<RegisterImageBody>(req);
     sendSuccess(
       res,
-      await this.cases.registerImage(
-        this.orgId(req),
-        this.batchId(req),
-        caseId,
-        this.actor(req),
-        body,
+      await this.creators.attach(
+        await this.cases.registerImage(
+          this.orgId(req),
+          this.batchId(req),
+          caseId,
+          this.actor(req),
+          body,
+        ),
       ),
     );
   };

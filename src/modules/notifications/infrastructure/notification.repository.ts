@@ -99,6 +99,25 @@ export class NotificationRepository {
     return this.findByIdForUser(id, userId, trx);
   }
 
+  /**
+   * Mark read every unread notification of one user about one entity (e.g.
+   * opening a syndicate submission clears its "new submission" alert). Returns
+   * the ids that changed, so the caller can emit `notification.read` for each.
+   */
+  async markReadByEntity(
+    userId: string,
+    entityType: string,
+    entityId: string,
+    trx: Knex.Transaction,
+  ): Promise<string[]> {
+    const rows: Array<{ id: string }> = await trx(T)
+      .where({ recipient_user_id: userId, entity_type: entityType, entity_id: entityId })
+      .whereNull('read_at')
+      .update({ read_at: trx.fn.now(), updated_at: trx.fn.now() })
+      .returning('id');
+    return rows.map((r) => r.id);
+  }
+
   /** Mark every unread notification read. Returns how many rows changed. */
   async markAllRead(userId: string, trx: Knex.Transaction): Promise<number> {
     return trx(T)

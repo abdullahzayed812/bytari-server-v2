@@ -91,6 +91,7 @@ export function createVetCourseRouter(c: Container): Router {
 /** `/admin/vet-courses*` — moderation + registration oversight. */
 export function createAdminVetCourseRouter(c: Container): Router {
   const courses = new AdminVetCourseController(c.vetCourseService);
+  const publicCourses = new VetCourseController(c.vetCourseService);
   const registrations = new AdminVetCourseRegistrationController(c.vetCourseRegistrationService);
   const { authorize } = c.authorization;
   const r = Router();
@@ -101,6 +102,14 @@ export function createAdminVetCourseRouter(c: Container): Router {
     authorize('vet_course.read'),
     validate({ query: moderationQuerySchema }),
     asyncHandler(courses.list),
+  );
+  // "إضافة دورة / ندوة" from Admin management — single-page form. ADMIN →
+  // published directly; VET_COURSES supervisor → PENDING (see the service).
+  r.post(
+    '/vet-courses',
+    authorize('vet_course.approve'),
+    validate({ body: createCourseBodySchema }),
+    asyncHandler(publicCourses.create),
   );
   r.get(
     '/vet-courses/:id',

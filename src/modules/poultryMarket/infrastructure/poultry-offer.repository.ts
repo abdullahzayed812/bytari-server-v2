@@ -63,7 +63,10 @@ export class PoultryOfferRepository {
     trx?: Knex.Transaction,
   ): Promise<{ items: PoultryOffer[]; total: number }> {
     const base = (): Knex.QueryBuilder => {
-      const qb = this.conn(trx)<PoultryOfferRow>(TABLE).where('status', filter.status ?? 'ACTIVE');
+      // Public browse: live AND approved by a moderator.
+      const qb = this.conn(trx)<PoultryOfferRow>(TABLE)
+        .where('status', filter.status ?? 'ACTIVE')
+        .andWhere('moderation_status', 'APPROVED');
       if (filter.birdType) qb.andWhere('bird_type', filter.birdType);
       if (filter.governorate) qb.andWhere('governorate', filter.governorate);
       return qb;
@@ -106,6 +109,7 @@ export class PoultryOfferRepository {
     const base = (): Knex.QueryBuilder => {
       const qb = this.conn(trx)<PoultryOfferRow>(TABLE);
       if (filter.status) qb.andWhere('status', filter.status);
+      if (filter.moderationStatus) qb.andWhere('moderation_status', filter.moderationStatus);
       if (filter.birdType) qb.andWhere('bird_type', filter.birdType);
       if (filter.governorate) qb.andWhere('governorate', filter.governorate);
       return qb;
@@ -118,5 +122,24 @@ export class PoultryOfferRepository {
       .limit(filter.pageSize)
       .offset((filter.page - 1) * filter.pageSize);
     return { items: rows.map(rowToPoultryOffer), total };
+  }
+
+  /** PENDING → APPROVED / REJECTED; `null` when it was no longer PENDING (race-safe). */
+  async moderate(
+    id: string,
+    decision: { status: 'APPROVED' | 'REJECTED'; reason: string | null; reviewerUserId: string },
+    trx: Knex.Transaction,
+  ): Promise<PoultryOffer | null> {
+    const [row] = (await trx(TABLE)
+      .where({ id, moderation_status: 'PENDING' })
+      .update({
+        moderation_status: decision.status,
+        rejection_reason: decision.reason,
+        reviewed_by_user_id: decision.reviewerUserId,
+        reviewed_at: trx.fn.now(),
+        updated_at: trx.fn.now(),
+      })
+      .returning('*')) as PoultryOfferRow[];
+    return row ? rowToPoultryOffer(row) : null;
   }
 }

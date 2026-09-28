@@ -48,10 +48,12 @@ function remainingSeats(capacity: number | null, registrationCount: number): num
 }
 
 /**
- * Veterinarian-created COURSE / SEMINAR / WORKSHOP ("الدورات والندوات").
- * Starts PENDING and is NOT public until an ADMIN or a VET_COURSES
- * system-supervisor approves it — the same reusable moderation lifecycle as
- * `vet-services` / `vet-jobs`. Only an approved veterinarian may create one.
+ * COURSE / SEMINAR / WORKSHOP ("الدورات والندوات"), created ONLY from Admin
+ * management ("الدورات والندوات" in ManagementScreen): an ADMIN's course is
+ * published directly (APPROVED — no approval request to itself); a
+ * VET_COURSES system-supervisor's course starts PENDING and needs a different
+ * moderator (`VetCoursePolicy.assertNotSelfReview`). Ordinary users only
+ * browse, view and register.
  */
 export class VetCourseService {
   private readonly log: Logger;
@@ -121,14 +123,12 @@ export class VetCourseService {
     };
   }
 
-  // --- create (approved veterinarian, or ADMIN on the platform's behalf) --
+  // --- create (Admin management only: ADMIN → APPROVED, supervisor → PENDING) --
 
   async create(input: CreateVetCourseInput, actor: VetCourseActor): Promise<VetCourseDTO> {
-    if (
-      !this.authz.isApprovedVeterinarian(actor.principal) &&
-      !this.authz.isAdmin(actor.principal)
-    ) {
-      throw new ForbiddenError('Veterinarian access requires an approved veterinarian account', {
+    const isAdmin = this.authz.isAdmin(actor.principal);
+    if (!isAdmin && !(await this.authz.can(actor.principal, 'vet_course.approve'))) {
+      throw new ForbiddenError('Courses and seminars are created from Admin management only', {
         code: ErrorCode.PERMISSION_DENIED,
       });
     }
@@ -141,6 +141,7 @@ export class VetCourseService {
           topics: trimList(input.topics),
           coverImageStorageKey,
           creatorUserId: actor.principal.userId,
+          approvedByUserId: isAdmin ? actor.principal.userId : null,
         },
         tx,
       );
@@ -150,7 +151,7 @@ export class VetCourseService {
           entityType: VetCourseAuditEntity.COURSE,
           entityId: created.id,
           actorUserId: actor.principal.userId,
-          metadata: { title: created.title, type: created.type },
+          metadata: { title: created.title, type: created.type, status: created.status },
           context: actor.context,
         },
         tx,
@@ -158,11 +159,14 @@ export class VetCourseService {
       return created;
     });
 
-    this.events.publish(VetCourseEvent.SUBMITTED, {
-      courseId: course.id,
-      creatorUserId: course.creatorUserId,
-      title: course.title,
-    });
+    // Only a PENDING course enters the moderation queue (reviewer notifications).
+    if (course.status === 'PENDING') {
+      this.events.publish(VetCourseEvent.SUBMITTED, {
+        courseId: course.id,
+        creatorUserId: course.creatorUserId,
+        title: course.title,
+      });
+    }
     return this.mustGetDTO(course.id);
   }
 

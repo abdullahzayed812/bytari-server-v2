@@ -7,6 +7,7 @@ import { auditContextFromRequest, type AuditContextResult } from '../../audit/au
 import { requireAuth } from '../../auth/authenticate.middleware.js';
 import { requireOrganization } from '../../organizations/presentation/organization.middleware.js';
 import { applyFinancialVisibility, canSeeFarmFinancials } from './farm-financials.js';
+import type { UserNameDirectory } from '../../users/user-name-directory.js';
 import type { AuthorizationService } from '../../authorization/authorization.service.js';
 import type { FarmAppointmentService } from '../application/farm-appointment.service.js';
 import type { FarmExpenseService } from '../application/farm-expense.service.js';
@@ -55,6 +56,8 @@ export class PoultryOpsController {
     private readonly cases: PoultryCaseService,
     private readonly subscription: FarmSubscriptionService,
     private readonly authz: AuthorizationService,
+    /** "أضيف بواسطة" — creator names for records that store only `createdByUserId`. */
+    private readonly creators: UserNameDirectory,
   ) {}
 
   private actor(req: Request): { actorUserId: string; context: AuditContextResult } {
@@ -72,22 +75,35 @@ export class PoultryOpsController {
   // --- farm profile -------------------------------------------
 
   getProfile = async (req: Request, res: Response): Promise<void> => {
-    sendSuccess(res, await this.profiles.getProfile(this.orgId(req)));
+    sendSuccess(res, await this.creators.attach(await this.profiles.getProfile(this.orgId(req))));
   };
 
   updateProfile = async (req: Request, res: Response): Promise<void> => {
     const body = validatedBody<UpdateFarmProfileBody>(req);
-    sendSuccess(res, await this.profiles.updateProfile(this.orgId(req), body, this.actor(req)));
+    sendSuccess(
+      res,
+      await this.creators.attach(
+        await this.profiles.updateProfile(this.orgId(req), body, this.actor(req)),
+      ),
+    );
   };
 
   requestProfileImageUploadUrl = async (req: Request, res: Response): Promise<void> => {
     const body = validatedBody<ImageUploadUrlBody>(req);
-    sendSuccess(res, await this.profiles.requestImageUploadUrl(this.orgId(req), body));
+    sendSuccess(
+      res,
+      await this.creators.attach(await this.profiles.requestImageUploadUrl(this.orgId(req), body)),
+    );
   };
 
   registerProfileImage = async (req: Request, res: Response): Promise<void> => {
     const body = validatedBody<RegisterImageBody>(req);
-    sendSuccess(res, await this.profiles.registerImage(this.orgId(req), this.actor(req), body));
+    sendSuccess(
+      res,
+      await this.creators.attach(
+        await this.profiles.registerImage(this.orgId(req), this.actor(req), body),
+      ),
+    );
   };
 
   // --- daily records ---------------------------------------
@@ -99,19 +115,38 @@ export class PoultryOpsController {
       pageSize: q.pageSize,
       from: q.from,
       to: q.to,
+      week: q.week,
     });
-    sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
+    sendSuccess(
+      res,
+      await this.creators.attach(items),
+      StatusCodes.OK,
+      pageMeta(q.page, q.pageSize, total),
+    );
+  };
+
+  /** Week history + where the next daily record goes ("الأسابيع المكتملة"). */
+  listDailyRecordWeeks = async (req: Request, res: Response): Promise<void> => {
+    sendSuccess(
+      res,
+      await this.creators.attach(await this.daily.listWeeks(this.orgId(req), this.flockId(req))),
+    );
   };
 
   getDailyRecord = async (req: Request, res: Response): Promise<void> => {
     const { recordId } = validatedParams<{ recordId: string }>(req);
-    sendSuccess(res, await this.daily.get(this.orgId(req), this.flockId(req), recordId));
+    sendSuccess(
+      res,
+      await this.creators.attach(
+        await this.daily.get(this.orgId(req), this.flockId(req), recordId),
+      ),
+    );
   };
 
   createDailyRecord = async (req: Request, res: Response): Promise<void> => {
     const body = validatedBody<CreateDailyRecordBody>(req);
     const dto = await this.daily.create(this.orgId(req), this.flockId(req), body, this.actor(req));
-    sendSuccess(res, dto, StatusCodes.CREATED);
+    sendSuccess(res, await this.creators.attach(dto), StatusCodes.CREATED);
   };
 
   updateDailyRecord = async (req: Request, res: Response): Promise<void> => {
@@ -119,7 +154,15 @@ export class PoultryOpsController {
     const body = validatedBody<UpdateDailyRecordBody>(req);
     sendSuccess(
       res,
-      await this.daily.update(this.orgId(req), this.flockId(req), recordId, body, this.actor(req)),
+      await this.creators.attach(
+        await this.daily.update(
+          this.orgId(req),
+          this.flockId(req),
+          recordId,
+          body,
+          this.actor(req),
+        ),
+      ),
     );
   };
 
@@ -133,12 +176,17 @@ export class PoultryOpsController {
     const orgId = this.orgId(req);
     const summary = await this.daily.batchSummary(orgId, this.flockId(req));
     const visible = await canSeeFarmFinancials(this.authz, req, orgId);
-    sendSuccess(res, applyFinancialVisibility(summary, visible));
+    sendSuccess(res, await this.creators.attach(applyFinancialVisibility(summary, visible)));
   };
 
   weeklySummary = async (req: Request, res: Response): Promise<void> => {
     const q = validatedQuery<WeeklySummaryQuery>(req);
-    sendSuccess(res, await this.daily.weeklySummary(this.orgId(req), this.flockId(req), q.weekOf));
+    sendSuccess(
+      res,
+      await this.creators.attach(
+        await this.daily.weeklySummary(this.orgId(req), this.flockId(req), q.weekOf),
+      ),
+    );
   };
 
   // --- expenses ------------------------------------------
@@ -153,23 +201,33 @@ export class PoultryOpsController {
       from: q.from,
       to: q.to,
     });
-    sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
+    sendSuccess(
+      res,
+      await this.creators.attach(items),
+      StatusCodes.OK,
+      pageMeta(q.page, q.pageSize, total),
+    );
   };
 
   expenseSummary = async (req: Request, res: Response): Promise<void> => {
-    sendSuccess(res, await this.expenses.summary(this.orgId(req)));
+    sendSuccess(res, await this.creators.attach(await this.expenses.summary(this.orgId(req))));
   };
 
   getExpense = async (req: Request, res: Response): Promise<void> => {
     const { expenseId } = validatedParams<{ expenseId: string }>(req);
-    sendSuccess(res, await this.expenses.get(this.orgId(req), expenseId));
+    sendSuccess(
+      res,
+      await this.creators.attach(await this.expenses.get(this.orgId(req), expenseId)),
+    );
   };
 
   createExpense = async (req: Request, res: Response): Promise<void> => {
     const body = validatedBody<CreateExpenseBody>(req);
     sendSuccess(
       res,
-      await this.expenses.create(this.orgId(req), body, this.actor(req)),
+      await this.creators.attach(
+        await this.expenses.create(this.orgId(req), body, this.actor(req)),
+      ),
       StatusCodes.CREATED,
     );
   };
@@ -177,7 +235,12 @@ export class PoultryOpsController {
   updateExpense = async (req: Request, res: Response): Promise<void> => {
     const { expenseId } = validatedParams<{ expenseId: string }>(req);
     const body = validatedBody<UpdateExpenseBody>(req);
-    sendSuccess(res, await this.expenses.update(this.orgId(req), expenseId, body, this.actor(req)));
+    sendSuccess(
+      res,
+      await this.creators.attach(
+        await this.expenses.update(this.orgId(req), expenseId, body, this.actor(req)),
+      ),
+    );
   };
 
   deleteExpense = async (req: Request, res: Response): Promise<void> => {
@@ -196,19 +259,31 @@ export class PoultryOpsController {
       kind: q.kind,
       status: q.status,
     });
-    sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
+    sendSuccess(
+      res,
+      await this.creators.attach(items),
+      StatusCodes.OK,
+      pageMeta(q.page, q.pageSize, total),
+    );
   };
 
   getHealthEvent = async (req: Request, res: Response): Promise<void> => {
     const { eventId } = validatedParams<{ eventId: string }>(req);
-    sendSuccess(res, await this.healthEvents.get(this.orgId(req), this.flockId(req), eventId));
+    sendSuccess(
+      res,
+      await this.creators.attach(
+        await this.healthEvents.get(this.orgId(req), this.flockId(req), eventId),
+      ),
+    );
   };
 
   createHealthEvent = async (req: Request, res: Response): Promise<void> => {
     const body = validatedBody<CreateHealthEventBody>(req);
     sendSuccess(
       res,
-      await this.healthEvents.create(this.orgId(req), this.flockId(req), body, this.actor(req)),
+      await this.creators.attach(
+        await this.healthEvents.create(this.orgId(req), this.flockId(req), body, this.actor(req)),
+      ),
       StatusCodes.CREATED,
     );
   };
@@ -218,12 +293,14 @@ export class PoultryOpsController {
     const body = validatedBody<UpdateHealthEventBody>(req);
     sendSuccess(
       res,
-      await this.healthEvents.update(
-        this.orgId(req),
-        this.flockId(req),
-        eventId,
-        body,
-        this.actor(req),
+      await this.creators.attach(
+        await this.healthEvents.update(
+          this.orgId(req),
+          this.flockId(req),
+          eventId,
+          body,
+          this.actor(req),
+        ),
       ),
     );
   };
@@ -245,19 +322,29 @@ export class PoultryOpsController {
       status: q.status,
       from: q.from,
     });
-    sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
+    sendSuccess(
+      res,
+      await this.creators.attach(items),
+      StatusCodes.OK,
+      pageMeta(q.page, q.pageSize, total),
+    );
   };
 
   getAppointment = async (req: Request, res: Response): Promise<void> => {
     const { appointmentId } = validatedParams<{ appointmentId: string }>(req);
-    sendSuccess(res, await this.appointments.get(this.orgId(req), appointmentId));
+    sendSuccess(
+      res,
+      await this.creators.attach(await this.appointments.get(this.orgId(req), appointmentId)),
+    );
   };
 
   createAppointment = async (req: Request, res: Response): Promise<void> => {
     const body = validatedBody<CreateAppointmentBody>(req);
     sendSuccess(
       res,
-      await this.appointments.create(this.orgId(req), body, this.actor(req)),
+      await this.creators.attach(
+        await this.appointments.create(this.orgId(req), body, this.actor(req)),
+      ),
       StatusCodes.CREATED,
     );
   };
@@ -267,7 +354,9 @@ export class PoultryOpsController {
     const body = validatedBody<UpdateAppointmentBody>(req);
     sendSuccess(
       res,
-      await this.appointments.update(this.orgId(req), appointmentId, body, this.actor(req)),
+      await this.creators.attach(
+        await this.appointments.update(this.orgId(req), appointmentId, body, this.actor(req)),
+      ),
     );
   };
 
@@ -286,23 +375,36 @@ export class PoultryOpsController {
       pageSize: q.pageSize,
       status: q.status,
     });
-    sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
+    sendSuccess(
+      res,
+      await this.creators.attach(items),
+      StatusCodes.OK,
+      pageMeta(q.page, q.pageSize, total),
+    );
   };
 
   caseSummary = async (req: Request, res: Response): Promise<void> => {
-    sendSuccess(res, await this.cases.summary(this.orgId(req), this.flockId(req)));
+    sendSuccess(
+      res,
+      await this.creators.attach(await this.cases.summary(this.orgId(req), this.flockId(req))),
+    );
   };
 
   getCase = async (req: Request, res: Response): Promise<void> => {
     const { caseId } = validatedParams<{ caseId: string }>(req);
-    sendSuccess(res, await this.cases.get(this.orgId(req), this.flockId(req), caseId));
+    sendSuccess(
+      res,
+      await this.creators.attach(await this.cases.get(this.orgId(req), this.flockId(req), caseId)),
+    );
   };
 
   createCase = async (req: Request, res: Response): Promise<void> => {
     const body = validatedBody<CreateCaseBody>(req);
     sendSuccess(
       res,
-      await this.cases.create(this.orgId(req), this.flockId(req), body, this.actor(req)),
+      await this.creators.attach(
+        await this.cases.create(this.orgId(req), this.flockId(req), body, this.actor(req)),
+      ),
       StatusCodes.CREATED,
     );
   };
@@ -312,7 +414,9 @@ export class PoultryOpsController {
     const body = validatedBody<UpdateCaseBody>(req);
     sendSuccess(
       res,
-      await this.cases.update(this.orgId(req), this.flockId(req), caseId, body, this.actor(req)),
+      await this.creators.attach(
+        await this.cases.update(this.orgId(req), this.flockId(req), caseId, body, this.actor(req)),
+      ),
     );
   };
 
@@ -327,7 +431,9 @@ export class PoultryOpsController {
     const body = validatedBody<ImageUploadUrlBody>(req);
     sendSuccess(
       res,
-      await this.cases.requestImageUploadUrl(this.orgId(req), this.flockId(req), caseId, body),
+      await this.creators.attach(
+        await this.cases.requestImageUploadUrl(this.orgId(req), this.flockId(req), caseId, body),
+      ),
     );
   };
 
@@ -336,12 +442,14 @@ export class PoultryOpsController {
     const body = validatedBody<RegisterImageBody>(req);
     sendSuccess(
       res,
-      await this.cases.registerImage(
-        this.orgId(req),
-        this.flockId(req),
-        caseId,
-        this.actor(req),
-        body,
+      await this.creators.attach(
+        await this.cases.registerImage(
+          this.orgId(req),
+          this.flockId(req),
+          caseId,
+          this.actor(req),
+          body,
+        ),
       ),
     );
   };
@@ -355,14 +463,16 @@ export class PoultryOpsController {
       pageSize: q.pageSize,
       status: q.status,
     });
-    sendSuccess(res, items, 200, pageMeta(q.page, q.pageSize, total));
+    sendSuccess(res, await this.creators.attach(items), 200, pageMeta(q.page, q.pageSize, total));
   };
 
   createSubscriptionRenewal = async (req: Request, res: Response): Promise<void> => {
     const body = validatedBody<CreateRenewalRequestBody>(req);
     sendSuccess(
       res,
-      await this.subscription.requestRenewal(requireOrganization(req), body, this.actor(req)),
+      await this.creators.attach(
+        await this.subscription.requestRenewal(requireOrganization(req), body, this.actor(req)),
+      ),
       StatusCodes.CREATED,
     );
   };
@@ -378,7 +488,9 @@ export class PoultryOpsController {
     const body = validatedBody<ApproveRenewalBody>(req);
     sendSuccess(
       res,
-      await this.subscription.approveRenewal(this.orgId(req), requestId, body, this.actor(req)),
+      await this.creators.attach(
+        await this.subscription.approveRenewal(this.orgId(req), requestId, body, this.actor(req)),
+      ),
     );
   };
 
@@ -387,11 +499,13 @@ export class PoultryOpsController {
     const body = validatedBody<RejectRenewalBody>(req);
     sendSuccess(
       res,
-      await this.subscription.rejectRenewal(
-        this.orgId(req),
-        requestId,
-        body.reason,
-        this.actor(req),
+      await this.creators.attach(
+        await this.subscription.rejectRenewal(
+          this.orgId(req),
+          requestId,
+          body.reason,
+          this.actor(req),
+        ),
       ),
     );
   };

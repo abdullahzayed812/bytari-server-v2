@@ -81,6 +81,13 @@ export class AdminOrganizationController {
   deactivate = (req: Request, res: Response): Promise<void> =>
     this.changeStatus(req, res, 'deactivate');
 
+  /** DELETE /admin/organizations/:id — soft delete from any status (see `OrganizationService.adminDelete`). */
+  remove = async (req: Request, res: Response): Promise<void> => {
+    const { id } = validatedParams<{ id: string }>(req);
+    const body = validatedBody<StatusChangeBody>(req);
+    sendSuccess(res, await this.organizations.adminDelete(id, this.actor(req), body.reason));
+  };
+
   private async changeStatus(
     req: Request,
     res: Response,
@@ -171,7 +178,10 @@ export class AdminOrganizationController {
   approveFarmRenewal = async (req: Request, res: Response): Promise<void> => {
     const { id, requestId } = validatedParams<{ id: string; requestId: string }>(req);
     const body = validatedBody<ApproveRenewalBody>(req);
-    sendSuccess(res, await this.farmSubscription.approveRenewal(id, requestId, body, this.actor(req)));
+    sendSuccess(
+      res,
+      await this.farmSubscription.approveRenewal(id, requestId, body, this.actor(req)),
+    );
   };
 
   rejectFarmRenewal = async (req: Request, res: Response): Promise<void> => {

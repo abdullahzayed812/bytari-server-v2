@@ -22,8 +22,20 @@ afterAll(() => closeTestDb());
 const api = (p: string): string => `/api/v1/vet-courses${p}`;
 const adminApi = (p: string): string => `/api/v1/admin${p}`;
 
+/**
+ * Courses / seminars are created from Admin management only: an ADMIN
+ * (published directly) or a VET_COURSES system supervisor (PENDING). This is
+ * an approved vet who also holds the VET_COURSES supervisor domain.
+ */
+async function registerCourseManager() {
+  const admin = await registerAdmin(app);
+  const manager = await registerApprovedVet(app);
+  await assignSystemSupervisor(app, admin.accessToken, manager.id, 'VET_COURSES');
+  return manager;
+}
+
 describe('Veterinarian Courses & Seminars — courses (approved veterinarian only, moderated)', () => {
-  it('a plain user cannot create a course; an approved veterinarian can, and it starts PENDING', async () => {
+  it('a plain user or plain veterinarian cannot create a course; a VET_COURSES supervisor can, and it starts PENDING', async () => {
     const plainUser = await registerUser(app);
     const denied = await request(app).post(api('')).set(bearer(plainUser.accessToken)).send({
       type: 'COURSE',
@@ -38,7 +50,10 @@ describe('Veterinarian Courses & Seminars — courses (approved veterinarian onl
     });
     expect(denied.status).toBe(403);
 
-    const vet = await registerApprovedVet(app);
+    const plainVet = await registerApprovedVet(app);
+    await expect(createVetCourse(app, plainVet.accessToken)).rejects.toThrow(/403/);
+
+    const vet = await registerCourseManager();
     const other = await registerUser(app);
     const created = await createVetCourse(app, vet.accessToken, { title: 'أساسيات التغذية' });
     expect(created.id).toBeTruthy();
@@ -60,7 +75,7 @@ describe('Veterinarian Courses & Seminars — courses (approved veterinarian onl
     const admin = await registerAdmin(app);
     const sup = await registerUser(app);
     await assignSystemSupervisor(app, admin.accessToken, sup.id, 'VET_COURSES');
-    const vet = await registerApprovedVet(app);
+    const vet = await registerCourseManager();
 
     const created = await createVetCourse(app, vet.accessToken);
     const selfApprove = await approveVetCourse(app, vet.accessToken, created.id);
@@ -72,7 +87,7 @@ describe('Veterinarian Courses & Seminars — courses (approved veterinarian onl
 
   it('rejects re-review of an already-decided course (409) and requires a reason to reject', async () => {
     const admin = await registerAdmin(app);
-    const vet = await registerApprovedVet(app);
+    const vet = await registerCourseManager();
     const created = await createVetCourse(app, vet.accessToken);
 
     const noReason = await request(app)
@@ -94,7 +109,7 @@ describe('Veterinarian Courses & Seminars — courses (approved veterinarian onl
 
   it('editing a rejected course resets it to PENDING for re-review', async () => {
     const admin = await registerAdmin(app);
-    const vet = await registerApprovedVet(app);
+    const vet = await registerCourseManager();
     const created = await createVetCourse(app, vet.accessToken);
     await request(app)
       .post(adminApi(`/vet-courses/${created.id}/reject`))
@@ -112,7 +127,7 @@ describe('Veterinarian Courses & Seminars — courses (approved veterinarian onl
 
   it('the creator can cancel ("إلغاء الدورة") their own approved course; cancelled courses drop off the public list', async () => {
     const admin = await registerAdmin(app);
-    const vet = await registerApprovedVet(app);
+    const vet = await registerCourseManager();
     const other = await registerUser(app);
     const created = await createVetCourse(app, vet.accessToken);
     await approveVetCourse(app, admin.accessToken, created.id);
@@ -144,7 +159,7 @@ describe('Veterinarian Courses & Seminars — registration (approved veterinaria
   }
 
   it('a pet owner (non-veterinarian) cannot register', async () => {
-    const creator = await registerApprovedVet(app);
+    const creator = await registerCourseManager();
     const course = await approvedCourse(creator.accessToken);
     const petOwner = await registerUser(app);
 
@@ -153,7 +168,7 @@ describe('Veterinarian Courses & Seminars — registration (approved veterinaria
   });
 
   it('an approved veterinarian can register; cannot register twice; cannot register for their own course', async () => {
-    const creator = await registerApprovedVet(app);
+    const creator = await registerCourseManager();
     const course = await approvedCourse(creator.accessToken);
 
     const selfRegister = await registerForVetCourse(app, creator.accessToken, course.id);
@@ -168,7 +183,7 @@ describe('Veterinarian Courses & Seminars — registration (approved veterinaria
   });
 
   it('cannot register for a course that is not open (still PENDING moderation)', async () => {
-    const creator = await registerApprovedVet(app);
+    const creator = await registerCourseManager();
     const course = await createVetCourse(app, creator.accessToken); // not approved
     const registrant = await registerApprovedVet(app);
     const res = await registerForVetCourse(app, registrant.accessToken, course.id);
@@ -176,7 +191,7 @@ describe('Veterinarian Courses & Seminars — registration (approved veterinaria
   });
 
   it('cannot register once the registration deadline has passed', async () => {
-    const creator = await registerApprovedVet(app);
+    const creator = await registerCourseManager();
     const course = await approvedCourse(creator.accessToken, {
       registrationDeadline: '2000-01-01',
     });
@@ -186,7 +201,7 @@ describe('Veterinarian Courses & Seminars — registration (approved veterinaria
   });
 
   it('enforces capacity — a full course rejects further registrations', async () => {
-    const creator = await registerApprovedVet(app);
+    const creator = await registerCourseManager();
     const course = await approvedCourse(creator.accessToken, { capacity: 1 });
 
     const first = await registerApprovedVet(app);
@@ -199,7 +214,7 @@ describe('Veterinarian Courses & Seminars — registration (approved veterinaria
   });
 
   it('registrations are private to the registrant and the course creator; "دوراتي" scopes correctly', async () => {
-    const creator = await registerApprovedVet(app);
+    const creator = await registerCourseManager();
     const course = await approvedCourse(creator.accessToken);
     const registrant = await registerApprovedVet(app);
     const register = await registerForVetCourse(app, registrant.accessToken, course.id);
@@ -230,7 +245,7 @@ describe('Veterinarian Courses & Seminars — registration (approved veterinaria
 describe('Veterinarian Courses & Seminars — admin oversight', () => {
   it('admin can list registrations for a course (read-only) via vet_course.read', async () => {
     const admin = await registerAdmin(app);
-    const creator = await registerApprovedVet(app);
+    const creator = await registerCourseManager();
     const course = await createVetCourse(app, creator.accessToken);
     await approveVetCourse(app, admin.accessToken, course.id);
     const registrant = await registerApprovedVet(app);
@@ -244,7 +259,7 @@ describe('Veterinarian Courses & Seminars — admin oversight', () => {
 
     const denied = await request(app)
       .get(adminApi(`/vet-courses/${course.id}/registrations`))
-      .set(bearer(creator.accessToken));
+      .set(bearer(registrant.accessToken));
     expect(denied.status).toBe(403);
   });
 
@@ -258,23 +273,27 @@ describe('Veterinarian Courses & Seminars — admin oversight', () => {
     });
     expect(created.id).toBeTruthy();
 
-    // It still starts PENDING like any other submission — no auto-approve
-    // shortcut — but ADMIN already holds `vet_course.approve`, so they can
-    // immediately approve their own submission (unlike a plain vet — see the
-    // self-approval test above).
+    // Admin-created content is published directly — no approval request is
+    // sent to the admins themselves.
     const asPlainUser = await request(app)
       .get(api(`/${created.id}`))
       .set(bearer(plainUser.accessToken));
-    expect(asPlainUser.status).toBe(404); // still PENDING, not public yet
+    // Publicly visible = APPROVED (the public DTO only ever shows approved items).
+    expect(asPlainUser.status).toBe(200);
 
-    const approve = await approveVetCourse(app, admin.accessToken, created.id);
-    expect(approve.status).toBe(200);
-    expect(approve.body.data.status).toBe('APPROVED');
+    const pendingQueue = await request(app)
+      .get(adminApi('/vet-courses'))
+      .query({ status: 'PENDING' })
+      .set(bearer(admin.accessToken));
+    expect(pendingQueue.body.data).toHaveLength(0);
+
+    const again = await approveVetCourse(app, admin.accessToken, created.id);
+    expect(again.status).toBe(409);
   });
 
   it('an ADMIN can edit a course they did not create; a plain approved vet who is not the owner cannot', async () => {
     const admin = await registerAdmin(app);
-    const creator = await registerApprovedVet(app);
+    const creator = await registerCourseManager();
     const otherVet = await registerApprovedVet(app);
     const course = await createVetCourse(app, creator.accessToken, { title: 'العنوان الأصلي' });
 
@@ -294,7 +313,7 @@ describe('Veterinarian Courses & Seminars — admin oversight', () => {
 
   it('admin can view every course/seminar state via explicit status filters; omitting status defaults to PENDING (same convention as vet-services/vet-jobs)', async () => {
     const admin = await registerAdmin(app);
-    const vet = await registerApprovedVet(app);
+    const vet = await registerCourseManager();
     const pending = await createVetCourse(app, vet.accessToken, { title: 'قيد الانتظار' });
     const toApprove = await createVetCourse(app, vet.accessToken, { title: 'سيُعتمد' });
     const toReject = await createVetCourse(app, vet.accessToken, { title: 'سيُرفض' });
@@ -333,7 +352,7 @@ describe('Veterinarian Courses & Seminars — admin oversight', () => {
 
   it('GET /admin/vet-courses?type=SEMINAR excludes COURSE/WORKSHOP submissions', async () => {
     const admin = await registerAdmin(app);
-    const vet = await registerApprovedVet(app);
+    const vet = await registerCourseManager();
     const course = await createVetCourse(app, vet.accessToken, { type: 'COURSE', title: 'دورة' });
     const seminar = await createVetCourse(app, vet.accessToken, { type: 'SEMINAR', title: 'ندوة' });
 
@@ -348,7 +367,7 @@ describe('Veterinarian Courses & Seminars — admin oversight', () => {
 });
 
 describe('Seminars — admin create → moderate → publish → register (same lifecycle as courses)', () => {
-  it('admin-created Course and Seminar both start PENDING, stay private, and publish only on approval', async () => {
+  it('admin-created Course and Seminar are published directly (no approval request to the admins)', async () => {
     const admin = await registerAdmin(app);
     const viewer = await registerApprovedVet(app);
     const course = await createVetCourse(app, admin.accessToken, {
@@ -364,28 +383,13 @@ describe('Seminars — admin create → moderate → publish → register (same 
       .get(adminApi('/vet-courses'))
       .query({ status: 'PENDING', type: 'SEMINAR' })
       .set(bearer(admin.accessToken));
-    expect(pending.body.data.map((c: { id: string }) => c.id)).toEqual([seminar.id]);
-    expect(pending.body.data[0].status).toBe('PENDING');
+    expect(pending.body.data).toHaveLength(0);
 
     const detail = await request(app)
       .get(adminApi(`/vet-courses/${seminar.id}`))
       .set(bearer(admin.accessToken));
     expect(detail.status).toBe(200);
-    expect(detail.body.data.type).toBe('SEMINAR');
-
-    expect(
-      (await request(app).get(api('')).set(bearer(viewer.accessToken))).body.data,
-    ).toHaveLength(0);
-    expect(
-      (
-        await request(app)
-          .get(api(`/${seminar.id}`))
-          .set(bearer(viewer.accessToken))
-      ).status,
-    ).toBe(404);
-
-    expect((await approveVetCourse(app, admin.accessToken, course.id)).status).toBe(200);
-    expect((await approveVetCourse(app, admin.accessToken, seminar.id)).status).toBe(200);
+    expect(detail.body.data).toMatchObject({ type: 'SEMINAR', status: 'APPROVED' });
 
     const seminarsOnly = await request(app)
       .get(api(''))
@@ -393,12 +397,43 @@ describe('Seminars — admin create → moderate → publish → register (same 
       .set(bearer(viewer.accessToken));
     expect(seminarsOnly.body.data.map((c: { id: string }) => c.id)).toEqual([seminar.id]);
     const all = await request(app).get(api('')).set(bearer(viewer.accessToken));
-    expect(all.body.data).toHaveLength(2);
+    expect(all.body.data.map((c: { id: string }) => c.id).sort()).toEqual(
+      [course.id, seminar.id].sort(),
+    );
+  });
+
+  it('the Admin management create route (POST /admin/vet-courses) is management-only', async () => {
+    const admin = await registerAdmin(app);
+    const plainVet = await registerApprovedVet(app);
+    const body = {
+      type: 'SEMINAR',
+      title: 'ندوة من الإدارة',
+      description: 'وصف الندوة من شاشة الإدارة.',
+      organizingBody: 'الإدارة',
+      instructorName: 'د. محاضر',
+      startDate: '2999-01-01',
+      endDate: '2999-01-01',
+      locationMode: 'ONLINE',
+      locationDetails: 'أونلاين',
+      capacity: 30,
+    };
+    const denied = await request(app)
+      .post(adminApi('/vet-courses'))
+      .set(bearer(plainVet.accessToken))
+      .send(body);
+    expect(denied.status).toBe(403);
+    const ok = await request(app)
+      .post(adminApi('/vet-courses'))
+      .set(bearer(admin.accessToken))
+      .send(body);
+    expect(ok.status).toBe(201);
+    expect(ok.body.data.status).toBe('APPROVED');
   });
 
   it('a rejected Seminar never appears publicly and cannot accept registrations', async () => {
     const admin = await registerAdmin(app);
-    const seminar = await createVetCourse(app, admin.accessToken, {
+    const manager = await registerCourseManager();
+    const seminar = await createVetCourse(app, manager.accessToken, {
       type: 'SEMINAR',
       capacity: 10,
     });
@@ -430,7 +465,6 @@ describe('Seminars — admin create → moderate → publish → register (same 
       type: 'SEMINAR',
       capacity: 10,
     });
-    await approveVetCourse(app, admin.accessToken, seminar.id);
     await request(app)
       .post(adminApi(`/vet-courses/${seminar.id}/cancel`))
       .set(bearer(admin.accessToken));
@@ -443,7 +477,6 @@ describe('Seminars — admin create → moderate → publish → register (same 
   it('seat counts and the viewer registration state are exact: OPEN → REGISTERED, others see FULL at capacity', async () => {
     const admin = await registerAdmin(app);
     const seminar = await createVetCourse(app, admin.accessToken, { type: 'SEMINAR', capacity: 2 });
-    await approveVetCourse(app, admin.accessToken, seminar.id);
     const [a, b, c] = [
       await registerApprovedVet(app),
       await registerApprovedVet(app),
@@ -505,7 +538,6 @@ describe('Seminars — admin create → moderate → publish → register (same 
   it('the last seat can only be taken once under concurrent registrations', async () => {
     const admin = await registerAdmin(app);
     const seminar = await createVetCourse(app, admin.accessToken, { type: 'SEMINAR', capacity: 1 });
-    await approveVetCourse(app, admin.accessToken, seminar.id);
     const vets = await Promise.all(Array.from({ length: 6 }, () => registerApprovedVet(app)));
 
     const results = await Promise.all(
@@ -531,7 +563,6 @@ describe('Seminars — admin create → moderate → publish → register (same 
       type: 'SEMINAR',
       capacity: 10,
     });
-    await approveVetCourse(app, admin.accessToken, seminar.id);
     const vet = await registerApprovedVet(app);
 
     const results = await Promise.all(
@@ -599,7 +630,7 @@ describe('ManagementScreen — separate Courses / Seminars badge counts', () => 
 
   it('counts pending Seminars on the seminars card only, and opening Seminars does not clear the Courses badge', async () => {
     const admin = await registerAdmin(app);
-    const vet = await registerApprovedVet(app);
+    const vet = await registerCourseManager();
     await createVetCourse(app, vet.accessToken, { type: 'COURSE' });
     await createVetCourse(app, vet.accessToken, { type: 'SEMINAR' });
     const toApprove = await createVetCourse(app, vet.accessToken, { type: 'SEMINAR' });

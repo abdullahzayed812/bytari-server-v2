@@ -1,6 +1,7 @@
 import type { Knex } from 'knex';
 import type { Logger } from 'pino';
-import { NotFoundError } from '../../../shared/errors/app-error.js';
+import { ConflictError, NotFoundError } from '../../../shared/errors/app-error.js';
+import { ErrorCode } from '../../../shared/errors/error-codes.js';
 import type { EventBus } from '../../../shared/events/index.js';
 import type { AuditContext } from '../../audit/audit.types.js';
 import type { AuditService } from '../../audit/audit.service.js';
@@ -11,16 +12,23 @@ import type { OrganizationRbacRepository } from '../../organizations/infrastruct
 import type { OrganizationFollowRepository } from '../../organizations/infrastructure/organization-follow.repository.js';
 import type { MembershipRepository } from '../../organizations/infrastructure/membership.repository.js';
 import type { OrganizationRepository } from '../../organizations/infrastructure/organization.repository.js';
-import { SyndicateAuditAction, SyndicateAuditEntity, SyndicateEvent } from '../domain/syndicate.constants.js';
+import {
+  SyndicateAuditAction,
+  SyndicateAuditEntity,
+  SyndicateEvent,
+} from '../domain/syndicate.constants.js';
 import { SyndicatePolicy } from '../domain/syndicate.policy.js';
 import type {
   CreateSyndicateInput,
   MySyndicateAccessDTO,
   PublicSyndicateDTO,
   SyndicateBrowseFilter,
+  SyndicateCountersDTO,
   UpdateSyndicateProfileInput,
 } from '../domain/syndicate.types.js';
 import type { SyndicateDetailsRepository } from '../infrastructure/syndicate-details.repository.js';
+import type { SyndicateRegistrationRepository } from '../infrastructure/syndicate-registration.repository.js';
+import type { SyndicateSubmissionRepository } from '../infrastructure/syndicate-submission.repository.js';
 import type { SyndicateMedia } from './syndicate-media.js';
 
 export interface SyndicateActor {
@@ -51,23 +59,53 @@ export class SyndicateService {
     private readonly audit: AuditService,
     private readonly events: EventBus,
     logger: Logger,
+    private readonly registrations: SyndicateRegistrationRepository,
+    private readonly submissions: SyndicateSubmissionRepository,
   ) {
     this.log = logger.child({ component: 'syndicate-service' });
   }
 
+  /** Card counters, only for a viewer allowed to read this syndicate's submissions. */
+  private async countersFor(
+    organizationId: string,
+    viewer: AuthPrincipal | null,
+  ): Promise<SyndicateCountersDTO | null> {
+    if (!viewer) return null;
+    const allowed =
+      this.authz.isAdmin(viewer) ||
+      (await this.authz.canInOrganization(viewer, 'syndicate.submission.read', organizationId));
+    return allowed ? this.submissions.countersFor(organizationId, viewer.userId) : null;
+  }
+
   private async toPublicDTO(
     organizationId: string,
-    viewerUserId: string | null,
+    viewer: AuthPrincipal | null,
   ): Promise<PublicSyndicateDTO> {
     const org = await this.organizations.findById(organizationId);
     if (!org || org.type !== 'SYNDICATE') throw new NotFoundError('Syndicate not found');
+    // A deleted (DEACTIVATED) / suspended syndicate disappears for everyone
+    // but a global Admin.
+    if (org.status !== 'ACTIVE' && !(viewer && this.authz.isAdmin(viewer))) {
+      throw new NotFoundError('Syndicate not found');
+    }
+    const viewerUserId = viewer?.userId ?? null;
     const d = await this.details.findByOrganizationId(organizationId);
 
-    const [branchCount, followersCount, isFollowing] = await Promise.all([
-      d && d.parentOrganizationId === null ? this.details.countBranches(organizationId) : Promise.resolve(0),
-      this.follows.count(organizationId),
-      viewerUserId ? this.follows.isFollowing(organizationId, viewerUserId) : Promise.resolve(false),
-    ]);
+    const [branchCount, followersCount, isFollowing, registration, membersCount, counters] =
+      await Promise.all([
+        d && d.parentOrganizationId === null
+          ? this.details.countBranches(organizationId)
+          : Promise.resolve(0),
+        this.follows.count(organizationId),
+        viewerUserId
+          ? this.follows.isFollowing(organizationId, viewerUserId)
+          : Promise.resolve(false),
+        viewerUserId
+          ? this.registrations.findActive(organizationId, viewerUserId)
+          : Promise.resolve(null),
+        this.registrations.countActive(organizationId),
+        this.countersFor(organizationId, viewer),
+      ]);
 
     return {
       id: org.id,
@@ -88,6 +126,9 @@ export class SyndicateService {
       branchCount,
       isFollowing,
       followersCount,
+      isRegistered: registration !== null,
+      membersCount,
+      counters,
       createdAt: org.createdAt,
     };
   }
@@ -103,7 +144,12 @@ export class SyndicateService {
           : null;
       SyndicatePolicy.assertValidParent(
         input.parentOrganizationId,
-        parentOrg ? { type: parentOrg.type, parentOrganizationId: parentDetails?.parentOrganizationId ?? null } : null,
+        parentOrg
+          ? {
+              type: parentOrg.type,
+              parentOrganizationId: parentDetails?.parentOrganizationId ?? null,
+            }
+          : null,
       );
     }
 
@@ -112,11 +158,20 @@ export class SyndicateService {
       if (!ownerRole) throw new Error('Seed data missing: organization role "OWNER"');
 
       const org = await this.organizations.create(
-        { type: 'SYNDICATE', name: input.name, description: input.description ?? null, ownerUserId: actor.principal.userId },
+        {
+          type: 'SYNDICATE',
+          name: input.name,
+          description: input.description ?? null,
+          ownerUserId: actor.principal.userId,
+        },
         tx,
       );
       // Admin-created — active immediately, no PENDING moderation queue.
-      await this.organizations.updateStatus(org.id, { status: 'ACTIVE', decidedBy: actor.principal.userId }, tx);
+      await this.organizations.updateStatus(
+        org.id,
+        { status: 'ACTIVE', decidedBy: actor.principal.userId },
+        tx,
+      );
       await this.details.create(org.id, input, tx);
       await this.memberships.create(
         {
@@ -147,22 +202,25 @@ export class SyndicateService {
       parentOrganizationId: input.parentOrganizationId ?? null,
       actorUserId: actor.principal.userId,
     });
-    return this.toPublicDTO(orgId, actor.principal.userId);
+    return this.toPublicDTO(orgId, actor.principal);
   }
 
   // --- reads -----------------------------------------------------
 
-  async getPublic(organizationId: string, viewerUserId: string | null): Promise<PublicSyndicateDTO> {
-    return this.toPublicDTO(organizationId, viewerUserId);
+  async getPublic(
+    organizationId: string,
+    viewer: AuthPrincipal | null,
+  ): Promise<PublicSyndicateDTO> {
+    return this.toPublicDTO(organizationId, viewer);
   }
 
   /** Root (main) syndicates — the top-level "السقابة" browse/landing list. */
   async listMain(
     filter: SyndicateBrowseFilter,
-    viewerUserId: string | null,
+    viewer: AuthPrincipal | null,
   ): Promise<{ items: PublicSyndicateDTO[]; total: number }> {
     const { ids, total } = await this.details.listMainOrganizationIds(filter);
-    const items = await Promise.all(ids.map((id) => this.toPublicDTO(id, viewerUserId)));
+    const items = await Promise.all(ids.map((id) => this.toPublicDTO(id, viewer)));
     return { items, total };
   }
 
@@ -170,10 +228,13 @@ export class SyndicateService {
   async listBranches(
     parentOrganizationId: string,
     filter: SyndicateBrowseFilter,
-    viewerUserId: string | null,
+    viewer: AuthPrincipal | null,
   ): Promise<{ items: PublicSyndicateDTO[]; total: number }> {
-    const { ids, total } = await this.details.listBranchOrganizationIds(parentOrganizationId, filter);
-    const items = await Promise.all(ids.map((id) => this.toPublicDTO(id, viewerUserId)));
+    const { ids, total } = await this.details.listBranchOrganizationIds(
+      parentOrganizationId,
+      filter,
+    );
+    const items = await Promise.all(ids.map((id) => this.toPublicDTO(id, viewer)));
     return { items, total };
   }
 
@@ -223,17 +284,68 @@ export class SyndicateService {
       await this.media.deleteReplaced([previousLogoKey], [logoStorageKey], { organizationId });
     }
 
-    return this.toPublicDTO(organizationId, actor.principal.userId);
+    return this.toPublicDTO(organizationId, actor.principal);
+  }
+
+  /**
+   * Delete a syndicate (global Admin, `syndicate.admin.delete`). Follows the
+   * organizations convention — a soft delete: the organization becomes
+   * DEACTIVATED (hidden from browse, every org-scoped write refused by
+   * `authorizeOrg`) and every ACTIVE registration is ended as REMOVED, in one
+   * transaction. Announcements / submissions / media stay attached to the
+   * (deactivated) organization row, so nothing is orphaned and history and
+   * audit survive. A main syndicate with active branches must have its
+   * branches deleted first.
+   */
+  async delete(organizationId: string, actor: SyndicateActor): Promise<void> {
+    const org = await this.organizations.findById(organizationId);
+    if (!org || org.type !== 'SYNDICATE') throw new NotFoundError('Syndicate not found');
+    if (org.status === 'DEACTIVATED') return;
+    const activeBranches = await this.details.countActiveBranches(organizationId);
+    if (activeBranches > 0) {
+      throw new ConflictError('Delete this syndicate’s branches first', {
+        code: ErrorCode.SYNDICATE_HAS_BRANCHES,
+      });
+    }
+
+    await this.db.transaction(async (tx) => {
+      await this.organizations.updateStatus(organizationId, { status: 'DEACTIVATED' }, tx);
+      const endedRegistrations = await this.registrations.endAllForOrganization(
+        organizationId,
+        actor.principal.userId,
+        tx,
+      );
+      await this.audit.record(
+        {
+          action: SyndicateAuditAction.DELETED,
+          entityType: SyndicateAuditEntity.SYNDICATE,
+          entityId: organizationId,
+          actorUserId: actor.principal.userId,
+          metadata: { name: org.name, from: org.status, endedRegistrations },
+          context: actor.context,
+        },
+        tx,
+      );
+    });
+    this.events.publish(SyndicateEvent.DELETED, {
+      organizationId,
+      actorUserId: actor.principal.userId,
+    });
   }
 
   /** Internal — used by the announcement/submission services to load org context. */
-  async loadOrganizationContext(organizationId: string): Promise<{ id: string; name: string; type: string } | null> {
+  async loadOrganizationContext(
+    organizationId: string,
+  ): Promise<{ id: string; name: string; type: string } | null> {
     const org = await this.organizations.findById(organizationId);
     return org ? { id: org.id, name: org.name, type: org.type } : null;
   }
 
   /** "What can I do here?" — drives whether the mobile app shows management actions for this syndicate. */
-  async getMyAccess(organizationId: string, principal: AuthPrincipal): Promise<MySyndicateAccessDTO> {
+  async getMyAccess(
+    organizationId: string,
+    principal: AuthPrincipal,
+  ): Promise<MySyndicateAccessDTO> {
     const isAdmin = this.authz.isAdmin(principal);
     const ctx = isAdmin
       ? null
@@ -241,6 +353,7 @@ export class SyndicateService {
     const isOwner = ctx?.isOwner ?? false;
     const has = (permission: string): boolean =>
       isAdmin || isOwner || (ctx?.permissions.includes(permission) ?? false);
+    const registration = await this.registrations.findActive(organizationId, principal.userId);
     return {
       isAdmin,
       isOwner,
@@ -248,6 +361,11 @@ export class SyndicateService {
       canManageAnnouncements: has('syndicate.announcement.manage'),
       canReadSubmissions: has('syndicate.submission.read'),
       canRespondSubmissions: has('syndicate.submission.respond'),
+      canReadMembers: has('syndicate.member.read'),
+      canManageMembers: has('syndicate.member.manage'),
+      canMessageMembers: has('syndicate.member.message'),
+      canDelete: isAdmin,
+      isRegistered: registration !== null,
     };
   }
 }

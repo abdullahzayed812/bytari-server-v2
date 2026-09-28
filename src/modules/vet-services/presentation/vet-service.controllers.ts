@@ -5,7 +5,10 @@ import { sendSuccess } from '../../../shared/http/response.js';
 import { validatedBody, validatedParams, validatedQuery } from '../../../shared/http/validate.js';
 import { auditContextFromRequest } from '../../audit/audit-context.js';
 import { requireAuth } from '../../auth/authenticate.middleware.js';
-import type { VetServiceListingService, VetServiceActor } from '../application/vet-service-listing.service.js';
+import type {
+  VetServiceListingService,
+  VetServiceActor,
+} from '../application/vet-service-listing.service.js';
 import type { VetServiceListingRequestService } from '../application/vet-service-listing-request.service.js';
 import type { VetServiceMedia } from '../application/vet-service-media.js';
 import type { VetServiceOfferService } from '../application/vet-service-offer.service.js';
@@ -132,6 +135,11 @@ export class VetServiceOfferController {
     const { id } = validatedParams<{ id: string }>(req);
     sendSuccess(res, await this.offers.getForActor(id, actor(req)));
   };
+  /** POST /vet-services/offers/:id/conversation — either party of the offer. */
+  openConversation = async (req: Request, res: Response): Promise<void> => {
+    const { id } = validatedParams<{ id: string }>(req);
+    sendSuccess(res, await this.offers.openConversationForParty(id, actor(req)));
+  };
   accept = async (req: Request, res: Response): Promise<void> => {
     const { id } = validatedParams<{ id: string }>(req);
     sendSuccess(res, await this.offers.accept(id, actor(req)));
@@ -187,6 +195,11 @@ export class VetServiceListingRequestController {
   getOne = async (req: Request, res: Response): Promise<void> => {
     const { id } = validatedParams<{ id: string }>(req);
     sendSuccess(res, await this.listingRequests.getForActor(id, actor(req)));
+  };
+  /** POST /vet-services/listing-requests/:id/conversation — either party of the request. */
+  openConversation = async (req: Request, res: Response): Promise<void> => {
+    const { id } = validatedParams<{ id: string }>(req);
+    sendSuccess(res, await this.listingRequests.openConversationForParty(id, actor(req)));
   };
   accept = async (req: Request, res: Response): Promise<void> => {
     const { id } = validatedParams<{ id: string }>(req);

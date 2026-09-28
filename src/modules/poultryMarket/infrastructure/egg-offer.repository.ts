@@ -59,7 +59,10 @@ export class EggOfferRepository {
     trx?: Knex.Transaction,
   ): Promise<{ items: EggOffer[]; total: number }> {
     const base = (): Knex.QueryBuilder => {
-      const qb = this.conn(trx)<EggOfferRow>(TABLE).where('status', filter.status ?? 'ACTIVE');
+      // Public browse: live AND approved by a moderator.
+      const qb = this.conn(trx)<EggOfferRow>(TABLE)
+        .where('status', filter.status ?? 'ACTIVE')
+        .andWhere('moderation_status', 'APPROVED');
       if (filter.eggType) qb.andWhere('egg_type', filter.eggType);
       if (filter.governorate) qb.andWhere('governorate', filter.governorate);
       return qb;
@@ -101,6 +104,7 @@ export class EggOfferRepository {
     const base = (): Knex.QueryBuilder => {
       const qb = this.conn(trx)<EggOfferRow>(TABLE);
       if (filter.status) qb.andWhere('status', filter.status);
+      if (filter.moderationStatus) qb.andWhere('moderation_status', filter.moderationStatus);
       if (filter.eggType) qb.andWhere('egg_type', filter.eggType);
       if (filter.governorate) qb.andWhere('governorate', filter.governorate);
       return qb;
@@ -113,5 +117,24 @@ export class EggOfferRepository {
       .limit(filter.pageSize)
       .offset((filter.page - 1) * filter.pageSize);
     return { items: rows.map(rowToEggOffer), total };
+  }
+
+  /** PENDING → APPROVED / REJECTED; `null` when it was no longer PENDING (race-safe). */
+  async moderate(
+    id: string,
+    decision: { status: 'APPROVED' | 'REJECTED'; reason: string | null; reviewerUserId: string },
+    trx: Knex.Transaction,
+  ): Promise<EggOffer | null> {
+    const [row] = (await trx(TABLE)
+      .where({ id, moderation_status: 'PENDING' })
+      .update({
+        moderation_status: decision.status,
+        rejection_reason: decision.reason,
+        reviewed_by_user_id: decision.reviewerUserId,
+        reviewed_at: trx.fn.now(),
+        updated_at: trx.fn.now(),
+      })
+      .returning('*')) as EggOfferRow[];
+    return row ? rowToEggOffer(row) : null;
   }
 }

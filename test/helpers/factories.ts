@@ -2093,8 +2093,17 @@ export async function seedDailyRecordRow(
   } = {},
 ): Promise<void> {
   const { table, fk } = DAILY_RECORD_TABLES[kind];
-  await getTestDb()(table).insert({
+  const db = getTestDb();
+  // Next weekly slot, exactly as the service assigns it (Day 7 → next week's Day 1).
+  const last = (await db(table)
+    .where(fk, batchId)
+    .select(db.raw('coalesce(max((week_number - 1) * 7 + day_in_week), 0)::int as seq'))
+    .first()) as { seq: number };
+  const seq = Number(last.seq);
+  await db(table).insert({
     [fk]: batchId,
+    week_number: Math.floor(seq / 7) + 1,
+    day_in_week: (seq % 7) + 1,
     organization_id: organizationId,
     organization_type: 'FARM',
     record_date: recordDate,

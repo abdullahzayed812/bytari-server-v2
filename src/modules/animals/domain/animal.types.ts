@@ -20,6 +20,11 @@ export interface Animal {
   color: string | null;
   distinguishingFeatures: string | null;
   ageEstimate: AnimalAgeEstimate | null;
+  /**
+   * Created only as the subject of an adoption / mating / lost listing — never
+   * shown in the owner's registered pets ("حيواناتي").
+   */
+  listingOnly: boolean;
   /** R2 storage keys — resolved to URLs by the service layer, same as organization galleries. */
   galleryKeys: string[];
   createdAt: string;
@@ -62,6 +67,8 @@ export interface AnimalDTO {
   color: string | null;
   distinguishingFeatures: string | null;
   ageEstimate: AnimalAgeEstimate | null;
+  /** Adoption / mating / lost listing subject — not one of the owner's registered pets. */
+  listingOnly: boolean;
   /** Resolved gallery photo URLs. */
   galleryUrls: string[];
   /** Raw R2 storage keys backing {@link galleryUrls} — exposed so the edit UI can remove-by-key without a second round trip (mirrors the organization gallery). */
@@ -94,6 +101,8 @@ export interface CreateAnimalInput {
   color?: string | null;
   distinguishingFeatures?: string | null;
   ageEstimate?: AnimalAgeEstimate | null;
+  /** Listing-only subject (adoption / mating / lost), not a registered pet. */
+  listingOnly?: boolean;
 }
 
 export interface UpdateAnimalInput {
@@ -114,6 +123,8 @@ export interface ListAnimalsFilter {
   status?: AnimalStatus;
   species?: AnimalSpecies;
   search?: string;
+  /** Include listing-only animals (default: registered pets only). */
+  includeListingOnly?: boolean;
 }
 
 /** Admin/oversight animal listing — any owner's animals, plus an owner filter. */
@@ -145,6 +156,7 @@ export interface AnimalRow {
   gallery_keys: string[] | null;
   created_at: Date;
   updated_at: Date;
+  listing_only?: boolean | null;
 }
 
 export interface AnimalOwnershipRow {
@@ -179,6 +191,7 @@ export function rowToAnimal(row: AnimalRow): Animal {
     color: row.color,
     distinguishingFeatures: row.distinguishing_features,
     ageEstimate: row.age_estimate as AnimalAgeEstimate | null,
+    listingOnly: row.listing_only === true,
     galleryKeys: row.gallery_keys ?? [],
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
@@ -217,6 +230,7 @@ export function toAnimalDTO(
     color: animal.color,
     distinguishingFeatures: animal.distinguishingFeatures,
     ageEstimate: animal.ageEstimate,
+    listingOnly: animal.listingOnly,
     galleryUrls,
     galleryKeys: animal.galleryKeys,
     createdAt: animal.createdAt,

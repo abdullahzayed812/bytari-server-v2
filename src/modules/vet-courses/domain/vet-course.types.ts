@@ -1,4 +1,8 @@
-import type { VetCourseLocationMode, VetCourseModerationStatus, VetCourseType } from './vet-course.constants.js';
+import type {
+  VetCourseLocationMode,
+  VetCourseModerationStatus,
+  VetCourseType,
+} from './vet-course.constants.js';
 
 export interface VetCourseUserSummary {
   id: string;
@@ -172,7 +176,8 @@ export interface VetCourseRegistration {
 }
 
 export interface VetCourseRegistrationDTO extends VetCourseRegistration {
-  registrant: VetCourseUserSummary;
+  /** Registrant name + resolved profile image (no raw storage key). */
+  registrant: VetCourseUserSummary & { avatarUrl: string | null };
   course?: {
     id: string;
     title: string;

@@ -11,8 +11,12 @@ import type { SyndicateMedia } from '../application/syndicate-media.js';
 import type { SyndicateAnnouncementService } from '../application/syndicate-announcement.service.js';
 import type { SyndicateSubmissionService } from '../application/syndicate-submission.service.js';
 import type { SyndicateService } from '../application/syndicate.service.js';
+import type { SyndicateMemberService } from '../application/syndicate-member.service.js';
 import type {
   AnnouncementListQuery,
+  AssignSyndicateAdminBody,
+  MemberListQuery,
+  MessageMembersBody,
   CreateAnnouncementBody,
   CreateSubmissionBody,
   CreateSyndicateBody,
@@ -43,21 +47,22 @@ export class SyndicateController {
 
   listMain = async (req: Request, res: Response): Promise<void> => {
     const q = validatedQuery<SyndicateBrowseQuery>(req);
-    const viewerUserId = requireAuth(req).userId;
-    const { items, total } = await this.syndicates.listMain(q, viewerUserId);
+    const { items, total } = await this.syndicates.listMain(q, requireAuth(req));
     sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
   };
   listBranches = async (req: Request, res: Response): Promise<void> => {
     const { organizationId } = validatedParams<{ organizationId: string }>(req);
     const q = validatedQuery<SyndicateBrowseQuery>(req);
-    const viewerUserId = requireAuth(req).userId;
-    const { items, total } = await this.syndicates.listBranches(organizationId, q, viewerUserId);
+    const { items, total } = await this.syndicates.listBranches(
+      organizationId,
+      q,
+      requireAuth(req),
+    );
     sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
   };
   getOne = async (req: Request, res: Response): Promise<void> => {
     const { organizationId } = validatedParams<{ organizationId: string }>(req);
-    const viewerUserId = requireAuth(req).userId;
-    sendSuccess(res, await this.syndicates.getPublic(organizationId, viewerUserId));
+    sendSuccess(res, await this.syndicates.getPublic(organizationId, requireAuth(req)));
   };
   /** "What can I do here?" — drives whether the mobile app shows management actions. */
   getMyAccess = async (req: Request, res: Response): Promise<void> => {
@@ -71,12 +76,73 @@ export class SyndicateController {
   };
 }
 
-/** POST /admin/syndicates — ADMIN only. */
+/** POST /admin/syndicates, DELETE /admin/syndicates/:organizationId — ADMIN only. */
 export class AdminSyndicateController {
   constructor(private readonly syndicates: SyndicateService) {}
   create = async (req: Request, res: Response): Promise<void> => {
     const body = validatedBody<CreateSyndicateBody>(req);
     sendSuccess(res, await this.syndicates.create(body, actor(req)), StatusCodes.CREATED);
+  };
+  remove = async (req: Request, res: Response): Promise<void> => {
+    const { organizationId } = validatedParams<{ organizationId: string }>(req);
+    await this.syndicates.delete(organizationId, actor(req));
+    res.status(StatusCodes.NO_CONTENT).send();
+  };
+}
+
+/** Registration ("التسجيل في النقابة") + member administration. */
+export class SyndicateMemberController {
+  constructor(private readonly members: SyndicateMemberService) {}
+
+  register = async (req: Request, res: Response): Promise<void> => {
+    const { organizationId } = validatedParams<{ organizationId: string }>(req);
+    sendSuccess(res, await this.members.register(organizationId, actor(req)), StatusCodes.CREATED);
+  };
+  getMine = async (req: Request, res: Response): Promise<void> => {
+    const { organizationId } = validatedParams<{ organizationId: string }>(req);
+    sendSuccess(res, await this.members.getMine(organizationId, requireAuth(req).userId));
+  };
+  cancelMine = async (req: Request, res: Response): Promise<void> => {
+    const { organizationId } = validatedParams<{ organizationId: string }>(req);
+    await this.members.cancelMine(organizationId, actor(req));
+    res.status(StatusCodes.NO_CONTENT).send();
+  };
+  list = async (req: Request, res: Response): Promise<void> => {
+    const org = requireOrganization(req);
+    const q = validatedQuery<MemberListQuery>(req);
+    const { items, total } = await this.members.listMembers(org.id, q);
+    sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
+  };
+  getOne = async (req: Request, res: Response): Promise<void> => {
+    const org = requireOrganization(req);
+    const { userId } = validatedParams<{ userId: string }>(req);
+    sendSuccess(res, await this.members.getMember(org.id, userId));
+  };
+  remove = async (req: Request, res: Response): Promise<void> => {
+    const org = requireOrganization(req);
+    const { userId } = validatedParams<{ userId: string }>(req);
+    await this.members.removeMember(org.id, userId, actor(req));
+    res.status(StatusCodes.NO_CONTENT).send();
+  };
+  openConversation = async (req: Request, res: Response): Promise<void> => {
+    const org = requireOrganization(req);
+    const { userId } = validatedParams<{ userId: string }>(req);
+    const result = await this.members.openConversation(org.id, userId, actor(req));
+    sendSuccess(res, result.conversation, result.created ? StatusCodes.CREATED : StatusCodes.OK);
+  };
+  messageAll = async (req: Request, res: Response): Promise<void> => {
+    const org = requireOrganization(req);
+    const body = validatedBody<MessageMembersBody>(req);
+    sendSuccess(
+      res,
+      await this.members.messageAllMembers(org.id, body, actor(req)),
+      StatusCodes.ACCEPTED,
+    );
+  };
+  assignAdmin = async (req: Request, res: Response): Promise<void> => {
+    const org = requireOrganization(req);
+    const body = validatedBody<AssignSyndicateAdminBody>(req);
+    sendSuccess(res, await this.members.assignAdmin(org.id, body, actor(req)), StatusCodes.CREATED);
   };
 }
 
@@ -96,7 +162,11 @@ export class SyndicateAnnouncementController {
   create = async (req: Request, res: Response): Promise<void> => {
     const org = requireOrganization(req);
     const body = validatedBody<CreateAnnouncementBody>(req);
-    sendSuccess(res, await this.announcements.create(org.id, body, actor(req)), StatusCodes.CREATED);
+    sendSuccess(
+      res,
+      await this.announcements.create(org.id, body, actor(req)),
+      StatusCodes.CREATED,
+    );
   };
   update = async (req: Request, res: Response): Promise<void> => {
     const org = requireOrganization(req);
@@ -133,7 +203,7 @@ export class SyndicateSubmissionController {
   };
   getOwn = async (req: Request, res: Response): Promise<void> => {
     const { id } = validatedParams<{ id: string }>(req);
-    sendSuccess(res, await this.submissions.getForActor(id, actor(req), false));
+    sendSuccess(res, await this.submissions.getForActor(id, actor(req), null));
   };
   respond = async (req: Request, res: Response): Promise<void> => {
     const org = requireOrganization(req);
@@ -148,8 +218,8 @@ export class SyndicateSubmissionController {
   };
   /** Reached only after `authorizeOrg('syndicate.submission.read')` passed — always authorized. */
   getForOrganization = async (req: Request, res: Response): Promise<void> => {
-    requireOrganization(req);
+    const org = requireOrganization(req);
     const { id } = validatedParams<{ id: string }>(req);
-    sendSuccess(res, await this.submissions.getForActor(id, actor(req), true));
+    sendSuccess(res, await this.submissions.getForActor(id, actor(req), org.id));
   };
 }

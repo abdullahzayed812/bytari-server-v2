@@ -93,7 +93,10 @@ export const OrganizationPolicy = {
    * moderators are drawn from all registered users, not just approved vets.
    */
   assertCanBeSupervisor(type: OrganizationType, target: { veterinarianStatus: string }): void {
-    if (type === 'CHAT_ROOM') return;
+    // A room moderator / syndicate admin ("مسؤول النقابة") is chosen directly
+    // by a global Admin and manages only that one room/syndicate — any active
+    // account may hold it, not only approved veterinarians.
+    if (type === 'CHAT_ROOM' || type === 'SYNDICATE') return;
     if (target.veterinarianStatus !== 'APPROVED') {
       throw new ForbiddenError(
         'Only an approved veterinarian can be assigned as an organization supervisor',

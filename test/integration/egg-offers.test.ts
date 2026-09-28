@@ -49,21 +49,72 @@ describe('egg market offers', () => {
     expect(res.body.error.code).toBe('TRADER_APPROVAL_REQUIRED');
   });
 
-  it('create by an approved trader is immediately ACTIVE — no moderation step', async () => {
+  it('a new ad is PENDING (not public) until a moderator approves it; rejection keeps it hidden', async () => {
     const trader = await registerApprovedTrader(app);
+    const admin = await registerAdmin(app);
+    const stranger = await registerUser(app);
     const res = await createOffer(trader.accessToken);
     expect(res.status).toBe(201);
     expect(res.body.data.status).toBe('ACTIVE');
+    expect(res.body.data.moderationStatus).toBe('PENDING');
     expect(res.body.data.traderUserId).toBe(trader.id);
+    const id = res.body.data.id as string;
 
-    const list = await request(app).get('/api/v1/egg-offers').set(bearer(trader.accessToken));
-    expect(list.body.data.some((o: { id: string }) => o.id === res.body.data.id)).toBe(true);
+    const before = await request(app).get('/api/v1/egg-offers').set(bearer(stranger.accessToken));
+    expect(before.body.data.some((o: { id: string }) => o.id === id)).toBe(false);
+    // Only the trader (and moderators) can open a pending ad.
+    expect(
+      (await request(app).get(`/api/v1/egg-offers/${id}`).set(bearer(stranger.accessToken))).status,
+    ).toBe(404);
+    expect(
+      (await request(app).get(`/api/v1/egg-offers/${id}`).set(bearer(trader.accessToken))).status,
+    ).toBe(200);
+
+    // A trader cannot approve their own ad; a moderator can.
+    expect(
+      (
+        await request(app)
+          .post(`/api/v1/admin/egg-offers/${id}/approve`)
+          .set(bearer(trader.accessToken))
+      ).status,
+    ).toBe(403);
+    const approve = await request(app)
+      .post(`/api/v1/admin/egg-offers/${id}/approve`)
+      .set(bearer(admin.accessToken));
+    expect(approve.status).toBe(200);
+    expect(approve.body.data.moderationStatus).toBe('APPROVED');
+    const again = await request(app)
+      .post(`/api/v1/admin/egg-offers/${id}/approve`)
+      .set(bearer(admin.accessToken));
+    expect(again.status).toBe(409);
+
+    const after = await request(app).get('/api/v1/egg-offers').set(bearer(stranger.accessToken));
+    expect(after.body.data.some((o: { id: string }) => o.id === id)).toBe(true);
+
+    const second = await createOffer(trader.accessToken);
+    const reject = await request(app)
+      .post(`/api/v1/admin/egg-offers/${second.body.data.id}/reject`)
+      .set(bearer(admin.accessToken))
+      .send({ reason: 'سعر غير واقعي' });
+    expect(reject.status).toBe(200);
+    expect(reject.body.data).toMatchObject({
+      moderationStatus: 'REJECTED',
+      rejectionReason: 'سعر غير واقعي',
+    });
+    const list = await request(app).get('/api/v1/egg-offers').set(bearer(stranger.accessToken));
+    expect(list.body.data.some((o: { id: string }) => o.id === second.body.data.id)).toBe(false);
   });
 
   it('filters by eggType and governorate', async () => {
     const trader = await registerApprovedTrader(app);
-    await createOffer(trader.accessToken, { eggType: 'WHITE', governorate: 'نينوى' });
-    await createOffer(trader.accessToken, { eggType: 'BROWN', governorate: 'بغداد' });
+    const o1 = await createOffer(trader.accessToken, { eggType: 'WHITE', governorate: 'نينوى' });
+    const o2 = await createOffer(trader.accessToken, { eggType: 'BROWN', governorate: 'بغداد' });
+    const admin = await registerAdmin(app);
+    for (const o of [o1, o2]) {
+      await request(app)
+        .post(`/api/v1/admin/egg-offers/${o.body.data.id}/approve`)
+        .set(bearer(admin.accessToken));
+    }
 
     const byType = await request(app)
       .get('/api/v1/egg-offers?eggType=BROWN')

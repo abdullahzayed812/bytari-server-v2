@@ -48,7 +48,11 @@ export class VetCourseRepository {
   }
 
   async create(
-    data: CreateVetCourseInput & { creatorUserId: string },
+    data: CreateVetCourseInput & {
+      creatorUserId: string;
+      /** Admin-created content is published directly (reviewed by the creator). */
+      approvedByUserId?: string | null;
+    },
     trx: Knex.Transaction,
   ): Promise<VetCourse> {
     const [row] = (await trx(T)
@@ -72,7 +76,9 @@ export class VetCourseRepository {
         registration_deadline: data.registrationDeadline ?? null,
         topics: JSON.stringify(data.topics ?? []),
         cover_image_storage_key: data.coverImageStorageKey ?? null,
-        status: 'PENDING',
+        status: data.approvedByUserId ? 'APPROVED' : 'PENDING',
+        reviewed_by_user_id: data.approvedByUserId ?? null,
+        reviewed_at: data.approvedByUserId ? trx.fn.now() : null,
       })
       .returning('*')) as VetCourseRow[];
     if (!row) throw new Error('vet_course insert returned no row');
@@ -90,13 +96,19 @@ export class VetCourseRepository {
     return row ? rowToCourse(row) : null;
   }
 
-  async findWithCreatorById(id: string, trx?: Knex.Transaction): Promise<VetCourseWithCreator | null> {
+  async findWithCreatorById(
+    id: string,
+    trx?: Knex.Transaction,
+  ): Promise<VetCourseWithCreator | null> {
     const row = (await this.joined(trx).where('c.id', id).first()) as JoinedRow | undefined;
     return row ? this.map(row) : null;
   }
 
   /** Same as `findWithCreatorById` but also counts registrations (owner/moderator view). */
-  async findWithCreatorAndCountById(id: string, trx?: Knex.Transaction): Promise<VetCourseWithCreator | null> {
+  async findWithCreatorAndCountById(
+    id: string,
+    trx?: Knex.Transaction,
+  ): Promise<VetCourseWithCreator | null> {
     const row = (await this.joined(trx).where('c.id', id).first()) as JoinedRow | undefined;
     if (!row) return null;
     const counts = await this.registrationCounts([id]);
@@ -138,7 +150,8 @@ export class VetCourseRepository {
     if (patch.description !== undefined) dbPatch.description = patch.description;
     if (patch.organizingBody !== undefined) dbPatch.organizing_body = patch.organizingBody;
     if (patch.instructorName !== undefined) dbPatch.instructor_name = patch.instructorName;
-    if (patch.instructorSpecialty !== undefined) dbPatch.instructor_specialty = patch.instructorSpecialty;
+    if (patch.instructorSpecialty !== undefined)
+      dbPatch.instructor_specialty = patch.instructorSpecialty;
     if (patch.startDate !== undefined) dbPatch.start_date = patch.startDate;
     if (patch.endDate !== undefined) dbPatch.end_date = patch.endDate;
     if (patch.startTime !== undefined) dbPatch.start_time = patch.startTime;
@@ -172,7 +185,9 @@ export class VetCourseRepository {
 
   // --- public browse (APPROVED, not cancelled) ---------------------------
 
-  async listPublic(filter: CourseBrowseFilter): Promise<{ items: VetCourseWithCreator[]; total: number }> {
+  async listPublic(
+    filter: CourseBrowseFilter,
+  ): Promise<{ items: VetCourseWithCreator[]; total: number }> {
     const scope = (qb: Knex.QueryBuilder): Knex.QueryBuilder => {
       qb.where('c.status', 'APPROVED').whereNull('c.cancelled_at');
       if (filter.type) qb.andWhere('c.type', filter.type);
@@ -180,7 +195,9 @@ export class VetCourseRepository {
       if (filter.search) {
         const s = `%${filter.search}%`;
         qb.andWhere((w) => {
-          w.whereILike('c.title', s).orWhereILike('c.organizing_body', s).orWhereILike('c.instructor_name', s);
+          w.whereILike('c.title', s)
+            .orWhereILike('c.organizing_body', s)
+            .orWhereILike('c.instructor_name', s);
         });
       }
       return qb;

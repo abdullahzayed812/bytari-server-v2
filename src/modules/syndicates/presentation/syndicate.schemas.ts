@@ -106,7 +106,10 @@ export const createSubmissionBodySchema = z
     kind: z.enum(SYNDICATE_SUBMISSION_KINDS),
     requestType: z.enum(SYNDICATE_REQUEST_TYPES).nullish(),
     message: z.string().trim().min(1).max(SYNDICATE_MESSAGE_MAX),
-    attachmentStorageKeys: z.array(z.string().trim().min(1).max(1024)).max(SYNDICATE_MAX_ATTACHMENTS).optional(),
+    attachmentStorageKeys: z
+      .array(z.string().trim().min(1).max(1024))
+      .max(SYNDICATE_MAX_ATTACHMENTS)
+      .optional(),
   })
   .strict()
   .refine((v) => v.kind !== 'REQUEST' || v.requestType, {
@@ -130,3 +133,30 @@ export const respondSubmissionBodySchema = z
   .object({ responseText: z.string().trim().min(1).max(SYNDICATE_RESPONSE_MAX) })
   .strict();
 export type RespondSubmissionBody = z.infer<typeof respondSubmissionBodySchema>;
+
+// --- registered members ------------------------------------------------
+
+export const organizationAndUserParamSchema = z.object({
+  organizationId: z.string().uuid(),
+  userId: z.string().uuid(),
+});
+
+export const memberListQuerySchema = paginationQuerySchema.extend({
+  search: z.string().trim().max(160).optional(),
+});
+export type MemberListQuery = z.infer<typeof memberListQuerySchema>;
+
+export const messageMembersBodySchema = z
+  .object({
+    title: z.string().trim().min(1).max(100),
+    body: z.string().trim().min(1).max(1000),
+    /** Idempotency key — the same value never notifies a member twice. */
+    clientRequestId: z.string().uuid(),
+  })
+  .strict();
+export type MessageMembersBody = z.infer<typeof messageMembersBodySchema>;
+
+export const assignSyndicateAdminBodySchema = z
+  .object({ email: z.string().trim().toLowerCase().email().max(255) })
+  .strict();
+export type AssignSyndicateAdminBody = z.infer<typeof assignSyndicateAdminBodySchema>;

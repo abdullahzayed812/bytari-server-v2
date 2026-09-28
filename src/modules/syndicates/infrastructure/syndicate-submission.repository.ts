@@ -59,9 +59,13 @@ export class SyndicateSubmissionRepository {
     const dbPatch: Record<string, unknown> = { updated_at: new Date() };
     if (patch.status !== undefined) dbPatch.status = patch.status;
     if (patch.responseText !== undefined) dbPatch.response_text = patch.responseText;
-    if (patch.respondedByUserId !== undefined) dbPatch.responded_by_user_id = patch.respondedByUserId;
+    if (patch.respondedByUserId !== undefined)
+      dbPatch.responded_by_user_id = patch.respondedByUserId;
     if (patch.respondedAt !== undefined) dbPatch.responded_at = patch.respondedAt;
-    const [row] = (await trx(T).where({ id }).update(dbPatch).returning('*')) as SyndicateSubmissionRow[];
+    const [row] = (await trx(T)
+      .where({ id })
+      .update(dbPatch)
+      .returning('*')) as SyndicateSubmissionRow[];
     if (!row) throw new Error('syndicate_submission not found on update');
     return rowToSubmission(row);
   }
@@ -101,5 +105,47 @@ export class SyndicateSubmissionRepository {
       .limit(filter.pageSize)
       .offset((filter.page - 1) * filter.pageSize)) as SyndicateSubmissionRow[];
     return { items: rows.map(rowToSubmission), total };
+  }
+
+  /**
+   * Syndicate card counters, per kind: `unread` = this user's still-unread
+   * "new submission" notifications for the syndicate (the existing
+   * notification read-state — cleared when the officer opens the submission),
+   * `pending` = submissions still awaiting a response.
+   */
+  async countersFor(
+    organizationId: string,
+    userId: string,
+  ): Promise<{
+    unreadRequests: number;
+    unreadInquiries: number;
+    pendingRequests: number;
+    pendingInquiries: number;
+  }> {
+    const unreadRows: Array<{ kind: string; count: string }> = await this.db('notifications as n')
+      .joinRaw(`inner join ${T} as s on s.id::text = n.entity_id`)
+      .where({
+        'n.recipient_user_id': userId,
+        'n.entity_type': 'SYNDICATE_SUBMISSION',
+        'n.type': 'SYNDICATE_SUBMISSION_CREATED',
+        's.organization_id': organizationId,
+      })
+      .whereNull('n.read_at')
+      .groupBy('s.kind')
+      .select('s.kind')
+      .count({ count: '*' });
+    const pendingRows: Array<{ kind: string; count: string }> = await this.db(T)
+      .where({ organization_id: organizationId, status: 'PENDING' })
+      .groupBy('kind')
+      .select('kind')
+      .count({ count: '*' });
+    const pick = (rows: Array<{ kind: string; count: string }>, kind: string): number =>
+      Number(rows.find((r) => r.kind === kind)?.count ?? 0);
+    return {
+      unreadRequests: pick(unreadRows, 'REQUEST'),
+      unreadInquiries: pick(unreadRows, 'INQUIRY'),
+      pendingRequests: pick(pendingRows, 'REQUEST'),
+      pendingInquiries: pick(pendingRows, 'INQUIRY'),
+    };
   }
 }

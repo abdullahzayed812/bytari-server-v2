@@ -21,6 +21,7 @@ export interface CreateAnimalData {
   color?: string | null;
   distinguishingFeatures?: string | null;
   ageEstimate?: string | null;
+  listingOnly?: boolean;
 }
 
 export interface UpdateAnimalData {
@@ -63,6 +64,7 @@ export class AnimalRepository {
         color: data.color ?? null,
         distinguishing_features: data.distinguishingFeatures ?? null,
         age_estimate: data.ageEstimate ?? null,
+        listing_only: data.listingOnly ?? false,
       })
       .returning('*')) as AnimalRow[];
     if (!row) throw new Error('animal insert did not return a row');
@@ -111,6 +113,8 @@ export class AnimalRepository {
       qb.join('animal_ownerships as o', function joinCurrent() {
         this.on('o.animal_id', 'a.id').andOnNull('o.ended_at');
       }).where('o.owner_user_id', userId);
+      // Adoption / mating / lost listing subjects are not registered pets.
+      if (!filter.includeListingOnly) qb.where('a.listing_only', false);
       if (filter.status) qb.where('a.status', filter.status);
       if (filter.species) qb.where('a.species', filter.species);
       if (filter.search) {

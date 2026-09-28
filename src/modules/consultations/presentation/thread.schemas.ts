@@ -39,13 +39,14 @@ export const createInquiryBodySchema = z
   })
   .strict();
 
-/** "تواصل معنا" — a support message. Body only; no animal, no recipient. */
+/** "تواصل معنا" — a support message. Body (+ optional images); no animal, no recipient. */
 export const createSupportBodySchema = z
-  .object({ body: z.string().trim().min(1).max(MESSAGE_BODY_MAX) })
+  .object({ body: z.string().trim().min(1).max(MESSAGE_BODY_MAX), imageKeys })
   .strict();
 
+/** A reply — text (links included) plus up to `MAX_MESSAGE_IMAGES` images. */
 export const sendThreadMessageBodySchema = z
-  .object({ body: z.string().trim().min(1).max(MESSAGE_BODY_MAX) })
+  .object({ body: z.string().trim().min(1).max(MESSAGE_BODY_MAX), imageKeys })
   .strict();
 
 export const listThreadsQuerySchema = paginationQuerySchema.extend({

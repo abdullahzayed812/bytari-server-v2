@@ -9,6 +9,7 @@ import {
   listAdminPoultryOffersQuerySchema,
   listPoultryOffersQuerySchema,
   poultryOfferParamSchema,
+  rejectPoultryOfferBodySchema,
   poultryOfferUploadUrlBodySchema,
 } from './poultry-offer.schemas.js';
 
@@ -22,7 +23,7 @@ import {
  * parsed as a `:offerId` uuid param and rejected).
  */
 export function createPoultryOfferRouters(c: Container): { self: Router; admin: Router } {
-  const ctrl = new PoultryOfferController(c.poultryOfferService);
+  const ctrl = new PoultryOfferController(c.poultryOfferService, c.authorizationService);
   const { authorize, requireApprovedTrader } = c.authorization;
   const { withPoultryOffer, requireOwnerOrPermission } = createMarketMiddleware({
     poultryOffers: c.poultryOfferRepository,
@@ -72,6 +73,20 @@ export function createPoultryOfferRouters(c: Container): { self: Router; admin: 
     authorize('market.offer.admin.read'),
     validate({ query: listAdminPoultryOffersQuerySchema }),
     asyncHandler(ctrl.adminList),
+  );
+  admin.post(
+    '/:offerId/approve',
+    authorize('market.offer.admin.moderate'),
+    validate({ params: poultryOfferParamSchema }),
+    withPoultryOffer,
+    asyncHandler(ctrl.approve),
+  );
+  admin.post(
+    '/:offerId/reject',
+    authorize('market.offer.admin.moderate'),
+    validate({ params: poultryOfferParamSchema, body: rejectPoultryOfferBodySchema }),
+    withPoultryOffer,
+    asyncHandler(ctrl.reject),
   );
   admin.delete(
     '/:offerId',

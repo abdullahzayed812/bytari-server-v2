@@ -62,6 +62,10 @@ function countNew(items: Array<{ createdAt: string | Date }>, seenAt: Date | und
   return items.filter((i) => new Date(i.createdAt) > seenAt).length;
 }
 
+import type { EggOfferService } from '../../poultryMarket/application/egg-offer.service.js';
+import type { PoultryOfferService } from '../../poultryMarket/application/poultry-offer.service.js';
+import type { TraderService } from '../../poultryMarket/application/trader.service.js';
+
 export interface AdminDashboardServiceDeps {
   organizations: OrganizationService;
   farmSubscriptionRenewals: FarmSubscriptionRenewalRepository;
@@ -85,6 +89,9 @@ export interface AdminDashboardServiceDeps {
   audit: AuditService;
   seen: AdminDashboardSeenRepository;
   animalPublications: AnimalPublicationRepository;
+  traders: TraderService;
+  poultryOffers: PoultryOfferService;
+  eggOffers: EggOfferService;
 }
 
 /**
@@ -167,6 +174,10 @@ export class AdminDashboardService {
       adoptionActive,
       matingActive,
       lostActive,
+      tradersPending,
+      poultryOffersPending,
+      eggOffersPending,
+      tradersApproved,
     ] = await Promise.all([
       this.deps.seen.getSeenMap(userId),
       this.deps.farmSubscriptionRenewals.listFarmsForAdmin({
@@ -307,6 +318,10 @@ export class AdminDashboardService {
         kind: 'LOST',
         status: 'APPROVED',
       }),
+      this.deps.traders.list('PENDING', 1, CARD_WINDOW_SIZE),
+      this.deps.poultryOffers.adminList({ ...WINDOW, moderationStatus: 'PENDING' }),
+      this.deps.eggOffers.adminList({ ...WINDOW, moderationStatus: 'PENDING' }),
+      this.deps.traders.list('APPROVED', 1, 1),
     ]);
 
     const since = (id: AdminDashboardCardId) => seenMap.get(id);
@@ -447,6 +462,16 @@ export class AdminDashboardService {
         id: 'lostAnimals',
         count: countNew(lostPending.items, since('lostAnimals')),
         activeCount: lostActive.total,
+      },
+      {
+        // badge = new trader applications + new ads awaiting moderation;
+        // main stat = approved traders.
+        id: 'poultryMarket',
+        count: countNew(
+          [...tradersPending.items, ...poultryOffersPending.items, ...eggOffersPending.items],
+          since('poultryMarket'),
+        ),
+        activeCount: tradersApproved.total,
       },
     ];
 

@@ -282,7 +282,7 @@ describe('Veterinarian Store — checkout & orders', () => {
       paymentStatus: 'UNPAID',
       subtotalAmount: '141.00',
       totalAmount: '141.00',
-      currency: 'SAR',
+      currency: 'IQD',
       recipientName: 'د. أحمد محمد',
       city: 'الرياض',
     });

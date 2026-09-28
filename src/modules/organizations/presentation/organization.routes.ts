@@ -80,7 +80,10 @@ export function createOrganizationRouter(c: Container): Router {
     '/:organizationId',
     validate({ params: organizationIdParamSchema, body: updateOrganizationBodySchema }),
     withOrganization,
-    authorizeOrg('organization.update'),
+    // The owner of a PENDING/REJECTED clinic or office must be able to correct
+    // its profile (e.g. the license number) while it awaits review. NOT while
+    // SUSPENDED / DEACTIVATED (deleted) — those stay locked for the owner.
+    authorizeOrg('organization.update', { allowInactiveForOwner: ['PENDING', 'REJECTED'] }),
     asyncHandler(ctrl.update),
   );
   // Logo — same guard as the gallery/license documents (including

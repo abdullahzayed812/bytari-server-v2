@@ -6,6 +6,7 @@ import { sendSuccess } from '../../shared/http/response.js';
 import { validatedBody, validatedParams, validatedQuery } from '../../shared/http/validate.js';
 import { auditContextFromRequest, type AuditContextResult } from '../audit/audit-context.js';
 import type { AuthService } from '../auth/auth.service.js';
+import type { AuthorizationService } from '../authorization/authorization.service.js';
 import type { SupportThreadService } from '../consultations/application/support-thread.service.js';
 import type { OrganizationService } from '../organizations/application/organization.service.js';
 import type { VeterinarianService } from '../veterinarians/veterinarian.service.js';
@@ -31,6 +32,7 @@ export class AdminUsersController {
     private readonly veterinarians: VeterinarianService,
     private readonly organizations: OrganizationService,
     private readonly support: SupportThreadService,
+    private readonly authz: AuthorizationService,
   ) {}
 
   private actor(req: Request): { actorUserId: string; context: AuditContextResult } {
@@ -58,17 +60,24 @@ export class AdminUsersController {
   /**
    * Full admin view of one account: the public profile (avatar resolved, no
    * password hash / storage keys), roles, the veterinarian application (status,
-   * sub-type, decision; document metadata only) and the organizations the user
+   * sub-type, decision; identity documents with signed URLs for a caller holding
+   * `veterinarian.read`, metadata only otherwise) and the organizations the user
    * is an ACTIVE member of (id/name/type/status/role — no org internals).
    */
   get = async (req: Request, res: Response): Promise<void> => {
     const { id } = validatedParams<{ id: string }>(req);
     const user = await this.users.getById(id);
-    const [roles, publicUser, vet, orgs] = await Promise.all([
+    // Identity / licence documents are private: only a caller who may review
+    // veterinarian applications gets their (short-lived, signed) URLs.
+    const canSeeDocuments = await this.authz.can(requireAuth(req), 'veterinarian.read');
+    const [roles, publicUser, vet, orgs, adminDocuments] = await Promise.all([
       this.rbac.getRoleKeysForUser(id),
       this.users.toPublicUserWithAvatar(user),
       this.veterinarians.getStatus(id),
       this.organizations.listMine(id),
+      canSeeDocuments
+        ? this.veterinarians.getLatestApplicationDocumentsForAdmin(id)
+        : Promise.resolve(null),
     ]);
     sendSuccess(res, {
       ...publicUser,
@@ -82,7 +91,8 @@ export class AdminUsersController {
             decidedAt: vet.application.decidedAt,
             decisionReason: vet.application.decisionReason,
             createdAt: vet.application.createdAt,
-            documents: vet.application.documents,
+            documents: adminDocuments ?? vet.application.documents,
+            documentsVisible: adminDocuments !== null,
           }
         : null,
       organizations: orgs.map((o) => ({

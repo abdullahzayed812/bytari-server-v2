@@ -124,6 +124,8 @@ export const PERMISSION_KEYS = [
   // system-supervisor (see SUPERVISOR_DOMAIN_PERMISSIONS). Granted to NO base role.
   'market.offer.admin.read',
   'market.offer.admin.delete',
+  // Approve / reject a PENDING poultry / egg advertisement.
+  'market.offer.admin.moderate',
   'market.rate.manage',
   // Pet Owners Store — a platform-run consumer storefront. Consumer browse /
   // cart / checkout / order-history are authentication-only (no key). These
@@ -162,6 +164,9 @@ export const PERMISSION_KEYS = [
   // organization-scoped `syndicate.*` permissions — see
   // `organization-rbac.constants.ts`). Granted to NO base role.
   'syndicate.admin.create',
+  // Deleting a syndicate (soft — status DEACTIVATED + registrations ended,
+  // the organizations convention) stays ADMIN-only. Granted to NO base role.
+  'syndicate.admin.delete',
   // Global Chat rooms — same shape as `syndicate.admin.create`: a room is
   // never self-service, only an ADMIN creates one (it then becomes an
   // `organizations` row of type CHAT_ROOM, moderated via the organization-
@@ -194,6 +199,16 @@ export const SUPERVISOR_DOMAINS = [
   'VETERINARIAN_STORE',
   'VET_JOBS',
   'VET_COURSES',
+  // Admin-management sections added so EVERY ManagementScreen area can be
+  // delegated (§39): user accounts, veterinarian approvals, farms,
+  // syndicates, poultry traders, content/chat reports, admin notifications.
+  'USERS',
+  'VETERINARIANS',
+  'FARMS',
+  'SYNDICATE',
+  'TRADERS',
+  'REPORTS',
+  'NOTIFICATIONS',
 ] as const;
 export type SupervisorDomain = (typeof SUPERVISOR_DOMAINS)[number];
 
@@ -292,6 +307,7 @@ export const PERMISSION_DEFINITIONS: Record<PermissionKey, string> = {
   'trader.admin.suspend': 'Suspend or reactivate an approved trader',
   'market.offer.admin.read': 'List and view any poultry/egg market offer (system-wide)',
   'market.offer.admin.delete': 'Delete any poultry/egg market offer (moderation)',
+  'market.offer.admin.moderate': 'Approve or reject a pending poultry/egg market advertisement',
   'market.rate.manage': 'Enter/update the poultry and egg exchange-rate boards',
   'pet_store.product.manage':
     'Create, update, deactivate and manage images for Pet Owners Store products',
@@ -310,8 +326,10 @@ export const PERMISSION_DEFINITIONS: Record<PermissionKey, string> = {
   'vet_course.approve': 'Approve a pending course / seminar / workshop',
   'vet_course.reject': 'Reject a pending course / seminar / workshop',
   'syndicate.admin.create': 'Create a main or subordinate veterinary syndicate',
+  'syndicate.admin.delete': 'Delete (deactivate) a veterinary syndicate and end its registrations',
   'chat_room.admin.create': 'Create a Global Chat public discussion room',
-  'dashboard.admin.read': 'Read the admin dashboard summary (category counts, recent activity, pending tasks)',
+  'dashboard.admin.read':
+    'Read the admin dashboard summary (category counts, recent activity, pending tasks)',
   'content_report.admin.manage': 'List content reports and mark them reviewed/dismissed',
 };
 
@@ -323,7 +341,16 @@ export const PERMISSION_DEFINITIONS: Record<PermissionKey, string> = {
  */
 export const SUPERVISOR_DOMAIN_PERMISSIONS: Record<SupervisorDomain, readonly PermissionKey[]> = {
   ANIMAL: ['animal.read', 'animal.update', 'animal.approve', 'animal.reject'],
-  CLINIC: [],
+  // Clinics / veterinary offices / stores. The organization-admin keys are
+  // TYPE-SCOPED for a supervisor (see `SUPERVISOR_DOMAIN_ORG_TYPES`): a CLINIC
+  // supervisor can act on clinic / office / store organizations only.
+  CLINIC: [
+    'organization.admin.read',
+    'organization.admin.approve',
+    'organization.admin.status',
+    'organization.admin.manage',
+    'organization.admin.subscription',
+  ],
   STORE: [],
   // The responsible Content Supervisor (Phase 14): full content management
   // EXCEPT `content.delete`, which stays ADMIN-only.
@@ -359,7 +386,12 @@ export const SUPERVISOR_DOMAIN_PERMISSIONS: Record<SupervisorDomain, readonly Pe
   // The responsible Market specialist: offer moderation + exchange-rate entry
   // (governorate-wide data, not per-organization — trader approve/reject/
   // suspend stays ADMIN/MODERATOR-oversight-only, not part of this domain).
-  MARKET: ['market.offer.admin.read', 'market.offer.admin.delete', 'market.rate.manage'],
+  MARKET: [
+    'market.offer.admin.read',
+    'market.offer.admin.delete',
+    'market.offer.admin.moderate',
+    'market.rate.manage',
+  ],
   // The responsible Pet Owners Store supervisor: full catalogue (products +
   // categories + images) and order management for the platform storefront.
   PET_OWNER_STORE: [
@@ -383,6 +415,48 @@ export const SUPERVISOR_DOMAIN_PERMISSIONS: Record<SupervisorDomain, readonly Pe
   // (approve / reject) courses/seminars/workshops. Does NOT gain access to
   // per-course registrations beyond what `vet_course.read` exposes.
   VET_COURSES: ['vet_course.read', 'vet_course.approve', 'vet_course.reject'],
+  // User accounts: view / edit / suspend / reactivate / deactivate. Never
+  // role or permission assignment, never hard delete (ADMIN-only).
+  USERS: ['user.read', 'user.update', 'user.suspend', 'user.activate', 'user.deactivate'],
+  VETERINARIANS: ['veterinarian.read', 'veterinarian.approve', 'veterinarian.reject'],
+  // Farms (poultry / sheep / cattle): approval, status and subscriptions —
+  // type-scoped to FARM organizations.
+  FARMS: [
+    'organization.admin.read',
+    'organization.admin.approve',
+    'organization.admin.status',
+    'organization.admin.manage',
+    'organization.admin.subscription',
+  ],
+  // Syndicates: create / delete + the organization-admin keys, type-scoped to
+  // SYNDICATE organizations.
+  SYNDICATE: [
+    'syndicate.admin.create',
+    'syndicate.admin.delete',
+    'organization.admin.read',
+    'organization.admin.status',
+    'organization.admin.manage',
+  ],
+  TRADERS: [
+    'trader.admin.read',
+    'trader.admin.approve',
+    'trader.admin.reject',
+    'trader.admin.suspend',
+  ],
+  REPORTS: ['content_report.admin.manage'],
+  NOTIFICATIONS: ['notification.admin.send'],
+};
+
+/**
+ * Organization types a supervisor domain's `organization.admin.*` keys apply
+ * to. Enforced by `AuthorizationService.canForOrganizationType` on every admin
+ * organization endpoint, so e.g. a FARMS supervisor gets 403 on a clinic.
+ * (ADMIN and role-granted keys — e.g. MODERATOR's read — are not type-scoped.)
+ */
+export const SUPERVISOR_DOMAIN_ORG_TYPES: Partial<Record<SupervisorDomain, readonly string[]>> = {
+  CLINIC: ['CLINIC', 'VETERINARY_OFFICE', 'VETERINARY_STORE'],
+  FARMS: ['FARM'],
+  SYNDICATE: ['SYNDICATE'],
 };
 
 /**

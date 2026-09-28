@@ -5,9 +5,12 @@ import { sendSuccess } from '../../../shared/http/response.js';
 import { validatedBody, validatedQuery } from '../../../shared/http/validate.js';
 import { auditContextFromRequest, type AuditContextResult } from '../../audit/audit-context.js';
 import { requireAuth } from '../../auth/authenticate.middleware.js';
+import type { AuthorizationService } from '../../authorization/authorization.service.js';
+import { NotFoundError } from '../../../shared/errors/app-error.js';
 import type { PoultryOfferService } from '../application/poultry-offer.service.js';
 import { requirePoultryOffer } from './market.middleware.js';
 import type {
+  RejectPoultryOfferBody,
   CreatePoultryOfferBody,
   ListAdminPoultryOffersQuery,
   ListPoultryOffersQuery,
@@ -15,7 +18,10 @@ import type {
 } from './poultry-offer.schemas.js';
 
 export class PoultryOfferController {
-  constructor(private readonly offers: PoultryOfferService) {}
+  constructor(
+    private readonly offers: PoultryOfferService,
+    private readonly authz: AuthorizationService,
+  ) {}
 
   private actor(req: Request): { actorUserId: string; context: AuditContextResult } {
     return { actorUserId: requireAuth(req).userId, context: auditContextFromRequest(req) };
@@ -51,9 +57,32 @@ export class PoultryOfferController {
     sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
   };
 
+  /** A not-yet-approved (or rejected) ad is visible only to its trader and to moderators. */
   getOne = async (req: Request, res: Response): Promise<void> => {
     const offer = requirePoultryOffer(req);
-    sendSuccess(res, await this.offers.get(offer.id));
+    const dto = await this.offers.get(offer.id);
+    if (dto.moderationStatus !== 'APPROVED') {
+      const principal = requireAuth(req);
+      const allowed =
+        dto.traderUserId === principal.userId ||
+        (await this.authz.can(principal, 'market.offer.admin.read'));
+      if (!allowed) throw new NotFoundError('Offer not found');
+    }
+    sendSuccess(res, dto);
+  };
+
+  approve = async (req: Request, res: Response): Promise<void> => {
+    const offer = requirePoultryOffer(req);
+    sendSuccess(res, await this.offers.moderate(offer.id, 'APPROVED', null, this.actor(req)));
+  };
+
+  reject = async (req: Request, res: Response): Promise<void> => {
+    const offer = requirePoultryOffer(req);
+    const body = validatedBody<RejectPoultryOfferBody>(req);
+    sendSuccess(
+      res,
+      await this.offers.moderate(offer.id, 'REJECTED', body.reason, this.actor(req)),
+    );
   };
 
   remove = async (req: Request, res: Response): Promise<void> => {
@@ -70,6 +99,7 @@ export class PoultryOfferController {
       birdType: q.birdType,
       governorate: q.governorate,
       status: q.status,
+      moderationStatus: q.moderationStatus,
     });
     sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
   };

@@ -214,6 +214,8 @@ export interface ListDailyRecordsFilter {
   pageSize: number;
   from?: string;
   to?: string;
+  /** Batch-relative week (1-based) — the week history view. */
+  week?: number;
 }
 
 // =====================================================================

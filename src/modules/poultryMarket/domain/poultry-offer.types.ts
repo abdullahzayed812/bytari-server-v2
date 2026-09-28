@@ -1,3 +1,4 @@
+import type { MarketModerationStatus } from './market-moderation.js';
 import type { BirdType, PoultryOfferStatus, PricingMethod } from './poultry-offer.constants.js';
 
 export interface PoultryOffer {
@@ -18,6 +19,10 @@ export interface PoultryOffer {
   notes: string | null;
   galleryKeys: string[];
   status: PoultryOfferStatus;
+  /** PENDING until a moderator approves; only APPROVED offers are public. */
+  moderationStatus: MarketModerationStatus;
+  rejectionReason: string | null;
+  reviewedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -46,6 +51,9 @@ export interface PoultryOfferRow {
   status: string;
   created_at: Date;
   updated_at: Date;
+  moderation_status?: string | null;
+  rejection_reason?: string | null;
+  reviewed_at?: Date | null;
 }
 
 export function rowToPoultryOffer(row: PoultryOfferRow): PoultryOffer {
@@ -66,6 +74,9 @@ export function rowToPoultryOffer(row: PoultryOfferRow): PoultryOffer {
     notes: row.notes,
     galleryKeys: row.gallery_keys ?? [],
     status: row.status as PoultryOfferStatus,
+    moderationStatus: (row.moderation_status ?? 'APPROVED') as MarketModerationStatus,
+    rejectionReason: row.rejection_reason ?? null,
+    reviewedAt: row.reviewed_at ? row.reviewed_at.toISOString() : null,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
   };
@@ -98,4 +109,6 @@ export interface ListPoultryOffersFilter {
   birdType?: BirdType;
   governorate?: string;
   status?: PoultryOfferStatus;
+  /** Admin listing only. */
+  moderationStatus?: MarketModerationStatus;
 }

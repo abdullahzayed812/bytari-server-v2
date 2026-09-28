@@ -1,3 +1,4 @@
+import type { MarketModerationStatus } from './market-moderation.js';
 import type { EggOfferStatus, EggType, SellUnit } from './egg-offer.constants.js';
 
 export interface EggOffer {
@@ -15,6 +16,10 @@ export interface EggOffer {
   notes: string | null;
   galleryKeys: string[];
   status: EggOfferStatus;
+  /** PENDING until a moderator approves; only APPROVED offers are public. */
+  moderationStatus: MarketModerationStatus;
+  rejectionReason: string | null;
+  reviewedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -40,6 +45,9 @@ export interface EggOfferRow {
   status: string;
   created_at: Date;
   updated_at: Date;
+  moderation_status?: string | null;
+  rejection_reason?: string | null;
+  reviewed_at?: Date | null;
 }
 
 export function rowToEggOffer(row: EggOfferRow): EggOffer {
@@ -57,6 +65,9 @@ export function rowToEggOffer(row: EggOfferRow): EggOffer {
     notes: row.notes,
     galleryKeys: row.gallery_keys ?? [],
     status: row.status as EggOfferStatus,
+    moderationStatus: (row.moderation_status ?? 'APPROVED') as MarketModerationStatus,
+    rejectionReason: row.rejection_reason ?? null,
+    reviewedAt: row.reviewed_at ? row.reviewed_at.toISOString() : null,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
   };
@@ -86,4 +97,6 @@ export interface ListEggOffersFilter {
   eggType?: EggType;
   governorate?: string;
   status?: EggOfferStatus;
+  /** Admin listing only. */
+  moderationStatus?: MarketModerationStatus;
 }

@@ -28,7 +28,11 @@ export const eggOfferUploadUrlBodySchema = z
   .object({
     filename,
     mimeType: z.string().trim().min(1).max(255),
-    size: z.number().int().positive().max(5 * 1024 * 1024),
+    size: z
+      .number()
+      .int()
+      .positive()
+      .max(5 * 1024 * 1024),
   })
   .strict();
 export type EggOfferUploadUrlBody = z.infer<typeof eggOfferUploadUrlBodySchema>;
@@ -55,7 +59,13 @@ export type ListEggOffersQuery = z.infer<typeof listEggOffersQuerySchema>;
 
 export const listAdminEggOffersQuerySchema = listEggOffersQuerySchema.extend({
   status: z.enum(['ACTIVE', 'REMOVED']).optional(),
+  moderationStatus: z.enum(['PENDING', 'APPROVED', 'REJECTED']).optional(),
 });
+
+export const rejectEggOfferBodySchema = z
+  .object({ reason: z.string().trim().min(3).max(500) })
+  .strict();
+export type RejectEggOfferBody = z.infer<typeof rejectEggOfferBodySchema>;
 export type ListAdminEggOffersQuery = z.infer<typeof listAdminEggOffersQuerySchema>;
 
 export const eggOfferParamSchema = z.object({ offerId: z.string().uuid() });

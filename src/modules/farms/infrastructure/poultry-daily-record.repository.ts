@@ -1,9 +1,11 @@
 import type { Knex } from 'knex';
 import {
-  lockBatchAndCountRecords,
+  listWeekSummaries,
+  lockBatchAndNextSlot,
   selectRecordsWithDayAndCreator,
   type DailyRecordTables,
 } from './daily-record-common.js';
+import type { DailyRecordSlot, DailyRecordWeekSummary } from '../domain/daily-record.js';
 import {
   rowToDailyRecord,
   type CreateDailyRecordInput,
@@ -18,6 +20,7 @@ const TABLES: DailyRecordTables = {
   batchTable: 'poultry_flocks',
   recordTable: TABLE,
   batchFk: 'poultry_flock_id',
+  weightColumn: 'average_weight_grams',
 };
 
 export interface DailyRecordAggregates {
@@ -62,6 +65,8 @@ export class PoultryDailyRecordRepository {
       poultryFlockId: string;
       organizationId: string;
       createdByUserId: string;
+      weekNumber: number;
+      dayInWeek: number;
     },
     trx: Knex.Transaction,
   ): Promise<PoultryDailyRecord> {
@@ -82,6 +87,8 @@ export class PoultryDailyRecordRepository {
         average_weight_grams: data.averageWeightGrams ?? null,
         notes: data.notes ?? null,
         created_by_user_id: data.createdByUserId,
+        week_number: data.weekNumber,
+        day_in_week: data.dayInWeek,
       })
       .returning('*')) as PoultryDailyRecordRow[];
     if (!row) throw new Error('daily record insert did not return a row');
@@ -127,6 +134,7 @@ export class PoultryDailyRecordRepository {
       const qb = this.db<PoultryDailyRecordRow>(TABLE).where('poultry_flock_id', flockId);
       if (filter.from) qb.andWhere('record_date', '>=', filter.from);
       if (filter.to) qb.andWhere('record_date', '<=', filter.to);
+      if (filter.week) qb.andWhere('week_number', filter.week);
       return qb;
     };
     const countRow = await base().count<{ count: string }>({ count: '*' }).first();
@@ -134,8 +142,10 @@ export class PoultryDailyRecordRepository {
     const numbered = selectRecordsWithDayAndCreator(this.db, TABLES, flockId);
     if (filter.from) numbered.andWhere('r.record_date', '>=', filter.from);
     if (filter.to) numbered.andWhere('r.record_date', '<=', filter.to);
+    if (filter.week) numbered.andWhere('r.week_number', filter.week);
     const rows = (await numbered
-      .orderBy('r.record_date', 'desc')
+      .orderBy('r.week_number', 'desc')
+      .orderBy('r.day_in_week', 'desc')
       .limit(filter.pageSize)
       .offset((filter.page - 1) * filter.pageSize)) as PoultryDailyRecordRow[];
     return { items: rows.map(rowToDailyRecord), total };
@@ -188,8 +198,13 @@ export class PoultryDailyRecordRepository {
     return row ? String(row.average_weight_grams) : null;
   }
 
-  /** Lock the batch row and return its daily-record count (see `lockBatchAndCountRecords`). */
-  lockBatchAndCount(batchId: string, trx: Knex.Transaction): Promise<number> {
-    return lockBatchAndCountRecords(trx, TABLES, batchId);
+  /** Lock the batch row and return its next free weekly slot (see `lockBatchAndNextSlot`). */
+  lockBatchAndNextSlot(batchId: string, trx: Knex.Transaction): Promise<DailyRecordSlot> {
+    return lockBatchAndNextSlot(trx, TABLES, batchId);
+  }
+
+  /** Week history (newest first) + the next slot — the "completed weeks" section. */
+  listWeeks(batchId: string): Promise<{ weeks: DailyRecordWeekSummary[]; next: DailyRecordSlot }> {
+    return listWeekSummaries(this.db, TABLES, batchId);
   }
 }

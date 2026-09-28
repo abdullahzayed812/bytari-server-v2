@@ -89,6 +89,8 @@ export type UpdateDailyRecordBody = z.infer<typeof updateDailyRecordBodySchema>;
 export const listDailyRecordsQuerySchema = paginationQuerySchema.extend({
   from: isoDate.optional(),
   to: isoDate.optional(),
+  /** Batch-relative week (1-based) — one week of the weekly cycle. */
+  week: z.coerce.number().int().min(1).max(10_000).optional(),
 });
 export type ListDailyRecordsQuery = z.infer<typeof listDailyRecordsQuerySchema>;
 

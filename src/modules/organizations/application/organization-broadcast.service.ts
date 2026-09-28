@@ -26,6 +26,24 @@ export interface SendBroadcastInput {
 }
 
 /**
+ * Who receives a broadcast. `FOLLOWERS` (default) — everyone following the
+ * organization ("إرسال رسالة للمتابعين"). `SYNDICATE_MEMBERS` — a syndicate's
+ * ACTIVE registered members ("رسالة إلى الأعضاء"); the caller has already
+ * checked the organization is a SYNDICATE.
+ */
+export type BroadcastAudience = 'FOLLOWERS' | 'SYNDICATE_MEMBERS';
+
+export interface SendBroadcastOptions {
+  audience?: BroadcastAudience;
+  /**
+   * Client-supplied idempotency key. The notification fan-out dedupes per
+   * recipient on `organization.broadcast.sent:<broadcastId>`, so re-sending
+   * the same request (double tap, retry) never notifies anyone twice.
+   */
+  idempotencyKey?: string;
+}
+
+/**
  * "إرسال رسالة للمتابعين" — an organization messages everyone following it. Pure
  * fan-out, mirroring `NotificationPolicy.syndicateFollowersToNotify`
  * (`organizationBroadcastToFollowers`) — deliberately NOT a persisted content
@@ -92,6 +110,7 @@ export class OrganizationBroadcastService {
     organizationId: string,
     input: SendBroadcastInput,
     actor: OrganizationBroadcastActor,
+    options: SendBroadcastOptions = {},
   ): Promise<{ broadcastId: string }> {
     await this.assertActiveOrganization(organizationId);
 
@@ -108,16 +127,23 @@ export class OrganizationBroadcastService {
           code: ErrorCode.STORAGE_OBJECT_MISSING,
         });
       }
-      imageUrl = await resolveStorageUrlOrNull(this.storage, input.imageStorageKey, IMAGE_URL_TTL_SECONDS);
+      imageUrl = await resolveStorageUrlOrNull(
+        this.storage,
+        input.imageStorageKey,
+        IMAGE_URL_TTL_SECONDS,
+      );
     }
 
-    const broadcastId = randomUUID();
+    const audience = options.audience ?? 'FOLLOWERS';
+    const broadcastId = options.idempotencyKey
+      ? `${organizationId}:${options.idempotencyKey}`
+      : randomUUID();
     await this.audit.record({
       action: AuditAction.ORGANIZATION_BROADCAST_SENT,
       entityType: AuditEntityType.ORGANIZATION,
       entityId: organizationId,
       actorUserId: actor.actorUserId,
-      metadata: { organizationId, broadcastId, title: input.title },
+      metadata: { organizationId, broadcastId, audience, title: input.title },
       context: actor.context,
     });
 
@@ -127,6 +153,7 @@ export class OrganizationBroadcastService {
       title: input.title,
       body: input.body,
       imageUrl,
+      audience,
       actorUserId: actor.actorUserId,
     });
 

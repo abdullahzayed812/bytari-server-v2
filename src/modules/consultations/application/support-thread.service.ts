@@ -397,9 +397,22 @@ export class SupportThreadService {
 
   // --- writes -------------------------------------------------
 
-  async sendMessage(actor: ThreadActor, threadId: string, body: string): Promise<ThreadMessageDTO> {
+  async sendMessage(
+    actor: ThreadActor,
+    threadId: string,
+    body: string,
+    inputImageKeys?: string[],
+  ): Promise<ThreadMessageDTO> {
     const thread = await this.load(threadId);
     const side = await this.assertAccess(actor.principal, thread);
+
+    let imageKeys: string[] = [];
+    if (inputImageKeys && inputImageKeys.length > 0) {
+      if (this.cfg.maxAttachmentImages === 0 || !this.media) {
+        throw new BadRequestError('this thread kind does not support image attachments');
+      }
+      imageKeys = await this.media.validateKeys(inputImageKeys, this.cfg.maxAttachmentImages);
+    }
 
     let source: MessageSource;
     if (side === 'CREATOR') {
@@ -417,10 +430,14 @@ export class SupportThreadService {
 
     const now = new Date();
     const message = await this.db.transaction(async (tx) => {
-      const created = await this.repo.createMessage(
-        { threadId: thread.id, senderUserId: actor.principal.userId, source, body },
-        tx,
-      );
+      const messageData: CreateThreadMessageData = {
+        threadId: thread.id,
+        senderUserId: actor.principal.userId,
+        source,
+        body,
+      };
+      if (this.cfg.maxAttachmentImages > 0) messageData.imageKeys = imageKeys;
+      const created = await this.repo.createMessage(messageData, tx);
       await this.repo.touchLastMessageAt(thread.id, now, tx);
       return created;
     });

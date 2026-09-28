@@ -40,9 +40,7 @@ export function createVetServiceRouter(c: Container): Router {
   const listings = new VetServiceListingController(c.vetServiceListingService);
   const requests = new VetServiceRequestController(c.vetServiceRequestService);
   const offers = new VetServiceOfferController(c.vetServiceOfferService);
-  const listingRequests = new VetServiceListingRequestController(
-    c.vetServiceListingRequestService,
-  );
+  const listingRequests = new VetServiceListingRequestController(c.vetServiceListingRequestService);
 
   const r = Router();
   r.use(c.authenticate);
@@ -60,28 +58,16 @@ export function createVetServiceRouter(c: Container): Router {
     validate({ query: listingBrowseQuerySchema }),
     asyncHandler(listings.listPublic),
   );
-  r.post(
-    '/listings',
-    validate({ body: createListingBodySchema }),
-    asyncHandler(listings.create),
-  );
+  r.post('/listings', validate({ body: createListingBodySchema }), asyncHandler(listings.create));
   r.get('/listings/mine', validate({ query: mineQuerySchema }), asyncHandler(listings.listMine));
-  r.get(
-    '/listings/:id',
-    validate({ params: idParamSchema }),
-    asyncHandler(listings.getPublic),
-  );
+  r.get('/listings/:id', validate({ params: idParamSchema }), asyncHandler(listings.getPublic));
   r.get(
     '/listings/:id/manage',
     validate({ params: idParamSchema }),
     asyncHandler(listings.getMine),
   );
   r.delete('/listings/:id', validate({ params: idParamSchema }), asyncHandler(listings.remove));
-  r.post(
-    '/listings/:id/close',
-    validate({ params: idParamSchema }),
-    asyncHandler(listings.close),
-  );
+  r.post('/listings/:id/close', validate({ params: idParamSchema }), asyncHandler(listings.close));
 
   // listing-requests (a Pet Owner requests a listing) + direct chat
   r.post(
@@ -106,19 +92,11 @@ export function createVetServiceRouter(c: Container): Router {
     validate({ query: requestBrowseQuerySchema }),
     asyncHandler(requests.listPublic),
   );
-  r.post(
-    '/requests',
-    validate({ body: createRequestBodySchema }),
-    asyncHandler(requests.create),
-  );
+  r.post('/requests', validate({ body: createRequestBodySchema }), asyncHandler(requests.create));
   r.get('/requests/mine', validate({ query: mineQuerySchema }), asyncHandler(requests.listMine));
   r.get('/requests/:id', validate({ params: idParamSchema }), asyncHandler(requests.getOne));
   r.delete('/requests/:id', validate({ params: idParamSchema }), asyncHandler(requests.remove));
-  r.post(
-    '/requests/:id/close',
-    validate({ params: idParamSchema }),
-    asyncHandler(requests.close),
-  );
+  r.post('/requests/:id/close', validate({ params: idParamSchema }), asyncHandler(requests.close));
 
   // offers (a Vet submits an offer on a request) + direct chat
   r.post(
@@ -144,6 +122,11 @@ export function createVetServiceRouter(c: Container): Router {
     asyncHandler(offers.listMine),
   );
   r.get('/offers/:id', validate({ params: idParamSchema }), asyncHandler(offers.getOne));
+  r.post(
+    '/offers/:id/conversation',
+    validate({ params: idParamSchema }),
+    asyncHandler(offers.openConversation),
+  );
   r.post('/offers/:id/accept', validate({ params: idParamSchema }), asyncHandler(offers.accept));
   r.post('/offers/:id/reject', validate({ params: idParamSchema }), asyncHandler(offers.reject));
   r.post(
@@ -172,6 +155,11 @@ export function createVetServiceRouter(c: Container): Router {
     '/listing-requests/:id',
     validate({ params: idParamSchema }),
     asyncHandler(listingRequests.getOne),
+  );
+  r.post(
+    '/listing-requests/:id/conversation',
+    validate({ params: idParamSchema }),
+    asyncHandler(listingRequests.openConversation),
   );
   r.post(
     '/listing-requests/:id/accept',

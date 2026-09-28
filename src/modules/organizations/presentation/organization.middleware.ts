@@ -33,7 +33,11 @@ export interface OrganizationMiddleware {
    */
   authorizeOrg: (
     permission: string,
-    opts?: { allowInactiveForOwner?: boolean; excludeOwner?: boolean },
+    opts?: {
+      /** `true` → any non-ACTIVE status; a list → only those statuses. */
+      allowInactiveForOwner?: boolean | readonly string[];
+      excludeOwner?: boolean;
+    },
   ) => RequestHandler;
 }
 
@@ -64,14 +68,16 @@ export function createOrganizationMiddleware(deps: {
 
   const authorizeOrg = (
     permission: string,
-    opts?: { allowInactiveForOwner?: boolean; excludeOwner?: boolean },
+    opts?: { allowInactiveForOwner?: boolean | readonly string[]; excludeOwner?: boolean },
   ): RequestHandler =>
     asyncHandler(async (req, _res, next) => {
       const principal = requireAuth(req);
       const org = requireOrganization(req);
       const isAdmin = deps.authz.isAdmin(principal);
       const isOwner = principal.userId === org.ownerUserId;
-      const isOwnerAllowedInactive = opts?.allowInactiveForOwner === true && isOwner;
+      const allow = opts?.allowInactiveForOwner;
+      const isOwnerAllowedInactive =
+        isOwner && (allow === true || (Array.isArray(allow) && allow.includes(org.status)));
 
       if (!isAdmin && !isOwnerAllowedInactive && org.status !== 'ACTIVE') {
         throw new ForbiddenError(

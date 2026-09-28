@@ -889,7 +889,7 @@ export class OrganizationService {
 
   async requestLicenseDocumentUploadUrl(
     organizationId: string,
-    input: { filename: string; mimeType: string; size: number },
+    input: { filename: string; mimeType: string; size: number; replacesStorageKey?: string },
   ): Promise<{
     storageKey: string;
     uploadUrl: string;
@@ -915,7 +915,12 @@ export class OrganizationService {
     }
 
     const row = await this.organizations.findProfileRow(org.type, organizationId);
-    if ((row?.license_document_keys?.length ?? 0) >= MAX_LICENSE_DOCUMENTS) {
+    const existingKeys = row?.license_document_keys ?? [];
+    if (input.replacesStorageKey !== undefined) {
+      if (!existingKeys.includes(input.replacesStorageKey)) {
+        throw new NotFoundError('License document not found');
+      }
+    } else if (existingKeys.length >= MAX_LICENSE_DOCUMENTS) {
       throw new BadRequestError(
         `the maximum of ${MAX_LICENSE_DOCUMENTS} license documents is already reached`,
         { code: ErrorCode.LICENSE_DOCUMENT_LIMIT_EXCEEDED },
@@ -938,11 +943,15 @@ export class OrganizationService {
     };
   }
 
-  /** Registers an uploaded license document — appends to the existing array. */
+  /**
+   * Registers an uploaded license document — appends to the existing array,
+   * or (with `replacesStorageKey`) swaps that document in place and deletes
+   * the replaced object after commit.
+   */
   async addLicenseDocument(
     organizationId: string,
     actor: OrgActor,
-    input: { storageKey: string; mimeType: string },
+    input: { storageKey: string; mimeType: string; replacesStorageKey?: string },
   ): Promise<OrganizationWithDetails> {
     const org = await this.getById(organizationId);
     this.assertLicensable(org.type);
@@ -972,13 +981,26 @@ export class OrganizationService {
 
     const row = await this.organizations.findProfileRow(org.type, organizationId);
     const currentKeys = row?.license_document_keys ?? [];
-    if (currentKeys.length >= MAX_LICENSE_DOCUMENTS) {
-      throw new BadRequestError(
-        `the maximum of ${MAX_LICENSE_DOCUMENTS} license documents is already reached`,
-        { code: ErrorCode.LICENSE_DOCUMENT_LIMIT_EXCEEDED },
-      );
+    if (currentKeys.includes(input.storageKey)) {
+      throw new ConflictError('license document is already registered', {
+        code: ErrorCode.STORAGE_KEY_MISMATCH,
+      });
     }
-    const licenseDocumentKeys = [...currentKeys, input.storageKey];
+    const replaced = input.replacesStorageKey;
+    let licenseDocumentKeys: string[];
+    if (replaced !== undefined) {
+      const index = currentKeys.indexOf(replaced);
+      if (index === -1) throw new NotFoundError('License document not found');
+      licenseDocumentKeys = currentKeys.map((k, i) => (i === index ? input.storageKey : k));
+    } else {
+      if (currentKeys.length >= MAX_LICENSE_DOCUMENTS) {
+        throw new BadRequestError(
+          `the maximum of ${MAX_LICENSE_DOCUMENTS} license documents is already reached`,
+          { code: ErrorCode.LICENSE_DOCUMENT_LIMIT_EXCEEDED },
+        );
+      }
+      licenseDocumentKeys = [...currentKeys, input.storageKey];
+    }
 
     await this.db.transaction(async (tx) => {
       await this.organizations.updateProfileFields(
@@ -997,12 +1019,24 @@ export class OrganizationService {
             organizationId,
             sizeBytes: head.size,
             documentCount: licenseDocumentKeys.length,
+            replaced: replaced !== undefined,
           },
           context: actor.context,
         },
         tx,
       );
     });
+
+    if (replaced !== undefined) {
+      try {
+        await this.storage.delete(replaced);
+      } catch (err) {
+        this.log.error(
+          { err, organizationId },
+          'failed to delete replaced license document — needs a sweep',
+        );
+      }
+    }
 
     const withDetails = await this.organizations.findByIdWithDetails(organizationId);
     if (!withDetails)
@@ -1321,6 +1355,54 @@ export class OrganizationService {
       return u;
     });
     this.events.publish(rule.event, { organizationId: id, ownerUserId: org.ownerUserId });
+    return updated;
+  }
+
+  /**
+   * Admin "حذف" of a clinic / office / farm / store — the organizations
+   * convention is a SOFT delete: status → DEACTIVATED from ANY state (a PENDING
+   * or REJECTED registration included), so every org-scoped operation is
+   * refused (`authorizeOrg`) and it disappears from discovery, while its
+   * members, media, products and history stay attached for audit (nothing is
+   * orphaned) and an admin can still re-activate it. Open subscription-renewal
+   * requests are closed as REJECTED in the same transaction so nothing is left
+   * waiting in the admin queue. Idempotent for an already-DEACTIVATED org.
+   */
+  async adminDelete(id: string, actor: OrgActor, reason?: string): Promise<Organization> {
+    const org = await this.getById(id);
+    if (org.status === 'DEACTIVATED') return org;
+    const updated = await this.db.transaction(async (tx) => {
+      const u = await this.organizations.updateStatus(
+        id,
+        { status: 'DEACTIVATED', decidedBy: actor.actorUserId, decisionReason: reason ?? null },
+        tx,
+      );
+      const closedRenewals = await tx('farm_subscription_renewal_requests')
+        .where({ organization_id: id, status: 'PENDING' })
+        .update({
+          status: 'REJECTED',
+          decided_by: actor.actorUserId,
+          decided_at: tx.fn.now(),
+          decision_reason: 'organization deleted',
+          updated_at: tx.fn.now(),
+        });
+      await this.audit.record(
+        {
+          action: AuditAction.ORGANIZATION_DELETED,
+          entityType: AuditEntityType.ORGANIZATION,
+          entityId: id,
+          actorUserId: actor.actorUserId,
+          metadata: { from: org.status, type: org.type, reason: reason ?? null, closedRenewals },
+          context: actor.context,
+        },
+        tx,
+      );
+      return u;
+    });
+    this.events.publish('organization.deactivated', {
+      organizationId: id,
+      ownerUserId: org.ownerUserId,
+    });
     return updated;
   }
 }

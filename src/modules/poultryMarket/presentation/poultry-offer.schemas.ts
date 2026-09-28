@@ -1,7 +1,11 @@
 import { z } from 'zod';
 import { paginationQuerySchema } from '../../../shared/http/pagination.js';
 import { phoneSchema } from '../../../shared/validation/common.js';
-import { BIRD_TYPES, MAX_POULTRY_OFFER_IMAGES, PRICING_METHODS } from '../domain/poultry-offer.constants.js';
+import {
+  BIRD_TYPES,
+  MAX_POULTRY_OFFER_IMAGES,
+  PRICING_METHODS,
+} from '../domain/poultry-offer.constants.js';
 
 /** Money as a string — never parsed to a float. `numeric(12,2)`, non-negative. */
 const moneySchema = z
@@ -33,7 +37,11 @@ export const poultryOfferUploadUrlBodySchema = z
   .object({
     filename,
     mimeType: z.string().trim().min(1).max(255),
-    size: z.number().int().positive().max(5 * 1024 * 1024),
+    size: z
+      .number()
+      .int()
+      .positive()
+      .max(5 * 1024 * 1024),
   })
   .strict();
 export type PoultryOfferUploadUrlBody = z.infer<typeof poultryOfferUploadUrlBodySchema>;
@@ -51,7 +59,10 @@ export const createPoultryOfferBodySchema = z.object({
   phone: phoneSchema,
   whatsapp: phoneSchema.optional(),
   notes: z.string().trim().max(2000).optional(),
-  galleryKeys: z.array(z.string().trim().min(1).max(1024)).max(MAX_POULTRY_OFFER_IMAGES).default([]),
+  galleryKeys: z
+    .array(z.string().trim().min(1).max(1024))
+    .max(MAX_POULTRY_OFFER_IMAGES)
+    .default([]),
 });
 export type CreatePoultryOfferBody = z.infer<typeof createPoultryOfferBodySchema>;
 
@@ -63,7 +74,13 @@ export type ListPoultryOffersQuery = z.infer<typeof listPoultryOffersQuerySchema
 
 export const listAdminPoultryOffersQuerySchema = listPoultryOffersQuerySchema.extend({
   status: z.enum(['ACTIVE', 'REMOVED']).optional(),
+  moderationStatus: z.enum(['PENDING', 'APPROVED', 'REJECTED']).optional(),
 });
+
+export const rejectPoultryOfferBodySchema = z
+  .object({ reason: z.string().trim().min(3).max(500) })
+  .strict();
+export type RejectPoultryOfferBody = z.infer<typeof rejectPoultryOfferBodySchema>;
 export type ListAdminPoultryOffersQuery = z.infer<typeof listAdminPoultryOffersQuerySchema>;
 
 export const poultryOfferParamSchema = z.object({ offerId: z.string().uuid() });

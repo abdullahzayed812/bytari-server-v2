@@ -53,9 +53,14 @@ export const PET_STORE_ORDER_TRANSITIONS: Record<PetStoreOrderStatus, PetStoreOr
   CANCELLED: [],
 };
 
-/** Free delivery for now — reference shows "توصيل مجاني". */
+/**
+ * The platform does not compute a delivery fee at checkout yet — it is
+ * settled on delivery (Cash on Delivery), so `0.00` here means "not included
+ * in the total", NOT free delivery. Clients must not advertise free delivery.
+ */
 export const PET_STORE_DELIVERY_FEE = '0.00';
-export const PET_STORE_CURRENCY = 'SAR';
+/** Iraqi Dinar — every price, cart and order total in this store. */
+export const PET_STORE_CURRENCY = 'IQD';
 
 /** Per-line and per-cart quantity ceilings (guards abuse, not a business rule). */
 export const PET_STORE_MAX_ITEM_QUANTITY = 99;

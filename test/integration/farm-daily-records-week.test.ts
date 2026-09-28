@@ -52,8 +52,8 @@ function pastDates(n: number): string[] {
   });
 }
 
-describe('daily records — weekly sequence (Day 1 … Day 7)', () => {
-  it('numbers records by day and returns who added each one', async () => {
+describe('daily records — continuous weekly cycles (Week N: Day 1 … Day 7)', () => {
+  it('numbers records by week + day and returns who added each one', async () => {
     const { vet, farm, flock } = await setup();
     for (const d of pastDates(2)) await seedDailyRecordRow('poultry', flock.id, farm.id, d);
     const created = await request(app)
@@ -61,6 +61,7 @@ describe('daily records — weekly sequence (Day 1 … Day 7)', () => {
       .set(bearer(vet.accessToken))
       .send({ feedKg: 12 });
     expect(created.status).toBe(201);
+    expect(created.body.data.weekNumber).toBe(1);
     expect(created.body.data.dayNumber).toBe(3);
     expect(created.body.data.createdBy).toMatchObject({ id: vet.id, firstName: 'Test' });
     expect(created.body.data.createdBy).not.toHaveProperty('email');
@@ -69,18 +70,55 @@ describe('daily records — weekly sequence (Day 1 … Day 7)', () => {
     expect(list.body.data.map((r: { dayNumber: number }) => r.dayNumber)).toEqual([3, 2, 1]);
   });
 
-  it('rejects an eighth daily record for the batch (409 DAILY_RECORD_LIMIT_REACHED)', async () => {
+  it('after Day 7 of Week 1 the next record starts Week 2 (no cap)', async () => {
     const { vet, farm, flock } = await setup();
     for (const d of pastDates(7)) await seedDailyRecordRow('poultry', flock.id, farm.id, d);
     const res = await request(app)
       .post(daily(farm.id, flock.id))
       .set(bearer(vet.accessToken))
       .send({ feedKg: 1 });
-    expect(res.status).toBe(409);
-    expect(res.body.error.code).toBe('DAILY_RECORD_LIMIT_REACHED');
+    expect(res.status).toBe(201);
+    expect(res.body.data).toMatchObject({ weekNumber: 2, dayNumber: 1 });
   });
 
-  it('two simultaneous submissions for the seventh day: exactly one is accepted', async () => {
+  it('Week 3 follows Week 2; completed weeks stay in the history with their records', async () => {
+    const { vet, staff, farm, flock } = await setup();
+    for (const [i, d] of pastDates(14).entries()) {
+      await seedDailyRecordRow('poultry', flock.id, farm.id, d, {
+        mortalityCount: i < 7 ? 1 : 2,
+        feedKg: 10,
+      });
+    }
+    const res = await request(app)
+      .post(daily(farm.id, flock.id))
+      .set(bearer(vet.accessToken))
+      .send({ feedKg: 3 });
+    expect(res.body.data).toMatchObject({ weekNumber: 3, dayNumber: 1 });
+
+    // STAFF (read-only) can see the week history.
+    const weeks = await request(app)
+      .get(`${daily(farm.id, flock.id)}/weeks`)
+      .set(bearer(staff.accessToken));
+    expect(weeks.status).toBe(200);
+    expect(weeks.body.data.currentWeek).toBe(3);
+    expect(weeks.body.data.nextDay).toBe(2);
+    const byWeek = new Map(
+      (weeks.body.data.weeks as Array<{ weekNumber: number }>).map((w) => [w.weekNumber, w]),
+    );
+    expect([...byWeek.keys()]).toEqual([3, 2, 1]);
+    expect(byWeek.get(1)).toMatchObject({ daysRecorded: 7, complete: true, totalMortality: 7 });
+    expect(byWeek.get(2)).toMatchObject({ daysRecorded: 7, complete: true, totalMortality: 14 });
+    expect(byWeek.get(3)).toMatchObject({ daysRecorded: 1, complete: false });
+
+    const week1 = await request(app)
+      .get(daily(farm.id, flock.id))
+      .query({ week: 1 })
+      .set(bearer(vet.accessToken));
+    expect(week1.body.data).toHaveLength(7);
+    expect(week1.body.data.every((r: { weekNumber: number }) => r.weekNumber === 1)).toBe(true);
+  });
+
+  it('two simultaneous submissions: exactly one is accepted and slots never collide', async () => {
     const { vet, owner, farm, flock } = await setup();
     for (const d of pastDates(6)) await seedDailyRecordRow('poultry', flock.id, farm.id, d);
     const [a, b] = await Promise.all([
@@ -90,6 +128,7 @@ describe('daily records — weekly sequence (Day 1 … Day 7)', () => {
         .set(bearer(owner.accessToken))
         .send({ feedKg: 2 }),
     ]);
+    // One record per business day: the second same-day submission is a 409.
     expect([a.status, b.status].sort()).toEqual([201, 409]);
     const count = (await getTestDb()('poultry_daily_records')
       .where({ poultry_flock_id: flock.id })
@@ -98,7 +137,7 @@ describe('daily records — weekly sequence (Day 1 … Day 7)', () => {
     expect(Number(count.c)).toBe(7);
   });
 
-  it('the same cap applies to sheep batches', async () => {
+  it('sheep batches follow the same weekly cycle', async () => {
     const { vet, farm } = await setup();
     const batch = await createSheepBatch(app, vet.accessToken, farm.id, {});
     for (const d of pastDates(7)) await seedDailyRecordRow('sheep', batch.id, farm.id, d);
@@ -106,8 +145,12 @@ describe('daily records — weekly sequence (Day 1 … Day 7)', () => {
       .post(`/api/v1/organizations/${farm.id}/sheep/batches/${batch.id}/daily-records`)
       .set(bearer(vet.accessToken))
       .send({ feedKg: 1 });
-    expect(res.status).toBe(409);
-    expect(res.body.error.code).toBe('DAILY_RECORD_LIMIT_REACHED');
+    expect(res.status).toBe(201);
+    expect(res.body.data).toMatchObject({ weekNumber: 2, dayNumber: 1 });
+    const weeks = await request(app)
+      .get(`/api/v1/organizations/${farm.id}/sheep/batches/${batch.id}/daily-records/weeks`)
+      .set(bearer(vet.accessToken));
+    expect(weeks.body.data.weeks).toHaveLength(2);
   });
 
   it('edit / delete are authorised: STAFF may not delete, another farm cannot reach the record', async () => {

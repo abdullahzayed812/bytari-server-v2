@@ -168,7 +168,10 @@ import {
   SyndicateService,
   SyndicateAnnouncementService,
   SyndicateSubmissionService,
+  SyndicateRegistrationRepository,
+  SyndicateMemberService,
 } from './modules/syndicates/index.js';
+import { UserNameDirectory } from './modules/users/user-name-directory.js';
 import { ChatRoomRepository, ChatRoomService } from './modules/chat-rooms/index.js';
 import { ReportRepository, ReportService } from './modules/reports/index.js';
 import {
@@ -417,6 +420,9 @@ export interface Container {
   syndicateService: SyndicateService;
   syndicateAnnouncementService: SyndicateAnnouncementService;
   syndicateSubmissionService: SyndicateSubmissionService;
+  syndicateRegistrationRepository: SyndicateRegistrationRepository;
+  syndicateMemberService: SyndicateMemberService;
+  userNameDirectory: UserNameDirectory;
   chatRoomRepository: ChatRoomRepository;
   chatRoomService: ChatRoomService;
   reportRepository: ReportRepository;
@@ -649,6 +655,10 @@ export function createContainer(deps: ContainerDeps): Container {
   const syndicateDetailsRepository = new SyndicateDetailsRepository(db);
   const syndicateAnnouncementRepository = new SyndicateAnnouncementRepository(db);
   const syndicateSubmissionRepository = new SyndicateSubmissionRepository(db);
+  const syndicateRegistrationRepository = new SyndicateRegistrationRepository(db);
+  // Constructed here (not with the rest of notifications below) so the
+  // syndicate module can clear an officer's "new submission" alerts.
+  const notificationRepository = new NotificationRepository(db);
   const syndicateService = new SyndicateService(
     db,
     syndicateDetailsRepository,
@@ -661,6 +671,8 @@ export function createContainer(deps: ContainerDeps): Container {
     auditService,
     eventBus,
     logger,
+    syndicateRegistrationRepository,
+    syndicateSubmissionRepository,
   );
   const syndicateAnnouncementService = new SyndicateAnnouncementService(
     db,
@@ -680,6 +692,16 @@ export function createContainer(deps: ContainerDeps): Container {
     auditService,
     eventBus,
     logger,
+    {
+      markReadForEntity: async (userId, entityType, entityId) => {
+        const ids = await db.transaction((tx) =>
+          notificationRepository.markReadByEntity(userId, entityType, entityId, tx),
+        );
+        for (const notificationId of ids) {
+          eventBus.publish('notification.read', { notificationId, recipientUserId: userId });
+        }
+      },
+    },
   );
 
   // --- animals & ownership (Phase 4) --------------------------
@@ -1106,6 +1128,18 @@ export function createContainer(deps: ContainerDeps): Container {
     logger,
     new ChatAttachmentMedia(objectStorage),
   );
+  const syndicateMemberService = new SyndicateMemberService(
+    db,
+    syndicateRegistrationRepository,
+    organizationRepository,
+    userService,
+    chatService,
+    organizationBroadcastService,
+    organizationSupervisorService,
+    auditService,
+    eventBus,
+    logger,
+  );
 
   // --- Global Chat rooms — public discussion rooms (an `organizations` row
   // of type CHAT_ROOM, reusing membership/supervisor RBAC + the chat module's
@@ -1183,6 +1217,10 @@ export function createContainer(deps: ContainerDeps): Container {
     objectStorage,
     StoragePrefix.inquiryAttachments,
   );
+  const supportAttachmentMedia = new ThreadAttachmentMedia(
+    objectStorage,
+    StoragePrefix.supportAttachments,
+  );
   const consultationService = new SupportThreadService(
     db,
     CONSULTATION_CONFIG,
@@ -1213,7 +1251,7 @@ export function createContainer(deps: ContainerDeps): Container {
     db,
     SUPPORT_CONFIG,
     supportRepository,
-    null,
+    supportAttachmentMedia,
     aiSettingsService,
     aiResponder,
     authorizationService,
@@ -1405,7 +1443,6 @@ export function createContainer(deps: ContainerDeps): Container {
     deviceTokenRepository,
     logger,
   );
-  const notificationRepository = new NotificationRepository(db);
   const preferenceRepository = new PreferenceRepository(db);
   const notificationService = new NotificationService(
     db,
@@ -1436,6 +1473,7 @@ export function createContainer(deps: ContainerDeps): Container {
     supervisors: supervisorRepository,
     organizationFollows: organizationFollowRepository,
     recipients: notificationRecipientRepository,
+    syndicateRegistrations: syndicateRegistrationRepository,
   });
   const notificationEventHandler = new NotificationEventHandler(
     eventBus,
@@ -1469,6 +1507,9 @@ export function createContainer(deps: ContainerDeps): Container {
     conversations: conversationRepository,
     audit: auditService,
     animalPublications: animalPublicationRepository,
+    traders: traderService,
+    poultryOffers: poultryOfferService,
+    eggOffers: eggOfferService,
   });
 
   const authenticateDeps = { tokens: tokenService, users: userService, roles: roleRepository };
@@ -1629,6 +1670,9 @@ export function createContainer(deps: ContainerDeps): Container {
     syndicateService,
     syndicateAnnouncementService,
     syndicateSubmissionService,
+    syndicateRegistrationRepository,
+    syndicateMemberService,
+    userNameDirectory: new UserNameDirectory(db),
     chatRoomRepository,
     chatRoomService,
     reportRepository,

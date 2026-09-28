@@ -1,4 +1,4 @@
-import { DAILY_RECORDS_PER_BATCH } from '../domain/daily-record.js';
+import type { DailyRecordWeeksDTO } from '../domain/daily-record.js';
 import { businessToday } from '../../../shared/time/business-date.js';
 import type { Knex } from 'knex';
 import type { Logger } from 'pino';
@@ -83,6 +83,13 @@ export class PoultryDailyRecordService {
     return this.records.listForFlock(flockId, filter);
   }
 
+  /** Week history (newest first) + the next slot — "الأسابيع المكتملة" under the batch card. */
+  async listWeeks(organizationId: string, flockId: string): Promise<DailyRecordWeeksDTO> {
+    await this.loadFlock(organizationId, flockId);
+    const { weeks, next } = await this.records.listWeeks(flockId);
+    return { currentWeek: next.weekNumber, nextDay: next.dayInWeek, weeks };
+  }
+
   async get(
     organizationId: string,
     flockId: string,
@@ -106,14 +113,11 @@ export class PoultryDailyRecordService {
     const recordDate = businessToday();
 
     const record = await this.db.transaction(async (tx) => {
-      // Serialise concurrent submissions on the batch row, then enforce the
-      // one-record-per-day and seven-days-per-batch rules under that lock.
-      const existingCount = await this.records.lockBatchAndCount(flockId, tx);
-      if (existingCount >= DAILY_RECORDS_PER_BATCH) {
-        throw new ConflictError('This batch already has its seven daily records', {
-          code: ErrorCode.DAILY_RECORD_LIMIT_REACHED,
-        });
-      }
+      // Serialise concurrent submissions on the batch row, then take the next
+      // weekly slot (Day 7 rolls over into Day 1 of the next week — daily data
+      // continues for the batch's whole lifetime) and enforce one record per
+      // day, all under that lock.
+      const slot = await this.records.lockBatchAndNextSlot(flockId, tx);
       if (await this.records.findByFlockAndDate(flockId, recordDate, tx)) {
         throw new ConflictError('A daily record already exists for today', {
           code: ErrorCode.POULTRY_DAILY_RECORD_DUPLICATE_DATE,
@@ -126,6 +130,8 @@ export class PoultryDailyRecordService {
           poultryFlockId: flockId,
           organizationId,
           createdByUserId: actor.actorUserId,
+          weekNumber: slot.weekNumber,
+          dayInWeek: slot.dayInWeek,
         },
         tx,
       );

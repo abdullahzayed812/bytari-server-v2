@@ -79,6 +79,39 @@ export class TraderRepository {
     return rowToTraderProfile(row as TraderProfileRow);
   }
 
+  /** Admin edit of the profile fields (status / decision untouched). */
+  async updateFields(
+    userId: string,
+    patch: Partial<{
+      displayName: string;
+      traderType: string;
+      governorate: string;
+      district: string | null;
+      phone: string;
+      whatsapp: string | null;
+      bio: string | null;
+    }>,
+    trx?: Knex.Transaction,
+  ): Promise<TraderProfile> {
+    const dbPatch: Record<string, unknown> = { updated_at: new Date() };
+    if (patch.displayName !== undefined) dbPatch.display_name = patch.displayName;
+    if (patch.traderType !== undefined) dbPatch.trader_type = patch.traderType;
+    if (patch.governorate !== undefined) dbPatch.governorate = patch.governorate;
+    if (patch.district !== undefined) dbPatch.district = patch.district;
+    if (patch.phone !== undefined) dbPatch.phone = patch.phone;
+    if (patch.whatsapp !== undefined) dbPatch.whatsapp = patch.whatsapp;
+    if (patch.bio !== undefined) dbPatch.bio = patch.bio;
+    const [row] = await this.conn(trx)<TraderProfileRow>(TABLE)
+      .where({ user_id: userId })
+      .update(dbPatch)
+      .returning('*');
+    return rowToTraderProfile(row as TraderProfileRow);
+  }
+
+  async deleteByUserId(userId: string, trx: Knex.Transaction): Promise<number> {
+    return trx(TABLE).where({ user_id: userId }).del();
+  }
+
   async decide(
     userId: string,
     decision: { status: TraderStatus; decidedBy: string; decisionReason?: string | null },
@@ -109,9 +142,7 @@ export class TraderRepository {
       return qb;
     };
 
-    const countRow = await base()
-      .count<{ count: string }>({ count: '*' })
-      .first();
+    const countRow = await base().count<{ count: string }>({ count: '*' }).first();
     const total = Number(countRow?.count ?? 0);
 
     const rows: Array<
