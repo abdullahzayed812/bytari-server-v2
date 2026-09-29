@@ -106,10 +106,10 @@ export class SyndicateRegistrationRepository {
     organizationId: string,
     userId: string,
   ): Promise<SyndicateRegistrationWithUser | null> {
-    const row = (await this.db(`${T} as r`)
+    const row = await this.db(`${T} as r`)
       .join('users as u', 'u.id', 'r.user_id')
       .where({ 'r.organization_id': organizationId, 'r.user_id': userId, 'r.status': 'ACTIVE' })
-      .first('r.*', ...USER_COLUMNS));
+      .first('r.*', ...USER_COLUMNS);
     return row ? toWithUser(row) : null;
   }
 
@@ -182,12 +182,12 @@ export class SyndicateRegistrationRepository {
     };
     const base = () => this.db(`${T} as r`).join('users as u', 'u.id', 'r.user_id');
     const countRow = await scope(base()).count<{ count: string }>({ count: '*' }).first();
-    const rows = (await scope(base())
+    const rows = await scope(base())
       .orderBy('r.registered_at', 'desc')
       .orderBy('r.id', 'desc')
       .limit(filter.pageSize)
       .offset((filter.page - 1) * filter.pageSize)
-      .select('r.*', ...USER_COLUMNS));
+      .select('r.*', ...USER_COLUMNS);
     return { items: rows.map(toWithUser), total: Number(countRow?.count ?? 0) };
   }
 

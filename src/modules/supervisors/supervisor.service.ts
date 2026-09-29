@@ -184,11 +184,7 @@ export class SupervisorService {
       }
       for (const domain of current) {
         if (wanted.has(domain)) continue;
-        const existing = await this.assignments.findByUserAndDomain(
-          user.id,
-          domain,
-          tx,
-        );
+        const existing = await this.assignments.findByUserAndDomain(user.id, domain, tx);
         if (!existing) continue;
         await this.assignments.setStatus(existing.id, 'INACTIVE', null, tx);
         removed.push(domain);
