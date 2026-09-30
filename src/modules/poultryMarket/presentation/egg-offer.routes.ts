@@ -19,7 +19,11 @@ import {
  * `admin` → `/admin/egg-offers/*`  (moderation: view all / delete any)
  */
 export function createEggOfferRouters(c: Container): { self: Router; admin: Router } {
-  const ctrl = new EggOfferController(c.eggOfferService, c.authorizationService);
+  const ctrl = new EggOfferController(
+    c.eggOfferService,
+    c.authorizationService,
+    c.traderRepository,
+  );
   const { authorize, requireApprovedTrader } = c.authorization;
   const { withEggOffer, requireEggOwnerOrPermission } = createMarketMiddleware({
     poultryOffers: c.poultryOfferRepository,

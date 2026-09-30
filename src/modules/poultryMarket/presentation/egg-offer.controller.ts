@@ -5,6 +5,7 @@ import { sendSuccess } from '../../../shared/http/response.js';
 import { validatedBody, validatedQuery } from '../../../shared/http/validate.js';
 import { auditContextFromRequest, type AuditContextResult } from '../../audit/audit-context.js';
 import { requireAuth } from '../../auth/authenticate.middleware.js';
+import type { TraderRepository } from '../infrastructure/trader.repository.js';
 import type { AuthorizationService } from '../../authorization/authorization.service.js';
 import { NotFoundError } from '../../../shared/errors/app-error.js';
 import type { EggOfferService } from '../application/egg-offer.service.js';
@@ -21,6 +22,7 @@ export class EggOfferController {
   constructor(
     private readonly offers: EggOfferService,
     private readonly authz: AuthorizationService,
+    private readonly traders: TraderRepository,
   ) {}
 
   private actor(req: Request): { actorUserId: string; context: AuditContextResult } {
@@ -101,7 +103,10 @@ export class EggOfferController {
       status: q.status,
       moderationStatus: q.moderationStatus,
     });
-    sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
+    // The reviewer needs to see WHO is selling (admin-only, `market.offer.admin.read`).
+    const sellers = await this.traders.findSellerSummaries(items.map((o) => o.traderUserId));
+    const withSeller = items.map((o) => ({ ...o, seller: sellers.get(o.traderUserId) ?? null }));
+    sendSuccess(res, withSeller, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
   };
 
   adminRemove = async (req: Request, res: Response): Promise<void> => {

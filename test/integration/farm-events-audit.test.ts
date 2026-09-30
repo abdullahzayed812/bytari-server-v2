@@ -102,7 +102,7 @@ describe('farm & poultry events + audit', () => {
     expect(regen?.metadata).toMatchObject({ organizationId: farm.id });
   });
 
-  it('poultry create/update/delete emit events and write audit with the acting vet', async () => {
+  it('poultry create/update/delete emit events and write audit with the acting user', async () => {
     const admin = await registerAdmin(app);
     const owner = await registerApprovedVet(app);
     const vet = await registerApprovedVet(app);
@@ -113,14 +113,19 @@ describe('farm & poultry events + audit', () => {
     });
     captured.length = 0;
 
-    const flock = await createPoultryFlock(app, vet.accessToken, farm.id);
+    const flock = await createPoultryFlock(app, owner.accessToken, farm.id);
     await request(app)
       .patch(`/api/v1/organizations/${farm.id}/poultry/flocks/${flock.id}`)
       .set(bearer(vet.accessToken))
       .send({ birdCount: 42 });
+    // deleting a batch is owner-level (a farm vet gets 403)
     await request(app)
       .delete(`/api/v1/organizations/${farm.id}/poultry/flocks/${flock.id}`)
-      .set(bearer(vet.accessToken));
+      .set(bearer(vet.accessToken))
+      .expect(403);
+    await request(app)
+      .delete(`/api/v1/organizations/${farm.id}/poultry/flocks/${flock.id}`)
+      .set(bearer(owner.accessToken));
     await tick();
 
     expect(captured).toEqual(
@@ -136,8 +141,8 @@ describe('farm & poultry events + audit', () => {
       'POULTRY_FLOCK_UPDATED',
       'POULTRY_FLOCK_DELETED',
     ]);
+    expect(rows.map((r) => r.actor_user_id)).toEqual([owner.id, vet.id, owner.id]);
     for (const r of rows) {
-      expect(r.actor_user_id).toBe(vet.id);
       expect(r.metadata).toMatchObject({ organizationId: farm.id });
     }
   });

@@ -15,7 +15,9 @@ import type {
   CreateInteractionBody,
   CreatePublicationBody,
   ListMinePublicationsQuery,
+  ListMyInteractionsQuery,
   PublicPublicationsQuery,
+  SetResolutionBody,
 } from './publication.schemas.js';
 
 interface PageQuery {
@@ -122,5 +124,36 @@ export class PublicationController {
       await this.interactions.create(publicationId, body, this.actor(req)),
       StatusCodes.CREATED,
     );
+  };
+
+  setResolution = async (req: Request, res: Response): Promise<void> => {
+    const { publicationId } = validatedParams<{ publicationId: string }>(req);
+    const body = validatedBody<SetResolutionBody>(req);
+    sendSuccess(
+      res,
+      await this.publications.resolve(publicationId, body.resolution, this.actor(req)),
+    );
+  };
+
+  listInteractions = async (req: Request, res: Response): Promise<void> => {
+    const { publicationId } = validatedParams<{ publicationId: string }>(req);
+    sendSuccess(res, await this.interactions.listForOwner(publicationId, this.actor(req)));
+  };
+
+  openInteractionConversation = async (req: Request, res: Response): Promise<void> => {
+    const { publicationId, interactionId } = validatedParams<{
+      publicationId: string;
+      interactionId: string;
+    }>(req);
+    sendSuccess(
+      res,
+      await this.interactions.openConversation(publicationId, interactionId, this.actor(req)),
+    );
+  };
+
+  listMyInteractions = async (req: Request, res: Response): Promise<void> => {
+    const q = validatedQuery<ListMyInteractionsQuery>(req);
+    const { items, total } = await this.interactions.listMine(this.actor(req), q);
+    sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
   };
 }

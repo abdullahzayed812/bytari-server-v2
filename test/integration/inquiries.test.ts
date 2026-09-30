@@ -179,26 +179,21 @@ describe('inquiries — lifecycle & AI', () => {
     expect(events).toContain('inquiry.message.created');
   });
 
-  it('AI enabled → replies to follow-up messages too, not only on creation', async () => {
+  it('AI enabled → a single AI answer, then the inquiry is closed (no follow-up turn)', async () => {
     const admin = await registerAdmin(app);
     await setAiSettings(app, admin.accessToken, { inquiryAiEnabled: true });
     const vet = await registerApprovedVet(app);
     const i = await createInquiry(app, vet.accessToken, 'first question');
     const id = i.body.data.id as string;
     expect(ai.calls).toBe(1);
+    expect(i.body.data.status).toBe('CLOSED');
 
-    expect(
-      (await sendThreadMessage(app, vet.accessToken, 'inquiries', id, 'a follow-up')).status,
-    ).toBe(201);
-    expect(ai.calls).toBe(2);
+    const followUp = await sendThreadMessage(app, vet.accessToken, 'inquiries', id, 'a follow-up');
+    expect(followUp.status).toBe(409);
+    expect(ai.calls).toBe(1);
 
     const msgs = await listThreadMessages(app, vet.accessToken, 'inquiries', id);
-    expect(msgs.body.data.map((m: { source: string }) => m.source)).toEqual([
-      'USER',
-      'AI',
-      'USER',
-      'AI',
-    ]);
+    expect(msgs.body.data.map((m: { source: string }) => m.source)).toEqual(['USER', 'AI']);
   });
 
   it('AI failure leaves the inquiry intact', async () => {

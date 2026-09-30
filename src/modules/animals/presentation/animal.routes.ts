@@ -109,6 +109,12 @@ export function createAdminAnimalRouter(c: Container): Router {
     validate({ query: listAdminAnimalsQuerySchema }),
     asyncHandler(ctrl.list),
   );
+  r.patch(
+    '/:animalId',
+    authorize('animal.update'),
+    validate({ params: animalIdParamSchema, body: updateAnimalBodySchema }),
+    asyncHandler(ctrl.update),
+  );
   r.delete(
     '/:animalId',
     authorize('animal.delete'),

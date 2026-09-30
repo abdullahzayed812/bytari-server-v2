@@ -3,6 +3,7 @@ import type {
   HealthStatus,
   PublicationInteractionType,
   PublicationKind,
+  PublicationResolution,
   PublicationStatus,
   VaccinationStatus,
 } from './publication.constants.js';
@@ -32,6 +33,9 @@ export interface AnimalPublication {
   lostDistrict: string | null;
   lostLocationDetail: string | null;
   healthNotes: string | null;
+  /** Outcome (`null` = available) — see `PUBLICATION_RESOLUTIONS`. */
+  resolution: PublicationResolution | null;
+  resolvedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -81,6 +85,8 @@ export interface AnimalPublicationDTO {
   lostDistrict: string | null;
   lostLocationDetail: string | null;
   healthNotes: string | null;
+  resolution: PublicationResolution | null;
+  resolvedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -121,6 +127,9 @@ export interface PublicPublicationDTO {
   lostDistrict: string | null;
   lostLocationDetail: string | null;
   healthNotes: string | null;
+  /** Outcome — `null` while the listing is still available. */
+  resolution: PublicationResolution | null;
+  resolvedAt: string | null;
   animal: PublicationAnimalSummary;
 }
 
@@ -189,7 +198,25 @@ export interface PublicationInteraction {
   type: PublicationInteractionType;
   requesterUserId: string;
   message: string | null;
+  /** The interested user ↔ owner chat (`ANIMAL_PUBLICATION`), once opened. */
+  conversationId: string | null;
   createdAt: string;
+}
+
+/** Owner view — who asked / reported, for one of the owner's listings. */
+export interface OwnerInteractionDTO extends PublicationInteraction {
+  requester: { id: string; firstName: string; lastName: string; avatarUrl: string | null };
+}
+
+/** Interested-user view — "my requests" with the listing's current outcome. */
+export interface MyInteractionDTO extends PublicationInteraction {
+  publication: {
+    id: string;
+    kind: PublicationKind;
+    status: PublicationStatus;
+    resolution: PublicationResolution | null;
+    animalName: string;
+  };
 }
 
 export interface CreateInteractionInput {
@@ -203,6 +230,7 @@ export interface InteractionRow {
   type: string;
   requester_user_id: string;
   message: string | null;
+  conversation_id: string | null;
   created_at: Date;
 }
 
@@ -213,6 +241,7 @@ export function rowToInteraction(row: InteractionRow): PublicationInteraction {
     type: row.type as PublicationInteractionType,
     requesterUserId: row.requester_user_id,
     message: row.message,
+    conversationId: row.conversation_id ?? null,
     createdAt: row.created_at.toISOString(),
   };
 }
@@ -242,6 +271,8 @@ export interface AnimalPublicationRow {
   lost_district: string | null;
   lost_location_detail: string | null;
   health_notes: string | null;
+  resolution: string | null;
+  resolved_at: Date | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -276,6 +307,8 @@ export function rowToPublication(row: AnimalPublicationRow): AnimalPublication {
     lostDistrict: row.lost_district,
     lostLocationDetail: row.lost_location_detail,
     healthNotes: row.health_notes,
+    resolution: (row.resolution as PublicationResolution | null) ?? null,
+    resolvedAt: row.resolved_at ? row.resolved_at.toISOString() : null,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
   };
@@ -328,6 +361,8 @@ export function toPublicPublicationDTO(p: AnimalPublicationWithAnimal): PublicPu
     lostDistrict: p.lostDistrict,
     lostLocationDetail: p.lostLocationDetail,
     healthNotes: p.healthNotes,
+    resolution: p.resolution,
+    resolvedAt: p.resolvedAt,
     animal: { ...animalRest, galleryUrls: [] },
   };
 }

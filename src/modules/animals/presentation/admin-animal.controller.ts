@@ -2,11 +2,11 @@ import type { Request, Response } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import { pageMeta } from '../../../shared/http/pagination.js';
 import { sendSuccess } from '../../../shared/http/response.js';
-import { validatedParams, validatedQuery } from '../../../shared/http/validate.js';
+import { validatedBody, validatedParams, validatedQuery } from '../../../shared/http/validate.js';
 import { auditContextFromRequest, type AuditContextResult } from '../../audit/audit-context.js';
 import { requireAuth } from '../../auth/authenticate.middleware.js';
 import type { AnimalService } from '../application/animal.service.js';
-import type { ListAdminAnimalsQuery } from './animal.schemas.js';
+import type { ListAdminAnimalsQuery, UpdateAnimalBody } from './animal.schemas.js';
 
 /**
  * Admin / ANIMAL-supervisor oversight of user animals: list every owner's
@@ -32,6 +32,17 @@ export class AdminAnimalController {
       ownerUserId: q.ownerUserId,
     });
     sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
+  };
+
+  /**
+   * Admin / ANIMAL-supervisor edit of a pet PROFILE (`animal.update`). Same
+   * field allow-list as the owner's own edit; it never touches the animal's
+   * Adoption / Mating / Lost listings (a separate domain / table).
+   */
+  update = async (req: Request, res: Response): Promise<void> => {
+    const { animalId } = validatedParams<{ animalId: string }>(req);
+    const body = validatedBody<UpdateAnimalBody>(req);
+    sendSuccess(res, await this.animals.update(animalId, body, this.actor(req)));
   };
 
   deactivate = async (req: Request, res: Response): Promise<void> => {

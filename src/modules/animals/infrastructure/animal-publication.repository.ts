@@ -297,7 +297,10 @@ export class AnimalPublicationRepository {
     const base = (): Knex.QueryBuilder => {
       const qb = this.conn(trx)(`${TABLE} as p`)
         .join('animals as a', 'a.id', 'p.animal_id')
-        .where('p.status', 'APPROVED');
+        .where('p.status', 'APPROVED')
+        // Only still-available listings are browsed; a FOUND / ADOPTED /
+        // CLOSED one stays reachable by id (existing links, chats).
+        .whereNull('p.resolution');
       if (filter.kind) qb.andWhere('p.kind', filter.kind);
       if (filter.species) qb.andWhere('a.species', filter.species);
       if (filter.search) {
@@ -360,5 +363,24 @@ export class AnimalPublicationRepository {
       .select('p.*', ...ANIMAL_JOIN_COLUMNS)
       .first();
     return row ? toWithAnimal(row) : null;
+  }
+
+  /** Owner sets (or clears, with `null`) the listing's outcome. */
+  async setResolution(
+    id: string,
+    resolution: string | null,
+    resolvedByUserId: string,
+    trx: Knex.Transaction,
+  ): Promise<AnimalPublication | null> {
+    const [row] = (await trx(TABLE)
+      .where({ id })
+      .update({
+        resolution,
+        resolved_at: resolution ? trx.fn.now() : null,
+        resolved_by_user_id: resolution ? resolvedByUserId : null,
+        updated_at: trx.fn.now(),
+      })
+      .returning('*')) as AnimalPublicationRow[];
+    return row ? rowToPublication(row) : null;
   }
 }

@@ -9,6 +9,9 @@ import {
   THREAD_STATUSES,
 } from '../domain/thread.constants.js';
 
+/** Upper bound for the admin's fixed AI instruction. */
+const AI_INSTRUCTION_MAX = 4000;
+
 export const threadIdParamSchema = z.object({ threadId: z.string().uuid() });
 
 const imageKeys = z.array(z.string().trim().min(1).max(1024)).max(MAX_MESSAGE_IMAGES).optional();
@@ -44,10 +47,18 @@ export const createSupportBodySchema = z
   .object({ body: z.string().trim().min(1).max(MESSAGE_BODY_MAX), imageKeys })
   .strict();
 
-/** A reply — text (links included) plus up to `MAX_MESSAGE_IMAGES` images. */
+/**
+ * A reply — text (links included) plus up to `MAX_MESSAGE_IMAGES` images. The
+ * text may be empty only when at least one image is attached (an image-only
+ * message); the stored body is then `''`.
+ */
 export const sendThreadMessageBodySchema = z
-  .object({ body: z.string().trim().min(1).max(MESSAGE_BODY_MAX), imageKeys })
-  .strict();
+  .object({ body: z.string().trim().max(MESSAGE_BODY_MAX).default(''), imageKeys })
+  .strict()
+  .refine((v) => v.body.length > 0 || (v.imageKeys?.length ?? 0) > 0, {
+    message: 'A message needs text or at least one image',
+    path: ['body'],
+  });
 
 export const listThreadsQuerySchema = paginationQuerySchema.extend({
   status: z.enum(THREAD_STATUSES).optional(),
@@ -92,10 +103,14 @@ export const updateAiSettingsBodySchema = z
   .object({
     consultationAiEnabled: z.boolean().optional(),
     inquiryAiEnabled: z.boolean().optional(),
+    /** Admin's fixed AI instruction; `null` / `''` clears it. */
+    consultationAiInstruction: z.string().max(AI_INSTRUCTION_MAX).nullable().optional(),
+    inquiryAiInstruction: z.string().max(AI_INSTRUCTION_MAX).nullable().optional(),
   })
   .strict()
-  .refine((v) => v.consultationAiEnabled !== undefined || v.inquiryAiEnabled !== undefined, {
-    message: 'Provide consultationAiEnabled and/or inquiryAiEnabled',
+  .refine((v) => Object.values(v).some((x) => x !== undefined), {
+    message:
+      'Provide at least one of consultationAiEnabled, inquiryAiEnabled, consultationAiInstruction, inquiryAiInstruction',
   });
 
 export type CreateConsultationBody = z.infer<typeof createConsultationBodySchema>;

@@ -3,15 +3,23 @@ import { StatusCodes } from 'http-status-codes';
 import { sendSuccess } from '../../../shared/http/response.js';
 import { validatedParams } from '../../../shared/http/validate.js';
 import { requireAuth } from '../../auth/authenticate.middleware.js';
+import type { AuthorizationService } from '../../authorization/authorization.service.js';
 import type { AdminDashboardService } from '../application/admin-dashboard.service.js';
 import type { AdminDashboardCardId } from '../domain/admin-dashboard.types.js';
 
 export class AdminDashboardController {
-  constructor(private readonly dashboard: AdminDashboardService) {}
+  constructor(
+    private readonly dashboard: AdminDashboardService,
+    private readonly authz: AuthorizationService,
+  ) {}
 
   getSummary = async (req: Request, res: Response): Promise<void> => {
-    const { userId } = requireAuth(req);
-    sendSuccess(res, await this.dashboard.getSummary(userId), StatusCodes.OK);
+    const principal = requireAuth(req);
+    // Recent activity is Admin-only — never shown to system supervisors.
+    const summary = await this.dashboard.getSummary(principal.userId, {
+      includeRecentActivity: this.authz.isAdmin(principal),
+    });
+    sendSuccess(res, summary, StatusCodes.OK);
   };
 
   markCardSeen = async (req: Request, res: Response): Promise<void> => {

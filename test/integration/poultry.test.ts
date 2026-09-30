@@ -41,10 +41,15 @@ const flockPath = (orgId: string, id?: string): string =>
   `/api/v1/organizations/${orgId}/poultry/flocks${id ? `/${id}` : ''}`;
 
 describe('poultry flocks — CRUD', () => {
-  it('a farm veterinarian can create, read, list, update and delete a flock', async () => {
-    const { vet, farm } = await setup();
+  it('the owner creates / deletes a flock; a farm veterinarian reads, lists and updates it', async () => {
+    const { owner, vet, farm } = await setup();
+    const vetCreate = await request(app)
+      .post(flockPath(farm.id))
+      .set(bearer(vet.accessToken))
+      .send({ name: 'x', birdType: 'CHICKEN', birdCount: 1, arrivalDate: '2026-01-01' });
+    expect(vetCreate.status).toBe(403);
 
-    const create = await request(app).post(flockPath(farm.id)).set(bearer(vet.accessToken)).send({
+    const create = await request(app).post(flockPath(farm.id)).set(bearer(owner.accessToken)).send({
       name: 'House 1',
       birdType: 'CHICKEN',
       birdCount: 12000,
@@ -59,7 +64,7 @@ describe('poultry flocks — CRUD', () => {
       birdType: 'CHICKEN',
       birdCount: 12000,
       status: 'ACTIVE',
-      createdByUserId: vet.id,
+      createdByUserId: owner.id,
     });
 
     const read = await request(app).get(flockPath(farm.id, id)).set(bearer(vet.accessToken));
@@ -78,18 +83,27 @@ describe('poultry flocks — CRUD', () => {
     expect(upd.status).toBe(200);
     expect(upd.body.data.birdCount).toBe(11800);
 
-    const del = await request(app).delete(flockPath(farm.id, id)).set(bearer(vet.accessToken));
+    const vetDel = await request(app).delete(flockPath(farm.id, id)).set(bearer(vet.accessToken));
+    expect(vetDel.status).toBe(403);
+    const del = await request(app).delete(flockPath(farm.id, id)).set(bearer(owner.accessToken));
     expect(del.status).toBe(200);
     expect(await getTestDb()('poultry_flocks').where({ id })).toHaveLength(0);
   });
 
   it('closing a flock stamps closed_at and blocks further content edits (409)', async () => {
-    const { vet, farm } = await setup();
-    const flock = await createPoultryFlock(app, vet.accessToken, farm.id);
+    const { owner, vet, farm } = await setup();
+    const flock = await createPoultryFlock(app, owner.accessToken, farm.id);
+
+    // selling / closing is owner-level
+    const vetClose = await request(app)
+      .patch(flockPath(farm.id, flock.id))
+      .set(bearer(vet.accessToken))
+      .send({ status: 'CLOSED' });
+    expect(vetClose.status).toBe(403);
 
     const close = await request(app)
       .patch(flockPath(farm.id, flock.id))
-      .set(bearer(vet.accessToken))
+      .set(bearer(owner.accessToken))
       .send({ status: 'CLOSED' });
     expect(close.status).toBe(200);
     expect(close.body.data.status).toBe('CLOSED');
@@ -105,7 +119,7 @@ describe('poultry flocks — CRUD', () => {
     // re-opening (status-only change) is allowed
     const reopen = await request(app)
       .patch(flockPath(farm.id, flock.id))
-      .set(bearer(vet.accessToken))
+      .set(bearer(owner.accessToken))
       .send({ status: 'ACTIVE' });
     expect(reopen.status).toBe(200);
     expect(reopen.body.data.closedAt).toBeNull();
@@ -128,12 +142,12 @@ describe('poultry flocks — CRUD', () => {
   });
 
   it('supports status + birdType list filters', async () => {
-    const { vet, farm } = await setup();
-    const a = await createPoultryFlock(app, vet.accessToken, farm.id, { birdType: 'CHICKEN' });
-    await createPoultryFlock(app, vet.accessToken, farm.id, { birdType: 'DUCK' });
+    const { owner, vet, farm } = await setup();
+    const a = await createPoultryFlock(app, owner.accessToken, farm.id, { birdType: 'CHICKEN' });
+    await createPoultryFlock(app, owner.accessToken, farm.id, { birdType: 'DUCK' });
     await request(app)
       .patch(flockPath(farm.id, a.id))
-      .set(bearer(vet.accessToken))
+      .set(bearer(owner.accessToken))
       .send({ status: 'CLOSED' });
 
     const ducks = await request(app)
@@ -160,8 +174,8 @@ describe('poultry flocks — authorization', () => {
   });
 
   it('a farm STAFF member can read but not write', async () => {
-    const { vet, staff, farm } = await setup();
-    await createPoultryFlock(app, vet.accessToken, farm.id);
+    const { owner, staff, farm } = await setup();
+    await createPoultryFlock(app, owner.accessToken, farm.id);
 
     const read = await request(app).get(flockPath(farm.id)).set(bearer(staff.accessToken));
     expect(read.status).toBe(200);
@@ -192,7 +206,7 @@ describe('poultry flocks — authorization', () => {
     expect(write.status).toBe(403);
   });
 
-  it('a veterinarian who joined via the code can manage poultry', async () => {
+  it('a veterinarian who joined via the code reads flocks but cannot create one', async () => {
     const admin = await registerAdmin(app);
     const owner = await registerApprovedVet(app);
     const vet = await registerApprovedVet(app);
@@ -205,7 +219,9 @@ describe('poultry flocks — authorization', () => {
       birdCount: 300,
       arrivalDate: '2026-01-02',
     });
-    expect(res.status).toBe(201);
+    expect(res.status).toBe(403);
+    const read = await request(app).get(flockPath(farm.id)).set(bearer(vet.accessToken));
+    expect(read.status).toBe(200);
   });
 
   it('denies a non-member (403)', async () => {
@@ -263,8 +279,8 @@ describe('poultry flocks — cross-farm isolation (IDOR)', () => {
   });
 
   it('a flock id from Farm A is invisible under Farm B’s URL (404, not 200)', async () => {
-    const { vet, farm: farmA } = await setup();
-    const flockA = await createPoultryFlock(app, vet.accessToken, farmA.id);
+    const { owner, farm: farmA } = await setup();
+    const flockA = await createPoultryFlock(app, owner.accessToken, farmA.id);
 
     const admin2 = await registerAdmin(app);
     const ownerB = await registerApprovedVet(app);

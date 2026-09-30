@@ -17,6 +17,7 @@ import type { OrganizationService } from '../application/organization.service.js
 import type { MembershipService } from '../application/membership.service.js';
 import type { OrganizationSupervisorService } from '../application/organization-supervisor.service.js';
 import type { OrganizationRepository } from '../infrastructure/organization.repository.js';
+import type { UserService } from '../../users/user.service.js';
 import type {
   AdminListOrganizationsQuery,
   RejectOrganizationBody,
@@ -32,6 +33,7 @@ export class AdminOrganizationController {
     private readonly supervisors: OrganizationSupervisorService,
     private readonly farmRenewals: FarmSubscriptionRenewalRepository,
     private readonly farmSubscription: FarmSubscriptionService,
+    private readonly users: UserService,
   ) {}
 
   private actor(req: Request): { actorUserId: string; context: AuditContextResult } {
@@ -61,7 +63,32 @@ export class AdminOrganizationController {
     const { id } = validatedParams<{ id: string }>(req);
     const org = await this.organizations.getWithDetails(id);
     if (!org) throw new NotFoundError('Organization not found');
-    sendSuccess(res, org);
+    // The admin "complete organization file": the owner's contact identity and
+    // the open renewal request (subscription-capable types only) ride along so
+    // the review screen needs no extra round-trips. Admin-only route — never
+    // on the public/member organization DTOs.
+    const [owner, pendingRenewalRequest] = await Promise.all([
+      this.users.getByIdOrNull(org.ownerUserId),
+      org.type === 'FARM' || org.type === 'CLINIC' || org.type === 'VETERINARY_OFFICE'
+        ? this.farmRenewals.findPendingForOrganization(id)
+        : Promise.resolve(null),
+    ]);
+    sendSuccess(res, {
+      ...org,
+      owner: owner
+        ? {
+            id: owner.id,
+            firstName: owner.firstName,
+            lastName: owner.lastName,
+            email: owner.email,
+            phone: owner.phone,
+            country: owner.country,
+            governorate: owner.governorate,
+            avatarUrl: await this.users.resolveAvatarUrl(owner),
+          }
+        : null,
+      pendingRenewalRequest,
+    });
   };
 
   approve = async (req: Request, res: Response): Promise<void> => {

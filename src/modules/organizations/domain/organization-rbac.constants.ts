@@ -90,6 +90,11 @@ export const ORG_PERMISSION_KEYS = [
   // NOBODY by default (OWNER override / ADMIN): a farm's vets and employees see
   // operational data only; an owner may grant it to a supervisor explicitly.
   'farm.financials.read',
+  // --- Selling / closing a batch (poultry flock, sheep or cattle batch status
+  // change). Owner-level like financials: granted to NOBODY by default (OWNER
+  // override / ADMIN / an explicit supervisor grant) — farm veterinarians and
+  // employees run operations but never sell.
+  'farm.batch.sell',
   // --- Veterinary store products (Phase 10; extended to Veterinary Offices) —
   // VETERINARY_STORE / VETERINARY_OFFICE organizations ---
   // Stock changes are `product.inventory.adjust`, NOT `product.update` — a
@@ -220,6 +225,7 @@ export const ORG_PERMISSION_DEFINITIONS: Record<OrgPermissionKey, string> = {
   'farm.subscription.manage':
     'Set this farm’s subscription period and approve/reject its renewal requests',
   'farm.financials.read': 'See the farm’s estimated profit and expected sale prices',
+  'farm.batch.sell': 'Sell / close a farm batch (and reopen it)',
   'product.read': 'View this store/office’s products',
   'product.create': 'Add a product to this store/office',
   'product.update': 'Update this store/office’s products (profile fields, not stock)',
@@ -267,22 +273,16 @@ export const ORG_ROLE_PERMISSIONS: Record<OrgRoleKey, OrgPermissionKey[]> = {
     'vaccination.create',
     'vaccination.update',
     'vaccination.delete',
-    // Phase 6: a farm veterinarian manages the farm's poultry flocks (docs 04
-    // §4.10 "Poultry Operations"). Farm profile / membership management stay on
-    // the existing `organization.*` / `member.*` permissions.
+    // A farm veterinarian runs the farm's batches operationally: reads and
+    // updates them, but CREATING or deleting a batch, selling it
+    // (`farm.batch.sell`) and the financials (`farm.financials.read`) stay with
+    // the owner / admin / an explicitly granted supervisor.
     'farm.poultry.read',
-    'farm.poultry.create',
     'farm.poultry.update',
-    'farm.poultry.delete',
-    // Sheep Farms & Cattle Farms — mirrors the poultry flock grant above.
     'farm.sheep_batch.read',
-    'farm.sheep_batch.create',
     'farm.sheep_batch.update',
-    'farm.sheep_batch.delete',
     'farm.cattle_batch.read',
-    'farm.cattle_batch.create',
     'farm.cattle_batch.update',
-    'farm.cattle_batch.delete',
     // Poultry Farm operations — the farm veterinarian runs day-to-day
     // operations on the Farm Details screen.
     'farm.daily_record.read',
@@ -311,9 +311,10 @@ export const ORG_ROLE_PERMISSIONS: Record<OrgRoleKey, OrgPermissionKey[]> = {
     'clinic.appointment.read',
     'clinic.appointment.manage',
   ],
-  // Phase 6: farm STAFF (employees) can view poultry data; write access to
-  // poultry stays with veterinarians / the owner / an assigned supervisor.
-  // Poultry Farm operations follow the same rule — STAFF is read-only.
+  // Farm STAFF (employees) view the batches and do the day-to-day operational
+  // entry — daily records, treatments & vaccinations (health events),
+  // expenses, appointments and cases (create + update, never delete). Batch
+  // create/update/delete, selling and financials are NOT theirs.
   // Phase 10: veterinary-store STAFF can view the product catalogue; create /
   // update / delete / inventory stay with the OWNER (override) or an explicitly
   // assigned SUPERVISOR — a Supervisor gets NO product permission by default.
@@ -323,10 +324,20 @@ export const ORG_ROLE_PERMISSIONS: Record<OrgRoleKey, OrgPermissionKey[]> = {
     'farm.sheep_batch.read',
     'farm.cattle_batch.read',
     'farm.daily_record.read',
+    'farm.daily_record.create',
+    'farm.daily_record.update',
     'farm.expense.read',
+    'farm.expense.create',
+    'farm.expense.update',
     'farm.health_event.read',
+    'farm.health_event.create',
+    'farm.health_event.update',
     'farm.appointment.read',
+    'farm.appointment.create',
+    'farm.appointment.update',
     'farm.case.read',
+    'farm.case.create',
+    'farm.case.update',
     'farm.subscription.read',
     'product.read',
     'clinic.appointment.read',

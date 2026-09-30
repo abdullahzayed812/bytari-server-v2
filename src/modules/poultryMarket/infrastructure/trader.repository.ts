@@ -170,4 +170,73 @@ export class TraderRepository {
 
     return { items, total };
   }
+
+  /**
+   * Admin ad review — the seller behind each offer: trader profile + account
+   * name/email, keyed by user id (missing = no trader profile any more).
+   */
+  async findSellerSummaries(
+    userIds: string[],
+    trx?: Knex.Transaction,
+  ): Promise<
+    Map<
+      string,
+      {
+        userId: string;
+        displayName: string | null;
+        traderType: string | null;
+        traderStatus: string | null;
+        firstName: string;
+        lastName: string;
+        email: string;
+      }
+    >
+  > {
+    const out = new Map<
+      string,
+      {
+        userId: string;
+        displayName: string | null;
+        traderType: string | null;
+        traderStatus: string | null;
+        firstName: string;
+        lastName: string;
+        email: string;
+      }
+    >();
+    const ids = [...new Set(userIds)];
+    if (ids.length === 0) return out;
+    const rows: Array<{
+      user_id: string;
+      first_name: string;
+      last_name: string;
+      email: string;
+      display_name: string | null;
+      trader_type: string | null;
+      trader_status: string | null;
+    }> = await this.conn(trx)('users as u')
+      .leftJoin(`${TABLE} as t`, 't.user_id', 'u.id')
+      .whereIn('u.id', ids)
+      .select(
+        'u.id as user_id',
+        'u.first_name',
+        'u.last_name',
+        'u.email',
+        't.display_name',
+        't.trader_type',
+        't.status as trader_status',
+      );
+    for (const r of rows) {
+      out.set(r.user_id, {
+        userId: r.user_id,
+        displayName: r.display_name,
+        traderType: r.trader_type,
+        traderStatus: r.trader_status,
+        firstName: r.first_name,
+        lastName: r.last_name,
+        email: r.email,
+      });
+    }
+    return out;
+  }
 }

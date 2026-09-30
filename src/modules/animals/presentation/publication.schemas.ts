@@ -4,6 +4,7 @@ import { ANIMAL_SPECIES } from '../domain/animal.constants.js';
 import {
   HEALTH_STATUSES,
   PUBLICATION_INTERACTION_TYPES,
+  PUBLICATION_RESOLUTIONS,
   PUBLICATION_KINDS,
   PUBLICATION_STATUSES,
   VACCINATION_STATUSES,
@@ -162,3 +163,21 @@ export const createInteractionBodySchema = z
   })
   .strict();
 export type CreateInteractionBody = z.infer<typeof createInteractionBodySchema>;
+
+// --- outcome + contact (Adoption / Mating / Lost) ------------------
+
+/** `POST /publications/:id/resolution` — `null` reopens the listing. */
+export const setResolutionBodySchema = z
+  .object({ resolution: z.enum(PUBLICATION_RESOLUTIONS).nullable() })
+  .strict();
+export type SetResolutionBody = z.infer<typeof setResolutionBodySchema>;
+
+export const interactionParamSchema = z.object({
+  publicationId: z.string().uuid(),
+  interactionId: z.string().uuid(),
+});
+
+export const listMyInteractionsQuerySchema = paginationQuerySchema.extend({
+  kind: z.enum(PUBLICATION_KINDS).optional(),
+});
+export type ListMyInteractionsQuery = z.infer<typeof listMyInteractionsQuerySchema>;

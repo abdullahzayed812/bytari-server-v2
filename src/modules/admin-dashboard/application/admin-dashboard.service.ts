@@ -113,7 +113,14 @@ export interface AdminDashboardServiceDeps {
 export class AdminDashboardService {
   constructor(private readonly deps: AdminDashboardServiceDeps) {}
 
-  async getSummary(userId: string): Promise<AdminDashboardSummary> {
+  /**
+   * `includeRecentActivity` — the "أحدث الأنشطة" feed (audit log) is ADMIN-only;
+   * system supervisors get an empty list and the audit query is skipped.
+   */
+  async getSummary(
+    userId: string,
+    opts: { includeRecentActivity: boolean } = { includeRecentActivity: true },
+  ): Promise<AdminDashboardSummary> {
     const [
       seenMap,
       poultry,
@@ -178,6 +185,8 @@ export class AdminDashboardService {
       poultryOffersPending,
       eggOffersPending,
       tradersApproved,
+      clinicRenewalsPending,
+      officeRenewalsPending,
     ] = await Promise.all([
       this.deps.seen.getSeenMap(userId),
       this.deps.farmSubscriptionRenewals.listFarmsForAdmin({
@@ -221,7 +230,9 @@ export class AdminDashboardService {
       this.deps.supervisors.list(WINDOW),
       this.deps.conversations.listAllForAdmin(WINDOW),
       this.deps.audit.list({ ...WINDOW, action: 'ADMIN_NOTIFICATION_SENT' }),
-      this.deps.audit.list({ page: 1, pageSize: RECENT_ACTIVITY_SIZE }),
+      opts.includeRecentActivity
+        ? this.deps.audit.list({ page: 1, pageSize: RECENT_ACTIVITY_SIZE })
+        : Promise.resolve({ items: [], total: 0 }),
       this.deps.organizations.listPendingForAdmin(1, CARD_WINDOW_SIZE),
       this.deps.farmSubscriptionRenewals.listAllPendingForAdmin({
         page: 1,
@@ -322,6 +333,17 @@ export class AdminDashboardService {
       this.deps.poultryOffers.adminList({ ...WINDOW, moderationStatus: 'PENDING' }),
       this.deps.eggOffers.adminList({ ...WINDOW, moderationStatus: 'PENDING' }),
       this.deps.traders.list('APPROVED', 1, 1),
+      // Type-scoped open renewal queues — `total` is the backend count.
+      this.deps.farmSubscriptionRenewals.listAllPendingForAdmin({
+        page: 1,
+        pageSize: 1,
+        organizationType: 'CLINIC',
+      }),
+      this.deps.farmSubscriptionRenewals.listAllPendingForAdmin({
+        page: 1,
+        pageSize: 1,
+        organizationType: 'VETERINARY_OFFICE',
+      }),
     ]);
 
     const since = (id: AdminDashboardCardId) => seenMap.get(id);
@@ -352,11 +374,13 @@ export class AdminDashboardService {
         id: 'clinics',
         count: countNew(clinics.items, since('clinics')),
         activeCount: clinicsActive.total,
+        pendingRenewals: clinicRenewalsPending.total,
       },
       {
         id: 'offices',
         count: countNew(offices.items, since('offices')),
         activeCount: officesActive.total,
+        pendingRenewals: officeRenewalsPending.total,
       },
       {
         id: 'vetApprovals',

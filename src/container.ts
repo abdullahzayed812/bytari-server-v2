@@ -737,12 +737,6 @@ export function createContainer(deps: ContainerDeps): Container {
     logger,
   );
   const publicationInteractionRepository = new PublicationInteractionRepository(db);
-  const publicationInteractionService = new PublicationInteractionService(
-    publicationInteractionRepository,
-    animalPublicationService,
-    eventBus,
-    logger,
-  );
 
   // --- animal ownership transfer requests (request/acceptance) -----
   const animalTransferRequestRepository = new AnimalTransferRequestRepository(db);
@@ -1127,6 +1121,14 @@ export function createContainer(deps: ContainerDeps): Container {
     eventBus,
     logger,
     new ChatAttachmentMedia(objectStorage),
+  );
+  // Listing contact opens an ANIMAL_PUBLICATION conversation — needs the chat service.
+  const publicationInteractionService = new PublicationInteractionService(
+    publicationInteractionRepository,
+    animalPublicationService,
+    chatService,
+    eventBus,
+    logger,
   );
   const syndicateMemberService = new SyndicateMemberService(
     db,

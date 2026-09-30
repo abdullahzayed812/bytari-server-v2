@@ -7,7 +7,12 @@ import type { ObjectStorage } from '../../../infra/storage/index.js';
 import { AuditAction, AuditEntityType, type AuditContext } from '../../audit/audit.types.js';
 import type { AuditService } from '../../audit/audit.service.js';
 import { PublicationPolicy } from '../domain/publication.policy.js';
-import { PUBLICATION_AUDIT_ACTIONS, PUBLICATION_EVENTS } from '../domain/publication.constants.js';
+import {
+  PUBLICATION_AUDIT_ACTIONS,
+  PUBLICATION_EVENTS,
+  RESOLUTIONS_BY_KIND,
+  type PublicationResolution,
+} from '../domain/publication.constants.js';
 import {
   toModerationPublicationDTO,
   toMyPublicationDTO,
@@ -114,6 +119,13 @@ export class AnimalPublicationService {
       ),
     );
     return urls.filter((u): u is string => u !== null);
+  }
+
+  /** A user's avatar key → client URL (same resolution rule as the gallery). */
+  async resolveUserAvatar(key: string | null): Promise<string | null> {
+    if (!key) return null;
+    const [url] = await this.resolveGalleryUrls([key]);
+    return url ?? null;
   }
 
   private async withResolvedGallery(
@@ -470,9 +482,13 @@ export class AnimalPublicationService {
   }
 
   /** Internal helper for {@link PublicationInteractionService} — the publication owner + status + kind. */
-  async loadOwnershipContext(
-    publicationId: string,
-  ): Promise<{ id: string; createdByUserId: string; status: string; kind: string } | null> {
+  async loadOwnershipContext(publicationId: string): Promise<{
+    id: string;
+    createdByUserId: string;
+    status: string;
+    kind: string;
+    resolution: PublicationResolution | null;
+  } | null> {
     const found = await this.publications.findById(publicationId);
     if (!found) return null;
     return {
@@ -480,6 +496,68 @@ export class AnimalPublicationService {
       createdByUserId: found.createdByUserId,
       status: found.status,
       kind: found.kind,
+      resolution: found.resolution,
     };
+  }
+
+  /**
+   * The listing OWNER records its outcome — LOST → FOUND, ADOPTION → ADOPTED,
+   * any kind → CLOSED — or reopens it (`null`). Only an APPROVED listing has an
+   * outcome; the moderation `status` is never touched. A resolved listing
+   * leaves the public browse lists and stops accepting new requests.
+   */
+  async resolve(
+    publicationId: string,
+    resolution: PublicationResolution | null,
+    actor: PublicationActor,
+  ): Promise<PublicPublicationDTO> {
+    const existing = await this.publications.findById(publicationId);
+    // Not the owner → 404, so listing ids do not leak.
+    if (!existing || existing.createdByUserId !== actor.actorUserId) {
+      throw new NotFoundError('Publication not found');
+    }
+    if (existing.status !== 'APPROVED') {
+      throw new ConflictError('Only a published (approved) listing can be marked resolved', {
+        code: ErrorCode.PUBLICATION_NOT_APPROVED,
+      });
+    }
+    if (resolution !== null && !RESOLUTIONS_BY_KIND[existing.kind].includes(resolution)) {
+      throw new BadRequestError(
+        `"${resolution}" is not a valid outcome for a ${existing.kind} listing`,
+        {
+          code: ErrorCode.VALIDATION_ERROR,
+        },
+      );
+    }
+    if (existing.resolution !== resolution) {
+      await this.db.transaction(async (tx) => {
+        await this.publications.setResolution(publicationId, resolution, actor.actorUserId, tx);
+        await this.audit.record(
+          {
+            action: AuditAction.ANIMAL_PUBLICATION_RESOLVED,
+            entityType: AuditEntityType.ANIMAL_PUBLICATION,
+            entityId: publicationId,
+            actorUserId: actor.actorUserId,
+            metadata: {
+              publicationId,
+              kind: existing.kind,
+              from: existing.resolution,
+              to: resolution,
+            },
+            context: actor.context,
+          },
+          tx,
+        );
+      });
+      this.events.publish('animal.publication.resolved', {
+        publicationId,
+        kind: existing.kind,
+        resolution,
+        ownerUserId: existing.createdByUserId,
+      });
+    }
+    const fresh = await this.publications.findByIdWithAnimal(publicationId);
+    if (!fresh) throw new NotFoundError('Publication not found');
+    return this.withResolvedGallery(fresh);
   }
 }

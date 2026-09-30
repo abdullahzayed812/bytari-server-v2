@@ -107,6 +107,8 @@ export const AuditAction = {
   ANIMAL_PUBLICATION_DELETED: 'ANIMAL_PUBLICATION_DELETED',
   /** An ADMIN / ANIMAL supervisor edits a listing's fields and/or its moderation status. */
   ANIMAL_PUBLICATION_UPDATED: 'ANIMAL_PUBLICATION_UPDATED',
+  /** The owner marks a listing FOUND / ADOPTED / CLOSED, or reopens it. */
+  ANIMAL_PUBLICATION_RESOLVED: 'ANIMAL_PUBLICATION_RESOLVED',
 
   // --- Veterinary Store products (Phase 10) — VETERINARY_STORE organizations only ---
   VETERINARY_STORE_PRODUCT_CREATED: 'VETERINARY_STORE_PRODUCT_CREATED',

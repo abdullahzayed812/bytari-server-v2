@@ -18,6 +18,21 @@ export type HealthStatus = (typeof HEALTH_STATUSES)[number];
 export const VACCINATION_STATUSES = ['COMPLETE', 'PARTIAL', 'NONE'] as const;
 export type VaccinationStatus = (typeof VACCINATION_STATUSES)[number];
 
+/**
+ * A listing's OUTCOME — separate from the moderation `status`. `null` =
+ * still available. `FOUND` is LOST-only, `ADOPTED` ADOPTION-only; `CLOSED`
+ * (withdrawn by the owner) applies to every kind. Mirrored by the DB CHECK
+ * `chk_animal_publications_resolution`.
+ */
+export const PUBLICATION_RESOLUTIONS = ['FOUND', 'ADOPTED', 'CLOSED'] as const;
+export type PublicationResolution = (typeof PUBLICATION_RESOLUTIONS)[number];
+
+export const RESOLUTIONS_BY_KIND: Record<PublicationKind, readonly PublicationResolution[]> = {
+  LOST: ['FOUND', 'CLOSED'],
+  ADOPTION: ['ADOPTED', 'CLOSED'],
+  MATING: ['CLOSED'],
+};
+
 /** A viewer's fire-and-forget interaction with a listing — notifies the owner, no workflow. */
 export const PUBLICATION_INTERACTION_TYPES = ['REQUEST', 'SIGHTING'] as const;
 export type PublicationInteractionType = (typeof PUBLICATION_INTERACTION_TYPES)[number];

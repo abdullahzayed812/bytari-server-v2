@@ -33,7 +33,7 @@ async function setup() {
     role: 'VETERINARIAN',
   });
   await addOrganizationMember(app, owner.accessToken, farm.id, { userId: staff.id, role: 'STAFF' });
-  const batch = await createSheepBatch(app, vet.accessToken, farm.id, {
+  const batch = await createSheepBatch(app, owner.accessToken, farm.id, {
     headCount: 150,
     arrivalDate: '2026-02-01',
   });
@@ -118,9 +118,9 @@ describe('sheep daily records', () => {
     expect(res.body.data.recordDate).toBe(businessToday());
   });
 
-  it('STAFF can read but not write daily records', async () => {
+  it('STAFF can read and add daily records but never delete them', async () => {
     const { vet, staff, farm, batch } = await setup();
-    await request(app)
+    const created = await request(app)
       .post(daily(farm.id, batch.id))
       .set(bearer(vet.accessToken))
       .send({ feedKg: 5 });
@@ -131,7 +131,17 @@ describe('sheep daily records', () => {
       .post(daily(farm.id, batch.id))
       .set(bearer(staff.accessToken))
       .send({ feedKg: 5 });
-    expect(write.status).toBe(403);
+    // one daily record per day — the vet's record already exists (409), never a 403
+    expect(write.status).toBe(409);
+    const edit = await request(app)
+      .patch(daily(farm.id, batch.id, created.body.data.id as string))
+      .set(bearer(staff.accessToken))
+      .send({ feedKg: 6 });
+    expect(edit.status).toBe(200);
+    const del = await request(app)
+      .delete(daily(farm.id, batch.id, created.body.data.id as string))
+      .set(bearer(staff.accessToken));
+    expect(del.status).toBe(403);
   });
 
   it('a non-member is denied (403)', async () => {
@@ -253,9 +263,9 @@ describe('sheep health events (treatments & vaccinations)', () => {
     expect(del.status).toBe(200);
   });
 
-  it('STAFF can read but not write health events', async () => {
+  it('STAFF can read and add health events but never delete them', async () => {
     const { vet, staff, farm, batch } = await setup();
-    await request(app)
+    const created = await request(app)
       .post(health(farm.id, batch.id))
       .set(bearer(vet.accessToken))
       .send({ kind: 'TREATMENT', name: 'مضاد حيوي', eventDate: '2026-02-05' });
@@ -265,7 +275,11 @@ describe('sheep health events (treatments & vaccinations)', () => {
       .post(health(farm.id, batch.id))
       .set(bearer(staff.accessToken))
       .send({ kind: 'TREATMENT', name: 'x', eventDate: '2026-02-05' });
-    expect(write.status).toBe(403);
+    expect(write.status).toBe(201);
+    const del = await request(app)
+      .delete(health(farm.id, batch.id, created.body.data.id as string))
+      .set(bearer(staff.accessToken));
+    expect(del.status).toBe(403);
   });
 });
 
@@ -308,9 +322,9 @@ describe('sheep individual cases', () => {
     expect(del.status).toBe(200);
   });
 
-  it('STAFF can read but not write cases', async () => {
+  it('STAFF can read and add cases but never delete them', async () => {
     const { vet, staff, farm, batch } = await setup();
-    await request(app)
+    const created = await request(app)
       .post(cases(farm.id, batch.id))
       .set(bearer(vet.accessToken))
       .send({ startedOn: '2026-02-06' });
@@ -320,6 +334,10 @@ describe('sheep individual cases', () => {
       .post(cases(farm.id, batch.id))
       .set(bearer(staff.accessToken))
       .send({ startedOn: '2026-02-06' });
-    expect(write.status).toBe(403);
+    expect(write.status).toBe(201);
+    const del = await request(app)
+      .delete(cases(farm.id, batch.id, created.body.data.id as string))
+      .set(bearer(staff.accessToken));
+    expect(del.status).toBe(403);
   });
 });

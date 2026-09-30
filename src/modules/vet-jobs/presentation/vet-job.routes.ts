@@ -14,6 +14,7 @@ import {
   VetJobSeekerProfileController,
 } from './vet-job.controllers.js';
 import {
+  adminApplicationListQuerySchema,
   applicationListQuerySchema,
   attachmentUploadUrlBodySchema,
   createApplicationBodySchema,
@@ -40,7 +41,7 @@ import {
  */
 export function createVetJobRouter(c: Container): Router {
   const attachments = new VetJobAttachmentController(c.vetJobMedia);
-  const offers = new VetJobOfferController(c.vetJobOfferService);
+  const offers = new VetJobOfferController(c.vetJobOfferService, c.vetJobApplicationService);
   const seekers = new VetJobSeekerProfileController(c.vetJobSeekerProfileService);
   const applications = new VetJobApplicationController(c.vetJobApplicationService);
 
@@ -91,7 +92,11 @@ export function createVetJobRouter(c: Container): Router {
     validate({ query: applicationListQuerySchema }),
     asyncHandler(applications.listMine),
   );
-  r.get('/applications/:id', validate({ params: idParamSchema }), asyncHandler(applications.getOne));
+  r.get(
+    '/applications/:id',
+    validate({ params: idParamSchema }),
+    asyncHandler(applications.getOne),
+  );
   r.post(
     '/applications/:id/accept',
     validate({ params: idParamSchema }),
@@ -140,7 +145,12 @@ export function createAdminVetJobRouter(c: Container): Router {
     ['/vet-job-offers', offers] as const,
     ['/vet-job-seekers', seekers] as const,
   ]) {
-    r.get(base, authorize('vet_job.read'), validate({ query: moderationQuerySchema }), asyncHandler(ctrl.list));
+    r.get(
+      base,
+      authorize('vet_job.read'),
+      validate({ query: moderationQuerySchema }),
+      asyncHandler(ctrl.list),
+    );
     r.get(
       `${base}/:id`,
       authorize('vet_job.read'),
@@ -164,7 +174,7 @@ export function createAdminVetJobRouter(c: Container): Router {
   r.get(
     '/vet-job-applications',
     authorize('vet_job.read'),
-    validate({ query: applicationListQuerySchema }),
+    validate({ query: adminApplicationListQuerySchema }),
     asyncHandler(applications.list),
   );
 

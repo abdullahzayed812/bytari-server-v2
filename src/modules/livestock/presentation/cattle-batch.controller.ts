@@ -8,6 +8,7 @@ import { requireAuth } from '../../auth/authenticate.middleware.js';
 import { requireOrganization } from '../../organizations/presentation/organization.middleware.js';
 import {
   applyFinancialVisibility,
+  assertCanChangeBatchStatus,
   canSeeFarmFinancials,
   stripFinancialInput,
 } from '../../farms/presentation/farm-financials.js';
@@ -105,6 +106,7 @@ export class CattleBatchController {
     const batch = requireCattleBatch(req);
     const body = validatedBody<UpdateCattleBatchBody>(req);
     const visible = await canSeeFarmFinancials(this.authz, req, org.id);
+    await assertCanChangeBatchStatus(this.authz, req, org.id, batch.status, body.status);
     const dto = await this.batches.update(
       org.id,
       batch.id,

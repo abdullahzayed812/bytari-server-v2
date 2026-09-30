@@ -3,9 +3,13 @@ import request from 'supertest';
 import { buildTestApp } from '../helpers/app.js';
 import { closeTestDb, ensureSchema, resetDb } from '../helpers/db.js';
 import {
+  addOrganizationMember,
+  assignOrganizationSupervisor,
   bearer,
+  createActiveOrganization,
   createOrganization,
   fixtureBytes,
+  registerAdmin,
   registerApprovedVet,
   registerUser,
 } from '../helpers/factories.js';
@@ -131,5 +135,44 @@ describe('clinic / office license editing (settings)', () => {
         replacesStorageKey: storageKey,
       });
     expect(replace.status).toBe(403);
+  });
+
+  it('an org supervisor granted organization.update manages the license; a plain member cannot', async () => {
+    const admin = await registerAdmin(app);
+    const owner = await registerApprovedVet(app);
+    const sup = await registerApprovedVet(app); // org supervisors must be approved vets
+    const staff = await registerUser(app);
+    const org = await createActiveOrganization(app, owner.accessToken, admin.accessToken, {
+      type: 'CLINIC',
+      name: 'عيادة',
+    });
+    await assignOrganizationSupervisor(app, owner.accessToken, org.id, {
+      userId: sup.id,
+      permissions: ['organization.read', 'organization.update'],
+    });
+    await addOrganizationMember(app, owner.accessToken, org.id, {
+      userId: staff.id,
+      role: 'STAFF',
+    });
+
+    const bySup = await request(app)
+      .patch(`/api/v1/organizations/${org.id}`)
+      .set(bearer(sup.accessToken))
+      .send({ licenseNumber: 'SUP-7' });
+    expect(bySup.status).toBe(200);
+    expect(bySup.body.data.details.licenseNumber).toBe('SUP-7');
+    const { res: supUpload } = await uploadLicense(sup.accessToken, org.id, 'sup.jpg');
+    expect(supUpload.status).toBe(200);
+
+    const byStaff = await request(app)
+      .patch(`/api/v1/organizations/${org.id}`)
+      .set(bearer(staff.accessToken))
+      .send({ licenseNumber: 'STAFF-1' });
+    expect(byStaff.status).toBe(403);
+    const staffRemove = await request(app)
+      .delete(`/api/v1/organizations/${org.id}/license-documents`)
+      .query({ storageKey: supUpload.body.data.details.licenseDocumentKeys[0] as string })
+      .set(bearer(staff.accessToken));
+    expect(staffRemove.status).toBe(403);
   });
 });

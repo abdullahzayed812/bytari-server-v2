@@ -112,6 +112,10 @@ export const ErrorCode = {
   PUBLICATION_NOT_PENDING: 'PUBLICATION_NOT_PENDING',
   /** An open (PENDING) publication of this kind already exists for the animal. */
   PUBLICATION_ALREADY_OPEN: 'PUBLICATION_ALREADY_OPEN',
+  /** Outcome (FOUND / ADOPTED / CLOSED) only applies to an APPROVED listing. */
+  PUBLICATION_NOT_APPROVED: 'PUBLICATION_NOT_APPROVED',
+  /** A FOUND / ADOPTED / CLOSED listing no longer accepts requests or reports. */
+  PUBLICATION_RESOLVED: 'PUBLICATION_RESOLVED',
 
   // --- Veterinary store & products (Phase 10) ---
   /** A stock adjustment would take the product's stock below zero. */

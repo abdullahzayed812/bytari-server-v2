@@ -38,6 +38,7 @@ export function createAdminOrganizationRouter(c: Container): Router {
     c.organizationSupervisorService,
     c.farmSubscriptionRenewalRepository,
     c.farmSubscriptionService,
+    c.userService,
   );
   /**
    * `authorize()` for the organization-admin keys, TYPE-SCOPED for system

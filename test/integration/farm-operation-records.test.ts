@@ -31,7 +31,7 @@ async function setup() {
     role: 'VETERINARIAN',
   });
   await addOrganizationMember(app, owner.accessToken, farm.id, { userId: staff.id, role: 'STAFF' });
-  const flock = await createPoultryFlock(app, vet.accessToken, farm.id, {
+  const flock = await createPoultryFlock(app, owner.accessToken, farm.id, {
     birdCount: 500,
     arrivalDate: '2026-02-01',
   });
@@ -60,12 +60,12 @@ describe('farm operation records — creator, details, edit, delete', () => {
       .set(bearer(staff.accessToken));
     expect(read.status).toBe(200);
     expect(read.body.data.createdBy.id).toBe(vet.id);
-    // … but may not edit or delete it.
+    // … and may update it (operational entry), but never delete it (below).
     const staffPatch = await request(app)
       .patch(`${flockBase(farm.id, flock.id)}/cases/${id}`)
       .set(bearer(staff.accessToken))
       .send({ status: 'RECOVERED' });
-    expect(staffPatch.status).toBe(403);
+    expect(staffPatch.status).toBe(200);
 
     const patch = await request(app)
       .patch(`${flockBase(farm.id, flock.id)}/cases/${id}`)
@@ -146,8 +146,8 @@ describe('farm operation records — creator, details, edit, delete', () => {
   });
 
   it('sheep cases support count + status edits and deletion too', async () => {
-    const { vet, farm } = await setup();
-    const batch = await createSheepBatch(app, vet.accessToken, farm.id, {});
+    const { vet, owner, farm } = await setup();
+    const batch = await createSheepBatch(app, owner.accessToken, farm.id, {});
     const base = `/api/v1/organizations/${farm.id}/sheep/batches/${batch.id}`;
     const c = await request(app)
       .post(`${base}/cases`)

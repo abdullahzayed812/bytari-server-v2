@@ -37,7 +37,10 @@ export class VetJobAttachmentController {
 }
 
 export class VetJobOfferController {
-  constructor(private readonly offers: VetJobOfferService) {}
+  constructor(
+    private readonly offers: VetJobOfferService,
+    private readonly applications: VetJobApplicationService,
+  ) {}
 
   create = async (req: Request, res: Response): Promise<void> => {
     const body = validatedBody<CreateOfferBody>(req);
@@ -55,7 +58,7 @@ export class VetJobOfferController {
   };
   getPublic = async (req: Request, res: Response): Promise<void> => {
     const { id } = validatedParams<{ id: string }>(req);
-    sendSuccess(res, await this.offers.getPublic(id));
+    sendSuccess(res, await this.applications.getOfferForViewer(id, requireAuth(req).userId));
   };
   getMine = async (req: Request, res: Response): Promise<void> => {
     const { id } = validatedParams<{ id: string }>(req);
@@ -111,7 +114,11 @@ export class VetJobApplicationController {
   apply = async (req: Request, res: Response): Promise<void> => {
     const { id: jobOfferId } = validatedParams<{ id: string }>(req);
     const body = validatedBody<CreateApplicationBody>(req);
-    sendSuccess(res, await this.applications.apply(jobOfferId, body, actor(req)), StatusCodes.CREATED);
+    sendSuccess(
+      res,
+      await this.applications.apply(jobOfferId, body, actor(req)),
+      StatusCodes.CREATED,
+    );
   };
   listForOffer = async (req: Request, res: Response): Promise<void> => {
     const { id: jobOfferId } = validatedParams<{ id: string }>(req);
@@ -143,6 +150,9 @@ export class VetJobApplicationController {
   };
   startConversationWithSeeker = async (req: Request, res: Response): Promise<void> => {
     const { id: seekerProfileId } = validatedParams<{ id: string }>(req);
-    sendSuccess(res, await this.applications.startConversationWithSeeker(seekerProfileId, actor(req)));
+    sendSuccess(
+      res,
+      await this.applications.startConversationWithSeeker(seekerProfileId, actor(req)),
+    );
   };
 }

@@ -14,7 +14,9 @@ import {
 
 const money = z.string().regex(/^\d{1,10}(\.\d{1,2})?$/, 'invalid amount');
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'expected YYYY-MM-DD');
-const listItems = z.array(z.string().trim().min(1).max(VET_JOB_LIST_ITEM_MAX)).max(VET_JOB_MAX_LIST_ITEMS);
+const listItems = z
+  .array(z.string().trim().min(1).max(VET_JOB_LIST_ITEM_MAX))
+  .max(VET_JOB_MAX_LIST_ITEMS);
 const phone = z.string().trim().min(5).max(30);
 
 export const idParamSchema = z.object({ id: z.string().uuid() });
@@ -55,10 +57,9 @@ export const createOfferBodySchema = z
   .strict();
 export type CreateOfferBody = z.infer<typeof createOfferBodySchema>;
 
-export const updateOfferBodySchema = createOfferBodySchema.partial().refine(
-  (v) => Object.keys(v).length > 0,
-  { message: 'At least one field is required' },
-);
+export const updateOfferBodySchema = createOfferBodySchema
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, { message: 'At least one field is required' });
 export type UpdateOfferBody = z.infer<typeof updateOfferBodySchema>;
 
 export const offerBrowseQuerySchema = paginationQuerySchema.extend({
@@ -88,10 +89,9 @@ export const createSeekerProfileBodySchema = z
   .strict();
 export type CreateSeekerProfileBody = z.infer<typeof createSeekerProfileBodySchema>;
 
-export const updateSeekerProfileBodySchema = createSeekerProfileBodySchema.partial().refine(
-  (v) => Object.keys(v).length > 0,
-  { message: 'At least one field is required' },
-);
+export const updateSeekerProfileBodySchema = createSeekerProfileBodySchema
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, { message: 'At least one field is required' });
 export type UpdateSeekerProfileBody = z.infer<typeof updateSeekerProfileBodySchema>;
 
 export const seekerBrowseQuerySchema = paginationQuerySchema.extend({
@@ -122,6 +122,12 @@ export const applicationListQuerySchema = paginationQuerySchema.extend({
   status: z.enum(VET_JOB_APPLICATION_STATUSES).optional(),
 });
 export type ApplicationListQuery = z.infer<typeof applicationListQuerySchema>;
+
+/** `GET /admin/vet-job-applications` — plus an optional one-offer filter ("المتقدمون"). */
+export const adminApplicationListQuerySchema = applicationListQuerySchema.extend({
+  jobOfferId: z.string().uuid().optional(),
+});
+export type AdminApplicationListQuery = z.infer<typeof adminApplicationListQuerySchema>;
 
 // --- shared --------------------------------------------------
 

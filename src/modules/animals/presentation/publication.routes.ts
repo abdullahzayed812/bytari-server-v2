@@ -12,6 +12,9 @@ import {
   adminUpdatePublicationBodySchema,
   animalPublicationParamSchema,
   createInteractionBodySchema,
+  interactionParamSchema,
+  listMyInteractionsQuerySchema,
+  setResolutionBodySchema,
   createPublicationBodySchema,
   listAnimalPublicationsQuerySchema,
   listMinePublicationsQuerySchema,
@@ -121,6 +124,12 @@ export function createPublicPublicationRouter(c: Container): Router {
 
   // `/mine` BEFORE `/:publicationId` — same ordering rule as `/users/me`.
   r.get('/mine', validate({ query: listMinePublicationsQuerySchema }), asyncHandler(ctrl.listMine));
+  // The caller's own requests / sighting reports + each listing's outcome.
+  r.get(
+    '/interactions/mine',
+    validate({ query: listMyInteractionsQuerySchema }),
+    asyncHandler(ctrl.listMyInteractions),
+  );
 
   r.get('/', validate({ query: publicPublicationsQuerySchema }), asyncHandler(ctrl.listPublic));
   r.get(
@@ -140,6 +149,23 @@ export function createPublicPublicationRouter(c: Container): Router {
     '/:publicationId/interactions',
     validate({ params: publicationIdParamSchema, body: createInteractionBodySchema }),
     asyncHandler(ctrl.createInteraction),
+  );
+  // Owner only (404 otherwise, enforced in the services): the listing's outcome,
+  // the requests on it, and the conversation with one requester.
+  r.post(
+    '/:publicationId/resolution',
+    validate({ params: publicationIdParamSchema, body: setResolutionBodySchema }),
+    asyncHandler(ctrl.setResolution),
+  );
+  r.get(
+    '/:publicationId/interactions',
+    validate({ params: publicationIdParamSchema }),
+    asyncHandler(ctrl.listInteractions),
+  );
+  r.post(
+    '/:publicationId/interactions/:interactionId/conversation',
+    validate({ params: interactionParamSchema }),
+    asyncHandler(ctrl.openInteractionConversation),
   );
 
   return r;

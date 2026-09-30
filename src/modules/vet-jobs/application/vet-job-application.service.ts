@@ -13,6 +13,7 @@ import { VetJobPolicy } from '../domain/vet-job.policy.js';
 import type {
   ApplicationListFilter,
   CreateVetJobApplicationInput,
+  PublicVetJobOfferDTO,
   VetJobApplicationDTO,
 } from '../domain/vet-job.types.js';
 import type {
@@ -62,8 +63,10 @@ export class VetJobApplicationService {
     return {
       ...rest,
       applicant: data.applicant,
-      cvUrl: await this.media.resolveUrl(cvStorageKey),
-      photoUrl: await this.media.resolveUrl(photoStorageKey),
+      // An applicant's CV / photo are private to the poster, the applicant and
+      // admins — always short-lived signed URLs, never the public CDN URL.
+      cvUrl: await this.media.resolveSignedUrl(cvStorageKey),
+      photoUrl: await this.media.resolveSignedUrl(photoStorageKey),
       offer: data.offer,
     };
   }
@@ -88,7 +91,13 @@ export class VetJobApplicationService {
     try {
       id = await this.db.transaction(async (tx) => {
         const created = await this.applications.create(
-          { ...input, cvStorageKey, photoStorageKey, jobOfferId, applicantUserId: actor.principal.userId },
+          {
+            ...input,
+            cvStorageKey,
+            photoStorageKey,
+            jobOfferId,
+            applicantUserId: actor.principal.userId,
+          },
           tx,
         );
         await this.audit.record(
@@ -123,6 +132,26 @@ export class VetJobApplicationService {
   }
 
   // --- reads -----------------------------------------------------
+
+  /**
+   * Public offer detail + the caller-relative `viewer` block (did the caller
+   * post it / what is the caller's own application status) — lets the app
+   * hide "Apply" where the server would refuse it (own offer, already applied).
+   */
+  async getOfferForViewer(jobOfferId: string, viewerUserId: string): Promise<PublicVetJobOfferDTO> {
+    const [dto, ctx, mine] = await Promise.all([
+      this.offers.getPublic(jobOfferId),
+      this.offers.loadEngageContext(jobOfferId),
+      this.applications.findByOfferAndApplicant(jobOfferId, viewerUserId),
+    ]);
+    return {
+      ...dto,
+      viewer: {
+        isPoster: ctx?.postedByUserId === viewerUserId,
+        applicationStatus: mine?.status ?? null,
+      },
+    };
+  }
 
   /** Applications received across ALL of the caller's job offers ("طلبات التقديم الواردة"). */
   async listForPoster(
@@ -169,7 +198,7 @@ export class VetJobApplicationService {
   // --- moderation oversight (ADMIN / VET_JOBS supervisor, read-only) -----
 
   async listForModeration(
-    filter: ApplicationListFilter,
+    filter: ApplicationListFilter & { jobOfferId?: string },
   ): Promise<{ items: VetJobApplicationDTO[]; total: number }> {
     const { items, total } = await this.applications.listForModeration(filter);
     return { items: await Promise.all(items.map((i) => this.toDTO(i))), total };
@@ -282,7 +311,9 @@ export class VetJobApplicationService {
       throw new NotFoundError('Job-seeker profile not found');
     }
     if (profile.userId === actor.principal.userId) {
-      throw new ForbiddenError('You cannot chat with yourself', { code: ErrorCode.PERMISSION_DENIED });
+      throw new ForbiddenError('You cannot chat with yourself', {
+        code: ErrorCode.PERMISSION_DENIED,
+      });
     }
     const { conversation } = await this.chat.getOrCreateDeal(
       { actorUserId: actor.principal.userId, context: actor.context },

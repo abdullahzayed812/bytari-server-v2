@@ -1289,7 +1289,12 @@ export async function blockThreadSender(
 export async function setAiSettings(
   app: Express,
   adminToken: string,
-  patch: { consultationAiEnabled?: boolean; inquiryAiEnabled?: boolean },
+  patch: {
+    consultationAiEnabled?: boolean;
+    inquiryAiEnabled?: boolean;
+    consultationAiInstruction?: string | null;
+    inquiryAiInstruction?: string | null;
+  },
 ): Promise<request.Response> {
   return request(app).patch('/api/v1/admin/ai-settings').set(bearer(adminToken)).send(patch);
 }

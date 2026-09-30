@@ -90,10 +90,15 @@ describe('POST /organizations/cattle-farms — Add Cattle Farm', () => {
 });
 
 describe('cattle batches — CRUD', () => {
-  it('a farm veterinarian can create, read, list, update and delete a batch', async () => {
-    const { vet, farm } = await setup();
+  it('the owner creates / deletes a batch; a farm veterinarian reads, lists and updates it', async () => {
+    const { owner, vet, farm } = await setup();
+    const vetCreate = await request(app)
+      .post(batchPath(farm.id))
+      .set(bearer(vet.accessToken))
+      .send({ name: 'x', headCount: 1, arrivalDate: '2026-01-01' });
+    expect(vetCreate.status).toBe(403);
 
-    const create = await request(app).post(batchPath(farm.id)).set(bearer(vet.accessToken)).send({
+    const create = await request(app).post(batchPath(farm.id)).set(bearer(owner.accessToken)).send({
       name: 'حقل الأبقار الأول',
       breed: 'هولشتاين',
       headCount: 60,
@@ -110,7 +115,7 @@ describe('cattle batches — CRUD', () => {
       name: 'حقل الأبقار الأول',
       headCount: 60,
       status: 'ACTIVE',
-      createdByUserId: vet.id,
+      createdByUserId: owner.id,
     });
 
     const read = await request(app).get(batchPath(farm.id, id)).set(bearer(vet.accessToken));
@@ -131,18 +136,27 @@ describe('cattle batches — CRUD', () => {
     expect(upd.body.data.headCount).toBe(58);
     expect(upd.body.data.cowCount).toBe(43);
 
-    const del = await request(app).delete(batchPath(farm.id, id)).set(bearer(vet.accessToken));
+    const vetDel = await request(app).delete(batchPath(farm.id, id)).set(bearer(vet.accessToken));
+    expect(vetDel.status).toBe(403);
+    const del = await request(app).delete(batchPath(farm.id, id)).set(bearer(owner.accessToken));
     expect(del.status).toBe(200);
     expect(await getTestDb()('cattle_batches').where({ id })).toHaveLength(0);
   });
 
   it('closing a batch stamps closed_at and blocks further content edits (409)', async () => {
-    const { vet, farm } = await setup();
-    const batch = await createCattleBatch(app, vet.accessToken, farm.id);
+    const { owner, vet, farm } = await setup();
+    const batch = await createCattleBatch(app, owner.accessToken, farm.id);
+
+    // selling / closing is owner-level
+    const vetClose = await request(app)
+      .patch(batchPath(farm.id, batch.id))
+      .set(bearer(vet.accessToken))
+      .send({ status: 'CLOSED' });
+    expect(vetClose.status).toBe(403);
 
     const close = await request(app)
       .patch(batchPath(farm.id, batch.id))
-      .set(bearer(vet.accessToken))
+      .set(bearer(owner.accessToken))
       .send({ status: 'CLOSED' });
     expect(close.status).toBe(200);
     expect(close.body.data.status).toBe('CLOSED');
@@ -157,7 +171,7 @@ describe('cattle batches — CRUD', () => {
 
     const reopen = await request(app)
       .patch(batchPath(farm.id, batch.id))
-      .set(bearer(vet.accessToken))
+      .set(bearer(owner.accessToken))
       .send({ status: 'ACTIVE' });
     expect(reopen.status).toBe(200);
     expect(reopen.body.data.closedAt).toBeNull();
@@ -179,12 +193,12 @@ describe('cattle batches — CRUD', () => {
   });
 
   it('supports the status list filter', async () => {
-    const { vet, farm } = await setup();
-    const a = await createCattleBatch(app, vet.accessToken, farm.id);
-    await createCattleBatch(app, vet.accessToken, farm.id);
+    const { owner, vet, farm } = await setup();
+    const a = await createCattleBatch(app, owner.accessToken, farm.id);
+    await createCattleBatch(app, owner.accessToken, farm.id);
     await request(app)
       .patch(batchPath(farm.id, a.id))
-      .set(bearer(vet.accessToken))
+      .set(bearer(owner.accessToken))
       .send({ status: 'CLOSED' });
 
     const closed = await request(app)
@@ -206,8 +220,8 @@ describe('cattle batches — authorization', () => {
   });
 
   it('a farm STAFF member can read but not write', async () => {
-    const { vet, staff, farm } = await setup();
-    await createCattleBatch(app, vet.accessToken, farm.id);
+    const { owner, staff, farm } = await setup();
+    await createCattleBatch(app, owner.accessToken, farm.id);
 
     const read = await request(app).get(batchPath(farm.id)).set(bearer(staff.accessToken));
     expect(read.status).toBe(200);
@@ -238,7 +252,7 @@ describe('cattle batches — authorization', () => {
     expect(write.status).toBe(403);
   });
 
-  it('a veterinarian who joined via the code can manage cattle batches', async () => {
+  it('a veterinarian who joined via the code reads batches but cannot create one', async () => {
     const admin = await registerAdmin(app);
     const owner = await registerApprovedVet(app);
     const vet = await registerApprovedVet(app);
@@ -250,7 +264,9 @@ describe('cattle batches — authorization', () => {
       headCount: 30,
       arrivalDate: '2026-01-02',
     });
-    expect(res.status).toBe(201);
+    expect(res.status).toBe(403);
+    const read = await request(app).get(batchPath(farm.id)).set(bearer(vet.accessToken));
+    expect(read.status).toBe(200);
   });
 
   it('denies a non-member (403)', async () => {
@@ -308,8 +324,8 @@ describe('cattle batches — cross-farm isolation (IDOR)', () => {
   });
 
   it('a batch id from Farm A is invisible under Farm B’s URL (404, not 200)', async () => {
-    const { vet, farm: farmA } = await setup();
-    const batchA = await createCattleBatch(app, vet.accessToken, farmA.id);
+    const { owner, farm: farmA } = await setup();
+    const batchA = await createCattleBatch(app, owner.accessToken, farmA.id);
 
     const admin2 = await registerAdmin(app);
     const ownerB = await registerApprovedVet(app);

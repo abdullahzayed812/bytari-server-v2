@@ -54,6 +54,12 @@ export interface AdminDashboardCard {
    * listing — never a second bespoke query.
    */
   activeCount: number;
+  /**
+   * PENDING subscription renewal requests for this section's organization
+   * type — the TOTAL open queue (not "new since seen"). Only set on the
+   * subscription-capable organization cards (`clinics`, `offices`).
+   */
+  pendingRenewals?: number;
 }
 
 export interface AdminActivityItem {

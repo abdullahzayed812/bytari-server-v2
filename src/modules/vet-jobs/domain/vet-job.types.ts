@@ -70,6 +70,12 @@ export interface PublicVetJobOfferDTO {
   contactEmail: string | null;
   applicationDeadline: string | null;
   publishedAt: string;
+  /**
+   * Caller-relative state (detail endpoint only): whether the caller posted
+   * this offer, and the status of the caller's own application, if any — so
+   * the app never offers "Apply" where the server would refuse it.
+   */
+  viewer?: { isPoster: boolean; applicationStatus: VetJobApplicationStatus | null };
 }
 
 export interface VetJobOfferRow {
@@ -165,8 +171,10 @@ export interface VetJobSeekerProfile {
   updatedAt: string;
 }
 
-export interface VetJobSeekerProfileDTO
-  extends Omit<VetJobSeekerProfile, 'cvStorageKey' | 'photoStorageKey'> {
+export interface VetJobSeekerProfileDTO extends Omit<
+  VetJobSeekerProfile,
+  'cvStorageKey' | 'photoStorageKey'
+> {
   user: VetJobUserSummary;
   cvUrl: string | null;
   photoUrl: string | null;
@@ -264,8 +272,10 @@ export interface VetJobApplication {
   updatedAt: string;
 }
 
-export interface VetJobApplicationDTO
-  extends Omit<VetJobApplication, 'cvStorageKey' | 'photoStorageKey'> {
+export interface VetJobApplicationDTO extends Omit<
+  VetJobApplication,
+  'cvStorageKey' | 'photoStorageKey'
+> {
   applicant: VetJobUserSummary;
   cvUrl: string | null;
   photoUrl: string | null;

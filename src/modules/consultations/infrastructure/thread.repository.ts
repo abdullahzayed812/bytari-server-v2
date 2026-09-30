@@ -92,7 +92,11 @@ export class ThreadRepository {
     return rowToThread(row);
   }
 
-  async close(id: string, closedByUserId: string, trx: Knex.Transaction): Promise<SupportThread> {
+  async close(
+    id: string,
+    closedByUserId: string | null,
+    trx: Knex.Transaction,
+  ): Promise<SupportThread> {
     const [row] = (await trx(this.cfg.threadTable)
       .where({ id })
       .update({

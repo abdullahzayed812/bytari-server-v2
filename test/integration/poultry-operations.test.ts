@@ -31,7 +31,7 @@ async function setup() {
     role: 'VETERINARIAN',
   });
   await addOrganizationMember(app, owner.accessToken, farm.id, { userId: staff.id, role: 'STAFF' });
-  const flock = await createPoultryFlock(app, vet.accessToken, farm.id, {
+  const flock = await createPoultryFlock(app, owner.accessToken, farm.id, {
     birdCount: 5000,
     arrivalDate: '2026-02-01',
   });
@@ -109,9 +109,9 @@ describe('poultry daily records', () => {
     expect(res.body.data.recordDate).toBe(businessToday());
   });
 
-  it('STAFF can read but not write daily records', async () => {
+  it('STAFF can read and add daily records but never delete them', async () => {
     const { vet, staff, farm, flock } = await setup();
-    await request(app)
+    const created = await request(app)
       .post(daily(farm.id, flock.id))
       .set(bearer(vet.accessToken))
       .send({ feedKg: 5 });
@@ -122,7 +122,17 @@ describe('poultry daily records', () => {
       .post(daily(farm.id, flock.id))
       .set(bearer(staff.accessToken))
       .send({ feedKg: 5 });
-    expect(write.status).toBe(403);
+    // one daily record per day — the vet's record already exists (409), never a 403
+    expect(write.status).toBe(409);
+    const edit = await request(app)
+      .patch(daily(farm.id, flock.id, created.body.data.id as string))
+      .set(bearer(staff.accessToken))
+      .send({ feedKg: 6 });
+    expect(edit.status).toBe(200);
+    const del = await request(app)
+      .delete(daily(farm.id, flock.id, created.body.data.id as string))
+      .set(bearer(staff.accessToken));
+    expect(del.status).toBe(403);
   });
 
   it('a non-member is denied (403)', async () => {

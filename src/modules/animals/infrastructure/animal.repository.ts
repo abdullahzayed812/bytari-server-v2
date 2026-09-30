@@ -153,6 +153,10 @@ export class AnimalRepository {
       qb.leftJoin('animal_ownerships as o', function joinCurrent() {
         this.on('o.animal_id', 'a.id').andOnNull('o.ended_at');
       }).leftJoin('users as u', 'u.id', 'o.owner_user_id');
+      // Admin "Pets" = the registered pet PROFILES. Animals created only as the
+      // subject of an Adoption / Mating / Lost listing are a separate domain
+      // (`listing_only`) and are managed from the listings section.
+      qb.where('a.listing_only', false);
       if (filter.ownerUserId) qb.where('o.owner_user_id', filter.ownerUserId);
       if (filter.status) qb.where('a.status', filter.status);
       if (filter.species) qb.where('a.species', filter.species);

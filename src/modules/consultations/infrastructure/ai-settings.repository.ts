@@ -6,6 +6,8 @@ const TABLE = 'ai_settings';
 export interface AiSettingRow {
   key: string;
   enabled: boolean;
+  /** Admin-defined fixed instruction for the AI (`null` = built-in prompt only). */
+  instruction: string | null;
   updated_by_user_id: string | null;
   updated_at: Date;
 }
@@ -24,6 +26,22 @@ export class AiSettingsRepository {
   async isEnabled(key: AiSettingKey, trx?: Knex.Transaction): Promise<boolean> {
     const row = await this.conn(trx)<AiSettingRow>(TABLE).where({ key }).first();
     return row?.enabled ?? false;
+  }
+
+  async getInstruction(key: AiSettingKey, trx?: Knex.Transaction): Promise<string | null> {
+    const row = await this.conn(trx)<AiSettingRow>(TABLE).where({ key }).first();
+    return row?.instruction ?? null;
+  }
+
+  async setInstruction(
+    key: AiSettingKey,
+    instruction: string | null,
+    updatedByUserId: string,
+    trx: Knex.Transaction,
+  ): Promise<void> {
+    const patch = { instruction, updated_by_user_id: updatedByUserId, updated_at: trx.fn.now() };
+    const updated = await trx(TABLE).where({ key }).update(patch);
+    if (updated === 0) await trx(TABLE).insert({ key, enabled: false, ...patch });
   }
 
   async all(trx?: Knex.Transaction): Promise<AiSettingRow[]> {

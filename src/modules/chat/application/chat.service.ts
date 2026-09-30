@@ -91,7 +91,10 @@ export class ChatService {
 
   /** Conversation-level "may new messages be posted here" rule (shared by send + attachment upload). */
   private async assertWritable(conversation: Conversation): Promise<void> {
-    if (conversation.type === 'PET_OWNER_VETERINARIAN') {
+    if (
+      conversation.type === 'PET_OWNER_VETERINARIAN' ||
+      conversation.type === 'ANIMAL_PUBLICATION'
+    ) {
       if (conversation.status === 'CLOSED') {
         throw new ForbiddenError('This conversation has been closed — messaging is disabled', {
           code: ErrorCode.CONVERSATION_CLOSED,
@@ -153,6 +156,12 @@ export class ChatService {
       // row; no org / membership involved.
       if (userId === conversation.petOwnerUserId) return 'PET_OWNER';
       if (userId === conversation.veterinarianUserId) return 'VETERINARIAN';
+      return null;
+    }
+    if (conversation.type === 'ANIMAL_PUBLICATION') {
+      // Listing contact — exactly the two users; nobody else, ever.
+      if (userId === conversation.petOwnerUserId) return 'PET_OWNER';
+      if (userId === conversation.memberUserId) return 'LISTING_OWNER';
       return null;
     }
     if (
@@ -619,6 +628,102 @@ export class ChatService {
   // "Chat immediately" (before any engagement is accepted) and "on accept"
   // both funnel through `getOrCreateDeal`.
 
+  /**
+   * Adoption / Mating / Lost listing contact: the interested user ↔ the listing
+   * owner, one conversation per (publication, interested user), pinned to the
+   * publication. Called by the animals module after it has verified the
+   * listing (approved, available, not the owner's own). Idempotent.
+   */
+  async getOrCreatePublicationContact(
+    actor: ChatActor,
+    params: { publicationId: string; interestedUserId: string; ownerUserId: string },
+  ): Promise<{ conversation: ConversationDTO; created: boolean }> {
+    const { publicationId, interestedUserId, ownerUserId } = params;
+    if (interestedUserId === ownerUserId) {
+      throw new BadRequestError('A listing contact needs two distinct users');
+    }
+    if (actor.actorUserId !== interestedUserId && actor.actorUserId !== ownerUserId) {
+      throw new ForbiddenError('Only the two parties can open this conversation');
+    }
+
+    const existing = await this.conversations.findPublicationContact(
+      publicationId,
+      interestedUserId,
+    );
+    if (existing) {
+      const side = await this.assertAccess(actor.actorUserId, existing);
+      return {
+        conversation: await this.decorate(actor.actorUserId, existing, side),
+        created: false,
+      };
+    }
+
+    let conversation: Conversation;
+    try {
+      conversation = await this.db.transaction(async (tx) => {
+        const created = await this.conversations.create(
+          {
+            type: 'ANIMAL_PUBLICATION',
+            organizationId: null,
+            petOwnerUserId: interestedUserId,
+            memberUserId: ownerUserId,
+            veterinarianUserId: null,
+            subjectType: 'ANIMAL_PUBLICATION',
+            subjectId: publicationId,
+            createdByUserId: actor.actorUserId,
+          },
+          tx,
+        );
+        await this.conversations.addParticipants(
+          [
+            { conversationId: created.id, userId: interestedUserId, role: 'PET_OWNER' },
+            { conversationId: created.id, userId: ownerUserId, role: 'LISTING_OWNER' },
+          ],
+          tx,
+        );
+        await this.audit.record(
+          {
+            action: AuditAction.CONVERSATION_CREATED,
+            entityType: AuditEntityType.CONVERSATION,
+            entityId: created.id,
+            actorUserId: actor.actorUserId,
+            metadata: { conversationId: created.id, type: 'ANIMAL_PUBLICATION', publicationId },
+            context: actor.context,
+          },
+          tx,
+        );
+        return created;
+      });
+    } catch (err) {
+      if (isUniqueViolation(err)) {
+        const raced = await this.conversations.findPublicationContact(
+          publicationId,
+          interestedUserId,
+        );
+        if (raced) {
+          const side = await this.assertAccess(actor.actorUserId, raced);
+          return {
+            conversation: await this.decorate(actor.actorUserId, raced, side),
+            created: false,
+          };
+        }
+      }
+      throw err;
+    }
+
+    this.events.publish('chat.conversation.created', {
+      conversationId: conversation.id,
+      organizationId: null,
+      type: conversation.type,
+      participantUserIds: [interestedUserId, ownerUserId],
+    });
+    const side = await this.assertAccess(actor.actorUserId, conversation);
+    return {
+      conversation: await this.decorate(actor.actorUserId, conversation, side),
+      created: true,
+    };
+  }
+
   async getOrCreateDeal(
     actor: ChatActor,
     params: {
@@ -993,6 +1098,9 @@ export class ChatService {
     } else if (conversation.type === 'PET_OWNER_VETERINARIAN') {
       counterpartUserId =
         side === 'PET_OWNER' ? conversation.veterinarianUserId : conversation.petOwnerUserId;
+    } else if (conversation.type === 'ANIMAL_PUBLICATION') {
+      counterpartUserId =
+        side === 'PET_OWNER' ? conversation.memberUserId : conversation.petOwnerUserId;
     } else {
       counterpartUserId = conversation.memberUserId;
     }

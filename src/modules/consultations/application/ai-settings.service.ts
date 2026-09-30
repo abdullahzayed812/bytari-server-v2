@@ -14,11 +14,22 @@ export interface AiSettingsActor {
 export interface AiSettingsView {
   consultationAiEnabled: boolean;
   inquiryAiEnabled: boolean;
+  /** Admin-defined fixed instruction given to the AI with every consultation (`null` = none). */
+  consultationAiInstruction: string | null;
+  inquiryAiInstruction: string | null;
 }
 
-const KEY_BY_FIELD: Record<keyof AiSettingsView, AiSettingKey> = {
+type EnabledField = 'consultationAiEnabled' | 'inquiryAiEnabled';
+type InstructionField = 'consultationAiInstruction' | 'inquiryAiInstruction';
+
+const KEY_BY_FIELD: Record<EnabledField, AiSettingKey> = {
   consultationAiEnabled: 'CONSULTATION_AI',
   inquiryAiEnabled: 'INQUIRY_AI',
+};
+
+const INSTRUCTION_KEY_BY_FIELD: Record<InstructionField, AiSettingKey> = {
+  consultationAiInstruction: 'CONSULTATION_AI',
+  inquiryAiInstruction: 'INQUIRY_AI',
 };
 
 /**
@@ -43,22 +54,60 @@ export class AiSettingsService {
     return this.repo.isEnabled(key);
   }
 
+  /** The admin's fixed instruction for this AI setting — server-side only, fed to the responder. */
+  getInstruction(key: AiSettingKey): Promise<string | null> {
+    return this.repo.getInstruction(key);
+  }
+
   async view(): Promise<AiSettingsView> {
     const rows = await this.repo.all();
-    const map = new Map(rows.map((r) => [r.key, r.enabled]));
+    const byKey = new Map(rows.map((r) => [r.key, r]));
     return {
-      consultationAiEnabled: map.get('CONSULTATION_AI') ?? false,
-      inquiryAiEnabled: map.get('INQUIRY_AI') ?? false,
+      consultationAiEnabled: byKey.get('CONSULTATION_AI')?.enabled ?? false,
+      inquiryAiEnabled: byKey.get('INQUIRY_AI')?.enabled ?? false,
+      consultationAiInstruction: byKey.get('CONSULTATION_AI')?.instruction ?? null,
+      inquiryAiInstruction: byKey.get('INQUIRY_AI')?.instruction ?? null,
     };
   }
 
   async update(actor: AiSettingsActor, patch: Partial<AiSettingsView>): Promise<AiSettingsView> {
-    const changed: Array<{ field: keyof AiSettingsView; key: AiSettingKey; enabled: boolean }> = [];
-    for (const field of Object.keys(KEY_BY_FIELD) as Array<keyof AiSettingsView>) {
+    const changed: Array<{ field: EnabledField; key: AiSettingKey; enabled: boolean }> = [];
+    for (const field of Object.keys(KEY_BY_FIELD) as EnabledField[]) {
       const value = patch[field];
       if (typeof value === 'boolean') {
         changed.push({ field, key: KEY_BY_FIELD[field], enabled: value });
       }
+    }
+    // `''` / whitespace clears the instruction (stored as NULL).
+    const instructions: Array<{ key: AiSettingKey; instruction: string | null }> = [];
+    for (const field of Object.keys(INSTRUCTION_KEY_BY_FIELD) as InstructionField[]) {
+      const value = patch[field];
+      if (value === undefined) continue;
+      const trimmed = value?.trim() ?? '';
+      instructions.push({
+        key: INSTRUCTION_KEY_BY_FIELD[field],
+        instruction: trimmed.length > 0 ? trimmed : null,
+      });
+    }
+
+    if (instructions.length > 0) {
+      await this.db.transaction(async (tx) => {
+        for (const i of instructions) {
+          await this.repo.setInstruction(i.key, i.instruction, actor.actorUserId, tx);
+          await this.audit.record(
+            {
+              action: AuditAction.AI_SETTING_UPDATED,
+              entityType: AuditEntityType.AI_SETTING,
+              entityId: null,
+              actorUserId: actor.actorUserId,
+              // Length only — the instruction text itself stays out of the audit log.
+              metadata: { key: i.key, instructionLength: i.instruction?.length ?? 0 },
+              context: actor.context,
+            },
+            tx,
+          );
+        }
+      });
     }
 
     if (changed.length > 0) {

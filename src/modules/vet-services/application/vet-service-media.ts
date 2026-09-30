@@ -84,6 +84,18 @@ export class VetServiceMedia {
           code: ErrorCode.FILE_TOO_LARGE,
         });
       }
+      // The stored object's real type (R2 storage sniffs magic bytes on `head`).
+      if (
+        head.contentType &&
+        !ALLOWED_IMAGE_MIME.includes(head.contentType as (typeof ALLOWED_IMAGE_MIME)[number])
+      ) {
+        throw new BadRequestError(
+          `the uploaded object's type "${head.contentType}" is not allowed`,
+          {
+            code: ErrorCode.UNSUPPORTED_FILE_TYPE,
+          },
+        );
+      }
     }
     return unique;
   }

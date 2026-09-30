@@ -9,7 +9,7 @@ import type { VetJobActor } from '../application/vet-job-offer.service.js';
 import type { VetJobApplicationService } from '../application/vet-job-application.service.js';
 import type { VetJobOfferService } from '../application/vet-job-offer.service.js';
 import type { VetJobSeekerProfileService } from '../application/vet-job-seeker-profile.service.js';
-import type { ApplicationListQuery, ModerationQuery, RejectBody } from './vet-job.schemas.js';
+import type { AdminApplicationListQuery, ModerationQuery, RejectBody } from './vet-job.schemas.js';
 
 function actor(req: Request): VetJobActor {
   return { principal: requireAuth(req), context: auditContextFromRequest(req) };
@@ -71,7 +71,7 @@ export class AdminVetJobApplicationController {
   constructor(private readonly applications: VetJobApplicationService) {}
 
   list = async (req: Request, res: Response): Promise<void> => {
-    const q = validatedQuery<ApplicationListQuery>(req);
+    const q = validatedQuery<AdminApplicationListQuery>(req);
     const { items, total } = await this.applications.listForModeration(q);
     sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
   };

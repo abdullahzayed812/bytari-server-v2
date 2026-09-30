@@ -1,4 +1,6 @@
 import type { Request } from 'express';
+import { ForbiddenError } from '../../../shared/errors/app-error.js';
+import { ErrorCode } from '../../../shared/errors/error-codes.js';
 import { requireAuth } from '../../auth/authenticate.middleware.js';
 import type { AuthorizationService } from '../../authorization/authorization.service.js';
 
@@ -44,4 +46,29 @@ export function stripFinancialInput<T extends { targetPricePerKg?: unknown }>(
   if (visible || body.targetPricePerKg === undefined) return body;
   const { targetPricePerKg: _dropped, ...rest } = body;
   return rest as T;
+}
+
+/**
+ * Selling a batch is a status change (ACTIVE → CLOSED, or reopening it) on the
+ * batch PATCH. `farm.*.update` alone (farm veterinarians) does NOT allow it —
+ * it needs the owner-level `farm.batch.sell` (OWNER override / ADMIN /
+ * explicit supervisor grant). A PATCH that repeats the current status is not a
+ * status change.
+ */
+export const FARM_BATCH_SELL_PERMISSION = 'farm.batch.sell';
+
+export async function assertCanChangeBatchStatus(
+  authz: AuthorizationService,
+  req: Request,
+  organizationId: string,
+  currentStatus: string,
+  requestedStatus: string | undefined,
+): Promise<void> {
+  if (requestedStatus === undefined || requestedStatus === currentStatus) return;
+  if (await authz.canInOrganization(requireAuth(req), FARM_BATCH_SELL_PERMISSION, organizationId)) {
+    return;
+  }
+  throw new ForbiddenError(`Missing required permission: ${FARM_BATCH_SELL_PERMISSION}`, {
+    code: ErrorCode.PERMISSION_DENIED,
+  });
 }

@@ -145,6 +145,21 @@ export class ConversationRepository {
     return rowToConversation(row);
   }
 
+  async findPublicationContact(
+    publicationId: string,
+    interestedUserId: string,
+    trx?: Knex.Transaction,
+  ): Promise<Conversation | null> {
+    const row = await this.conn(trx)<ConversationRow>(T_CONV)
+      .where({
+        type: 'ANIMAL_PUBLICATION',
+        subject_id: publicationId,
+        pet_owner_user_id: interestedUserId,
+      })
+      .first();
+    return row ? rowToConversation(row) : null;
+  }
+
   async findPetOwnerVeterinarian(
     petOwnerUserId: string,
     veterinarianUserId: string,

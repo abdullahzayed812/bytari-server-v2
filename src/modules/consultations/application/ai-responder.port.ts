@@ -19,6 +19,8 @@ export interface AiResponderPort {
     kind: ThreadKind;
     threadId: string;
     messages: Array<{ source: MessageSource; body: string }>;
+    /** Admin-configured fixed instruction (`ai_settings.instruction`), appended to the system prompt. */
+    instruction?: string | null;
   }): Promise<string | null>;
 }
 

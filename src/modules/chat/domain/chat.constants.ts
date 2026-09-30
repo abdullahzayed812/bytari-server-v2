@@ -30,6 +30,14 @@ export const CONVERSATION_TYPES = [
    * Only ever opened by an officer holding `syndicate.member.message`.
    */
   'SYNDICATE_MEMBER',
+  /**
+   * Adoption / Mating / Lost listing contact — the interested user
+   * (`pet_owner_user_id`, participant role `PET_OWNER`) ↔ the listing owner
+   * (`member_user_id`, role `LISTING_OWNER`), pinned to the publication
+   * (`subject_type` ANIMAL_PUBLICATION). One per (listing, interested user);
+   * both sides have explicit participant rows.
+   */
+  'ANIMAL_PUBLICATION',
 ] as const;
 export type ConversationType = (typeof CONVERSATION_TYPES)[number];
 
@@ -47,6 +55,7 @@ export const PARTICIPANT_ROLES = [
   'VETERINARIAN',
   'ROOM_MEMBER',
   'SYNDICATE_MEMBER',
+  'LISTING_OWNER',
 ] as const;
 export type ParticipantRole = (typeof PARTICIPANT_ROLES)[number];
 
@@ -61,6 +70,7 @@ export const CONVERSATION_SIDES = [
   'ROOM_MEMBER',
   'SYNDICATE',
   'SYNDICATE_MEMBER',
+  'LISTING_OWNER',
 ] as const;
 export type ConversationSide = (typeof CONVERSATION_SIDES)[number];
 
@@ -73,6 +83,7 @@ export const CONVERSATION_SUBJECT_TYPES = [
   'VET_SERVICE_OFFER',
   'VET_SERVICE_LISTING_REQUEST',
   'VET_JOB_APPLICATION',
+  'ANIMAL_PUBLICATION',
 ] as const;
 export type ConversationSubjectType = (typeof CONVERSATION_SUBJECT_TYPES)[number];
 

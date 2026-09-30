@@ -32,7 +32,7 @@ async function setup() {
     role: 'VETERINARIAN',
   });
   await addOrganizationMember(app, owner.accessToken, farm.id, { userId: staff.id, role: 'STAFF' });
-  const flock = await createPoultryFlock(app, vet.accessToken, farm.id, {
+  const flock = await createPoultryFlock(app, owner.accessToken, farm.id, {
     birdCount: 1000,
     arrivalDate: '2026-02-01',
   });
@@ -138,8 +138,8 @@ describe('daily records — continuous weekly cycles (Week N: Day 1 … Day 7)',
   });
 
   it('sheep batches follow the same weekly cycle', async () => {
-    const { vet, farm } = await setup();
-    const batch = await createSheepBatch(app, vet.accessToken, farm.id, {});
+    const { vet, owner, farm } = await setup();
+    const batch = await createSheepBatch(app, owner.accessToken, farm.id, {});
     for (const d of pastDates(7)) await seedDailyRecordRow('sheep', batch.id, farm.id, d);
     const res = await request(app)
       .post(`/api/v1/organizations/${farm.id}/sheep/batches/${batch.id}/daily-records`)

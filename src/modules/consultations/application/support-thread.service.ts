@@ -284,13 +284,13 @@ export class SupportThreadService {
   }
 
   /**
-   * If AI is enabled for this kind, ask the abstraction for a reply and persist
-   * it as an `AI` message in its own transaction. A provider error is logged
-   * and swallowed — the original thread must stay intact.
-   *
-   * Called after EVERY creator message (thread creation and each follow-up),
-   * never after a responder message — so the AI keeps the conversation going
-   * for as long as the flag is on.
+   * Single-response AI (consultations / inquiries): if AI is enabled for this
+   * kind and the thread has not been answered by the AI yet, send the thread
+   * + the Admin's fixed instruction to the responder, then — in ONE
+   * transaction — persist the reply as an `AI` message and CLOSE the thread
+   * (the AI answers once; no follow-up conversation). A provider failure or
+   * an empty reply is logged and swallowed: the thread is left OPEN and
+   * untouched, never marked answered/closed.
    */
   private async maybeAiRespond(threadId: string): Promise<void> {
     // Automatic AI replies apply to CONSULTATION / INQUIRY only — SUPPORT is
@@ -298,13 +298,18 @@ export class SupportThreadService {
     if (!this.cfg.aiAutoRespond) return;
 
     let enabled = false;
+    let instruction: string | null = null;
     try {
       enabled = await this.aiSettings.isEnabled(this.cfg.aiSettingKey);
+      if (enabled) instruction = await this.aiSettings.getInstruction(this.cfg.aiSettingKey);
     } catch (err) {
       this.log.error({ err }, 'failed to read AI setting');
       return;
     }
     if (!enabled) return;
+
+    const current = await this.repo.findById(threadId);
+    if (!current || current.status === 'CLOSED' || current.aiResponded) return;
 
     let reply: string | null;
     try {
@@ -313,9 +318,10 @@ export class SupportThreadService {
         kind: this.cfg.kind,
         threadId,
         messages: items.map((m) => ({ source: m.source, body: m.body })),
+        instruction,
       });
     } catch (err) {
-      this.log.warn({ err, threadId }, 'AI responder failed — thread left intact');
+      this.log.warn({ err, threadId }, 'AI responder failed — thread left open and intact');
       return;
     }
     if (!reply) return;
@@ -328,6 +334,17 @@ export class SupportThreadService {
       );
       await this.repo.markAiResponded(threadId, tx);
       await this.repo.touchLastMessageAt(threadId, now, tx);
+      await this.repo.close(threadId, null, tx);
+      await this.audit.record(
+        {
+          action: this.cfg.auditActions.closed,
+          entityType: this.entityType,
+          entityId: threadId,
+          actorUserId: null,
+          metadata: { [this.cfg.parentIdField]: threadId, reason: 'AI_SINGLE_RESPONSE' },
+        },
+        tx,
+      );
       return created;
     });
 
@@ -335,6 +352,12 @@ export class SupportThreadService {
       [this.cfg.parentIdField]: threadId,
       messageId: message.id,
       source: 'AI',
+    });
+    // `closedByAi` — the creator was already notified of the AI answer, so the
+    // notification policy skips a second "closed" push for this close.
+    this.events.publish(this.cfg.events.closed, {
+      [this.cfg.parentIdField]: threadId,
+      closedByAi: true,
     });
   }
 

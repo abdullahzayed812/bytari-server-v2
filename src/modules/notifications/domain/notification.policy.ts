@@ -646,6 +646,11 @@ export class NotificationPolicy {
       for (const id of [conv.petOwnerUserId, conv.veterinarianUserId]) {
         if (id && id !== sender) recipients.add(id);
       }
+    } else if (conv.type === 'ANIMAL_PUBLICATION') {
+      // Listing contact — the other party (interested user ↔ listing owner).
+      for (const id of [conv.petOwnerUserId, conv.memberUserId]) {
+        if (id && id !== sender) recipients.add(id);
+      }
     } else if (conv.type === 'FARM_OWNER_MEMBER') {
       const org = conv.organizationId
         ? await this.deps.organizations.findById(conv.organizationId)
@@ -860,6 +865,9 @@ export class NotificationPolicy {
         : domain === 'INQUIRY'
           ? this.deps.inquiries
           : this.deps.support;
+    // Closed automatically right after the single AI answer — the creator was
+    // already notified of that answer; no second "closed" notification.
+    if (p.closedByAi === true) return [];
     const idField = `${domain.toLowerCase()}Id`;
     const threadId = str(p[idField]);
     const thread = await repo.findById(threadId);

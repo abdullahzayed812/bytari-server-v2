@@ -388,7 +388,7 @@ describe('consultations — AI response flow', () => {
     );
   });
 
-  it('AI enabled → replies to every creator follow-up, not just the first message', async () => {
+  it('AI enabled → answers ONCE, then the consultation is closed for everyone', async () => {
     const admin = await registerAdmin(app);
     await setAiSettings(app, admin.accessToken, { consultationAiEnabled: true });
 
@@ -396,7 +396,9 @@ describe('consultations — AI response flow', () => {
     const c = await createConsultation(app, owner.accessToken, 'my dog is limping');
     const id = c.body.data.id as string;
     expect(ai.calls).toBe(1);
+    expect(c.body.data.status).toBe('CLOSED');
 
+    // No follow-up turn: the creator cannot post, and the AI is not called again.
     const f1 = await sendThreadMessage(
       app,
       owner.accessToken,
@@ -404,37 +406,9 @@ describe('consultations — AI response flow', () => {
       id,
       'still limping',
     );
-    expect(f1.status).toBe(201);
-    const f2 = await sendThreadMessage(
-      app,
-      owner.accessToken,
-      'consultations',
-      id,
-      'and not eating',
-    );
-    expect(f2.status).toBe(201);
-    expect(ai.calls).toBe(3);
-
-    const list = await listThreadMessages(app, owner.accessToken, 'consultations', id);
-    expect(list.body.data.map((m: { source: string }) => m.source)).toEqual([
-      'USER',
-      'AI',
-      'USER',
-      'AI',
-      'USER',
-      'AI',
-    ]);
-  });
-
-  it('AI enabled → never replies to a responder (supervisor / admin) message', async () => {
-    const admin = await registerAdmin(app);
-    await setAiSettings(app, admin.accessToken, { consultationAiEnabled: true });
-
-    const owner = await registerUser(app);
-    const c = await createConsultation(app, owner.accessToken, 'q');
-    const id = c.body.data.id as string;
-    expect(ai.calls).toBe(1); // the creation only
-
+    expect(f1.status).toBe(409);
+    expect(f1.body.error.code).toBe('THREAD_NOT_WRITABLE');
+    // A responder cannot reopen the conversation by posting either.
     const reply = await sendThreadMessage(
       app,
       admin.accessToken,
@@ -442,15 +416,11 @@ describe('consultations — AI response flow', () => {
       id,
       'admin here',
     );
-    expect(reply.status).toBe(201);
-    expect(ai.calls).toBe(1); // unchanged — no AI turn after a responder
+    expect(reply.status).toBe(409);
+    expect(ai.calls).toBe(1);
 
     const list = await listThreadMessages(app, owner.accessToken, 'consultations', id);
-    expect(list.body.data.map((m: { source: string }) => m.source)).toEqual([
-      'USER',
-      'AI',
-      'ADMIN',
-    ]);
+    expect(list.body.data.map((m: { source: string }) => m.source)).toEqual(['USER', 'AI']);
   });
 
   it('AI failure does not corrupt the consultation (thread + first message still there)', async () => {

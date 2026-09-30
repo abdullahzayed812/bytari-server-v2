@@ -72,6 +72,7 @@ export class RorkAiResponder implements AiResponderPort {
     kind: ThreadKind;
     threadId: string;
     messages: Array<{ source: MessageSource; body: string }>;
+    instruction?: string | null;
   }): Promise<string | null> {
     const history: LlmMessage[] = input.messages
       .map((m) => ({ role: toRole(m.source), content: m.body.trim() }))
@@ -81,7 +82,15 @@ export class RorkAiResponder implements AiResponderPort {
     if (!history.some((m) => m.role === 'user')) return null;
 
     const payload: { messages: LlmMessage[] } = {
-      messages: [{ role: 'system', content: SYSTEM_PROMPT[input.kind] }, ...history],
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT[input.kind] },
+        // The Admin's fixed instruction — a second system message after the
+        // built-in safety priming, so it can shape but not remove it.
+        ...(input.instruction?.trim()
+          ? [{ role: 'system' as const, content: input.instruction.trim() }]
+          : []),
+        ...history,
+      ],
     };
 
     const res = await fetch(this.opts.url, {

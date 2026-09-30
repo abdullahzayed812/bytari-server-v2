@@ -47,14 +47,21 @@ export class VetJobMedia {
     return deleteReplacedObjects(this.storage, this.log, previous, next, context);
   }
 
-  async presignUpload(input: { filename: string; mimeType: string; size: number }): Promise<PresignResult> {
+  async presignUpload(input: {
+    filename: string;
+    mimeType: string;
+    size: number;
+  }): Promise<PresignResult> {
     if (!Number.isInteger(input.size) || input.size <= 0) {
       throw new BadRequestError('size must be a positive integer number of bytes');
     }
     if (input.size > VET_JOB_MAX_ATTACHMENT_BYTES) {
-      throw new BadRequestError(`attachment exceeds the ${VET_JOB_MAX_ATTACHMENT_BYTES}-byte limit`, {
-        code: ErrorCode.FILE_TOO_LARGE,
-      });
+      throw new BadRequestError(
+        `attachment exceeds the ${VET_JOB_MAX_ATTACHMENT_BYTES}-byte limit`,
+        {
+          code: ErrorCode.FILE_TOO_LARGE,
+        },
+      );
     }
     if (!(ALLOWED_MIME as readonly string[]).includes(input.mimeType)) {
       throw new BadRequestError(`MIME type "${input.mimeType}" is not allowed`, {
@@ -96,6 +103,15 @@ export class VetJobMedia {
       });
     }
     return key;
+  }
+
+  /** Private attachments (a job application's CV / photo): ALWAYS a short-lived signed URL. */
+  async resolveSignedUrl(key: string | null): Promise<string | null> {
+    if (!key) return null;
+    return this.storage.getSignedUrl(key, {
+      operation: 'get',
+      expiresIn: VET_JOB_ATTACHMENT_URL_TTL_SECONDS,
+    });
   }
 
   async resolveUrl(key: string | null): Promise<string | null> {

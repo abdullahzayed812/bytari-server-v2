@@ -94,7 +94,10 @@ export class VetJobApplicationRepository {
     return row ? rowToApplication(row) : null;
   }
 
-  async findJoinedById(id: string, trx?: Knex.Transaction): Promise<VetJobApplicationJoined | null> {
+  async findJoinedById(
+    id: string,
+    trx?: Knex.Transaction,
+  ): Promise<VetJobApplicationJoined | null> {
     const row = (await this.joined(trx, true).where('a.id', id).first()) as JoinedRow | undefined;
     return row ? this.map(row) : null;
   }
@@ -125,7 +128,10 @@ export class VetJobApplicationRepository {
     if (patch.reviewedByUserId !== undefined) dbPatch.reviewed_by_user_id = patch.reviewedByUserId;
     if (patch.reviewedAt !== undefined) dbPatch.reviewed_at = patch.reviewedAt;
     if (patch.conversationId !== undefined) dbPatch.conversation_id = patch.conversationId;
-    const [row] = (await trx(T).where({ id }).update(dbPatch).returning('*')) as VetJobApplicationRow[];
+    const [row] = (await trx(T)
+      .where({ id })
+      .update(dbPatch)
+      .returning('*')) as VetJobApplicationRow[];
     if (!row) throw new Error('vet_job_application not found on update');
     return rowToApplication(row);
   }
@@ -163,10 +169,12 @@ export class VetJobApplicationRepository {
     }, filter);
   }
 
+  /** Admin read-only list — every application, optionally one offer's applicants. */
   async listForModeration(
-    filter: ApplicationListFilter,
+    filter: ApplicationListFilter & { jobOfferId?: string },
   ): Promise<{ items: VetJobApplicationJoined[]; total: number }> {
     return this.listScoped((qb) => {
+      if (filter.jobOfferId) qb.andWhere('a.job_offer_id', filter.jobOfferId);
       if (filter.status) qb.andWhere('a.status', filter.status);
     }, filter);
   }

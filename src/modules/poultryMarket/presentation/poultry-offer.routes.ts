@@ -23,7 +23,11 @@ import {
  * parsed as a `:offerId` uuid param and rejected).
  */
 export function createPoultryOfferRouters(c: Container): { self: Router; admin: Router } {
-  const ctrl = new PoultryOfferController(c.poultryOfferService, c.authorizationService);
+  const ctrl = new PoultryOfferController(
+    c.poultryOfferService,
+    c.authorizationService,
+    c.traderRepository,
+  );
   const { authorize, requireApprovedTrader } = c.authorization;
   const { withPoultryOffer, requireOwnerOrPermission } = createMarketMiddleware({
     poultryOffers: c.poultryOfferRepository,
