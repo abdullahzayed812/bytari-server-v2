@@ -33,6 +33,18 @@ export interface DeviceToken {
 
 // --- DTOs ----------------------------------------------------
 
+/**
+ * Who a notification is from, for the inbox "From:" line (resolved on read by
+ * `NotificationSourceResolver`): the administration, an organization (e.g. a
+ * syndicate, by its own name), another user (display name only), or the
+ * platform itself.
+ */
+export type NotificationSource =
+  | { kind: 'ADMIN' }
+  | { kind: 'ORGANIZATION'; organizationId: string; organizationType: string; name: string }
+  | { kind: 'USER'; userId: string; name: string }
+  | { kind: 'SYSTEM' };
+
 export interface NotificationDTO {
   id: string;
   type: NotificationType;
@@ -45,6 +57,7 @@ export interface NotificationDTO {
   read: boolean;
   readAt: string | null;
   createdAt: string;
+  source: NotificationSource;
 }
 
 /** Device view — the raw FCM token is NEVER returned, only a short suffix. */
@@ -123,7 +136,10 @@ export function rowToDeviceToken(row: DeviceTokenRow): DeviceToken {
   };
 }
 
-export function toNotificationDTO(n: Notification): NotificationDTO {
+export function toNotificationDTO(
+  n: Notification,
+  source: NotificationSource = { kind: 'SYSTEM' },
+): NotificationDTO {
   return {
     id: n.id,
     type: n.type,
@@ -136,6 +152,7 @@ export function toNotificationDTO(n: Notification): NotificationDTO {
     read: n.readAt !== null,
     readAt: n.readAt,
     createdAt: n.createdAt,
+    source,
   };
 }
 

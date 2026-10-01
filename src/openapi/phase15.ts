@@ -68,6 +68,20 @@ const schemas: Obj = {
       read: { type: 'boolean' },
       readAt: { type: 'string', format: 'date-time', nullable: true },
       createdAt: { type: 'string', format: 'date-time' },
+      source: {
+        type: 'object',
+        description:
+          'Who the notification is from (resolved on read): ADMIN (the administration), ' +
+          'ORGANIZATION (e.g. a syndicate, with its name), USER (display name only) or SYSTEM.',
+        properties: {
+          kind: { type: 'string', enum: ['ADMIN', 'ORGANIZATION', 'USER', 'SYSTEM'] },
+          organizationId: { type: 'string', format: 'uuid' },
+          organizationType: { type: 'string' },
+          userId: { type: 'string', format: 'uuid' },
+          name: { type: 'string' },
+        },
+        required: ['kind'],
+      },
     },
   },
   DeviceToken: {

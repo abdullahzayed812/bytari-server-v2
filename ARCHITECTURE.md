@@ -290,6 +290,23 @@ additive — never deletes admin-added grants). `0020_bootstrap_admin` creates a
 ADMIN **only** when `BOOTSTRAP_ADMIN_EMAIL` + `_PASSWORD` are in the environment;
 nothing is hardcoded.
 
+### 8.5a Admin user lists — `GET /admin/users?accountType=`
+
+Every self-registered user holds the `PET_OWNER` role (veterinarians included;
+`VETERINARIAN` is additive on approval), so `?role=PET_OWNER` cannot separate
+the admin "Pet Owners" and "Veterinarians" pages. `accountType` (2026-10-01) is
+the disjoint, server-enforced split derived from the existing model:
+`VETERINARIAN` = `registration_type = 'VETERINARIAN'` OR `veterinarian_status`
+PENDING/APPROVED OR the VETERINARIAN role; `PET_OWNER` = PET_OWNER role, none
+of the above, and not ADMIN/MODERATOR staff. The admin dashboard counts use the
+same filter. The raw `role` filter is kept for staff roles.
+
+`GET /admin/veterinarians/pending` (`veterinarian.read`) returns the
+applicant's full `PublicUser` profile (gender, country, governorate, avatar,
+account status, registration type/date) so the reviewer — including a
+VETERINARIANS-domain supervisor without `user.read` — decides with the full
+record.
+
 ### 8.6 User directory — `GET /users/:id`
 
 `users/public-users.routes.ts` mounts `GET /users/:id` (authentication only, no
@@ -1340,6 +1357,17 @@ Realtime reuses the Phase-12 seam: `notification.created` / `notification.read`
 → `emitToUser(recipientUserId, …)` on the recipient's `user:<id>` room. No new
 authorizer — that room is already self-only (`SelfRoomAuthorizer`). Payloads are
 ids-only (`{ notificationId, type }`) — no title / body over the wire.
+
+**Sender (`source`, 2026-10-01).** Every `NotificationDTO` (list, get,
+mark-read) carries `source` — resolved on read by `NotificationSourceResolver`
+(one batched lookup per page, no migration, so older rows resolve too):
+`ADMIN_ANNOUNCEMENT` / admin-broadcast rows (`data.source = 'ADMIN'`) → `ADMIN`;
+organization-authored types (`ORGANIZATION_BROADCAST`,
+`SYNDICATE_ANNOUNCEMENT_PUBLISHED`, `SYNDICATE_SUBMISSION_RESPONDED`) → that
+`ORGANIZATION` by name; a staff actor (ADMIN / MODERATOR role or active system
+supervisor) → `ADMIN`; an organization the recipient is not owner/member of →
+`ORGANIZATION`; any other actor → `USER` (display name only); else `SYSTEM`.
+Admin-broadcast pushes now carry each recipient's own `notificationId`.
 
 ### 19.6 Idempotency
 

@@ -445,6 +445,14 @@ describe('notifications — admin broadcast', () => {
     await tick();
     expect((await notifRows(target.id)).map((r) => r.type)).toEqual(['ADMIN_ANNOUNCEMENT']);
     expect(push.sent).toHaveLength(1);
+    // The push carries the recipient's own row id (a tap marks THAT row read /
+    // opens its details) and marks the sender as the administration.
+    const [row] = await getTestDb()('notifications').where({ recipient_user_id: target.id });
+    expect(push.sent[0]?.data).toMatchObject({
+      type: 'ADMIN_ANNOUNCEMENT',
+      source: 'ADMIN',
+      notificationId: row.id,
+    });
 
     // a non-admin cannot broadcast
     const user = await registerUser(app);

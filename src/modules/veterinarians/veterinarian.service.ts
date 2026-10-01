@@ -248,6 +248,7 @@ export class VeterinarianService {
     const withDocs: PendingApplicationSummary[] = await Promise.all(
       items.map(async (item) => {
         const docs = docMap.get(item.id) ?? [];
+        const user = await this.users.toPublicUserWithAvatar(await this.users.getById(item.userId));
         const documents: AdminVeterinarianApplicationDocument[] = await Promise.all(
           docs.map(async (d) => ({
             ...toApplicantDocumentDTO(d),
@@ -257,7 +258,7 @@ export class VeterinarianService {
             }),
           })),
         );
-        return { ...item, documents };
+        return { ...item, user, documents };
       }),
     );
 

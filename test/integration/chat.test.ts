@@ -532,6 +532,35 @@ describe('chat — messages: ordering, pagination, soft delete, unread', () => {
     ).toBe(422);
   });
 
+  it('only marking the NEWEST message (page 1, index 0 — newest-first) clears the counter', async () => {
+    const { vetOwner, petOwner, conv } = await convWithMessages();
+    await sendChatMessage(app, vetOwner.accessToken, conv.id, 'a');
+    await sendChatMessage(app, vetOwner.accessToken, conv.id, 'b');
+    const page = await listChatMessages(app, petOwner.accessToken, conv.id);
+    const ids = page.body.data.map((m: { id: string }) => m.id) as string[];
+    const unreadAfter = async (messageId: string) =>
+      (await markConversationRead(app, petOwner.accessToken, conv.id, messageId)).body.data
+        .unreadCount as number;
+
+    // The last item of the page is the OLDEST — marking it leaves newer ones unread.
+    expect(await unreadAfter(ids[ids.length - 1] as string)).toBeGreaterThan(0);
+    // The first item is the newest — marking it clears everything.
+    expect(await unreadAfter(ids[0] as string)).toBe(0);
+  });
+
+  it("a non-participant cannot move someone's read marker (IDOR)", async () => {
+    const { vetOwner, conv } = await convWithMessages();
+    const m = await sendChatMessage(app, vetOwner.accessToken, conv.id, 'secret');
+    const intruder = await registerUser(app);
+    const res = await markConversationRead(
+      app,
+      intruder.accessToken,
+      conv.id,
+      m.body.data.id as string,
+    );
+    expect([403, 404]).toContain(res.status);
+  });
+
   it('mark-read with a message from another conversation is 400', async () => {
     const { vetOwner, clinic, petOwner, conv } = await convWithMessages();
     const other = await registerUser(app);

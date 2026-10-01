@@ -1,6 +1,10 @@
 import { z } from 'zod';
+import { businessToday } from '../../../shared/time/business-date.js';
 import { paginationQuerySchema } from '../../../shared/http/pagination.js';
-import { CATTLE_BATCH_STATUSES, CATTLE_PRODUCTION_TYPES } from '../domain/cattle-batch.constants.js';
+import {
+  CATTLE_BATCH_STATUSES,
+  CATTLE_PRODUCTION_TYPES,
+} from '../domain/cattle-batch.constants.js';
 
 const notesSchema = z.string().trim().min(1).max(4000);
 const nameSchema = z.string().trim().min(1).max(120);
@@ -10,7 +14,7 @@ const priceSchema = z.coerce.number().nonnegative().max(1_000_000_000);
 const pastOrTodayDate = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD')
-  .refine((v) => !Number.isNaN(Date.parse(v)) && new Date(v) <= new Date(), 'Invalid or future date');
+  .refine((v) => !Number.isNaN(Date.parse(v)) && v <= businessToday(), 'Invalid or future date');
 const futureOrTodayDate = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD')

@@ -1,14 +1,12 @@
 import { z } from 'zod';
+import { businessToday } from '../../../shared/time/business-date.js';
 import { paginationQuerySchema } from '../../../shared/http/pagination.js';
 
 /** `YYYY-MM-DD`, a real calendar date, not in the future. */
 const pastOrTodayDate = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD')
-  .refine(
-    (v) => !Number.isNaN(Date.parse(v)) && new Date(v) <= new Date(),
-    'Invalid or future date',
-  );
+  .refine((v) => !Number.isNaN(Date.parse(v)) && v <= businessToday(), 'Invalid or future date');
 
 /** `YYYY-MM-DD`, a real calendar date (may be in the future — e.g. next-due). */
 const anyDate = z

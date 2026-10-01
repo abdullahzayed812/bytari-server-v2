@@ -8,14 +8,19 @@ import {
 } from '../../shared/validation/common.js';
 import { countryCodeSchema, governorateSchema } from '../../shared/validation/geography.js';
 import { ROLE_KEYS } from '../rbac/rbac.constants.js';
-import { GENDERS, USER_STATUSES, VETERINARIAN_STATUSES } from './user.types.js';
+import { ACCOUNT_TYPES, GENDERS, USER_STATUSES, VETERINARIAN_STATUSES } from './user.types.js';
 
 export const listUsersQuerySchema = paginationQuerySchema.extend({
   status: z.enum(USER_STATUSES).optional(),
   veterinarianStatus: z.enum(VETERINARIAN_STATUSES).optional(),
   search: z.string().trim().min(1).max(120).optional(),
-  /** Narrow to users holding this global role (e.g. admin-dashboard per-role counts). */
+  /** Narrow to users holding this global role key (raw RBAC filter). */
   role: z.enum(ROLE_KEYS).optional(),
+  /**
+   * Admin "Pet Owners" / "Veterinarians" pages — mutually exclusive audiences
+   * (see `ACCOUNT_TYPES`); a raw `role=PET_OWNER` also matches veterinarians.
+   */
+  accountType: z.enum(ACCOUNT_TYPES).optional(),
 });
 export type ListUsersQuery = z.infer<typeof listUsersQuerySchema>;
 

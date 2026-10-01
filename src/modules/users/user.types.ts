@@ -33,6 +33,18 @@ export type TraderStatus = (typeof TRADER_STATUSES)[number];
 export const REGISTRATION_TYPES = ['PET_OWNER', 'VETERINARIAN'] as const;
 export type RegistrationType = (typeof REGISTRATION_TYPES)[number];
 
+/**
+ * Admin user-management audiences, derived from the existing model (no extra
+ * column):
+ * - `VETERINARIAN` — registered as a veterinarian (`registration_type`), OR has
+ *   a pending/approved veterinarian application, OR holds the VETERINARIAN role.
+ * - `PET_OWNER` — holds the PET_OWNER role and is none of the above, and is
+ *   not platform staff (ADMIN / MODERATOR).
+ * The two never overlap.
+ */
+export const ACCOUNT_TYPES = ['PET_OWNER', 'VETERINARIAN'] as const;
+export type AccountType = (typeof ACCOUNT_TYPES)[number];
+
 export const GENDERS = ['MALE', 'FEMALE'] as const;
 export type Gender = (typeof GENDERS)[number];
 
@@ -151,8 +163,15 @@ export interface ListUsersFilter {
   status?: UserStatus;
   veterinarianStatus?: VeterinarianStatus;
   search?: string;
-  /** Narrow to users holding this global role key (e.g. `'PET_OWNER'`, `'VETERINARIAN'`). */
+  /** Narrow to users holding this global role key (e.g. `'ADMIN'`, `'MODERATOR'`). */
   role?: string;
+  /**
+   * Narrow to one account audience (see `ACCOUNT_TYPES`). Unlike `role`, this
+   * is the admin "Pet Owners" / "Veterinarians" split: every self-registered
+   * user holds the PET_OWNER role (veterinarians included), so a raw role
+   * filter cannot separate the two.
+   */
+  accountType?: AccountType;
 }
 
 /** Raw `users` table row (snake_case). */

@@ -1,3 +1,5 @@
+import type { PublicUser } from '../users/user.types.js';
+
 export const VET_APPLICATION_STATUSES = ['PENDING', 'APPROVED', 'REJECTED'] as const;
 export type VetApplicationStatus = (typeof VET_APPLICATION_STATUSES)[number];
 
@@ -41,14 +43,13 @@ export interface VeterinarianApplicationRow {
 }
 
 export interface PendingApplicationSummary extends VeterinarianApplication {
-  user: {
-    id: string;
-    email: string;
-    firstName: string;
-    lastName: string;
-    phone: string | null;
-    specialization: string | null;
-  };
+  /**
+   * The applicant's complete stored profile (avatar resolved, never the
+   * password hash or storage keys) so the reviewer decides with everything on
+   * file: contact, gender, country / governorate, specialization, account
+   * status, registration path and date. Same shape as the admin user view.
+   */
+  user: PublicUser;
   /** Admin-only view of documents, including a short-lived signed download URL. */
   documents: AdminVeterinarianApplicationDocument[];
 }

@@ -102,6 +102,27 @@ export class UserRepository {
             .select('ur.user_id'),
         );
       }
+      if (filter.accountType) {
+        const db = trx ?? this.db;
+        const holdingRole = (keys: readonly string[]): Knex.QueryBuilder =>
+          db('user_roles as ur')
+            .join('roles as r', 'r.id', 'ur.role_id')
+            .whereIn('r.key', keys)
+            .select('ur.user_id');
+        const isVeterinarian = (w: Knex.QueryBuilder): void => {
+          void w
+            .where('registration_type', 'VETERINARIAN')
+            .orWhereIn('veterinarian_status', ['PENDING', 'APPROVED'])
+            .orWhereIn('id', holdingRole(['VETERINARIAN']));
+        };
+        if (filter.accountType === 'VETERINARIAN') {
+          qb.where(isVeterinarian);
+        } else {
+          qb.whereIn('id', holdingRole(['PET_OWNER']))
+            .whereNot(isVeterinarian)
+            .whereNotIn('id', holdingRole(['ADMIN', 'MODERATOR']));
+        }
+      }
       return qb;
     };
 

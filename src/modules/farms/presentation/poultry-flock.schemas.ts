@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { businessToday } from '../../../shared/time/business-date.js';
 import { paginationQuerySchema } from '../../../shared/http/pagination.js';
 import {
   POULTRY_BIRD_TYPES,
@@ -10,10 +11,7 @@ import {
 const pastOrTodayDate = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD')
-  .refine(
-    (v) => !Number.isNaN(Date.parse(v)) && new Date(v) <= new Date(),
-    'Invalid or future date',
-  );
+  .refine((v) => !Number.isNaN(Date.parse(v)) && v <= businessToday(), 'Invalid or future date');
 
 const notesSchema = z.string().trim().min(1).max(4000);
 const nameSchema = z.string().trim().min(1).max(120);

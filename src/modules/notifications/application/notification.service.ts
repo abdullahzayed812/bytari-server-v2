@@ -17,6 +17,7 @@ import {
   toNotificationDTO,
   type DeviceTokenDTO,
   type ListNotificationsFilter,
+  type Notification,
   type NotificationDTO,
   type NotificationSpec,
 } from '../domain/notification.types.js';
@@ -25,6 +26,7 @@ import type {
   RegisterDeviceInput,
 } from '../infrastructure/device-token.repository.js';
 import type { NotificationRepository } from '../infrastructure/notification.repository.js';
+import { NotificationSourceResolver } from '../infrastructure/notification-source.resolver.js';
 import type {
   NotificationPreferences,
   PreferenceRepository,
@@ -76,6 +78,7 @@ function tokenSuffix(token: string): string {
 export class NotificationService {
   private readonly log: Logger;
   private readonly pushRetryDelaysMs: readonly number[];
+  private readonly sources: NotificationSourceResolver;
 
   constructor(
     private readonly db: Knex,
@@ -90,6 +93,7 @@ export class NotificationService {
     options: NotificationServiceOptions = {},
   ) {
     this.log = logger.child({ component: 'notification-service' });
+    this.sources = new NotificationSourceResolver(db);
     this.pushRetryDelaysMs = options.pushRetryDelaysMs ?? DEFAULT_PUSH_RETRY_DELAYS_MS;
   }
 
@@ -207,14 +211,23 @@ export class NotificationService {
 
   // --- user reads ----------------------------------------------------
 
-  list(
+  async list(
     userId: string,
     filter: ListNotificationsFilter,
   ): Promise<{ items: NotificationDTO[]; total: number }> {
-    return this.notifications.listForUser(userId, filter).then(({ items, total }) => ({
-      items: items.map(toNotificationDTO),
-      total,
-    }));
+    const { items, total } = await this.notifications.listForUser(userId, filter);
+    return { items: await this.withSources(items), total };
+  }
+
+  /** DTOs with their resolved "From:" source (one batched lookup per page). */
+  private async withSources(items: Notification[]): Promise<NotificationDTO[]> {
+    const sources = await this.sources.resolve(items);
+    return items.map((n) => toNotificationDTO(n, sources.get(n.id)));
+  }
+
+  private async withSource(n: Notification): Promise<NotificationDTO> {
+    const [dto] = await this.withSources([n]);
+    return dto as NotificationDTO;
   }
 
   unreadCount(userId: string): Promise<number> {
@@ -224,18 +237,18 @@ export class NotificationService {
   async get(userId: string, id: string): Promise<NotificationDTO> {
     const n = await this.notifications.findByIdForUser(id, userId);
     if (!n) throw new NotFoundError('Notification not found');
-    return toNotificationDTO(n);
+    return this.withSource(n);
   }
 
   async markRead(userId: string, id: string): Promise<NotificationDTO> {
     const existing = await this.notifications.findByIdForUser(id, userId);
     if (!existing) throw new NotFoundError('Notification not found');
-    if (existing.readAt) return toNotificationDTO(existing); // idempotent
+    if (existing.readAt) return this.withSource(existing); // idempotent
 
     const updated = await this.db.transaction((tx) => this.notifications.markRead(id, userId, tx));
     if (updated)
       this.events.publish('notification.read', { notificationId: id, recipientUserId: userId });
-    return toNotificationDTO(updated ?? existing);
+    return this.withSource(updated ?? existing);
   }
 
   async markAllRead(userId: string): Promise<{ updated: number }> {
@@ -345,18 +358,26 @@ export class NotificationService {
     }
     if (recipientIds.length === 0) return { recipientCount: 0 };
 
+    // recipient → its own notification row id, so each push can carry
+    // `notificationId` (a push tap then marks THAT row read / opens it).
+    const notificationIdByUser = new Map<string, string>();
     await this.db.transaction(async (tx) => {
       const rows = recipientIds.map((uid) => ({
         recipient_user_id: uid,
         type: input.type,
         title: input.title,
         body: input.body,
-        data: JSON.stringify({ type: input.type, ...(input.data ?? {}) }),
+        // `source: 'ADMIN'` → the inbox shows "From: the administration" for
+        // every admin broadcast, whatever `type` the admin picked.
+        data: JSON.stringify({ type: input.type, ...(input.data ?? {}), source: 'ADMIN' }),
         actor_user_id: actor.actorUserId,
       }));
       // batched insert — bounded by MAX_BROADCAST_RECIPIENTS
       for (let i = 0; i < rows.length; i += 500) {
-        await tx('notifications').insert(rows.slice(i, i + 500));
+        const inserted: Array<{ id: string; recipient_user_id: string }> = await tx('notifications')
+          .insert(rows.slice(i, i + 500))
+          .returning(['id', 'recipient_user_id']);
+        for (const r of inserted) notificationIdByUser.set(r.recipient_user_id, r.id);
       }
       await this.audit.record(
         {
@@ -385,7 +406,9 @@ export class NotificationService {
       {
         type: input.type,
         ...(input.data ?? {}),
+        source: 'ADMIN',
       },
+      notificationIdByUser,
     );
 
     return { recipientCount: recipientIds.length };
@@ -419,6 +442,7 @@ export class NotificationService {
     userIds: string[],
     notification: { title: string; body: string },
     data: Record<string, string>,
+    notificationIdByUser: ReadonlyMap<string, string> = new Map(),
   ): Promise<void> {
     for (let i = 0; i < userIds.length; i += PUSH_FANOUT_BATCH) {
       const batch = userIds.slice(i, i + PUSH_FANOUT_BATCH);
@@ -426,7 +450,12 @@ export class NotificationService {
         batch.map(async (uid) => {
           try {
             if (await this.preferences.pushEnabled(uid)) {
-              await this.push.sendToUser(uid, notification, data);
+              const notificationId = notificationIdByUser.get(uid);
+              await this.push.sendToUser(
+                uid,
+                notification,
+                notificationId ? { ...data, notificationId } : data,
+              );
             }
           } catch (err) {
             this.log.warn({ err, uid }, 'broadcast push failed for one user');

@@ -310,12 +310,17 @@ export class NotificationPolicy {
           'SYNDICATE_REGISTRATION',
         );
       case 'syndicate.submission.responded':
+        // `organizationId` in data → the inbox shows the syndicate's name as the sender.
         return this.vetServiceToUser('SYNDICATE_SUBMISSION_RESPONDED', event.name, p, {
           userId: str(p.submittedByUserId),
           actorUserId: str(p.actorUserId),
           entityType: 'SYNDICATE_SUBMISSION',
           entityId: str(p.submissionId),
-        });
+        }).map((spec) =>
+          str(p.organizationId)
+            ? { ...spec, data: { ...spec.data, organizationId: str(p.organizationId) } }
+            : spec,
+        );
 
       // --- Organization → followers broadcast (Veterinary Office Dashboard) ---
       case 'organization.broadcast.sent':

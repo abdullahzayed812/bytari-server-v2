@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { businessToday } from '../../../shared/time/business-date.js';
 import { paginationQuerySchema } from '../../../shared/http/pagination.js';
 import { SHEEP_BATCH_STATUSES, SHEEP_PRODUCTION_TYPES } from '../domain/sheep-batch.constants.js';
 
@@ -10,7 +11,7 @@ const priceSchema = z.coerce.number().nonnegative().max(1_000_000_000);
 const pastOrTodayDate = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD')
-  .refine((v) => !Number.isNaN(Date.parse(v)) && new Date(v) <= new Date(), 'Invalid or future date');
+  .refine((v) => !Number.isNaN(Date.parse(v)) && v <= businessToday(), 'Invalid or future date');
 const futureOrTodayDate = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD')

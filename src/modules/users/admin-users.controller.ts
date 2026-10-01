@@ -48,6 +48,7 @@ export class AdminUsersController {
       veterinarianStatus: q.veterinarianStatus,
       search: q.search,
       role: q.role,
+      accountType: q.accountType,
     });
     sendSuccess(
       res,

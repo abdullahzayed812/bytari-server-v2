@@ -166,7 +166,11 @@ export class UserService {
       const country = patch.country !== undefined ? patch.country : existing.country;
       const governorate =
         patch.governorate !== undefined ? patch.governorate : existing.governorate;
-      if (country && governorate && !isValidGovernorate(country, governorate)) {
+      // Only re-validate when the location is being edited: a legacy free-text
+      // governorate (stored before its country got a fixed list) must not
+      // block unrelated edits such as a name or phone change.
+      const locationTouched = patch.country !== undefined || patch.governorate !== undefined;
+      if (locationTouched && country && governorate && !isValidGovernorate(country, governorate)) {
         throw new BadRequestError('governorate is not valid for the selected country', {
           details: [{ path: 'body.governorate', message: 'not valid for country' }],
         });

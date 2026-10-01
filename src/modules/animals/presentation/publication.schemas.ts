@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { businessToday } from '../../../shared/time/business-date.js';
 import { paginationQuerySchema } from '../../../shared/http/pagination.js';
 import { ANIMAL_SPECIES } from '../domain/animal.constants.js';
 import {
@@ -25,10 +26,7 @@ const extraNotesField = z.string().trim().max(2000);
 const dateField = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD')
-  .refine(
-    (v) => !Number.isNaN(Date.parse(v)) && new Date(v) <= new Date(),
-    'Invalid or future date',
-  );
+  .refine((v) => !Number.isNaN(Date.parse(v)) && v <= businessToday(), 'Invalid or future date');
 /** `HH:MM` (24h). */
 const timeField = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Expected HH:MM');
 

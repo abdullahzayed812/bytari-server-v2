@@ -96,6 +96,30 @@ describe('veterinarian approval workflow', () => {
     expect(entry.documents[0].kind).toBe('LICENSE_OR_ID');
     expect(entry.documents[0].downloadUrl).toBeTypeOf('string');
     expect(entry.documents[0]).not.toHaveProperty('storageKey');
+    // The reviewer sees the applicant's complete stored profile — never secrets.
+    expect(entry.user).toMatchObject({
+      id: u.id,
+      email: u.email,
+      status: 'ACTIVE',
+      veterinarianStatus: 'PENDING',
+      registrationType: 'PET_OWNER',
+    });
+    for (const key of ['phone', 'gender', 'country', 'governorate', 'avatarUrl', 'createdAt']) {
+      expect(entry.user).toHaveProperty(key);
+    }
+    expect(entry.user).not.toHaveProperty('passwordHash');
+    expect(entry.user).not.toHaveProperty('avatarKey');
+
+    // Applicant details + documents are reviewer-only.
+    const asApplicant = await request(app)
+      .get('/api/v1/admin/veterinarians/pending')
+      .set(bearer(u.accessToken));
+    expect(asApplicant.status).toBe(403);
+    const other = await registerUser(app);
+    const asOther = await request(app)
+      .get('/api/v1/admin/veterinarians/pending')
+      .set(bearer(other.accessToken));
+    expect(asOther.status).toBe(403);
   });
 
   it('re-applying while PENDING is a 409', async () => {

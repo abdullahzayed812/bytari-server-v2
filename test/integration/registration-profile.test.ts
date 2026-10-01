@@ -55,6 +55,19 @@ describe('POST /auth/register — phone, country → governorate, specialization
     );
   });
 
+  it("validates a non-Iraqi country against that country's own regions", async () => {
+    const ok = await request(app)
+      .post('/api/v1/auth/register')
+      .send({ ...base(), country: 'EG', governorate: 'الجيزة' });
+    expect(ok.status).toBe(201);
+    expect(ok.body.data.user).toMatchObject({ country: 'EG', governorate: 'الجيزة' });
+
+    const iraqiInEgypt = await request(app)
+      .post('/api/v1/auth/register')
+      .send({ ...base(), country: 'EG', governorate: 'بغداد' });
+    expect(iraqiInEgypt.status).toBe(422);
+  });
+
   it('requires a governorate once a country is chosen, and a country for a governorate', async () => {
     const noGov = await request(app)
       .post('/api/v1/auth/register')

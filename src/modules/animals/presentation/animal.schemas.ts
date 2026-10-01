@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { businessToday } from '../../../shared/time/business-date.js';
 import { paginationQuerySchema } from '../../../shared/http/pagination.js';
 import {
   ANIMAL_AGE_ESTIMATES,
@@ -16,10 +17,7 @@ const distinguishingFeaturesSchema = z.string().trim().min(1).max(500);
 const dateOfBirthSchema = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD')
-  .refine(
-    (v) => !Number.isNaN(Date.parse(v)) && new Date(v) <= new Date(),
-    'Invalid or future date',
-  );
+  .refine((v) => !Number.isNaN(Date.parse(v)) && v <= businessToday(), 'Invalid or future date');
 
 export const createAnimalBodySchema = z.object({
   name: nameSchema,

@@ -153,12 +153,12 @@ describe('POST /auth/register', () => {
       phone: '+9647700000001',
       gender: 'FEMALE',
       country: 'jo',
-      governorate: 'Amman',
+      governorate: 'عمان',
     });
     expect(res.status).toBe(201);
     expect(res.body.data.user.gender).toBe('FEMALE');
     expect(res.body.data.user.country).toBe('JO'); // auto-uppercased
-    expect(res.body.data.user.governorate).toBe('Amman'); // free text outside Iraq
+    expect(res.body.data.user.governorate).toBe('عمان'); // Jordan's own region list (not Iraqi)
 
     const me = await request(app)
       .get('/api/v1/auth/me')

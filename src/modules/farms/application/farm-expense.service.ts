@@ -2,6 +2,7 @@ import type { Knex } from 'knex';
 import type { Logger } from 'pino';
 import { NotFoundError } from '../../../shared/errors/app-error.js';
 import type { EventBus } from '../../../shared/events/index.js';
+import { businessToday } from '../../../shared/time/business-date.js';
 import type { AuditContext } from '../../audit/audit.types.js';
 import type { AuditService } from '../../audit/audit.service.js';
 import { PoultryOpsAuditAction, PoultryOpsAuditEntity } from '../domain/poultry-ops.constants.js';
@@ -57,9 +58,11 @@ export class FarmExpenseService {
   }
 
   async summary(organizationId: string): Promise<FarmExpenseSummary> {
-    const now = new Date();
-    const monthStart = `${now.toISOString().slice(0, 7)}-01`;
-    const todayStr = now.toISOString().slice(0, 10);
+    // Expenses are dated on the business calendar, so "today" / "this month"
+    // must be too — a UTC day would drop late-evening Baghdad entries.
+    const todayStr = businessToday();
+    const now = new Date(`${todayStr}T00:00:00Z`);
+    const monthStart = `${todayStr.slice(0, 7)}-01`;
     const weekStart = addDays(now, -6);
 
     const [totalThisWeek, totalThisMonth] = await Promise.all([
