@@ -102,15 +102,12 @@ describe('organization registration terms & conditions', () => {
 
   it('a stale terms version is refused (409) so the user must review the current terms', async () => {
     const vet = await registerApprovedVet(app);
-    const res = await request(app)
-      .post(API)
-      .set(bearer(vet.accessToken))
-      .send({
-        type: 'CLINIC',
-        name: 'عيادة',
-        termsAccepted: true,
-        termsVersion: 'deadbeefdeadbeef',
-      });
+    const res = await request(app).post(API).set(bearer(vet.accessToken)).send({
+      type: 'CLINIC',
+      name: 'عيادة',
+      termsAccepted: true,
+      termsVersion: 'deadbeefdeadbeef',
+    });
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('TERMS_VERSION_OUTDATED');
   });

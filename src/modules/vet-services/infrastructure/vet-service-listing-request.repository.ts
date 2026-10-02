@@ -7,10 +7,7 @@ import {
   type VetServiceListingRequestRow,
   type VetServiceUserSummary,
 } from '../domain/vet-service.types.js';
-import type {
-  VetServiceAnimalType,
-  VetServiceType,
-} from '../domain/vet-service.constants.js';
+import type { VetServiceAnimalType, VetServiceType } from '../domain/vet-service.constants.js';
 
 const T = 'vet_service_listing_requests';
 

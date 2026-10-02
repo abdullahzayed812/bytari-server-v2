@@ -184,8 +184,7 @@ export class VeterinaryOfficeProductService {
     }
     // An EXPIRED office is off the public market until renewed (§10).
     const profile = (await this.organizations.findProfileRow(org.type, organizationId)) as
-      | { subscription_end_date?: string | Date | null }
-      | undefined;
+      { subscription_end_date?: string | Date | null } | undefined;
     const end = profile?.subscription_end_date ?? null;
     if (end) {
       const endDay = end instanceof Date ? end.toISOString().slice(0, 10) : end.slice(0, 10);
@@ -346,11 +345,7 @@ export class VeterinaryOfficeProductService {
       await this.products.addImage(productId, input.storageKey, sortOrder, tx);
       let result = product;
       if (!product.primaryImageKey) {
-        result = await this.products.update(
-          productId,
-          { primaryImageKey: input.storageKey },
-          tx,
-        );
+        result = await this.products.update(productId, { primaryImageKey: input.storageKey }, tx);
       }
       await this.audit.record(
         {

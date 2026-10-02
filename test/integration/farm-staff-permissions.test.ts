@@ -169,7 +169,7 @@ describe('farm employees / veterinarians — operational access only', () => {
     expect(ownerRemove.status).toBe(200);
   });
 
-  it('the member chat button opens the FARM_OWNER_MEMBER conversation (owner ↔ member only)', async () => {
+  it('owner ↔ member chats are FARM_OWNER_MEMBER; member ↔ member is the colleagues chat', async () => {
     const { owner, vet, staff, farm } = await farmWithStaff();
     const byOwner = await request(app)
       .post(`${API}/${farm.id}/conversations`)
@@ -178,16 +178,20 @@ describe('farm employees / veterinarians — operational access only', () => {
     expect([200, 201]).toContain(byOwner.status);
     expect(byOwner.body.data.type).toBe('FARM_OWNER_MEMBER');
 
-    // a member opens their own chat with the owner — never one with another member
+    // a member opens their own chat with the owner (no target)
     const byStaff = await request(app)
       .post(`${API}/${farm.id}/conversations`)
       .set(bearer(staff.accessToken))
       .send({});
     expect(byStaff.body.data.id).toBe(byOwner.body.data.id);
+    // …and naming a colleague (the farm's vet) opens the separate colleagues chat
+    // (final corrections §9) — never the owner's conversation.
     const memberToMember = await request(app)
       .post(`${API}/${farm.id}/conversations`)
       .set(bearer(staff.accessToken))
       .send({ targetUserId: vet.id });
-    expect(memberToMember.status).toBe(403);
+    expect([200, 201]).toContain(memberToMember.status);
+    expect(memberToMember.body.data.type).toBe('FARM_MEMBER_DIRECT');
+    expect(memberToMember.body.data.id).not.toBe(byOwner.body.data.id);
   });
 });

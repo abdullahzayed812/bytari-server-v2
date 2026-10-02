@@ -48,8 +48,7 @@ export interface VetServiceUserSummary {
 }
 
 /** Client-safe listing shape (moderation metadata included — owner / admin view). */
-export interface VetServiceListingDTO
-  extends Omit<VetServiceListing, 'imageKeys'> {
+export interface VetServiceListingDTO extends Omit<VetServiceListing, 'imageKeys'> {
   veterinarian: VetServiceUserSummary;
   imageUrls: string[];
 }
@@ -201,8 +200,7 @@ export interface VetServiceListingRequest {
   updatedAt: string;
 }
 
-export interface VetServiceListingRequestDTO
-  extends Omit<VetServiceListingRequest, 'imageKeys'> {
+export interface VetServiceListingRequestDTO extends Omit<VetServiceListingRequest, 'imageKeys'> {
   petOwner: VetServiceUserSummary;
   imageUrls: string[];
   listing?: {
@@ -406,9 +404,7 @@ export function rowToOffer(row: VetServiceOfferRow): VetServiceOffer {
   };
 }
 
-export function rowToListingRequest(
-  row: VetServiceListingRequestRow,
-): VetServiceListingRequest {
+export function rowToListingRequest(row: VetServiceListingRequestRow): VetServiceListingRequest {
   return {
     id: row.id,
     requestNumber: row.request_number,

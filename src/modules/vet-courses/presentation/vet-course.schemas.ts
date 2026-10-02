@@ -16,7 +16,9 @@ import {
 const money = z.string().regex(/^\d{1,10}(\.\d{1,2})?$/, 'invalid amount');
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'expected YYYY-MM-DD');
 const isoTime = z.string().regex(/^\d{2}:\d{2}$/, 'expected HH:MM');
-const topics = z.array(z.string().trim().min(1).max(VET_COURSE_LIST_ITEM_MAX)).max(VET_COURSE_MAX_LIST_ITEMS);
+const topics = z
+  .array(z.string().trim().min(1).max(VET_COURSE_LIST_ITEM_MAX))
+  .max(VET_COURSE_MAX_LIST_ITEMS);
 const phone = z.string().trim().min(5).max(30);
 
 export const idParamSchema = z.object({ id: z.string().uuid() });
@@ -56,7 +58,10 @@ export const createCourseBodySchema = z
     coverImageStorageKey: z.string().trim().min(1).max(1024).nullish(),
   })
   .strict()
-  .refine((v) => v.endDate >= v.startDate, { message: 'endDate must be on/after startDate', path: ['endDate'] });
+  .refine((v) => v.endDate >= v.startDate, {
+    message: 'endDate must be on/after startDate',
+    path: ['endDate'],
+  });
 export type CreateCourseBody = z.infer<typeof createCourseBodySchema>;
 
 export const updateCourseBodySchema = z

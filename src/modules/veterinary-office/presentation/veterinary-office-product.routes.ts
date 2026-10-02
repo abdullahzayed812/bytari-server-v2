@@ -63,7 +63,10 @@ export function createVeterinaryOfficeProductRouter(c: Container): Router {
 
   r.get(
     base,
-    validate({ params: veterinaryOfficeIdParamSchema, query: listVeterinaryOfficeProductsQuerySchema }),
+    validate({
+      params: veterinaryOfficeIdParamSchema,
+      query: listVeterinaryOfficeProductsQuerySchema,
+    }),
     withOrganization,
     withVeterinaryOffice,
     authorizeOrg('product.read'),
@@ -71,7 +74,10 @@ export function createVeterinaryOfficeProductRouter(c: Container): Router {
   );
   r.post(
     base,
-    validate({ params: veterinaryOfficeIdParamSchema, body: createVeterinaryOfficeProductBodySchema }),
+    validate({
+      params: veterinaryOfficeIdParamSchema,
+      body: createVeterinaryOfficeProductBodySchema,
+    }),
     withOrganization,
     withVeterinaryOffice,
     authorizeOrg('product.create'),
@@ -89,7 +95,10 @@ export function createVeterinaryOfficeProductRouter(c: Container): Router {
   );
   r.patch(
     `${base}/:productId`,
-    validate({ params: veterinaryOfficeProductParamSchema, body: updateVeterinaryOfficeProductBodySchema }),
+    validate({
+      params: veterinaryOfficeProductParamSchema,
+      body: updateVeterinaryOfficeProductBodySchema,
+    }),
     withOrganization,
     withVeterinaryOffice,
     authorizeOrg('product.update'),
@@ -109,7 +118,10 @@ export function createVeterinaryOfficeProductRouter(c: Container): Router {
   );
   r.post(
     `${base}/:productId/stock`,
-    validate({ params: veterinaryOfficeProductParamSchema, body: adjustVeterinaryOfficeStockBodySchema }),
+    validate({
+      params: veterinaryOfficeProductParamSchema,
+      body: adjustVeterinaryOfficeStockBodySchema,
+    }),
     withOrganization,
     withVeterinaryOffice,
     authorizeOrg('product.inventory.adjust'),
@@ -122,7 +134,10 @@ export function createVeterinaryOfficeProductRouter(c: Container): Router {
   // seam as the organization gallery / Pet Owners Store products.
   r.post(
     `${base}/:productId/images/upload-url`,
-    validate({ params: veterinaryOfficeProductParamSchema, body: veterinaryOfficeProductImageUploadUrlBodySchema }),
+    validate({
+      params: veterinaryOfficeProductParamSchema,
+      body: veterinaryOfficeProductImageUploadUrlBodySchema,
+    }),
     withOrganization,
     withVeterinaryOffice,
     authorizeOrg('product.update'),
@@ -132,7 +147,10 @@ export function createVeterinaryOfficeProductRouter(c: Container): Router {
   );
   r.post(
     `${base}/:productId/images`,
-    validate({ params: veterinaryOfficeProductParamSchema, body: finalizeVeterinaryOfficeProductImageBodySchema }),
+    validate({
+      params: veterinaryOfficeProductParamSchema,
+      body: finalizeVeterinaryOfficeProductImageBodySchema,
+    }),
     withOrganization,
     withVeterinaryOffice,
     authorizeOrg('product.update'),
@@ -169,7 +187,10 @@ export function createPublicVeterinaryOfficeProductRouter(c: Container): Router 
 
   r.get(
     '/discover/:organizationId/office-products',
-    validate({ params: veterinaryOfficeIdParamSchema, query: publicListVeterinaryOfficeProductsQuerySchema }),
+    validate({
+      params: veterinaryOfficeIdParamSchema,
+      query: publicListVeterinaryOfficeProductsQuerySchema,
+    }),
     asyncHandler(ctrl.list),
   );
   r.get(

@@ -32,7 +32,10 @@ export function createOrganizationBroadcastRouter(c: Container): Router {
 
   r.post(
     '/:organizationId/broadcast/image-upload-url',
-    validate({ params: organizationBroadcastParamSchema, body: organizationBroadcastImageUploadUrlBodySchema }),
+    validate({
+      params: organizationBroadcastParamSchema,
+      body: organizationBroadcastImageUploadUrlBodySchema,
+    }),
     withOrganization,
     authorizeOrg('organization.broadcast.send'),
     activeSubscription,
@@ -40,7 +43,10 @@ export function createOrganizationBroadcastRouter(c: Container): Router {
   );
   r.post(
     '/:organizationId/broadcast',
-    validate({ params: organizationBroadcastParamSchema, body: sendOrganizationBroadcastBodySchema }),
+    validate({
+      params: organizationBroadcastParamSchema,
+      body: sendOrganizationBroadcastBodySchema,
+    }),
     withOrganization,
     authorizeOrg('organization.broadcast.send'),
     activeSubscription,

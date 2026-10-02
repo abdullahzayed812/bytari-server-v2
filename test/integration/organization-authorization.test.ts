@@ -87,7 +87,7 @@ describe('organization-scoped authorization', () => {
       .expect(403);
   });
 
-  it('a STAFF member gets only organization.read', async () => {
+  it('a STAFF member can read the organization and (read-only) its members — never manage them', async () => {
     const admin = await registerAdmin(app);
     const owner = await registerApprovedVet(app);
     const staff = await registerUser(app);
@@ -103,8 +103,20 @@ describe('organization-scoped authorization', () => {
       .get(`/api/v1/organizations/${org.id}`)
       .set(bearer(staff.accessToken))
       .expect(200);
+    // member.read — e.g. a farm's employees and vets see each other (final corrections §9)
     await request(app)
       .get(`/api/v1/organizations/${org.id}/members`)
+      .set(bearer(staff.accessToken))
+      .expect(200);
+    // …but adding / changing members stays with the owner
+    const other = await registerUser(app);
+    await request(app)
+      .post(`/api/v1/organizations/${org.id}/members`)
+      .set(bearer(staff.accessToken))
+      .send({ userId: other.id, role: 'STAFF' })
+      .expect(403);
+    await request(app)
+      .get(`/api/v1/organizations/${org.id}/supervisors`)
       .set(bearer(staff.accessToken))
       .expect(403);
   });

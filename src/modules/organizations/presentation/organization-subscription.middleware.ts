@@ -17,16 +17,18 @@ import { requireOrganization } from './organization.middleware.js';
  */
 const SUBSCRIPTION_CAPABLE_TYPES = new Set(['VETERINARY_OFFICE', 'CLINIC']);
 
-export const withSubscriptionCapableOrganization: RequestHandler = asyncHandler((req, _res, next) => {
-  const org = requireOrganization(req);
-  if (!SUBSCRIPTION_CAPABLE_TYPES.has(org.type)) {
-    throw new BadRequestError(
-      'This operation is only available for veterinary office or clinic organizations',
-      { code: ErrorCode.ORGANIZATION_TYPE_NOT_SUPPORTED },
-    );
-  }
-  next();
-});
+export const withSubscriptionCapableOrganization: RequestHandler = asyncHandler(
+  (req, _res, next) => {
+    const org = requireOrganization(req);
+    if (!SUBSCRIPTION_CAPABLE_TYPES.has(org.type)) {
+      throw new BadRequestError(
+        'This operation is only available for veterinary office or clinic organizations',
+        { code: ErrorCode.ORGANIZATION_TYPE_NOT_SUPPORTED },
+      );
+    }
+    next();
+  },
+);
 
 /**
  * MUST run after `withOrganization`. A CLINIC / VETERINARY_OFFICE whose
@@ -36,7 +38,11 @@ export const withSubscriptionCapableOrganization: RequestHandler = asyncHandler(
  * A global ADMIN bypasses, like every other organization gate.
  */
 export function createOrganizationSubscriptionGuard(deps: {
-  subscriptions: { getSubscriptionDates(organizationId: string): Promise<{ startDate: string | null; endDate: string | null }> };
+  subscriptions: {
+    getSubscriptionDates(
+      organizationId: string,
+    ): Promise<{ startDate: string | null; endDate: string | null }>;
+  };
   authz: AuthorizationService;
 }): RequestHandler {
   return asyncHandler(async (req, _res, next) => {
