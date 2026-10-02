@@ -46,6 +46,7 @@ describe('POST /organizations/cattle-farms — Add Cattle Farm', () => {
       .post('/api/v1/organizations/cattle-farms')
       .set(bearer(owner.accessToken))
       .send({
+        termsAccepted: true,
         name: 'مزرعة الأبقار الشمالية',
         location: 'نينوى - الموصل',
         governorate: 'نينوى',
@@ -84,7 +85,7 @@ describe('POST /organizations/cattle-farms — Add Cattle Farm', () => {
     const res = await request(app)
       .post('/api/v1/organizations/cattle-farms')
       .set(bearer(owner.accessToken))
-      .send({ name: 'x', location: 'y' });
+      .send({ termsAccepted: true, name: 'x', location: 'y' });
     expect(res.status).toBe(422);
   });
 });
@@ -291,7 +292,7 @@ describe('cattle batches — authorization', () => {
     const clinicRes = await request(app)
       .post('/api/v1/organizations')
       .set(bearer(owner.accessToken))
-      .send({ type: 'CLINIC', name: 'Clinic' });
+      .send({ termsAccepted: true, type: 'CLINIC', name: 'Clinic' });
     const clinicId = clinicRes.body.data.id as string;
     await request(app)
       .post(`/api/v1/admin/organizations/${clinicId}/approve`)
@@ -353,7 +354,7 @@ describe('cattle batches — cross-farm isolation (IDOR)', () => {
     const clinicRes = await request(app)
       .post('/api/v1/organizations')
       .set(bearer(owner.accessToken))
-      .send({ type: 'CLINIC', name: 'Clinic' });
+      .send({ termsAccepted: true, type: 'CLINIC', name: 'Clinic' });
     const clinicId = clinicRes.body.data.id as string;
 
     await expect(

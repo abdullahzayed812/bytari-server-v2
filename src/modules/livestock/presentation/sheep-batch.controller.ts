@@ -59,7 +59,13 @@ export class SheepBatchController {
     if (body.contactEmail != null) details.contact_email = body.contactEmail;
 
     const org = await this.organizations.create(
-      { type: 'FARM', name: body.name, description: body.description ?? null, details },
+      {
+        type: 'FARM',
+        name: body.name,
+        description: body.description ?? null,
+        details,
+        terms: { accepted: body.termsAccepted, version: body.termsVersion },
+      },
       this.actor(req),
     );
     sendSuccess(res, org, StatusCodes.CREATED);

@@ -38,6 +38,11 @@ export const CONVERSATION_TYPES = [
    * both sides have explicit participant rows.
    */
   'ANIMAL_PUBLICATION',
+  /**
+   * Two ACTIVE non-owner members of the same farm (e.g. its veterinarian and
+   * an employee) — explicit FARM_MEMBER rows for both; access re-checked live.
+   */
+  'FARM_MEMBER_DIRECT',
 ] as const;
 export type ConversationType = (typeof CONVERSATION_TYPES)[number];
 

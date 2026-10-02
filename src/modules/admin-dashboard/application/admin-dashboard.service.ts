@@ -187,6 +187,8 @@ export class AdminDashboardService {
       tradersApproved,
       clinicRenewalsPending,
       officeRenewalsPending,
+      courseRegistrationsPending,
+      traderRenewalRequests,
     ] = await Promise.all([
       this.deps.seen.getSeenMap(userId),
       this.deps.farmSubscriptionRenewals.listFarmsForAdmin({
@@ -354,6 +356,8 @@ export class AdminDashboardService {
         pageSize: 1,
         organizationType: 'VETERINARY_OFFICE',
       }),
+      this.deps.vetCourses.pendingRegistrationTotals(),
+      this.deps.traders.countRenewalRequests(),
     ]);
 
     const since = (id: AdminDashboardCardId) => seenMap.get(id);
@@ -401,11 +405,13 @@ export class AdminDashboardService {
         id: 'courses',
         count: countNew(courses.items, since('courses')),
         activeCount: coursesActive.total,
+        pendingRegistrations: courseRegistrationsPending.COURSE,
       },
       {
         id: 'seminars',
         count: countNew(seminars.items, since('seminars')),
         activeCount: seminarsActive.total,
+        pendingRegistrations: courseRegistrationsPending.SEMINAR,
       },
       {
         id: 'services',
@@ -506,6 +512,14 @@ export class AdminDashboardService {
           since('poultryMarket'),
         ),
         activeCount: tradersApproved.total,
+        // Open queues behind each entry of the poultry admin hub (TOTALS, not
+        // "new since seen"): trader applications + renewal requests, and the
+        // poultry / egg ads awaiting moderation.
+        sectionCounts: {
+          traders: tradersPending.total + traderRenewalRequests,
+          poultryOffers: poultryOffersPending.total,
+          eggOffers: eggOffersPending.total,
+        },
       },
     ];
 

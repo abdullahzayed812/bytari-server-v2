@@ -6,6 +6,7 @@ import {
   NotFoundError,
 } from '../../../shared/errors/app-error.js';
 import { ErrorCode } from '../../../shared/errors/error-codes.js';
+import type { NotificationReadPort } from '../../../shared/events/notification-read.port.js';
 import type { EventBus } from '../../../shared/events/index.js';
 import { AuditAction, AuditEntityType, type AuditContext } from '../../audit/audit.types.js';
 import type { AuditService } from '../../audit/audit.service.js';
@@ -78,6 +79,8 @@ export class ChatService {
     logger: Logger,
     /** Chat media (image / video / file). Optional only for narrow harnesses; the container injects it. */
     private readonly media: ChatAttachmentMedia | null = null,
+    /** Clears the conversation's "new message" alerts when the user reads it. */
+    private readonly notificationReads: NotificationReadPort | null = null,
   ) {
     this.log = logger.child({ component: 'chat-service' });
   }
@@ -180,6 +183,15 @@ export class ChatService {
       const m = await this.memberships.findByUserAndOrg(userId, conversation.organizationId);
       return m?.status === 'ACTIVE' ? 'SYNDICATE' : null;
     }
+    if (conversation.type === 'FARM_MEMBER_DIRECT') {
+      // Farm colleagues — one of the two, and STILL an active non-owner member.
+      if (userId !== conversation.petOwnerUserId && userId !== conversation.memberUserId) {
+        return null;
+      }
+      if (!conversation.organizationId) return null;
+      const m = await this.memberships.findByUserAndOrg(userId, conversation.organizationId);
+      return m?.status === 'ACTIVE' && m.roleKey !== 'OWNER' ? 'FARM_MEMBER' : null;
+    }
     if (conversation.type === 'CHAT_ROOM') {
       // Every room member has an explicit participant row (`ChatRoomService.join`)
       // — no live membership lookup needed, unlike CLINIC/OFFICE above.
@@ -235,6 +247,16 @@ export class ChatService {
       // it, the other side is always the pet owner.
       const petOwnerUserId = await this.resolveClinicCounterpart(actor, org, targetUserId);
       return this.getOrCreatePetOwnerVeterinaryOffice(actor, org.id, petOwnerUserId);
+    }
+
+    // A farm member naming another (non-owner) member → the colleagues chat.
+    if (
+      targetUserId &&
+      targetUserId !== actor.actorUserId &&
+      actor.actorUserId !== org.ownerUserId &&
+      targetUserId !== org.ownerUserId
+    ) {
+      return this.getOrCreateFarmMemberDirect(actor, org, targetUserId);
     }
 
     const memberUserId = await this.resolveFarmCounterpart(actor, org, targetUserId);
@@ -620,6 +642,102 @@ export class ChatService {
     };
   }
 
+  /**
+   * Farm colleagues (final corrections §9): two ACTIVE non-owner members of the
+   * same farm — its veterinarian(s) and employees — message each other.
+   * Idempotent per unordered pair.
+   */
+  private async getOrCreateFarmMemberDirect(
+    actor: ChatActor,
+    org: ChatOrgRef,
+    targetUserId: string,
+  ): Promise<{ conversation: ConversationDTO; created: boolean }> {
+    const [mine, theirs] = await Promise.all([
+      this.memberships.findByUserAndOrg(actor.actorUserId, org.id),
+      this.memberships.findByUserAndOrg(targetUserId, org.id),
+    ]);
+    if (!mine || mine.status !== 'ACTIVE' || mine.roleKey === 'OWNER') {
+      throw new ForbiddenError('Only an active member of this farm can message its members');
+    }
+    if (!theirs || theirs.status !== 'ACTIVE' || theirs.roleKey === 'OWNER') {
+      throw new BadRequestError('The target must be an active non-owner member of this farm');
+    }
+
+    const find = (): Promise<Conversation | null> =>
+      this.conversations.findFarmMemberDirect(org.id, actor.actorUserId, targetUserId);
+    const existing = await find();
+    if (existing) {
+      const side = await this.assertAccess(actor.actorUserId, existing);
+      return {
+        conversation: await this.decorate(actor.actorUserId, existing, side),
+        created: false,
+      };
+    }
+
+    let conversation: Conversation;
+    try {
+      conversation = await this.db.transaction(async (tx) => {
+        const created = await this.conversations.create(
+          {
+            type: 'FARM_MEMBER_DIRECT',
+            organizationId: org.id,
+            petOwnerUserId: actor.actorUserId,
+            memberUserId: targetUserId,
+            createdByUserId: actor.actorUserId,
+          },
+          tx,
+        );
+        await this.conversations.addParticipants(
+          [
+            { conversationId: created.id, userId: actor.actorUserId, role: 'FARM_MEMBER' },
+            { conversationId: created.id, userId: targetUserId, role: 'FARM_MEMBER' },
+          ],
+          tx,
+        );
+        await this.audit.record(
+          {
+            action: AuditAction.CONVERSATION_CREATED,
+            entityType: AuditEntityType.CONVERSATION,
+            entityId: created.id,
+            actorUserId: actor.actorUserId,
+            metadata: {
+              conversationId: created.id,
+              organizationId: org.id,
+              type: 'FARM_MEMBER_DIRECT',
+            },
+            context: actor.context,
+          },
+          tx,
+        );
+        return created;
+      });
+    } catch (err) {
+      if (isUniqueViolation(err)) {
+        const raced = await find();
+        if (raced) {
+          const side = await this.assertAccess(actor.actorUserId, raced);
+          return {
+            conversation: await this.decorate(actor.actorUserId, raced, side),
+            created: false,
+          };
+        }
+      }
+      throw err;
+    }
+
+    this.events.publish('chat.conversation.created', {
+      conversationId: conversation.id,
+      organizationId: org.id,
+      type: conversation.type,
+      participantUserIds: [actor.actorUserId, targetUserId],
+    });
+    const side = await this.assertAccess(actor.actorUserId, conversation);
+    return {
+      conversation: await this.decorate(actor.actorUserId, conversation, side),
+      created: true,
+    };
+  }
+
   // --- marketplace deal conversations (PET_OWNER_VETERINARIAN) --------
   //
   // Created / driven by the `vet-services` and `vet-jobs` modules. A direct
@@ -910,7 +1028,12 @@ export class ChatService {
     );
 
     const items = pageSlice.map((x) =>
-      this.toDTO(x.conversation, x.side, this.unreadFor(x.side, unread.get(x.conversation.id))),
+      this.toDTO(
+        x.conversation,
+        x.side,
+        this.unreadFor(x.side, unread.get(x.conversation.id)),
+        userId,
+      ),
     );
     return { items, total };
   }
@@ -1025,6 +1148,9 @@ export class ChatService {
         this.conversations.setParticipantLastRead(conversation.id, userId, messageId, tx),
       );
     }
+    // Reading the conversation also clears its message alerts in the bell —
+    // for every side, including clinic/office members (no participant row).
+    await this.notificationReads?.markReadForEntity(userId, 'CONVERSATION', conversation.id);
     return this.decorate(userId, conversation, side);
   }
 
@@ -1087,6 +1213,7 @@ export class ChatService {
     conversation: Conversation,
     side: ConversationSide,
     unreadCount: number | null,
+    viewerUserId: string | null = null,
   ): ConversationDTO {
     let counterpartUserId: string | null;
     if (
@@ -1101,6 +1228,12 @@ export class ChatService {
     } else if (conversation.type === 'ANIMAL_PUBLICATION') {
       counterpartUserId =
         side === 'PET_OWNER' ? conversation.memberUserId : conversation.petOwnerUserId;
+    } else if (conversation.type === 'FARM_MEMBER_DIRECT') {
+      // The OTHER colleague — `viewerUserId` tells which of the two is asking.
+      counterpartUserId =
+        viewerUserId === conversation.petOwnerUserId
+          ? conversation.memberUserId
+          : conversation.petOwnerUserId;
     } else {
       counterpartUserId = conversation.memberUserId;
     }
@@ -1125,8 +1258,8 @@ export class ChatService {
     conversation: Conversation,
     side: ConversationSide,
   ): Promise<ConversationDTO> {
-    if (side === 'CLINIC') return this.toDTO(conversation, side, null);
+    if (side === 'CLINIC') return this.toDTO(conversation, side, null, userId);
     const unread = await this.conversations.unreadCounts(userId, [conversation.id]);
-    return this.toDTO(conversation, side, unread.get(conversation.id) ?? 0);
+    return this.toDTO(conversation, side, unread.get(conversation.id) ?? 0, userId);
   }
 }

@@ -38,6 +38,8 @@ export const StoragePrefix = {
   veterinaryStoreProductImages: 'veterinary-store/products',
   veterinaryOfficeProductImages: 'veterinary-office/products',
   organizationBroadcastImages: 'organizations/broadcasts',
+  /** Admin broadcast photos — key kept in `notifications.data.imageKey`, resolved per read. */
+  adminBroadcastImages: 'notifications/broadcasts',
   organizationLicenseDocuments: 'organizations/license-documents',
   /** Private chat media — always `chat/attachments/<conversationId>/…`, served only via signed URLs. */
   chatAttachments: 'chat/attachments',

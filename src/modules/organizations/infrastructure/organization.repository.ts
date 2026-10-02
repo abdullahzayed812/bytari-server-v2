@@ -270,6 +270,15 @@ export class OrganizationRepository {
         .leftJoin(`${table} as d`, 'd.organization_id', 'o.id')
         .where('o.type', filter.type)
         .where('o.status', 'ACTIVE');
+      // An EXPIRED clinic / office leaves the pet-owner directory AND its
+      // search until the subscription is renewed (final corrections §10).
+      if (filter.type === 'CLINIC' || filter.type === 'VETERINARY_OFFICE') {
+        qb.where((w) => {
+          w.whereNull('d.subscription_end_date').orWhereRaw(
+            'd.subscription_end_date >= CURRENT_DATE',
+          );
+        });
+      }
       if (filter.search) {
         qb.whereRaw('lower(o.name) like ?', [`%${filter.search.toLowerCase()}%`]);
       }

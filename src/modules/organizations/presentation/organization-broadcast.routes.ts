@@ -3,6 +3,7 @@ import { asyncHandler } from '../../../shared/http/async-handler.js';
 import { validate } from '../../../shared/http/validate.js';
 import type { Container } from '../../../container.js';
 import { createOrganizationMiddleware } from './organization.middleware.js';
+import { createOrganizationSubscriptionGuard } from './organization-subscription.middleware.js';
 import { OrganizationBroadcastController } from './organization-broadcast.controller.js';
 import {
   organizationBroadcastImageUploadUrlBodySchema,
@@ -21,6 +22,11 @@ export function createOrganizationBroadcastRouter(c: Container): Router {
     authz: c.authorizationService,
   });
 
+  const activeSubscription = createOrganizationSubscriptionGuard({
+    subscriptions: c.farmSubscriptionRenewalRepository,
+    authz: c.authorizationService,
+  });
+
   const r = Router();
   r.use(c.authenticate);
 
@@ -29,6 +35,7 @@ export function createOrganizationBroadcastRouter(c: Container): Router {
     validate({ params: organizationBroadcastParamSchema, body: organizationBroadcastImageUploadUrlBodySchema }),
     withOrganization,
     authorizeOrg('organization.broadcast.send'),
+    activeSubscription,
     asyncHandler(ctrl.requestImageUploadUrl),
   );
   r.post(
@@ -36,6 +43,7 @@ export function createOrganizationBroadcastRouter(c: Container): Router {
     validate({ params: organizationBroadcastParamSchema, body: sendOrganizationBroadcastBodySchema }),
     withOrganization,
     authorizeOrg('organization.broadcast.send'),
+    activeSubscription,
     asyncHandler(ctrl.send),
   );
 

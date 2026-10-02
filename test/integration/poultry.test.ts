@@ -246,7 +246,7 @@ describe('poultry flocks — authorization', () => {
     const clinicRes = await request(app)
       .post('/api/v1/organizations')
       .set(bearer(owner.accessToken))
-      .send({ type: 'CLINIC', name: 'Clinic' });
+      .send({ termsAccepted: true, type: 'CLINIC', name: 'Clinic' });
     const clinicId = clinicRes.body.data.id as string;
     await request(app)
       .post(`/api/v1/admin/organizations/${clinicId}/approve`)
@@ -316,7 +316,7 @@ describe('poultry flocks — cross-farm isolation (IDOR)', () => {
     const clinicRes = await request(app)
       .post('/api/v1/organizations')
       .set(bearer(owner.accessToken))
-      .send({ type: 'CLINIC', name: 'Clinic' });
+      .send({ termsAccepted: true, type: 'CLINIC', name: 'Clinic' });
     const clinicId = clinicRes.body.data.id as string;
     void admin;
 

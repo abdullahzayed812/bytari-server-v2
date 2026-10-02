@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { termsAcceptanceShape } from '../../../shared/validation/terms.js';
 import { businessToday } from '../../../shared/time/business-date.js';
 import { paginationQuerySchema } from '../../../shared/http/pagination.js';
 import { SHEEP_BATCH_STATUSES, SHEEP_PRODUCTION_TYPES } from '../domain/sheep-batch.constants.js';
@@ -33,6 +34,7 @@ export const createSheepFarmBodySchema = z.object({
   contactName: shortText(160).nullable().optional(),
   contactPhone: z.string().trim().min(3).max(40).nullable().optional(),
   contactEmail: z.string().trim().max(255).email().nullable().optional(),
+  ...termsAcceptanceShape,
 });
 export type CreateSheepFarmBody = z.infer<typeof createSheepFarmBodySchema>;
 

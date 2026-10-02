@@ -184,6 +184,7 @@ import {
   type AiResponderPort,
 } from './modules/consultations/application/ai-responder.port.js';
 import { RorkAiResponder } from './modules/consultations/infrastructure/rork-ai-responder.js';
+import type { NotificationReadPort } from './shared/events/notification-read.port.js';
 import { createObjectStorage, StoragePrefix, type ObjectStorage } from './infra/storage/index.js';
 import { ContentRepository } from './modules/content/infrastructure/content.repository.js';
 import { ContentFileRepository } from './modules/content/infrastructure/content-file.repository.js';
@@ -659,6 +660,16 @@ export function createContainer(deps: ContainerDeps): Container {
   // Constructed here (not with the rest of notifications below) so the
   // syndicate module can clear an officer's "new submission" alerts.
   const notificationRepository = new NotificationRepository(db);
+  const notificationReads: NotificationReadPort = {
+    markReadForEntity: async (userId, entityType, entityId) => {
+      const ids = await db.transaction((tx) =>
+        notificationRepository.markReadByEntity(userId, entityType, entityId, tx),
+      );
+      for (const notificationId of ids) {
+        eventBus.publish('notification.read', { notificationId, recipientUserId: userId });
+      }
+    },
+  };
   const syndicateService = new SyndicateService(
     db,
     syndicateDetailsRepository,
@@ -692,16 +703,7 @@ export function createContainer(deps: ContainerDeps): Container {
     auditService,
     eventBus,
     logger,
-    {
-      markReadForEntity: async (userId, entityType, entityId) => {
-        const ids = await db.transaction((tx) =>
-          notificationRepository.markReadByEntity(userId, entityType, entityId, tx),
-        );
-        for (const notificationId of ids) {
-          eventBus.publish('notification.read', { notificationId, recipientUserId: userId });
-        }
-      },
-    },
+    notificationReads,
   );
 
   // --- animals & ownership (Phase 4) --------------------------
@@ -1121,6 +1123,7 @@ export function createContainer(deps: ContainerDeps): Container {
     eventBus,
     logger,
     new ChatAttachmentMedia(objectStorage),
+    notificationReads,
   );
   // Listing contact opens an ANIMAL_PUBLICATION conversation — needs the chat service.
   const publicationInteractionService = new PublicationInteractionService(
@@ -1235,6 +1238,7 @@ export function createContainer(deps: ContainerDeps): Container {
     eventBus,
     animalOwnershipRepository,
     logger,
+    notificationReads,
   );
   const inquiryService = new SupportThreadService(
     db,
@@ -1248,6 +1252,7 @@ export function createContainer(deps: ContainerDeps): Container {
     eventBus,
     animalOwnershipRepository,
     logger,
+    notificationReads,
   );
   const supportService = new SupportThreadService(
     db,
@@ -1261,6 +1266,7 @@ export function createContainer(deps: ContainerDeps): Container {
     eventBus,
     animalOwnershipRepository,
     logger,
+    notificationReads,
   );
 
   // --- Veterinary Services marketplace ----------------------
@@ -1457,7 +1463,9 @@ export function createContainer(deps: ContainerDeps): Container {
     eventBus,
     logger,
     // Tests: no back-off, so a retried push can't land after the test ends.
-    config.env === 'test' ? { pushRetryDelaysMs: [0, 0] } : {},
+    config.env === 'test'
+      ? { pushRetryDelaysMs: [0, 0], storage: objectStorage }
+      : { storage: objectStorage },
   );
   const notificationRecipientRepository = new NotificationRecipientRepository(db);
   const subscriptionExpiryNotifier = new SubscriptionExpiryNotifier(

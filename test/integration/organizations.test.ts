@@ -32,7 +32,12 @@ describe('organization creation', () => {
     const res = await request(app)
       .post('/api/v1/organizations')
       .set(bearer(vet.accessToken))
-      .send({ type: 'CLINIC', name: 'Happy Paws Clinic', description: 'Downtown' });
+      .send({
+        termsAccepted: true,
+        type: 'CLINIC',
+        name: 'Happy Paws Clinic',
+        description: 'Downtown',
+      });
 
     expect(res.status).toBe(201);
     expect(res.body.data).toMatchObject({
@@ -56,7 +61,7 @@ describe('organization creation', () => {
     const res = await request(app)
       .post('/api/v1/organizations')
       .set(bearer(vet.accessToken))
-      .send({ type: 'HOSPITAL', name: 'Org X' });
+      .send({ termsAccepted: true, type: 'HOSPITAL', name: 'Org X' });
     expect(res.status).toBe(422);
   });
 
@@ -65,7 +70,7 @@ describe('organization creation', () => {
     const res = await request(app)
       .post('/api/v1/organizations')
       .set(bearer(vet.accessToken))
-      .send({ type: 'CLINIC', name: 'x' });
+      .send({ termsAccepted: true, type: 'CLINIC', name: 'x' });
     expect(res.status).toBe(422);
   });
 
@@ -87,7 +92,7 @@ describe('organization creation', () => {
   it('requires no authentication bypass — anonymous cannot create', async () => {
     await request(app)
       .post('/api/v1/organizations')
-      .send({ type: 'VETERINARY_STORE', name: 'Anon Store' })
+      .send({ termsAccepted: true, type: 'VETERINARY_STORE', name: 'Anon Store' })
       .expect(401);
   });
 });
@@ -98,12 +103,12 @@ describe('owner veterinarian requirement', () => {
     await request(app)
       .post('/api/v1/organizations')
       .set(bearer(vet.accessToken))
-      .send({ type: 'CLINIC', name: 'Org C' })
+      .send({ termsAccepted: true, type: 'CLINIC', name: 'Org C' })
       .expect(201);
     await request(app)
       .post('/api/v1/organizations')
       .set(bearer(vet.accessToken))
-      .send({ type: 'FARM', name: 'Org F' })
+      .send({ termsAccepted: true, type: 'FARM', name: 'Org F' })
       .expect(201);
   });
 
@@ -112,7 +117,7 @@ describe('owner veterinarian requirement', () => {
     const clinic = await request(app)
       .post('/api/v1/organizations')
       .set(bearer(user.accessToken))
-      .send({ type: 'CLINIC', name: 'Org C' });
+      .send({ termsAccepted: true, type: 'CLINIC', name: 'Org C' });
     expect(clinic.status).toBe(403);
     expect(clinic.body.error.code).toBe('VETERINARIAN_APPROVAL_REQUIRED');
 
@@ -121,7 +126,7 @@ describe('owner veterinarian requirement', () => {
     await request(app)
       .post('/api/v1/organizations')
       .set(bearer(user.accessToken))
-      .send({ type: 'FARM', name: 'Org F' })
+      .send({ termsAccepted: true, type: 'FARM', name: 'Org F' })
       .expect(201);
   });
 
@@ -130,7 +135,7 @@ describe('owner veterinarian requirement', () => {
     await request(app)
       .post('/api/v1/organizations')
       .set(bearer(pending.accessToken))
-      .send({ type: 'CLINIC', name: 'Org C' })
+      .send({ termsAccepted: true, type: 'CLINIC', name: 'Org C' })
       .expect(403);
   });
 
@@ -139,7 +144,7 @@ describe('owner veterinarian requirement', () => {
     const res = await request(app)
       .post('/api/v1/organizations')
       .set(bearer(rejected.accessToken))
-      .send({ type: 'CLINIC', name: 'Org C' });
+      .send({ termsAccepted: true, type: 'CLINIC', name: 'Org C' });
     expect(res.status).toBe(403);
     expect(res.body.error.code).toBe('VETERINARIAN_APPROVAL_REQUIRED');
   });
@@ -150,7 +155,7 @@ describe('owner veterinarian requirement', () => {
       await request(app)
         .post('/api/v1/organizations')
         .set(bearer(user.accessToken))
-        .send({ type, name: `Org ${type}` })
+        .send({ termsAccepted: true, type, name: `Org ${type}` })
         .expect(201);
     }
   });
@@ -158,13 +163,17 @@ describe('owner veterinarian requirement', () => {
   it('the server ignores a client-supplied owner / status (no escalation)', async () => {
     const vet = await registerApprovedVet(app);
     const other = await registerUser(app);
-    const res = await request(app).post('/api/v1/organizations').set(bearer(vet.accessToken)).send({
-      type: 'CLINIC',
-      name: 'Org C',
-      ownerUserId: other.id,
-      status: 'ACTIVE',
-      owner_user_id: other.id,
-    });
+    const res = await request(app)
+      .post('/api/v1/organizations')
+      .set(bearer(vet.accessToken))
+      .send({
+        termsAccepted: true,
+        type: 'CLINIC',
+        name: 'Org C',
+        ownerUserId: other.id,
+        status: 'ACTIVE',
+        owner_user_id: other.id,
+      });
     expect(res.status).toBe(201);
     expect(res.body.data.ownerUserId).toBe(vet.id);
     expect(res.body.data.status).toBe('PENDING');

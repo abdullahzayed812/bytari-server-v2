@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { paginationQuerySchema } from '../../../shared/http/pagination.js';
+import { linkUrlSchema } from '../../../shared/validation/link-url.js';
 import {
   BODY_MAX,
   DEVICE_PLATFORMS,
@@ -50,8 +51,21 @@ export const adminNotificationBodySchema = z
     title: z.string().trim().min(1).max(TITLE_MAX),
     body: z.string().trim().min(1).max(BODY_MAX),
     data: stringData.optional(),
+    imageStorageKey: z.string().trim().min(1).max(1000).nullable().optional(),
+    linkUrl: linkUrlSchema.nullable().optional(),
   })
   .strict();
+
+export const adminBroadcastImageUploadUrlBodySchema = z
+  .object({
+    filename: z.string().trim().min(1).max(255),
+    mimeType: z.string().trim().min(1).max(100),
+    size: z.number().int().positive(),
+  })
+  .strict();
+export type AdminBroadcastImageUploadUrlBody = z.infer<
+  typeof adminBroadcastImageUploadUrlBodySchema
+>;
 
 export type ListNotificationsQuery = z.infer<typeof listNotificationsQuerySchema>;
 export type RegisterDeviceBody = z.infer<typeof registerDeviceBodySchema>;

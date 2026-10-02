@@ -75,6 +75,10 @@ export type AdminSetPasswordBody = z.infer<typeof adminSetPasswordBodySchema>;
 
 /** `POST /admin/users/:id/messages` — opens a support thread owned by the user. */
 export const adminMessageUserBodySchema = z
-  .object({ body: z.string().trim().min(1).max(4000) })
+  .object({
+    body: z.string().trim().min(1).max(4000),
+    /** Photos uploaded first via `POST /support-messages/attachments/upload-url`. */
+    imageKeys: z.array(z.string().trim().min(1).max(1024)).max(4).optional(),
+  })
   .strict();
 export type AdminMessageUserBody = z.infer<typeof adminMessageUserBodySchema>;

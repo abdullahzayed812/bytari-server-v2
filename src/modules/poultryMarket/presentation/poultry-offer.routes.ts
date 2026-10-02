@@ -3,7 +3,7 @@ import { asyncHandler } from '../../../shared/http/async-handler.js';
 import { validate } from '../../../shared/http/validate.js';
 import type { Container } from '../../../container.js';
 import { PoultryOfferController } from './poultry-offer.controller.js';
-import { createMarketMiddleware } from './market.middleware.js';
+import { createMarketMiddleware, createTraderSubscriptionGuard } from './market.middleware.js';
 import {
   createPoultryOfferBodySchema,
   listAdminPoultryOffersQuerySchema,
@@ -35,17 +35,24 @@ export function createPoultryOfferRouters(c: Container): { self: Router; admin: 
     authz: c.authorizationService,
   });
 
+  const activeTrader = createTraderSubscriptionGuard({
+    traders: c.traderRepository,
+    authz: c.authorizationService,
+  });
+
   const self = Router();
   self.use(c.authenticate);
   self.post(
     '/upload-url',
     requireApprovedTrader(),
+    activeTrader,
     validate({ body: poultryOfferUploadUrlBodySchema }),
     asyncHandler(ctrl.requestUploadUrl),
   );
   self.get(
     '/mine',
     requireApprovedTrader(),
+    activeTrader,
     validate({ query: listPoultryOffersQuerySchema }),
     asyncHandler(ctrl.listMine),
   );
@@ -53,6 +60,7 @@ export function createPoultryOfferRouters(c: Container): { self: Router; admin: 
   self.post(
     '/',
     requireApprovedTrader(),
+    activeTrader,
     validate({ body: createPoultryOfferBodySchema }),
     asyncHandler(ctrl.create),
   );

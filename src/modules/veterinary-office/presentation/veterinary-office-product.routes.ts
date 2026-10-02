@@ -3,6 +3,7 @@ import { asyncHandler } from '../../../shared/http/async-handler.js';
 import { validate } from '../../../shared/http/validate.js';
 import type { Container } from '../../../container.js';
 import { createOrganizationMiddleware } from '../../organizations/presentation/organization.middleware.js';
+import { createOrganizationSubscriptionGuard } from '../../organizations/presentation/organization-subscription.middleware.js';
 import { VeterinaryOfficeProductController } from './veterinary-office-product.controller.js';
 import { PublicVeterinaryOfficeProductController } from './public-veterinary-office-product.controller.js';
 import {
@@ -49,6 +50,11 @@ export function createVeterinaryOfficeProductRouter(c: Container): Router {
   const { withVeterinaryOfficeProduct } = createVeterinaryOfficeProductMiddleware({
     products: c.veterinaryOfficeProductRepository,
   });
+  // An EXPIRED office cannot manage its catalog (reads stay allowed).
+  const activeSubscription = createOrganizationSubscriptionGuard({
+    subscriptions: c.farmSubscriptionRenewalRepository,
+    authz: c.authorizationService,
+  });
 
   const r = Router();
   r.use(c.authenticate);
@@ -69,6 +75,7 @@ export function createVeterinaryOfficeProductRouter(c: Container): Router {
     withOrganization,
     withVeterinaryOffice,
     authorizeOrg('product.create'),
+    activeSubscription,
     asyncHandler(ctrl.create),
   );
   r.get(
@@ -86,6 +93,7 @@ export function createVeterinaryOfficeProductRouter(c: Container): Router {
     withOrganization,
     withVeterinaryOffice,
     authorizeOrg('product.update'),
+    activeSubscription,
     withVeterinaryOfficeProduct,
     asyncHandler(ctrl.update),
   );
@@ -95,6 +103,7 @@ export function createVeterinaryOfficeProductRouter(c: Container): Router {
     withOrganization,
     withVeterinaryOffice,
     authorizeOrg('product.delete'),
+    activeSubscription,
     withVeterinaryOfficeProduct,
     asyncHandler(ctrl.deactivate),
   );
@@ -104,6 +113,7 @@ export function createVeterinaryOfficeProductRouter(c: Container): Router {
     withOrganization,
     withVeterinaryOffice,
     authorizeOrg('product.inventory.adjust'),
+    activeSubscription,
     withVeterinaryOfficeProduct,
     asyncHandler(ctrl.adjustStock),
   );
@@ -116,6 +126,7 @@ export function createVeterinaryOfficeProductRouter(c: Container): Router {
     withOrganization,
     withVeterinaryOffice,
     authorizeOrg('product.update'),
+    activeSubscription,
     withVeterinaryOfficeProduct,
     asyncHandler(ctrl.requestImageUploadUrl),
   );
@@ -125,6 +136,7 @@ export function createVeterinaryOfficeProductRouter(c: Container): Router {
     withOrganization,
     withVeterinaryOffice,
     authorizeOrg('product.update'),
+    activeSubscription,
     withVeterinaryOfficeProduct,
     asyncHandler(ctrl.addImage),
   );
@@ -134,6 +146,7 @@ export function createVeterinaryOfficeProductRouter(c: Container): Router {
     withOrganization,
     withVeterinaryOffice,
     authorizeOrg('product.update'),
+    activeSubscription,
     withVeterinaryOfficeProduct,
     asyncHandler(ctrl.removeImage),
   );

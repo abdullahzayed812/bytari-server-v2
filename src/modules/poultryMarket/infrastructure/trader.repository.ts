@@ -130,6 +130,41 @@ export class TraderRepository {
     return rowToTraderProfile(row as TraderProfileRow);
   }
 
+  /** Set (or renew) the activation period; clears any open renewal request. */
+  async setSubscription(
+    userId: string,
+    period: { startDate: string; endDate: string },
+    trx: Knex.Transaction,
+  ): Promise<TraderProfile> {
+    const [row] = await trx<TraderProfileRow>(TABLE)
+      .where({ user_id: userId })
+      .update({
+        subscription_start_date: period.startDate,
+        subscription_end_date: period.endDate,
+        renewal_requested_at: null,
+        updated_at: new Date(),
+      })
+      .returning('*');
+    return rowToTraderProfile(row as TraderProfileRow);
+  }
+
+  async markRenewalRequested(userId: string, trx: Knex.Transaction): Promise<TraderProfile> {
+    const [row] = await trx<TraderProfileRow>(TABLE)
+      .where({ user_id: userId })
+      .update({ renewal_requested_at: new Date(), updated_at: new Date() })
+      .returning('*');
+    return rowToTraderProfile(row as TraderProfileRow);
+  }
+
+  /** Traders who asked for a renewal and wait for the admin (dashboard counter). */
+  async countRenewalRequests(trx?: Knex.Transaction): Promise<number> {
+    const row = await this.conn(trx)(TABLE)
+      .whereNotNull('renewal_requested_at')
+      .count<{ count: string }>({ count: '*' })
+      .first();
+    return Number(row?.count ?? 0);
+  }
+
   async list(
     status: TraderStatus | undefined,
     page: number,

@@ -25,6 +25,29 @@ export const suspendTraderBodySchema = z.object({
 });
 export type SuspendTraderBody = z.infer<typeof suspendTraderBodySchema>;
 
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const dayString = z
+  .string()
+  .regex(DATE_RE, 'Expected YYYY-MM-DD')
+  .refine((v) => !Number.isNaN(Date.parse(v)), 'Invalid date');
+
+/** The trader's activation period (both dates, or neither → one year from today). */
+export const traderSubscriptionBodySchema = z
+  .object({ startDate: dayString, endDate: dayString })
+  .strict()
+  .refine((v) => v.endDate >= v.startDate, {
+    message: 'endDate must be on or after startDate',
+    path: ['endDate'],
+  });
+export type TraderSubscriptionBody = z.infer<typeof traderSubscriptionBodySchema>;
+
+/** Approve body — optional activation period (defaults to one year from today). */
+export const approveTraderBodySchema = z
+  .object({ subscription: traderSubscriptionBodySchema.optional() })
+  .strict()
+  .optional();
+export type ApproveTraderBody = z.infer<typeof approveTraderBodySchema>;
+
 export const listTradersQuerySchema = paginationQuerySchema.extend({
   status: z.enum(TRADER_STATUSES).optional(),
 });

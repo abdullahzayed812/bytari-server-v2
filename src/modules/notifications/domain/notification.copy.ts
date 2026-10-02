@@ -168,6 +168,14 @@ export const NOTIFICATION_COPY: Record<NotificationType, { title: string; body: 
     title: 'تسجيل جديد',
     body: 'سجّل مشارك جديد في دورتك أو ندوتك.',
   },
+  VET_COURSE_REGISTRATION_APPROVED: {
+    title: 'تم قبول تسجيلك',
+    body: 'تمت الموافقة على تسجيلك في الدورة/الندوة.',
+  },
+  VET_COURSE_REGISTRATION_REJECTED: {
+    title: 'لم يتم قبول تسجيلك',
+    body: 'لم تتم الموافقة على تسجيلك في الدورة/الندوة.',
+  },
   VET_COURSE_CAPACITY_REACHED: {
     title: 'اكتمل العدد',
     body: 'اكتمل عدد المقاعد في دورتك أو ندوتك.',

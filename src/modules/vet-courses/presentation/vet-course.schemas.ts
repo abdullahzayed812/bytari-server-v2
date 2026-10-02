@@ -6,6 +6,7 @@ import {
   VET_COURSE_LOCATION_MODES,
   VET_COURSE_MAX_LIST_ITEMS,
   VET_COURSE_MODERATION_STATUSES,
+  VET_COURSE_REGISTRATION_STATUSES,
   VET_COURSE_REASON_MAX,
   VET_COURSE_TEXT_MAX,
   VET_COURSE_TITLE_MAX,
@@ -105,7 +106,15 @@ export const createRegistrationBodySchema = z
   .strict();
 export type CreateRegistrationBody = z.infer<typeof createRegistrationBodySchema>;
 
-export const registrationListQuerySchema = paginationQuerySchema;
+export const registrationListQuerySchema = paginationQuerySchema.extend({
+  status: z.enum(VET_COURSE_REGISTRATION_STATUSES).optional(),
+});
+
+/** Rejecting a registrant — the reason is optional (shown to the registrant). */
+export const registrationRejectBodySchema = z
+  .object({ reason: z.string().trim().min(1).max(VET_COURSE_REASON_MAX).optional() })
+  .strict();
+export type RegistrationRejectBody = z.infer<typeof registrationRejectBodySchema>;
 export type RegistrationListQuery = z.infer<typeof registrationListQuerySchema>;
 
 // --- shared --------------------------------------------------

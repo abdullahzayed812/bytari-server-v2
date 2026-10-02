@@ -11,6 +11,7 @@ beforeEach(() => resetDb());
 afterAll(() => closeTestDb());
 
 const validBody = {
+  termsAccepted: true,
   name: 'مزرعة النور للدواجن',
   location: 'بغداد - الدورة',
   governorate: 'بغداد',

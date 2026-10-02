@@ -16,6 +16,7 @@ import {
   assignSyndicateAdminBodySchema,
   memberListQuerySchema,
   messageMembersBodySchema,
+  membersBroadcastImageUploadUrlBodySchema,
   organizationAndUserParamSchema,
   createAnnouncementBodySchema,
   createSubmissionBodySchema,
@@ -202,6 +203,16 @@ export function createSyndicateRouter(c: Container): Router {
 
   // --- registered members (syndicate.member.*, org-scoped) --------------
   // `/members/broadcast` is mounted before `/members/:userId`.
+  r.post(
+    '/:organizationId/members/broadcast/image-upload-url',
+    validate({
+      params: organizationIdParamSchema,
+      body: membersBroadcastImageUploadUrlBodySchema,
+    }),
+    withOrganization,
+    authorizeOrg('syndicate.member.message'),
+    asyncHandler(members.broadcastImageUploadUrl),
+  );
   r.post(
     '/:organizationId/members/broadcast',
     validate({ params: organizationIdParamSchema, body: messageMembersBodySchema }),

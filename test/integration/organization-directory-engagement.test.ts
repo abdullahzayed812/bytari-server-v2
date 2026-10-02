@@ -230,7 +230,7 @@ describe('Clinic Details — public detail composition (veterinarians + engageme
     const pending = await request(app)
       .post('/api/v1/organizations')
       .set(bearer(vet.accessToken))
-      .send({ type: 'CLINIC', name: 'Not yet approved' });
+      .send({ termsAccepted: true, type: 'CLINIC', name: 'Not yet approved' });
     const outsider = await registerUser(app);
     const res = await request(app)
       .get(`/api/v1/organizations/discover/${pending.body.data.id}`)

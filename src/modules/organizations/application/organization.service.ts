@@ -1,6 +1,12 @@
 import type { Knex } from 'knex';
 import type { Logger } from 'pino';
 import {
+  ORGANIZATION_TERMS,
+  termsKeyFor,
+  type OrganizationTermsDTO,
+  type OrganizationTermsKey,
+} from '../domain/organization-terms.js';
+import {
   BadRequestError,
   ConflictError,
   InternalError,
@@ -98,6 +104,12 @@ export interface CreateOrganizationInput {
   details?: CreateOrganizationDetails;
   /** Typed camelCase profile fields — CLINIC / VETERINARY_OFFICE / VETERINARY_STORE registration. */
   profile?: CreateOrganizationProfileInput;
+  /**
+   * Registration Terms & Conditions acceptance — REQUIRED for a clinic, an
+   * office and every farm (`termsKeyFor`). `version`, when sent, must be the
+   * version the server currently serves (the one the user was shown).
+   */
+  terms?: { accepted?: boolean; version?: string };
 }
 
 const NON_ADMIN_STATUS_CHANGE: Record<
@@ -206,10 +218,66 @@ export class OrganizationService {
     };
   }
 
+  /** The registration terms for one set (`GET /organizations/terms/:termsKey`). */
+  getTerms(termsKey: OrganizationTermsKey): OrganizationTermsDTO {
+    return ORGANIZATION_TERMS[termsKey];
+  }
+
+  /** Recorded terms acceptance(s) of one organization — shown to admins on the application. */
+  async getTermsAcceptances(organizationId: string): Promise<
+    Array<{
+      termsKey: string;
+      termsVersion: string;
+      acceptedAt: string;
+      acceptedByUserId: string | null;
+      isCurrentVersion: boolean;
+    }>
+  > {
+    const rows = await this.db<{
+      organization_id: string;
+      terms_key: string;
+      terms_version: string;
+      accepted_at: Date;
+      user_id: string | null;
+    }>('organization_terms_acceptances')
+      .where({ organization_id: organizationId })
+      .orderBy('accepted_at', 'asc')
+      .select('terms_key', 'terms_version', 'accepted_at', 'user_id');
+    return rows.map((r) => ({
+      termsKey: r.terms_key,
+      termsVersion: r.terms_version,
+      acceptedAt: r.accepted_at.toISOString(),
+      acceptedByUserId: r.user_id,
+      isCurrentVersion:
+        (ORGANIZATION_TERMS as Record<string, OrganizationTermsDTO>)[r.terms_key]?.version ===
+        r.terms_version,
+    }));
+  }
+
   async create(input: CreateOrganizationInput, actor: OrgActor): Promise<OrganizationWithDetails> {
     const creator = await this.users.getById(actor.actorUserId);
     OrganizationPolicy.assertCanCreate(input.type, creator);
     OrganizationPolicy.validateTypeSpecificRules(input.type, input);
+
+    // Terms & Conditions — enforced here, where EVERY creation path (generic
+    // registration, poultry / sheep / cattle farm forms) converges.
+    const termsKey = termsKeyFor(
+      input.type,
+      (input.details as { farm_species?: string } | undefined)?.farm_species ?? null,
+    );
+    const terms = termsKey ? ORGANIZATION_TERMS[termsKey] : null;
+    if (terms) {
+      if (input.terms?.accepted !== true) {
+        throw new BadRequestError('You must accept the terms and conditions', {
+          code: ErrorCode.TERMS_NOT_ACCEPTED,
+        });
+      }
+      if (input.terms.version !== undefined && input.terms.version !== terms.version) {
+        throw new ConflictError('The terms and conditions have changed — review them again', {
+          code: ErrorCode.TERMS_VERSION_OUTDATED,
+        });
+      }
+    }
 
     const org = await this.db.transaction(async (tx) => {
       const ownerRole = await this.orgRbac.findRoleByKey(OWNER_ORG_ROLE_KEY, tx);
@@ -247,6 +315,14 @@ export class OrganizationService {
         detailExtra.join_code = OrganizationPolicy.generateJoinCode();
       }
       await this.organizations.insertDetails(input.type, created.id, detailExtra, tx);
+      if (terms) {
+        await tx('organization_terms_acceptances').insert({
+          organization_id: created.id,
+          user_id: actor.actorUserId,
+          terms_key: terms.termsKey,
+          terms_version: terms.version,
+        });
+      }
 
       const membership = await this.memberships.create(
         {

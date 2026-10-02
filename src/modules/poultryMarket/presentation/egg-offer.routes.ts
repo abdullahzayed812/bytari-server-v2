@@ -3,7 +3,7 @@ import { asyncHandler } from '../../../shared/http/async-handler.js';
 import { validate } from '../../../shared/http/validate.js';
 import type { Container } from '../../../container.js';
 import { EggOfferController } from './egg-offer.controller.js';
-import { createMarketMiddleware } from './market.middleware.js';
+import { createMarketMiddleware, createTraderSubscriptionGuard } from './market.middleware.js';
 import {
   createEggOfferBodySchema,
   eggOfferParamSchema,
@@ -31,17 +31,24 @@ export function createEggOfferRouters(c: Container): { self: Router; admin: Rout
     authz: c.authorizationService,
   });
 
+  const activeTrader = createTraderSubscriptionGuard({
+    traders: c.traderRepository,
+    authz: c.authorizationService,
+  });
+
   const self = Router();
   self.use(c.authenticate);
   self.post(
     '/upload-url',
     requireApprovedTrader(),
+    activeTrader,
     validate({ body: eggOfferUploadUrlBodySchema }),
     asyncHandler(ctrl.requestUploadUrl),
   );
   self.get(
     '/mine',
     requireApprovedTrader(),
+    activeTrader,
     validate({ query: listEggOffersQuerySchema }),
     asyncHandler(ctrl.listMine),
   );
@@ -49,6 +56,7 @@ export function createEggOfferRouters(c: Container): { self: Router; admin: Rout
   self.post(
     '/',
     requireApprovedTrader(),
+    activeTrader,
     validate({ body: createEggOfferBodySchema }),
     asyncHandler(ctrl.create),
   );

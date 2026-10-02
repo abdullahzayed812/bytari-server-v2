@@ -149,6 +149,67 @@ export class VetCourseRegistrationService {
     return this.mustGetDTO(id);
   }
 
+  // --- management review (ADMIN / VET_COURSES supervisor) -----------------
+
+  /**
+   * Approve / reject one registrant. Route-guarded by `vet_course.approve` /
+   * `vet_course.reject`; the registrant is notified either way. A rejected
+   * registrant frees their seat (counts exclude REJECTED).
+   */
+  async review(
+    registrationId: string,
+    decision: 'APPROVED' | 'REJECTED',
+    reason: string | null,
+    actor: VetCourseActor,
+  ): Promise<VetCourseRegistrationDTO> {
+    const existing = await this.registrations.findJoinedById(registrationId);
+    if (!existing) throw new NotFoundError('Registration not found');
+    if (existing.registration.status !== 'PENDING') {
+      throw new ConflictError('This registration was already reviewed', {
+        code: ErrorCode.VET_COURSE_REGISTRATION_NOT_PENDING,
+      });
+    }
+    await this.db.transaction(async (tx) => {
+      const updated = await this.registrations.review(
+        registrationId,
+        { status: decision, reviewerUserId: actor.principal.userId, reason },
+        tx,
+      );
+      if (!updated) {
+        throw new ConflictError('This registration was already reviewed', {
+          code: ErrorCode.VET_COURSE_REGISTRATION_NOT_PENDING,
+        });
+      }
+      await this.audit.record(
+        {
+          action:
+            decision === 'APPROVED'
+              ? VetCourseAuditAction.REGISTRATION_APPROVED
+              : VetCourseAuditAction.REGISTRATION_REJECTED,
+          entityType: VetCourseAuditEntity.REGISTRATION,
+          entityId: registrationId,
+          actorUserId: actor.principal.userId,
+          metadata: { courseId: existing.registration.courseId, ...(reason ? { reason } : {}) },
+          context: actor.context,
+        },
+        tx,
+      );
+    });
+    this.events.publish(
+      decision === 'APPROVED'
+        ? VetCourseEvent.REGISTRATION_APPROVED
+        : VetCourseEvent.REGISTRATION_REJECTED,
+      {
+        registrationId,
+        courseId: existing.registration.courseId,
+        courseTitle: existing.course?.title ?? '',
+        registrantUserId: existing.registration.registrantUserId,
+        actorUserId: actor.principal.userId,
+      },
+    );
+    return this.mustGetDTO(registrationId);
+  }
+
   // --- reads -----------------------------------------------------
 
   /** Registrants of ONE course — the course's creator (or a moderator) only. */

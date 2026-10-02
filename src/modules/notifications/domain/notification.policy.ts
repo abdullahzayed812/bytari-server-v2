@@ -282,6 +282,21 @@ export class NotificationPolicy {
         });
       case 'vet_course.registration.created':
         return this.vetCourseRegistration(event.name, p);
+      case 'vet_course.registration.approved':
+      case 'vet_course.registration.rejected':
+        return this.vetServiceToUser(
+          event.name === 'vet_course.registration.approved'
+            ? 'VET_COURSE_REGISTRATION_APPROVED'
+            : 'VET_COURSE_REGISTRATION_REJECTED',
+          event.name,
+          { ...p, conversationId: '' },
+          {
+            userId: str(p.registrantUserId),
+            actorUserId: str(p.actorUserId),
+            entityType: 'VET_COURSE_REGISTRATION',
+            entityId: str(p.registrationId),
+          },
+        ).map((spec) => ({ ...spec, data: { ...spec.data, courseId: str(p.courseId) } }));
 
       // --- Veterinary Syndicates / Unions ---
       case 'syndicate.announcement.published':
@@ -330,7 +345,12 @@ export class NotificationPolicy {
           str(p.broadcastId),
           str(p.title),
           str(p.body),
-          typeof p.imageUrl === 'string' ? p.imageUrl : null,
+          {
+            imageKey: typeof p.imageKey === 'string' ? p.imageKey : null,
+            // legacy in-flight events carried a pre-signed URL
+            imageUrl: typeof p.imageUrl === 'string' ? p.imageUrl : null,
+            linkUrl: typeof p.linkUrl === 'string' ? p.linkUrl : null,
+          },
           str(p.actorUserId),
           p.audience === 'SYNDICATE_MEMBERS' ? 'SYNDICATE_MEMBERS' : 'FOLLOWERS',
         );
@@ -653,6 +673,11 @@ export class NotificationPolicy {
       }
     } else if (conv.type === 'ANIMAL_PUBLICATION') {
       // Listing contact — the other party (interested user ↔ listing owner).
+      for (const id of [conv.petOwnerUserId, conv.memberUserId]) {
+        if (id && id !== sender) recipients.add(id);
+      }
+    } else if (conv.type === 'FARM_MEMBER_DIRECT') {
+      // Farm colleagues — the other member.
       for (const id of [conv.petOwnerUserId, conv.memberUserId]) {
         if (id && id !== sender) recipients.add(id);
       }
@@ -981,7 +1006,7 @@ export class NotificationPolicy {
     broadcastId: string,
     title: string,
     body: string,
-    imageUrl: string | null,
+    media: { imageKey: string | null; imageUrl: string | null; linkUrl: string | null },
     actorUserId: string,
     audience: 'FOLLOWERS' | 'SYNDICATE_MEMBERS',
   ): Promise<NotificationSpec[]> {
@@ -1008,7 +1033,9 @@ export class NotificationPolicy {
           type: 'ORGANIZATION_BROADCAST',
           organizationId,
           audience,
-          ...(imageUrl ? { imageUrl } : {}),
+          ...(media.imageKey ? { imageKey: media.imageKey } : {}),
+          ...(!media.imageKey && media.imageUrl ? { imageUrl: media.imageUrl } : {}),
+          ...(media.linkUrl ? { linkUrl: media.linkUrl } : {}),
         },
         actorUserId: actorUserId || null,
         entityType: 'ORGANIZATION',

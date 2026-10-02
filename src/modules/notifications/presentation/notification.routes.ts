@@ -6,6 +6,7 @@ import { NOTIFICATION_ADMIN_SEND } from '../domain/notification.constants.js';
 import { NotificationController } from './notification.controller.js';
 import {
   adminNotificationBodySchema,
+  adminBroadcastImageUploadUrlBodySchema,
   deviceIdParamSchema,
   listNotificationsQuerySchema,
   notificationIdParamSchema,
@@ -74,6 +75,12 @@ export function createAdminNotificationRouter(c: Container): Router {
     authorize(NOTIFICATION_ADMIN_SEND),
     validate({ body: adminNotificationBodySchema }),
     asyncHandler(ctrl.adminSend),
+  );
+  r.post(
+    '/image-upload-url',
+    authorize(NOTIFICATION_ADMIN_SEND),
+    validate({ body: adminBroadcastImageUploadUrlBodySchema }),
+    asyncHandler(ctrl.adminImageUploadUrl),
   );
   return r;
 }

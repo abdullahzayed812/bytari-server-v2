@@ -84,7 +84,7 @@ describe('public product catalog — GET /organizations/discover/:id/products*',
     const created = await request(app)
       .post('/api/v1/organizations')
       .set(bearer(owner.accessToken))
-      .send({ type: 'VETERINARY_OFFICE', name: 'Unapproved Office' });
+      .send({ termsAccepted: true, type: 'VETERINARY_OFFICE', name: 'Unapproved Office' });
     const officeId = created.body.data.id as string;
 
     const res = await request(app).get(publicPPath(officeId)).set(bearer(stranger.accessToken));

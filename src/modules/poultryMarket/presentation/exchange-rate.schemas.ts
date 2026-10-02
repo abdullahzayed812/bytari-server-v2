@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isMarketGovernorate } from '../domain/market-governorates.js';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const dateSchema = z
@@ -17,8 +18,19 @@ const moneySchema = z
 export const exchangeRateDateQuerySchema = z.object({ date: dateSchema });
 export type ExchangeRateDateQuery = z.infer<typeof exchangeRateDateQuerySchema>;
 
+/**
+ * A board row: an Iraqi governorate, or "إقليم كوردستان" — the Kurdistan
+ * Region's four governorates are priced ONCE, never individually.
+ */
+const marketGovernorateSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(120)
+  .refine(isMarketGovernorate, { message: 'Not an exchange-board governorate' });
+
 const poultryRateEntrySchema = z.object({
-  governorate: z.string().trim().min(1).max(120),
+  governorate: marketGovernorateSchema,
   meatPricePerKg: moneySchema,
   layerPricePerBird: moneySchema,
 });
@@ -30,7 +42,7 @@ export const savePoultryRatesBodySchema = z.object({
 export type SavePoultryRatesBody = z.infer<typeof savePoultryRatesBodySchema>;
 
 const eggRateEntrySchema = z.object({
-  governorate: z.string().trim().min(1).max(120),
+  governorate: marketGovernorateSchema,
   eggPricePerTray: moneySchema,
 });
 

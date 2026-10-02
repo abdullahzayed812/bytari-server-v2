@@ -106,6 +106,14 @@ export const ErrorCode = {
   RENEWAL_REQUEST_NOT_PENDING: 'RENEWAL_REQUEST_NOT_PENDING',
   /** Farm operations are restricted — the subscription is EXPIRED or NOT_STARTED. */
   FARM_SUBSCRIPTION_NOT_ACTIVE: 'FARM_SUBSCRIPTION_NOT_ACTIVE',
+  /** A clinic / veterinary office whose subscription EXPIRED cannot operate until renewed. */
+  ORGANIZATION_SUBSCRIPTION_EXPIRED: 'ORGANIZATION_SUBSCRIPTION_EXPIRED',
+  /** The license number / license images are immutable once the organization was approved. */
+  ORGANIZATION_LICENSE_LOCKED: 'ORGANIZATION_LICENSE_LOCKED',
+  /** A clinic / office / farm registration was submitted without accepting its terms. */
+  TERMS_NOT_ACCEPTED: 'TERMS_NOT_ACCEPTED',
+  /** The accepted terms version is not the current one — show the current terms again. */
+  TERMS_VERSION_OUTDATED: 'TERMS_VERSION_OUTDATED',
 
   // --- Animal publications / lifecycle (Phase 7) ---
   /** A moderation action was attempted on a publication that is not PENDING. */
@@ -156,6 +164,8 @@ export const ErrorCode = {
   // --- Poultry Markets (trader registration / offers / exchange rates) ---
   /** Market-only action requires an APPROVED trader account. */
   TRADER_APPROVAL_REQUIRED: 'TRADER_APPROVAL_REQUIRED',
+  /** The trader's activation period has ended — market access is blocked until renewed. */
+  TRADER_SUBSCRIPTION_EXPIRED: 'TRADER_SUBSCRIPTION_EXPIRED',
 
   // --- Clinic appointments (Pet Owner ↔ Clinic booking) ---
   /** A lifecycle action was attempted from a status that does not allow it. */
@@ -198,6 +208,8 @@ export const ErrorCode = {
   VET_COURSE_CAPACITY_FULL: 'VET_COURSE_CAPACITY_FULL',
   /** An uploaded cover image storage key is missing / oversized / wrong type / wrong prefix. */
   VET_COURSE_IMAGE_INVALID: 'VET_COURSE_IMAGE_INVALID',
+  /** Approve / reject attempted on a course registration that is no longer PENDING. */
+  VET_COURSE_REGISTRATION_NOT_PENDING: 'VET_COURSE_REGISTRATION_NOT_PENDING',
 
   // --- Veterinary Syndicates / Unions ---
   /** A subordinate syndicate's `parentOrganizationId` does not point at a valid main syndicate. */

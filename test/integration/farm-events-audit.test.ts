@@ -153,7 +153,7 @@ describe('farm & poultry events + audit', () => {
     const clinicRes = await request(app)
       .post('/api/v1/organizations')
       .set(bearer(owner.accessToken))
-      .send({ type: 'CLINIC', name: 'Clinic' });
+      .send({ termsAccepted: true, type: 'CLINIC', name: 'Clinic' });
     const clinicId = clinicRes.body.data.id as string;
     await request(app)
       .post(`/api/v1/admin/organizations/${clinicId}/approve`)

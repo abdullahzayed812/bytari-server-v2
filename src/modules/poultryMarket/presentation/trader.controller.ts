@@ -8,6 +8,8 @@ import { requireAuth } from '../../auth/authenticate.middleware.js';
 import type { TraderService } from '../application/trader.service.js';
 import type {
   AdminUpdateTraderBody,
+  ApproveTraderBody,
+  TraderSubscriptionBody,
   ListTradersQuery,
   RegisterTraderBody,
   RejectTraderBody,
@@ -58,7 +60,23 @@ export class TraderController {
 
   approve = async (req: Request, res: Response): Promise<void> => {
     const { userId } = validatedParams<{ userId: string }>(req);
-    sendSuccess(res, await this.traders.approve(userId, this.actor(req)));
+    const body = validatedBody<ApproveTraderBody>(req);
+    sendSuccess(res, await this.traders.approve(userId, this.actor(req), body?.subscription));
+  };
+
+  setSubscription = async (req: Request, res: Response): Promise<void> => {
+    const { userId } = validatedParams<{ userId: string }>(req);
+    const body = validatedBody<TraderSubscriptionBody>(req);
+    sendSuccess(res, await this.traders.setSubscription(userId, body, this.actor(req)));
+  };
+
+  requestRenewal = async (req: Request, res: Response): Promise<void> => {
+    const auth = requireAuth(req);
+    sendSuccess(
+      res,
+      await this.traders.requestRenewal(auth.userId, this.actor(req)),
+      StatusCodes.CREATED,
+    );
   };
 
   reject = async (req: Request, res: Response): Promise<void> => {

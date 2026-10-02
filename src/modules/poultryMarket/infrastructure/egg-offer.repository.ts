@@ -62,7 +62,15 @@ export class EggOfferRepository {
       // Public browse: live AND approved by a moderator.
       const qb = this.conn(trx)<EggOfferRow>(TABLE)
         .where('status', filter.status ?? 'ACTIVE')
-        .andWhere('moderation_status', 'APPROVED');
+        .andWhere('moderation_status', 'APPROVED')
+        // A trader whose activation period has ended is off the market until renewed.
+        .whereNotIn(
+          'trader_user_id',
+          this.conn(trx)('trader_profiles')
+            .whereNotNull('subscription_end_date')
+            .andWhereRaw('subscription_end_date < CURRENT_DATE')
+            .select('user_id'),
+        );
       if (filter.eggType) qb.andWhere('egg_type', filter.eggType);
       if (filter.governorate) qb.andWhere('governorate', filter.governorate);
       return qb;

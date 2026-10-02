@@ -1,17 +1,46 @@
 import type { Knex } from 'knex';
 import type { Logger } from 'pino';
-import { ConflictError, ForbiddenError, NotFoundError } from '../../../shared/errors/app-error.js';
+import {
+  BadRequestError,
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+} from '../../../shared/errors/app-error.js';
+import { ErrorCode } from '../../../shared/errors/error-codes.js';
 import type { EventBus } from '../../../shared/events/index.js';
 import { AuditAction, AuditEntityType, type AuditContext } from '../../audit/audit.types.js';
 import type { AuditService } from '../../audit/audit.service.js';
 import type { UserService } from '../../users/user.service.js';
 import type { TraderRepository } from '../infrastructure/trader.repository.js';
-import type {
-  RegisterTraderInput,
-  TraderApplicationSummary,
-  TraderProfile,
+import {
+  DEFAULT_TRADER_SUBSCRIPTION_DAYS,
+  type RegisterTraderInput,
+  type TraderApplicationSummary,
+  type TraderProfile,
 } from '../domain/trader.types.js';
 import type { TraderStatus } from '../domain/trader.constants.js';
+
+export interface TraderSubscriptionPeriod {
+  startDate: string;
+  endDate: string;
+}
+
+function isoDay(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+function defaultPeriod(now = new Date()): TraderSubscriptionPeriod {
+  const end = new Date(now.getTime() + DEFAULT_TRADER_SUBSCRIPTION_DAYS * 86_400_000);
+  return { startDate: isoDay(now), endDate: isoDay(end) };
+}
+
+function assertValidPeriod(p: TraderSubscriptionPeriod): void {
+  if (p.endDate < p.startDate) {
+    throw new BadRequestError('The subscription end date must be on or after its start date', {
+      code: ErrorCode.INVALID_SUBSCRIPTION_DATES,
+    });
+  }
+}
 
 export interface TraderActor {
   actorUserId: string;
@@ -102,6 +131,11 @@ export class TraderService {
     return this.traders.list(status, page, pageSize);
   }
 
+  /** Approved traders waiting for the admin to renew their activation period. */
+  countRenewalRequests(): Promise<number> {
+    return this.traders.countRenewalRequests();
+  }
+
   async getOne(userId: string): Promise<TraderApplicationSummary> {
     const { items } = await this.traders.list(undefined, 1, 1000);
     const found = items.find((i) => i.userId === userId);
@@ -117,11 +151,21 @@ export class TraderService {
     return profile;
   }
 
-  async approve(targetUserId: string, actor: TraderActor): Promise<TraderProfile> {
+  /**
+   * Approve a registration — which also STARTS its limited activation period
+   * (the admin's dates, or one year from today).
+   */
+  async approve(
+    targetUserId: string,
+    actor: TraderActor,
+    period?: TraderSubscriptionPeriod,
+  ): Promise<TraderProfile> {
     if (targetUserId === actor.actorUserId) {
       throw new ForbiddenError('You cannot approve your own trader registration');
     }
     await this.requirePending(targetUserId);
+    const activation = period ?? defaultPeriod();
+    assertValidPeriod(activation);
 
     const decided = await this.db.transaction(async (tx) => {
       const profile = await this.traders.decide(
@@ -130,18 +174,19 @@ export class TraderService {
         tx,
       );
       await this.users.applyTraderStatus(targetUserId, 'APPROVED', tx);
+      const activated = await this.traders.setSubscription(targetUserId, activation, tx);
       await this.audit.record(
         {
           action: AuditAction.TRADER_APPROVED,
           entityType: AuditEntityType.TRADER_PROFILE,
           entityId: profile.id,
           actorUserId: actor.actorUserId,
-          metadata: { targetUserId },
+          metadata: { targetUserId, ...activation },
           context: actor.context,
         },
         tx,
       );
-      return profile;
+      return activated;
     });
 
     this.events.publish('trader.approved', { userId: targetUserId });
@@ -246,6 +291,73 @@ export class TraderService {
 
     this.events.publish('trader.reactivated', { userId: targetUserId });
     return decided;
+  }
+
+  // --- activation period -------------------------------------------------
+
+  /** Admin sets / renews a trader's activation period (`trader.admin.approve`). */
+  async setSubscription(
+    targetUserId: string,
+    period: TraderSubscriptionPeriod,
+    actor: TraderActor,
+  ): Promise<TraderProfile> {
+    assertValidPeriod(period);
+    const profile = await this.traders.findByUserId(targetUserId);
+    if (!profile || (profile.status !== 'APPROVED' && profile.status !== 'SUSPENDED')) {
+      throw new NotFoundError('No approved trader account for this user');
+    }
+    const updated = await this.db.transaction(async (tx) => {
+      const next = await this.traders.setSubscription(targetUserId, period, tx);
+      await this.audit.record(
+        {
+          action: AuditAction.TRADER_SUBSCRIPTION_SET,
+          entityType: AuditEntityType.TRADER_PROFILE,
+          entityId: profile.id,
+          actorUserId: actor.actorUserId,
+          metadata: { targetUserId, ...period },
+          context: actor.context,
+        },
+        tx,
+      );
+      return next;
+    });
+    this.events.publish('trader.subscription.set', { userId: targetUserId, ...period });
+    return updated;
+  }
+
+  /** The trader asks for a renewal — only once the period has EXPIRED. */
+  async requestRenewal(userId: string, actor: TraderActor): Promise<TraderProfile> {
+    const profile = await this.traders.findByUserId(userId);
+    if (!profile || profile.status !== 'APPROVED') {
+      throw new NotFoundError('No approved trader account for this user');
+    }
+    if (profile.subscriptionStatus === 'ACTIVE') {
+      throw new ConflictError('Your trader subscription is still active', {
+        code: ErrorCode.SUBSCRIPTION_NOT_EXPIRED,
+      });
+    }
+    if (profile.renewalRequestedAt) {
+      throw new ConflictError('A renewal request is already pending', {
+        code: ErrorCode.RENEWAL_REQUEST_ALREADY_PENDING,
+      });
+    }
+    const updated = await this.db.transaction(async (tx) => {
+      const next = await this.traders.markRenewalRequested(userId, tx);
+      await this.audit.record(
+        {
+          action: AuditAction.TRADER_SUBSCRIPTION_RENEWAL_REQUESTED,
+          entityType: AuditEntityType.TRADER_PROFILE,
+          entityId: profile.id,
+          actorUserId: actor.actorUserId,
+          metadata: { userId },
+          context: actor.context,
+        },
+        tx,
+      );
+      return next;
+    });
+    this.events.publish('trader.subscription.renewal.requested', { userId });
+    return updated;
   }
 
   /** Admin edit of a trader's registration details (`trader.admin.approve`). */

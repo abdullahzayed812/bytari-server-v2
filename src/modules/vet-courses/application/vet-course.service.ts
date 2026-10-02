@@ -70,6 +70,12 @@ export class VetCourseService {
     this.log = logger.child({ component: 'vet-course-service' });
   }
 
+  /** Registrants awaiting review, per type — the admin dashboard's course / seminar counters. */
+  async pendingRegistrationTotals(): Promise<{ COURSE: number; SEMINAR: number }> {
+    const totals = await this.courses.pendingRegistrationTotals();
+    return { COURSE: totals.COURSE ?? 0, SEMINAR: totals.SEMINAR ?? 0 };
+  }
+
   private async toDTO(data: VetCourseWithCreator): Promise<VetCourseDTO> {
     const { coverImageStorageKey, ...rest } = data.course;
     return {
@@ -77,6 +83,7 @@ export class VetCourseService {
       creator: data.creator,
       coverImageUrl: await this.media.resolveUrl(coverImageStorageKey),
       registrationCount: data.registrationCount,
+      pendingRegistrationCount: data.pendingRegistrationCount,
       remainingSeats: remainingSeats(rest.capacity, data.registrationCount ?? 0),
     };
   }

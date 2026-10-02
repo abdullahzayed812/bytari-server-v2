@@ -1,6 +1,7 @@
 import type {
   VetCourseLocationMode,
   VetCourseModerationStatus,
+  VetCourseRegistrationStatus,
   VetCourseType,
 } from './vet-course.constants.js';
 
@@ -48,8 +49,10 @@ export interface VetCourse {
 export interface VetCourseDTO extends Omit<VetCourse, 'coverImageStorageKey'> {
   creator: VetCourseUserSummary;
   coverImageUrl: string | null;
-  /** Visible to the creator / moderators only. */
+  /** Visible to the creator / moderators only. Excludes REJECTED registrants. */
   registrationCount?: number;
+  /** Registrants still awaiting management review — the course's badge counter. */
+  pendingRegistrationCount?: number;
   /** `capacity - registrationCount` (never negative); null = unlimited. */
   remainingSeats?: number | null;
 }
@@ -172,6 +175,9 @@ export interface VetCourseRegistration {
   governorate: string;
   specialty: string | null;
   notes: string | null;
+  status: VetCourseRegistrationStatus;
+  reviewedAt: string | null;
+  rejectionReason: string | null;
   createdAt: string;
 }
 
@@ -201,6 +207,9 @@ export interface VetCourseRegistrationRow {
   governorate: string;
   specialty: string | null;
   notes: string | null;
+  status: string;
+  reviewed_at: Date | null;
+  rejection_reason: string | null;
   created_at: Date;
 }
 
@@ -215,6 +224,9 @@ export function rowToRegistration(row: VetCourseRegistrationRow): VetCourseRegis
     governorate: row.governorate,
     specialty: row.specialty,
     notes: row.notes,
+    status: row.status as VetCourseRegistrationStatus,
+    reviewedAt: row.reviewed_at ? row.reviewed_at.toISOString() : null,
+    rejectionReason: row.rejection_reason,
     createdAt: row.created_at.toISOString(),
   };
 }
@@ -279,4 +291,5 @@ export interface ModerationFilter {
 export interface RegistrationListFilter {
   page: number;
   pageSize: number;
+  status?: VetCourseRegistrationStatus;
 }

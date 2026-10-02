@@ -123,12 +123,13 @@ export class AdminUsersController {
   /** Admin → user message: a SUPPORT thread owned by the user, first message from staff. */
   message = async (req: Request, res: Response): Promise<void> => {
     const { id } = validatedParams<{ id: string }>(req);
-    const { body } = validatedBody<AdminMessageUserBody>(req);
+    const { body, imageKeys } = validatedBody<AdminMessageUserBody>(req);
     const thread = await this.support.openForUser(
       { principal: requireAuth(req), context: auditContextFromRequest(req) },
       id,
       body,
       async (userId) => (await this.users.getByIdOrNull(userId)) !== null,
+      imageKeys,
     );
     sendSuccess(res, thread, StatusCodes.CREATED);
   };

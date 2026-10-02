@@ -4,6 +4,7 @@ import { validate } from '../../../shared/http/validate.js';
 import { userRateLimiter } from '../../../shared/http/user-rate-limit.js';
 import type { Container } from '../../../container.js';
 import { OrganizationController } from './organization.controller.js';
+import { createLicenseLock } from './organization-license-lock.middleware.js';
 import {
   createOrganizationMiddleware,
   organizationIdParamSchema,
@@ -12,6 +13,7 @@ import {
   addMemberBodySchema,
   assignSupervisorBodySchema,
   createOrganizationBodySchema,
+  organizationTermsParamSchema,
   discoverOrganizationsQuerySchema,
   finalizeGalleryBodySchema,
   finalizeLicenseDocumentBodySchema,
@@ -45,11 +47,22 @@ export function createOrganizationRouter(c: Container): Router {
     organizations: c.organizationRepository,
     authz: c.authorizationService,
   });
+  // License number + license images are part of the REVIEWED registration:
+  // editable by the owner only while PENDING / REJECTED, then immutable
+  // (ADMIN excepted) — final corrections §10.
+  const { lockLicenseDocuments, lockLicenseNumber } = createLicenseLock(c.authorizationService);
   const r = Router();
   r.use(c.authenticate);
 
   // --- collection ---------------------------------------------------
   r.post('/', validate({ body: createOrganizationBodySchema }), asyncHandler(ctrl.create));
+  // Registration Terms & Conditions (clinic / office / poultry / sheep / cattle
+  // farm) — mounted before `/:organizationId` so `terms` is never a uuid param.
+  r.get(
+    '/terms/:termsKey',
+    validate({ params: organizationTermsParamSchema }),
+    asyncHandler(ctrl.terms),
+  );
   r.get('/', validate({ query: listMyOrganizationsQuerySchema }), asyncHandler(ctrl.listMine));
 
   // Discovery — any authenticated user (not just members), e.g. the Pet Owner
@@ -84,6 +97,7 @@ export function createOrganizationRouter(c: Container): Router {
     // its profile (e.g. the license number) while it awaits review. NOT while
     // SUSPENDED / DEACTIVATED (deleted) — those stay locked for the owner.
     authorizeOrg('organization.update', { allowInactiveForOwner: ['PENDING', 'REJECTED'] }),
+    lockLicenseNumber,
     asyncHandler(ctrl.update),
   );
   // Logo — same guard as the gallery/license documents (including
@@ -146,6 +160,7 @@ export function createOrganizationRouter(c: Container): Router {
     validate({ params: organizationIdParamSchema, body: licenseDocumentUploadUrlBodySchema }),
     withOrganization,
     authorizeOrg('organization.update', { allowInactiveForOwner: true }),
+    lockLicenseDocuments,
     asyncHandler(ctrl.requestLicenseDocumentUploadUrl),
   );
   r.post(
@@ -153,6 +168,7 @@ export function createOrganizationRouter(c: Container): Router {
     validate({ params: organizationIdParamSchema, body: finalizeLicenseDocumentBodySchema }),
     withOrganization,
     authorizeOrg('organization.update', { allowInactiveForOwner: true }),
+    lockLicenseDocuments,
     asyncHandler(ctrl.addLicenseDocument),
   );
   r.delete(
@@ -160,6 +176,7 @@ export function createOrganizationRouter(c: Container): Router {
     validate({ params: organizationIdParamSchema, query: removeLicenseDocumentQuerySchema }),
     withOrganization,
     authorizeOrg('organization.update', { allowInactiveForOwner: true }),
+    lockLicenseDocuments,
     asyncHandler(ctrl.removeLicenseDocument),
   );
 

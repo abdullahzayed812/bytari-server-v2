@@ -5,7 +5,11 @@ import { PoultryMarketStatisticsController } from './poultry-market-statistics.c
 
 /** Mounted at `/market/statistics` — admin or approved-trader only (checked in the controller). */
 export function createPoultryMarketStatisticsRouter(c: Container): Router {
-  const ctrl = new PoultryMarketStatisticsController(c.poultryMarketStatisticsService, c.authorizationService);
+  const ctrl = new PoultryMarketStatisticsController(
+    c.poultryMarketStatisticsService,
+    c.authorizationService,
+    c.traderRepository,
+  );
 
   const r = Router();
   r.use(c.authenticate);

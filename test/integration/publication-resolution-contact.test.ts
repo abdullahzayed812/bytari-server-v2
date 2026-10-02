@@ -123,7 +123,7 @@ describe('adoption / mating / lost — outcome + owner ↔ interested-user conta
     expect(mineAfter.body.data[0].publication.resolution).toBe('FOUND');
   });
 
-  it('a resolved listing leaves the public list, refuses new requests, and can be reopened', async () => {
+  it('a resolved listing STAYS in the public list (locked, with its outcome), refuses new requests, and can be reopened', async () => {
     const { owner, pub } = await approvedListing('ADOPTION');
     const viewer = await registerUser(app);
 
@@ -137,7 +137,10 @@ describe('adoption / mating / lost — outcome + owner ↔ interested-user conta
       .get(`${API}/animal-publications`)
       .query({ kind: 'ADOPTION' })
       .set(bearer(viewer.accessToken));
-    expect((list.body.data as Array<{ id: string }>).map((p) => p.id)).not.toContain(pub.id);
+    const listed = (list.body.data as Array<{ id: string; resolution: string | null }>).find(
+      (p) => p.id === pub.id,
+    );
+    expect(listed?.resolution).toBe('ADOPTED');
     // still reachable by id, with its outcome
     const detail = await request(app)
       .get(`${API}/animal-publications/${pub.id}`)
@@ -160,6 +163,23 @@ describe('adoption / mating / lost — outcome + owner ↔ interested-user conta
         .status,
     ).toBe(201);
     expect(events.map((e) => e.name)).toContain('animal.publication.resolved');
+  });
+
+  it('a MATING listing can be marked MATED; MATED is refused for other kinds', async () => {
+    const { owner, pub } = await approvedListing('MATING');
+    const mated = await request(app)
+      .post(`${API}/animal-publications/${pub.id}/resolution`)
+      .set(bearer(owner.accessToken))
+      .send({ resolution: 'MATED' });
+    expect(mated.status).toBe(200);
+    expect(mated.body.data.resolution).toBe('MATED');
+
+    const lost = await approvedListing('LOST');
+    const bad = await request(app)
+      .post(`${API}/animal-publications/${lost.pub.id}/resolution`)
+      .set(bearer(lost.owner.accessToken))
+      .send({ resolution: 'MATED' });
+    expect(bad.status).toBe(400);
   });
 
   it('only the owner can resolve; outcomes must fit the kind; the moderation status is untouched', async () => {

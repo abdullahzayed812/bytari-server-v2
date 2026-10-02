@@ -85,7 +85,7 @@ describe('organization registration — full profile captured in one POST /organ
       .set(bearer(owner.accessToken))
       // NB: a 1-char name used to make this 422 on validation, so the 403 it
       // claims to assert was never actually reached (`name` is `min(2)`).
-      .send({ type: 'CLINIC', name: 'عيادة', details: fullClinicDetails });
+      .send({ termsAccepted: true, type: 'CLINIC', name: 'عيادة', details: fullClinicDetails });
     expect(res.status).toBe(403);
     expect(res.body.error.code).toBe('VETERINARIAN_APPROVAL_REQUIRED');
   });

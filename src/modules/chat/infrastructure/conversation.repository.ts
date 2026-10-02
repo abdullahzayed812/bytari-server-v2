@@ -145,6 +145,25 @@ export class ConversationRepository {
     return rowToConversation(row);
   }
 
+  /** The farm-colleagues conversation for an UNORDERED pair of members. */
+  async findFarmMemberDirect(
+    organizationId: string,
+    userA: string,
+    userB: string,
+    trx?: Knex.Transaction,
+  ): Promise<Conversation | null> {
+    const row = await this.conn(trx)<ConversationRow>(T_CONV)
+      .where({ type: 'FARM_MEMBER_DIRECT', organization_id: organizationId })
+      .andWhere((qb) => {
+        qb.where({ pet_owner_user_id: userA, member_user_id: userB }).orWhere({
+          pet_owner_user_id: userB,
+          member_user_id: userA,
+        });
+      })
+      .first();
+    return row ? rowToConversation(row) : null;
+  }
+
   async findPublicationContact(
     publicationId: string,
     interestedUserId: string,
@@ -247,8 +266,17 @@ export class ConversationRepository {
     messageId: string,
     trx: Knex.Transaction,
   ): Promise<void> {
+    // Only ever ADVANCE the read pointer: marking an older message (a stale
+    // client, a second device) must not resurrect messages already read.
     await trx(T_PART)
       .where({ conversation_id: conversationId, user_id: userId })
+      .andWhere((qb) => {
+        qb.whereNull('last_read_message_id').orWhereRaw(
+          `(SELECT created_at FROM messages WHERE id = ?) >=
+             (SELECT created_at FROM messages WHERE id = ${T_PART}.last_read_message_id)`,
+          [messageId],
+        );
+      })
       .update({ last_read_message_id: messageId, updated_at: trx.fn.now() });
   }
 

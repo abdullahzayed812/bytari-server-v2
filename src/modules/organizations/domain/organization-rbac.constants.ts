@@ -319,6 +319,9 @@ export const ORG_ROLE_PERMISSIONS: Record<OrgRoleKey, OrgPermissionKey[]> = {
   // update / delete / inventory stay with the OWNER (override) or an explicitly
   // assigned SUPERVISOR — a Supervisor gets NO product permission by default.
   STAFF: [
+    // See the other members (e.g. a farm's vet ↔ its employees) — read only;
+    // removing / changing members stays with the owner (final corrections §9).
+    'member.read',
     'organization.read',
     'farm.poultry.read',
     'farm.sheep_batch.read',

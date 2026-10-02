@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { linkUrlSchema } from '../../../shared/validation/link-url.js';
 import { paginationQuerySchema } from '../../../shared/http/pagination.js';
 import {
   SYNDICATE_ANNOUNCEMENT_TYPES,
@@ -152,9 +153,22 @@ export const messageMembersBodySchema = z
     body: z.string().trim().min(1).max(1000),
     /** Idempotency key — the same value never notifies a member twice. */
     clientRequestId: z.string().uuid(),
+    imageStorageKey: z.string().trim().min(1).max(1000).nullable().optional(),
+    linkUrl: linkUrlSchema.nullable().optional(),
   })
   .strict();
 export type MessageMembersBody = z.infer<typeof messageMembersBodySchema>;
+
+export const membersBroadcastImageUploadUrlBodySchema = z
+  .object({
+    filename: z.string().trim().min(1).max(255),
+    mimeType: z.string().trim().min(1).max(100),
+    size: z.number().int().positive(),
+  })
+  .strict();
+export type MembersBroadcastImageUploadUrlBody = z.infer<
+  typeof membersBroadcastImageUploadUrlBodySchema
+>;
 
 export const assignSyndicateAdminBodySchema = z
   .object({ email: z.string().trim().toLowerCase().email().max(255) })

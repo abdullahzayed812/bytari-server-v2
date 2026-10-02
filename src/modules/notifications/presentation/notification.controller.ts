@@ -8,6 +8,7 @@ import { requireAuth } from '../../auth/authenticate.middleware.js';
 import type { NotificationService } from '../application/notification.service.js';
 import type {
   AdminNotificationBody,
+  AdminBroadcastImageUploadUrlBody,
   ListNotificationsQuery,
   RegisterDeviceBody,
   UpdatePreferencesBody,
@@ -102,5 +103,10 @@ export class NotificationController {
   adminSend = async (req: Request, res: Response): Promise<void> => {
     const body = validatedBody<AdminNotificationBody>(req);
     sendSuccess(res, await this.service.adminBroadcast(this.actor(req), body), StatusCodes.CREATED);
+  };
+
+  adminImageUploadUrl = async (req: Request, res: Response): Promise<void> => {
+    const body = validatedBody<AdminBroadcastImageUploadUrlBody>(req);
+    sendSuccess(res, await this.service.requestBroadcastImageUploadUrl(body), StatusCodes.CREATED);
   };
 }

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { termsAcceptanceShape } from '../../../shared/validation/terms.js';
 import { businessToday } from '../../../shared/time/business-date.js';
 import { paginationQuerySchema } from '../../../shared/http/pagination.js';
 import {
@@ -36,6 +37,7 @@ export const createCattleFarmBodySchema = z.object({
   contactName: shortText(160).nullable().optional(),
   contactPhone: z.string().trim().min(3).max(40).nullable().optional(),
   contactEmail: z.string().trim().max(255).email().nullable().optional(),
+  ...termsAcceptanceShape,
 });
 export type CreateCattleFarmBody = z.infer<typeof createCattleFarmBodySchema>;
 

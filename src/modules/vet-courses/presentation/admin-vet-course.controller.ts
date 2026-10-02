@@ -8,7 +8,12 @@ import { requireAuth } from '../../auth/authenticate.middleware.js';
 import type { VetCourseActor } from '../application/vet-course.service.js';
 import type { VetCourseRegistrationService } from '../application/vet-course-registration.service.js';
 import type { VetCourseService } from '../application/vet-course.service.js';
-import type { ModerationQuery, RegistrationListQuery, RejectBody } from './vet-course.schemas.js';
+import type {
+  ModerationQuery,
+  RegistrationListQuery,
+  RegistrationRejectBody,
+  RejectBody,
+} from './vet-course.schemas.js';
 
 function actor(req: Request): VetCourseActor {
   return { principal: requireAuth(req), context: auditContextFromRequest(req) };
@@ -46,7 +51,7 @@ export class AdminVetCourseController {
   };
 }
 
-/** Read-only oversight of registrations ("view registrations") — `vet_course.read`. */
+/** Registrant oversight — list (`vet_course.read`) + approve / reject (`vet_course.approve|reject`). */
 export class AdminVetCourseRegistrationController {
   constructor(private readonly registrations: VetCourseRegistrationService) {}
 
@@ -55,5 +60,17 @@ export class AdminVetCourseRegistrationController {
     const q = validatedQuery<RegistrationListQuery>(req);
     const { items, total } = await this.registrations.listForCourse(courseId, q, actor(req));
     sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
+  };
+  approve = async (req: Request, res: Response): Promise<void> => {
+    const { id } = validatedParams<{ id: string }>(req);
+    sendSuccess(res, await this.registrations.review(id, 'APPROVED', null, actor(req)));
+  };
+  reject = async (req: Request, res: Response): Promise<void> => {
+    const { id } = validatedParams<{ id: string }>(req);
+    const body = validatedBody<RegistrationRejectBody>(req);
+    sendSuccess(
+      res,
+      await this.registrations.review(id, 'REJECTED', body.reason ?? null, actor(req)),
+    );
   };
 }

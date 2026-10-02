@@ -193,6 +193,20 @@ export async function registerRejectedVet(app: Express): Promise<RegisteredUser>
 export async function registerApprovedTrader(app: Express): Promise<RegisteredUser> {
   const trader = await registerUser(app, { email: uniqueEmail('trader') });
   await getTestDb()('users').where({ id: trader.id }).update({ trader_status: 'APPROVED' });
+  // A real approved profile with an ACTIVE activation period (market access is
+  // limited to that period — final corrections §8).
+  await getTestDb()('trader_profiles').insert({
+    user_id: trader.id,
+    display_name: 'تاجر الاختبار',
+    trader_type: 'WHOLESALE',
+    governorate: 'بغداد',
+    phone: '+9647701234567',
+    terms_accepted_at: new Date(),
+    status: 'APPROVED',
+    decided_at: new Date(),
+    subscription_start_date: getTestDb().raw('CURRENT_DATE'),
+    subscription_end_date: getTestDb().raw("(CURRENT_DATE + INTERVAL '1 year')::date"),
+  });
   return trader;
 }
 
@@ -287,7 +301,7 @@ export async function createOrganization(
   const res = await request(app)
     .post('/api/v1/organizations')
     .set(bearer(ownerToken))
-    .send({ name: input.name ?? `Org ${Date.now()}`, ...input });
+    .send({ termsAccepted: true, name: input.name ?? `Org ${Date.now()}`, ...input });
   if (res.status !== 201) {
     throw new Error(`createOrganization failed: ${res.status} ${JSON.stringify(res.body)}`);
   }
@@ -706,6 +720,7 @@ export async function createSheepFarm(
     .post('/api/v1/organizations/sheep-farms')
     .set(bearer(ownerToken))
     .send({
+      termsAccepted: true,
       name: input.name ?? `Sheep Farm ${Date.now()}`,
       location: input.location ?? 'Baqubah',
       governorate: input.governorate ?? 'ديالى',
@@ -753,6 +768,7 @@ export async function createCattleFarm(
     .post('/api/v1/organizations/cattle-farms')
     .set(bearer(ownerToken))
     .send({
+      termsAccepted: true,
       name: input.name ?? `Cattle Farm ${Date.now()}`,
       location: input.location ?? 'Baqubah',
       governorate: input.governorate ?? 'ديالى',

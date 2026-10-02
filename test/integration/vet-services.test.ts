@@ -322,6 +322,9 @@ describe('vet services — pet-owner requests a listing (Flow A)', () => {
       .get(`${API}/vet-services/listing-requests/mine`)
       .set(bearer(owner.accessToken));
     expect(mineReq.body.data).toHaveLength(1);
+    // the pet owner sees WHICH vet the request went to
+    expect(mineReq.body.data[0].listing.veterinarian).toMatchObject({ id: vet.id });
+    expect(typeof mineReq.body.data[0].listing.veterinarian.firstName).toBe('string');
 
     const accepted = await request(app)
       .post(`${API}/vet-services/listing-requests/${listingRequestId}/accept`)

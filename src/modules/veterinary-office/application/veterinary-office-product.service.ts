@@ -182,6 +182,17 @@ export class VeterinaryOfficeProductService {
     } catch {
       throw new NotFoundError('Organization not found');
     }
+    // An EXPIRED office is off the public market until renewed (§10).
+    const profile = (await this.organizations.findProfileRow(org.type, organizationId)) as
+      | { subscription_end_date?: string | Date | null }
+      | undefined;
+    const end = profile?.subscription_end_date ?? null;
+    if (end) {
+      const endDay = end instanceof Date ? end.toISOString().slice(0, 10) : end.slice(0, 10);
+      if (endDay < new Date().toISOString().slice(0, 10)) {
+        throw new NotFoundError('Organization not found');
+      }
+    }
   }
 
   async update(

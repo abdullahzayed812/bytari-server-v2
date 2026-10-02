@@ -160,3 +160,34 @@ describe('egg exchange-rate board', () => {
     expect(poultryGet.body.data[0].meatPricePerKg).toBe('900.00');
   });
 });
+
+describe('Kurdistan Region — one exchange entry, one price (final corrections §8)', () => {
+  it('accepts "إقليم كوردستان" as a single row and rejects the four provinces individually', async () => {
+    const admin = await registerAdmin(app);
+    for (const board of ['poultry', 'egg'] as const) {
+      const entry =
+        board === 'poultry'
+          ? { governorate: 'إقليم كوردستان', meatPricePerKg: '980', layerPricePerBird: '5100' }
+          : { governorate: 'إقليم كوردستان', eggPricePerTray: '4500' };
+      const ok = await request(app)
+        .post(`/api/v1/poultry-market/exchange-rates/${board}`)
+        .set(bearer(admin.accessToken))
+        .send({ date: '2026-09-03', entries: [entry] });
+      expect(ok.status).toBe(200);
+
+      for (const province of ['أربيل', 'دهوك', 'السليمانية', 'حلبجة']) {
+        const bad = await request(app)
+          .post(`/api/v1/poultry-market/exchange-rates/${board}`)
+          .set(bearer(admin.accessToken))
+          .send({ date: '2026-09-03', entries: [{ ...entry, governorate: province }] });
+        expect(bad.status).toBe(422);
+      }
+    }
+    const get = await request(app)
+      .get('/api/v1/poultry-market/exchange-rates/egg?date=2026-09-03')
+      .set(bearer(admin.accessToken));
+    expect(get.body.data).toEqual([
+      expect.objectContaining({ governorate: 'إقليم كوردستان', eggPricePerTray: '4500.00' }),
+    ]);
+  });
+});

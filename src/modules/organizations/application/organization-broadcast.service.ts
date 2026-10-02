@@ -1,18 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import type { Logger } from 'pino';
-import { buildObjectKey, StoragePrefix, type ObjectStorage } from '../../../infra/storage/index.js';
-import { resolveStorageUrlOrNull } from '../../../shared/storage/media-url.js';
-import { BadRequestError, NotFoundError } from '../../../shared/errors/app-error.js';
-import { ErrorCode } from '../../../shared/errors/error-codes.js';
+import { StoragePrefix, type ObjectStorage } from '../../../infra/storage/index.js';
+import {
+  assertBroadcastImage,
+  presignBroadcastImage,
+  type BroadcastImagePresign,
+} from '../../../shared/storage/broadcast-media.js';
+import { NotFoundError } from '../../../shared/errors/app-error.js';
 import type { EventBus } from '../../../shared/events/index.js';
 import { AuditAction, AuditEntityType, type AuditContext } from '../../audit/audit.types.js';
 import type { AuditService } from '../../audit/audit.service.js';
 import type { OrganizationRepository } from '../infrastructure/organization.repository.js';
-
-const ALLOWED_IMAGE_MIME = ['image/png', 'image/jpeg', 'image/webp'] as const;
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-const IMAGE_UPLOAD_URL_TTL_SECONDS = 600;
-const IMAGE_URL_TTL_SECONDS = 3600;
 
 export interface OrganizationBroadcastActor {
   actorUserId: string;
@@ -23,6 +21,8 @@ export interface SendBroadcastInput {
   title: string;
   body: string;
   imageStorageKey?: string | null;
+  /** Optional http(s) link (validated by the route schema). */
+  linkUrl?: string | null;
 }
 
 /**
@@ -69,41 +69,9 @@ export class OrganizationBroadcastService {
   async requestImageUploadUrl(
     organizationId: string,
     input: { filename: string; mimeType: string; size: number },
-  ): Promise<{
-    storageKey: string;
-    uploadUrl: string;
-    method: 'PUT';
-    headers: Record<string, string>;
-    expiresInSeconds: number;
-  }> {
+  ): Promise<BroadcastImagePresign> {
     await this.assertActiveOrganization(organizationId);
-    if (!Number.isInteger(input.size) || input.size <= 0) {
-      throw new BadRequestError('size must be a positive integer number of bytes');
-    }
-    if (input.size > MAX_IMAGE_BYTES) {
-      throw new BadRequestError(`image exceeds the ${MAX_IMAGE_BYTES}-byte limit`, {
-        code: ErrorCode.FILE_TOO_LARGE,
-      });
-    }
-    if (!(ALLOWED_IMAGE_MIME as readonly string[]).includes(input.mimeType)) {
-      throw new BadRequestError(`MIME type "${input.mimeType}" is not allowed`, {
-        code: ErrorCode.UNSUPPORTED_FILE_TYPE,
-      });
-    }
-
-    const storageKey = buildObjectKey(StoragePrefix.organizationBroadcastImages, input.filename);
-    const uploadUrl = await this.storage.getSignedUrl(storageKey, {
-      operation: 'put',
-      expiresIn: IMAGE_UPLOAD_URL_TTL_SECONDS,
-      contentType: input.mimeType,
-    });
-    return {
-      storageKey,
-      uploadUrl,
-      method: 'PUT',
-      headers: { 'Content-Type': input.mimeType },
-      expiresInSeconds: IMAGE_UPLOAD_URL_TTL_SECONDS,
-    };
+    return presignBroadcastImage(this.storage, StoragePrefix.organizationBroadcastImages, input);
   }
 
   async send(
@@ -114,24 +82,16 @@ export class OrganizationBroadcastService {
   ): Promise<{ broadcastId: string }> {
     await this.assertActiveOrganization(organizationId);
 
-    let imageUrl: string | null = null;
+    // The notification rows keep the storage KEY, resolved to a fresh URL on
+    // every read — a signed URL stored here would expire an hour later.
+    let imageKey: string | null = null;
     if (input.imageStorageKey) {
-      if (!input.imageStorageKey.startsWith(`${StoragePrefix.organizationBroadcastImages}/`)) {
-        throw new BadRequestError('storage key does not belong to broadcast uploads', {
-          code: ErrorCode.STORAGE_KEY_MISMATCH,
-        });
-      }
-      const head = await this.storage.head(input.imageStorageKey);
-      if (!head) {
-        throw new BadRequestError('no uploaded object exists at that storage key', {
-          code: ErrorCode.STORAGE_OBJECT_MISSING,
-        });
-      }
-      imageUrl = await resolveStorageUrlOrNull(
+      await assertBroadcastImage(
         this.storage,
+        StoragePrefix.organizationBroadcastImages,
         input.imageStorageKey,
-        IMAGE_URL_TTL_SECONDS,
       );
+      imageKey = input.imageStorageKey;
     }
 
     const audience = options.audience ?? 'FOLLOWERS';
@@ -143,7 +103,14 @@ export class OrganizationBroadcastService {
       entityType: AuditEntityType.ORGANIZATION,
       entityId: organizationId,
       actorUserId: actor.actorUserId,
-      metadata: { organizationId, broadcastId, audience, title: input.title },
+      metadata: {
+        organizationId,
+        broadcastId,
+        audience,
+        title: input.title,
+        hasImage: Boolean(imageKey),
+        hasLink: Boolean(input.linkUrl),
+      },
       context: actor.context,
     });
 
@@ -152,7 +119,8 @@ export class OrganizationBroadcastService {
       broadcastId,
       title: input.title,
       body: input.body,
-      imageUrl,
+      imageKey,
+      linkUrl: input.linkUrl ?? null,
       audience,
       actorUserId: actor.actorUserId,
     });

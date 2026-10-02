@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { ORGANIZATION_TERMS_KEYS } from '../domain/organization-terms.js';
+import { termsAcceptanceShape } from '../../../shared/validation/terms.js';
 import { paginationQuerySchema } from '../../../shared/http/pagination.js';
 import { ORG_PERMISSION_KEYS } from '../domain/organization-rbac.constants.js';
 import {
@@ -58,8 +60,13 @@ export const createOrganizationBodySchema = z.object({
   name: z.string().trim().min(2).max(160),
   description: z.string().trim().max(2000).optional(),
   details: z.object(profileFieldsShape).optional(),
+  ...termsAcceptanceShape,
 });
 export type CreateOrganizationBody = z.infer<typeof createOrganizationBodySchema>;
+
+export const organizationTermsParamSchema = z.object({
+  termsKey: z.enum(ORGANIZATION_TERMS_KEYS),
+});
 
 export const updateOrganizationBodySchema = z
   .object({

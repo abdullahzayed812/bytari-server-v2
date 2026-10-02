@@ -297,10 +297,10 @@ export class AnimalPublicationRepository {
     const base = (): Knex.QueryBuilder => {
       const qb = this.conn(trx)(`${TABLE} as p`)
         .join('animals as a', 'a.id', 'p.animal_id')
-        .where('p.status', 'APPROVED')
-        // Only still-available listings are browsed; a FOUND / ADOPTED /
-        // CLOSED one stays reachable by id (existing links, chats).
-        .whereNull('p.resolution');
+        // A FOUND / ADOPTED / MATED / CLOSED listing STAYS in the browse (final
+        // corrections §4) — shown locked with its outcome; requests on it are
+        // refused server-side (409 PUBLICATION_RESOLVED).
+        .where('p.status', 'APPROVED');
       if (filter.kind) qb.andWhere('p.kind', filter.kind);
       if (filter.species) qb.andWhere('a.species', filter.species);
       if (filter.search) {
@@ -313,6 +313,8 @@ export class AnimalPublicationRepository {
     const total = Number(countRow?.count ?? 0);
 
     const rows: JoinedRow[] = await base()
+      // still-available listings first, then the resolved ones
+      .orderByRaw('(p.resolution IS NOT NULL) ASC')
       .orderBy('p.reviewed_at', 'desc')
       .limit(filter.pageSize)
       .offset((filter.page - 1) * filter.pageSize)

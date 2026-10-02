@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import type { OrganizationTermsKey } from '../domain/organization-terms.js';
 import { StatusCodes } from 'http-status-codes';
 import { pageMeta } from '../../../shared/http/pagination.js';
 import { sendSuccess } from '../../../shared/http/response.js';
@@ -47,10 +48,22 @@ export class OrganizationController {
     return { actorUserId: requireAuth(req).userId, context: auditContextFromRequest(req) };
   }
 
+  /** `GET /organizations/terms/:termsKey` — the exact registration terms to display. */
+  terms = (req: Request, res: Response): void => {
+    const { termsKey } = validatedParams<{ termsKey: OrganizationTermsKey }>(req);
+    sendSuccess(res, this.organizations.getTerms(termsKey));
+  };
+
   create = async (req: Request, res: Response): Promise<void> => {
     const body = validatedBody<CreateOrganizationBody>(req);
     const org = await this.organizations.create(
-      { type: body.type, name: body.name, description: body.description, profile: body.details },
+      {
+        type: body.type,
+        name: body.name,
+        description: body.description,
+        profile: body.details,
+        terms: { accepted: body.termsAccepted, version: body.termsVersion },
+      },
       this.actor(req),
     );
     sendSuccess(res, org, StatusCodes.CREATED);

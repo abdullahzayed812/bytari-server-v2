@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { linkUrlSchema } from '../../../shared/validation/link-url.js';
 
 export const organizationBroadcastParamSchema = z.object({ organizationId: z.string().uuid() });
 
@@ -6,6 +7,7 @@ export const sendOrganizationBroadcastBodySchema = z.object({
   title: z.string().trim().min(1).max(100),
   body: z.string().trim().min(1).max(1000),
   imageStorageKey: z.string().trim().min(1).max(1000).nullable().optional(),
+  linkUrl: linkUrlSchema.nullable().optional(),
 });
 export type SendOrganizationBroadcastBody = z.infer<typeof sendOrganizationBroadcastBodySchema>;
 

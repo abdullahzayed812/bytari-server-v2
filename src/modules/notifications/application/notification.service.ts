@@ -4,6 +4,13 @@ import { BadRequestError, NotFoundError } from '../../../shared/errors/app-error
 import { ErrorCode } from '../../../shared/errors/error-codes.js';
 import type { EventBus } from '../../../shared/events/index.js';
 import type { PushNotificationService } from '../../../infra/push/index.js';
+import { StoragePrefix, type ObjectStorage } from '../../../infra/storage/index.js';
+import {
+  assertBroadcastImage,
+  presignBroadcastImage,
+  resolveNotificationImage,
+  type BroadcastImagePresign,
+} from '../../../shared/storage/broadcast-media.js';
 import { AuditAction, AuditEntityType, type AuditContext } from '../../audit/audit.types.js';
 import type { AuditService } from '../../audit/audit.service.js';
 import type { UserService } from '../../users/user.service.js';
@@ -43,6 +50,10 @@ export interface AdminNotificationInput {
   title: string;
   body: string;
   data?: Record<string, string>;
+  /** Optional photo (uploaded first via `requestBroadcastImageUploadUrl`). */
+  imageStorageKey?: string | null;
+  /** Optional http(s) link shown as a button on the notification details. */
+  linkUrl?: string | null;
 }
 
 const PUSH_FANOUT_BATCH = 200;
@@ -58,6 +69,8 @@ export const DEFAULT_PUSH_RETRY_DELAYS_MS: readonly number[] = [1_000, 5_000];
 
 export interface NotificationServiceOptions {
   pushRetryDelaysMs?: readonly number[];
+  /** Resolves broadcast image keys (`data.imageKey`) to fresh URLs on read. */
+  storage?: ObjectStorage;
 }
 
 const sleep = (ms: number): Promise<void> =>
@@ -79,6 +92,7 @@ export class NotificationService {
   private readonly log: Logger;
   private readonly pushRetryDelaysMs: readonly number[];
   private readonly sources: NotificationSourceResolver;
+  private readonly storage: ObjectStorage | undefined;
 
   constructor(
     private readonly db: Knex,
@@ -95,6 +109,7 @@ export class NotificationService {
     this.log = logger.child({ component: 'notification-service' });
     this.sources = new NotificationSourceResolver(db);
     this.pushRetryDelaysMs = options.pushRetryDelaysMs ?? DEFAULT_PUSH_RETRY_DELAYS_MS;
+    this.storage = options.storage;
   }
 
   // --- event-driven delivery (called by the handler) --------------------
@@ -162,7 +177,9 @@ export class NotificationService {
     // `notificationId` lets a push tap mark this exact row read. Detached so a
     // retry back-off for one recipient never delays the rest of a fan-out;
     // `sendPushWithRetry` never rejects.
-    void this.sendPushWithRetry(logCtx, spec, { ...spec.data, notificationId: created.id });
+    // The storage key never leaves the server — the app opens the row by id.
+    const { imageKey: _imageKey, ...pushData } = spec.data;
+    void this.sendPushWithRetry(logCtx, spec, { ...pushData, notificationId: created.id });
   }
 
   private async sendPushWithRetry(
@@ -222,7 +239,12 @@ export class NotificationService {
   /** DTOs with their resolved "From:" source (one batched lookup per page). */
   private async withSources(items: Notification[]): Promise<NotificationDTO[]> {
     const sources = await this.sources.resolve(items);
-    return items.map((n) => toNotificationDTO(n, sources.get(n.id)));
+    return Promise.all(
+      items.map(async (n) => {
+        const dto = toNotificationDTO(n, sources.get(n.id));
+        return { ...dto, data: await resolveNotificationImage(this.storage, dto.data) };
+      }),
+    );
   }
 
   private async withSource(n: Notification): Promise<NotificationDTO> {
@@ -344,10 +366,34 @@ export class NotificationService {
 
   // --- admin broadcast -----------------------------------------
 
+  /** Presigned PUT for an admin broadcast / direct-message photo. */
+  async requestBroadcastImageUploadUrl(input: {
+    filename: string;
+    mimeType: string;
+    size: number;
+  }): Promise<BroadcastImagePresign> {
+    if (!this.storage) throw new BadRequestError('image uploads are not configured');
+    return presignBroadcastImage(this.storage, StoragePrefix.adminBroadcastImages, input);
+  }
+
   async adminBroadcast(
     actor: NotificationActor,
     input: AdminNotificationInput,
   ): Promise<{ recipientCount: number }> {
+    // Attachments travel in `data` as the storage KEY (resolved per read) and
+    // the link — never as a signed URL that would expire in the stored row.
+    const attachments: Record<string, string> = {};
+    if (input.imageStorageKey) {
+      if (!this.storage) throw new BadRequestError('image uploads are not configured');
+      await assertBroadcastImage(
+        this.storage,
+        StoragePrefix.adminBroadcastImages,
+        input.imageStorageKey,
+      );
+      attachments.imageKey = input.imageStorageKey;
+    }
+    if (input.linkUrl) attachments.linkUrl = input.linkUrl;
+
     const recipientIds = await this.resolveBroadcastRecipients(input.target);
 
     if (recipientIds.length > MAX_BROADCAST_RECIPIENTS) {
@@ -369,7 +415,12 @@ export class NotificationService {
         body: input.body,
         // `source: 'ADMIN'` → the inbox shows "From: the administration" for
         // every admin broadcast, whatever `type` the admin picked.
-        data: JSON.stringify({ type: input.type, ...(input.data ?? {}), source: 'ADMIN' }),
+        data: JSON.stringify({
+          type: input.type,
+          ...(input.data ?? {}),
+          ...attachments,
+          source: 'ADMIN',
+        }),
         actor_user_id: actor.actorUserId,
       }));
       // batched insert — bounded by MAX_BROADCAST_RECIPIENTS
@@ -389,6 +440,8 @@ export class NotificationService {
           metadata: {
             targetKind: input.target.kind,
             type: input.type,
+            hasImage: Boolean(attachments.imageKey),
+            hasLink: Boolean(attachments.linkUrl),
             recipientCount: recipientIds.length,
           },
           context: actor.context,
@@ -406,6 +459,7 @@ export class NotificationService {
       {
         type: input.type,
         ...(input.data ?? {}),
+        ...(attachments.linkUrl ? { linkUrl: attachments.linkUrl } : {}),
         source: 'ADMIN',
       },
       notificationIdByUser,

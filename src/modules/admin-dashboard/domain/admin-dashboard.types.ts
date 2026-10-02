@@ -60,6 +60,16 @@ export interface AdminDashboardCard {
    * subscription-capable organization cards (`clinics`, `offices`).
    */
   pendingRenewals?: number;
+  /**
+   * Course / seminar registrants awaiting review — the TOTAL open queue. Only
+   * set on the `courses` / `seminars` cards.
+   */
+  pendingRegistrations?: number;
+  /**
+   * Per-entry open-queue totals for a hub card's sub-screens (e.g.
+   * `poultryMarket` → `traders` / `poultryOffers` / `eggOffers`).
+   */
+  sectionCounts?: Record<string, number>;
 }
 
 export interface AdminActivityItem {

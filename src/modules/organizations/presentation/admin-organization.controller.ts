@@ -67,11 +67,12 @@ export class AdminOrganizationController {
     // the open renewal request (subscription-capable types only) ride along so
     // the review screen needs no extra round-trips. Admin-only route — never
     // on the public/member organization DTOs.
-    const [owner, pendingRenewalRequest] = await Promise.all([
+    const [owner, pendingRenewalRequest, termsAcceptances] = await Promise.all([
       this.users.getByIdOrNull(org.ownerUserId),
       org.type === 'FARM' || org.type === 'CLINIC' || org.type === 'VETERINARY_OFFICE'
         ? this.farmRenewals.findPendingForOrganization(id)
         : Promise.resolve(null),
+      this.organizations.getTermsAcceptances(id),
     ]);
     sendSuccess(res, {
       ...org,
@@ -88,6 +89,8 @@ export class AdminOrganizationController {
           }
         : null,
       pendingRenewalRequest,
+      // Which registration terms the applicant accepted, which version, when.
+      termsAcceptances,
     });
   };
 

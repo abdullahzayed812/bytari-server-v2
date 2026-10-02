@@ -212,6 +212,7 @@ export interface VetServiceListingRequestDTO
     animalType: VetServiceAnimalType;
     veterinarianUserId: string;
     priceAmount: string | null;
+    veterinarian?: VetServiceUserSummary;
   };
 }
 

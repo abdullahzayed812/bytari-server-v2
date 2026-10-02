@@ -51,7 +51,13 @@ export const VetCourseAuditAction = {
   CANCELLED: 'VET_COURSE_CANCELLED',
   DELETED: 'VET_COURSE_DELETED',
   REGISTRATION_CREATED: 'VET_COURSE_REGISTRATION_CREATED',
+  REGISTRATION_APPROVED: 'VET_COURSE_REGISTRATION_APPROVED',
+  REGISTRATION_REJECTED: 'VET_COURSE_REGISTRATION_REJECTED',
 } as const;
+
+/** Management review of one registrant (PENDING → APPROVED / REJECTED). */
+export const VET_COURSE_REGISTRATION_STATUSES = ['PENDING', 'APPROVED', 'REJECTED'] as const;
+export type VetCourseRegistrationStatus = (typeof VET_COURSE_REGISTRATION_STATUSES)[number];
 
 export const VetCourseAuditEntity = {
   COURSE: 'VET_COURSE',
@@ -63,6 +69,8 @@ export const VetCourseEvent = {
   APPROVED: 'vet_course.approved',
   REJECTED: 'vet_course.rejected',
   REGISTERED: 'vet_course.registration.created',
+  REGISTRATION_APPROVED: 'vet_course.registration.approved',
+  REGISTRATION_REJECTED: 'vet_course.registration.rejected',
   CANCELLED: 'vet_course.cancelled',
 } as const;
 

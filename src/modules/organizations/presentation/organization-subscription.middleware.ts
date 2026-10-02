@@ -1,7 +1,10 @@
 import type { RequestHandler } from 'express';
-import { BadRequestError } from '../../../shared/errors/app-error.js';
+import { BadRequestError, ForbiddenError } from '../../../shared/errors/app-error.js';
 import { ErrorCode } from '../../../shared/errors/error-codes.js';
 import { asyncHandler } from '../../../shared/http/async-handler.js';
+import { requireAuth } from '../../auth/authenticate.middleware.js';
+import type { AuthorizationService } from '../../authorization/authorization.service.js';
+import { computeFarmSubscriptionStatus } from '../domain/organization.types.js';
 import { requireOrganization } from './organization.middleware.js';
 
 /**
@@ -24,3 +27,29 @@ export const withSubscriptionCapableOrganization: RequestHandler = asyncHandler(
   }
   next();
 });
+
+/**
+ * MUST run after `withOrganization`. A CLINIC / VETERINARY_OFFICE whose
+ * subscription has EXPIRED cannot operate — no product management, no
+ * follower broadcasts — until it is renewed (final corrections §10). Other
+ * organization types pass through (FARM has its own `requireActiveFarmSubscription`).
+ * A global ADMIN bypasses, like every other organization gate.
+ */
+export function createOrganizationSubscriptionGuard(deps: {
+  subscriptions: { getSubscriptionDates(organizationId: string): Promise<{ startDate: string | null; endDate: string | null }> };
+  authz: AuthorizationService;
+}): RequestHandler {
+  return asyncHandler(async (req, _res, next) => {
+    const org = requireOrganization(req);
+    if (!SUBSCRIPTION_CAPABLE_TYPES.has(org.type)) return next();
+    if (deps.authz.isAdmin(requireAuth(req))) return next();
+    const dates = await deps.subscriptions.getSubscriptionDates(org.id);
+    if (computeFarmSubscriptionStatus(dates.startDate, dates.endDate) === 'EXPIRED') {
+      throw new ForbiddenError(
+        'This organization’s subscription has expired — renew it to continue',
+        { code: ErrorCode.ORGANIZATION_SUBSCRIPTION_EXPIRED },
+      );
+    }
+    next();
+  });
+}

@@ -9,6 +9,8 @@ import {
   registerTraderBodySchema,
   adminUpdateTraderBodySchema,
   rejectTraderBodySchema,
+  approveTraderBodySchema,
+  traderSubscriptionBodySchema,
   suspendTraderBodySchema,
 } from './trader.schemas.js';
 
@@ -24,6 +26,8 @@ export function createTraderRouters(c: Container): { self: Router; admin: Router
   self.use(c.authenticate);
   self.post('/register', validate({ body: registerTraderBodySchema }), asyncHandler(ctrl.register));
   self.get('/me', asyncHandler(ctrl.myStatus));
+  // An approved trader whose activation period ended asks the admin to renew it.
+  self.post('/me/renewal-request', asyncHandler(ctrl.requestRenewal));
 
   const admin = Router();
   admin.use(c.authenticate);
@@ -54,8 +58,15 @@ export function createTraderRouters(c: Container): { self: Router; admin: Router
   admin.post(
     '/:userId/approve',
     authorize('trader.admin.approve'),
-    validate({ params: userIdParamSchema }),
+    validate({ params: userIdParamSchema, body: approveTraderBodySchema }),
     asyncHandler(ctrl.approve),
+  );
+  // Set / renew the trader's activation period.
+  admin.put(
+    '/:userId/subscription',
+    authorize('trader.admin.approve'),
+    validate({ params: userIdParamSchema, body: traderSubscriptionBodySchema }),
+    asyncHandler(ctrl.setSubscription),
   );
   admin.post(
     '/:userId/reject',

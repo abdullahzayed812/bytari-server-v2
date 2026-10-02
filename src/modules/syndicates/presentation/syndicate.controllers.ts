@@ -17,6 +17,7 @@ import type {
   AssignSyndicateAdminBody,
   MemberListQuery,
   MessageMembersBody,
+  MembersBroadcastImageUploadUrlBody,
   CreateAnnouncementBody,
   CreateSubmissionBody,
   CreateSyndicateBody,
@@ -129,6 +130,15 @@ export class SyndicateMemberController {
     const { userId } = validatedParams<{ userId: string }>(req);
     const result = await this.members.openConversation(org.id, userId, actor(req));
     sendSuccess(res, result.conversation, result.created ? StatusCodes.CREATED : StatusCodes.OK);
+  };
+  broadcastImageUploadUrl = async (req: Request, res: Response): Promise<void> => {
+    const org = requireOrganization(req);
+    const body = validatedBody<MembersBroadcastImageUploadUrlBody>(req);
+    sendSuccess(
+      res,
+      await this.members.requestBroadcastImageUploadUrl(org.id, body),
+      StatusCodes.CREATED,
+    );
   };
   messageAll = async (req: Request, res: Response): Promise<void> => {
     const org = requireOrganization(req);

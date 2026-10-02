@@ -49,6 +49,7 @@ export class FarmController {
         name: body.name,
         description: body.description ?? null,
         details,
+        terms: { accepted: body.termsAccepted, version: body.termsVersion },
       },
       this.actor(req),
     );

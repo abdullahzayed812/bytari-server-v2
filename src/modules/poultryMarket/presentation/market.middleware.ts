@@ -1,11 +1,37 @@
 import type { Request, RequestHandler } from 'express';
-import { NotFoundError } from '../../../shared/errors/app-error.js';
+import { ForbiddenError, NotFoundError } from '../../../shared/errors/app-error.js';
+import { ErrorCode } from '../../../shared/errors/error-codes.js';
 import { asyncHandler } from '../../../shared/http/async-handler.js';
 import { validatedParams } from '../../../shared/http/validate.js';
 import type { AuthorizationService } from '../../authorization/authorization.service.js';
 import { requireAuth } from '../../auth/authenticate.middleware.js';
 import type { PoultryOfferRepository } from '../infrastructure/poultry-offer.repository.js';
 import type { EggOfferRepository } from '../infrastructure/egg-offer.repository.js';
+import type { TraderRepository } from '../infrastructure/trader.repository.js';
+
+/**
+ * MUST run after `requireApprovedTrader()`. A trader's market access lasts only
+ * for their activation period (final corrections §8): once it has EXPIRED (or
+ * was never started) every trader-only market capability is refused with
+ * `403 TRADER_SUBSCRIPTION_EXPIRED` until an admin renews it. ADMIN bypasses.
+ */
+export function createTraderSubscriptionGuard(deps: {
+  traders: TraderRepository;
+  authz: AuthorizationService;
+}): RequestHandler {
+  return asyncHandler(async (req, _res, next) => {
+    const auth = requireAuth(req);
+    if (deps.authz.isAdmin(auth)) return next();
+    const profile = await deps.traders.findByUserId(auth.userId);
+    if (!profile || profile.subscriptionStatus !== 'ACTIVE') {
+      throw new ForbiddenError(
+        'Your trader activation period has ended — request a renewal to use the market',
+        { code: ErrorCode.TRADER_SUBSCRIPTION_EXPIRED },
+      );
+    }
+    next();
+  });
+}
 
 /** Narrow `req.poultryOffer` inside a controller that runs after `withPoultryOffer`. */
 export function requirePoultryOffer(req: Request): Express.PoultryOfferContext {

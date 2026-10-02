@@ -73,7 +73,7 @@ describe('farm join by code', () => {
     const createRes = await request(app)
       .post('/api/v1/organizations')
       .set(bearer(owner.accessToken))
-      .send({ type: 'FARM', name: 'Pending Farm' });
+      .send({ termsAccepted: true, type: 'FARM', name: 'Pending Farm' });
     const joinCode = createRes.body.data.details.joinCode as string;
 
     const res = await joinFarm(app, vet.accessToken, joinCode);
@@ -264,7 +264,7 @@ describe('farm join code regeneration', () => {
     const clinicRes = await request(app)
       .post('/api/v1/organizations')
       .set(bearer(owner.accessToken))
-      .send({ type: 'CLINIC', name: 'A Clinic' });
+      .send({ termsAccepted: true, type: 'CLINIC', name: 'A Clinic' });
     const clinicId = clinicRes.body.data.id as string;
     await request(app)
       .post(`/api/v1/admin/organizations/${clinicId}/approve`)

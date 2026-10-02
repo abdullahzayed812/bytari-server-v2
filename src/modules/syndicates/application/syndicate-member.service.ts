@@ -11,6 +11,7 @@ import type { EventBus } from '../../../shared/events/index.js';
 import type { AuditService } from '../../audit/audit.service.js';
 import type { ChatService } from '../../chat/application/chat.service.js';
 import type { ConversationDTO } from '../../chat/domain/chat.types.js';
+import type { BroadcastImagePresign } from '../../../shared/storage/broadcast-media.js';
 import type { OrganizationBroadcastService } from '../../organizations/application/organization-broadcast.service.js';
 import type { OrganizationSupervisorService } from '../../organizations/application/organization-supervisor.service.js';
 import type { SupervisorMembershipSummary } from '../../organizations/domain/organization.types.js';
@@ -213,10 +214,25 @@ export class SyndicateMemberService {
     );
   }
 
+  /** Presigned PUT for the optional photo of a members broadcast. */
+  async requestBroadcastImageUploadUrl(
+    organizationId: string,
+    input: { filename: string; mimeType: string; size: number },
+  ): Promise<BroadcastImagePresign> {
+    await this.requireActiveSyndicate(organizationId);
+    return this.broadcasts.requestImageUploadUrl(organizationId, input);
+  }
+
   /** "رسالة إلى الأعضاء" — notify every ACTIVE registered member of THIS syndicate. */
   async messageAllMembers(
     organizationId: string,
-    input: { title: string; body: string; clientRequestId: string },
+    input: {
+      title: string;
+      body: string;
+      clientRequestId: string;
+      imageStorageKey?: string | null;
+      linkUrl?: string | null;
+    },
     actor: SyndicateActor,
   ): Promise<{ broadcastId: string; recipientCount: number }> {
     await this.requireActiveSyndicate(organizationId);
@@ -228,7 +244,12 @@ export class SyndicateMemberService {
     }
     const { broadcastId } = await this.broadcasts.send(
       organizationId,
-      { title: input.title, body: input.body },
+      {
+        title: input.title,
+        body: input.body,
+        imageStorageKey: input.imageStorageKey ?? null,
+        linkUrl: input.linkUrl ?? null,
+      },
       { actorUserId: actor.principal.userId, context: actor.context },
       { audience: 'SYNDICATE_MEMBERS', idempotencyKey: input.clientRequestId },
     );

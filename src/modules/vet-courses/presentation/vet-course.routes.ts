@@ -20,6 +20,7 @@ import {
   mineQuerySchema,
   moderationQuerySchema,
   registrationListQuerySchema,
+  registrationRejectBodySchema,
   rejectBodySchema,
   updateCourseBodySchema,
 } from './vet-course.schemas.js';
@@ -140,6 +141,18 @@ export function createAdminVetCourseRouter(c: Container): Router {
     authorize('vet_course.read'),
     validate({ params: idParamSchema, query: registrationListQuerySchema }),
     asyncHandler(registrations.listForCourse),
+  );
+  r.post(
+    '/vet-course-registrations/:id/approve',
+    authorize('vet_course.approve'),
+    validate({ params: idParamSchema }),
+    asyncHandler(registrations.approve),
+  );
+  r.post(
+    '/vet-course-registrations/:id/reject',
+    authorize('vet_course.reject'),
+    validate({ params: idParamSchema, body: registrationRejectBodySchema }),
+    asyncHandler(registrations.reject),
   );
 
   return r;

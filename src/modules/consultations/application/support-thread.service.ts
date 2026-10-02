@@ -6,6 +6,7 @@ import {
   NotFoundError,
 } from '../../../shared/errors/app-error.js';
 import { ErrorCode } from '../../../shared/errors/error-codes.js';
+import type { NotificationReadPort } from '../../../shared/events/notification-read.port.js';
 import type { EventBus } from '../../../shared/events/index.js';
 import { AuditEntityType, type AuditContext } from '../../audit/audit.types.js';
 import type { AuditService } from '../../audit/audit.service.js';
@@ -80,6 +81,8 @@ export class SupportThreadService {
     private readonly events: EventBus,
     private readonly animalOwnership: AnimalOwnershipRepository,
     logger: Logger,
+    /** Clears the thread's alerts in the bell once the user opens its messages. */
+    private readonly notificationReads: NotificationReadPort | null = null,
   ) {
     this.log = logger.child({ component: `${cfg.kind.toLowerCase()}-service` });
     this.entityType = AUDIT_ENTITY[cfg.kind] ?? cfg.kind;
@@ -227,6 +230,7 @@ export class SupportThreadService {
     targetUserId: string,
     body: string,
     targetExists: (userId: string) => Promise<boolean>,
+    inputImageKeys?: string[],
   ): Promise<ThreadDTO> {
     if (!(await this.authz.can(actor.principal, this.cfg.perms.respond))) {
       throw new ForbiddenError(`You cannot open a ${this.cfg.kind.toLowerCase()} thread`, {
@@ -237,6 +241,14 @@ export class SupportThreadService {
       throw new BadRequestError('You cannot message yourself');
     }
     if (!(await targetExists(targetUserId))) throw new NotFoundError('User not found');
+
+    let imageKeys: string[] = [];
+    if (inputImageKeys && inputImageKeys.length > 0) {
+      if (this.cfg.maxAttachmentImages === 0 || !this.media) {
+        throw new BadRequestError('this thread kind does not support image attachments');
+      }
+      imageKeys = await this.media.validateKeys(inputImageKeys, this.cfg.maxAttachmentImages);
+    }
 
     const source: MessageSource = this.authz.isAdmin(actor.principal) ? 'ADMIN' : 'SUPERVISOR';
     const now = new Date();
@@ -251,7 +263,13 @@ export class SupportThreadService {
         tx,
       );
       const message = await this.repo.createMessage(
-        { threadId: created.id, senderUserId: actor.principal.userId, source, body },
+        {
+          threadId: created.id,
+          senderUserId: actor.principal.userId,
+          source,
+          body,
+          ...(this.cfg.maxAttachmentImages > 0 ? { imageKeys } : {}),
+        },
         tx,
       );
       await this.repo.touchLastMessageAt(created.id, now, tx);
@@ -415,6 +433,10 @@ export class SupportThreadService {
     const thread = await this.load(threadId);
     await this.assertAccess(principal, thread);
     const { items, total } = await this.repo.listMessages(thread.id, { page, pageSize });
+    // Opening the thread (first page) reads it: clear its unread alerts.
+    if (page === 1) {
+      await this.notificationReads?.markReadForEntity(principal.userId, this.cfg.kind, thread.id);
+    }
     return { items: await Promise.all(items.map((m) => this.resolveMessageDto(m))), total };
   }
 
@@ -483,8 +505,13 @@ export class SupportThreadService {
 
   async close(actor: ThreadActor, threadId: string): Promise<ThreadDTO> {
     const thread = await this.load(threadId);
-    await this.assertAccess(actor.principal, thread);
-    if (!(await this.authz.can(actor.principal, this.cfg.perms.close))) {
+    const side = await this.assertAccess(actor.principal, thread);
+    // Ending a conversation is a management action — never the asker's own,
+    // even when the asker also holds a supervisor permission (ADMIN excepted).
+    if (
+      (side === 'CREATOR' && !this.authz.isAdmin(actor.principal)) ||
+      !(await this.authz.can(actor.principal, this.cfg.perms.close))
+    ) {
       throw new ForbiddenError(`You cannot close this ${this.label().toLowerCase()}`, {
         code: ErrorCode.PERMISSION_DENIED,
       });
@@ -517,8 +544,8 @@ export class SupportThreadService {
     blocked: boolean,
   ): Promise<ThreadDTO> {
     const thread = await this.load(threadId);
-    await this.assertAccess(actor.principal, thread);
-    if (!(await this.authz.can(actor.principal, this.cfg.perms.respond))) {
+    const side = await this.assertAccess(actor.principal, thread);
+    if (side === 'CREATOR' || !(await this.authz.can(actor.principal, this.cfg.perms.respond))) {
       throw new ForbiddenError('Only a responder can block or unblock the sender', {
         code: ErrorCode.PERMISSION_DENIED,
       });

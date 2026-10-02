@@ -6,7 +6,7 @@ import {
   addOrganizationMember,
   assignOrganizationSupervisor,
   bearer,
-  createActiveOrganization,
+  approveOrganization,
   createOrganization,
   fixtureBytes,
   registerAdmin,
@@ -137,15 +137,22 @@ describe('clinic / office license editing (settings)', () => {
     expect(replace.status).toBe(403);
   });
 
-  it('an org supervisor granted organization.update manages the license; a plain member cannot', async () => {
+  it('once APPROVED the license number and photos are locked — owner, supervisor and staff alike; ADMIN can still fix them', async () => {
     const admin = await registerAdmin(app);
     const owner = await registerApprovedVet(app);
     const sup = await registerApprovedVet(app); // org supervisors must be approved vets
     const staff = await registerUser(app);
-    const org = await createActiveOrganization(app, owner.accessToken, admin.accessToken, {
+    const org = await createOrganization(app, owner.accessToken, {
       type: 'CLINIC',
       name: 'عيادة',
+      details: { licenseNumber: 'LIC-1' },
     });
+    // While PENDING the owner still uploads / corrects the license.
+    const { res: pendingUpload } = await uploadLicense(owner.accessToken, org.id, 'lic.jpg');
+    expect(pendingUpload.status).toBe(200);
+    const key = pendingUpload.body.data.details.licenseDocumentKeys[0] as string;
+
+    await approveOrganization(app, admin.accessToken, org.id);
     await assignOrganizationSupervisor(app, owner.accessToken, org.id, {
       userId: sup.id,
       permissions: ['organization.read', 'organization.update'],
@@ -155,24 +162,43 @@ describe('clinic / office license editing (settings)', () => {
       role: 'STAFF',
     });
 
-    const bySup = await request(app)
+    for (const who of [owner, sup]) {
+      const patch = await request(app)
+        .patch(`/api/v1/organizations/${org.id}`)
+        .set(bearer(who.accessToken))
+        .send({ licenseNumber: 'CHANGED' });
+      expect(patch.status).toBe(403);
+      expect(patch.body.error.code).toBe('ORGANIZATION_LICENSE_LOCKED');
+      const upload = await request(app)
+        .post(`/api/v1/organizations/${org.id}/license-documents/upload-url`)
+        .set(bearer(who.accessToken))
+        .send({ filename: 'x.jpg', mimeType: 'image/jpeg', size: 1024, replacesStorageKey: key });
+      expect(upload.status).toBe(403);
+      const remove = await request(app)
+        .delete(`/api/v1/organizations/${org.id}/license-documents`)
+        .query({ storageKey: key })
+        .set(bearer(who.accessToken));
+      expect(remove.status).toBe(403);
+    }
+    // Other profile fields stay editable for the owner.
+    const other = await request(app)
       .patch(`/api/v1/organizations/${org.id}`)
-      .set(bearer(sup.accessToken))
-      .send({ licenseNumber: 'SUP-7' });
-    expect(bySup.status).toBe(200);
-    expect(bySup.body.data.details.licenseNumber).toBe('SUP-7');
-    const { res: supUpload } = await uploadLicense(sup.accessToken, org.id, 'sup.jpg');
-    expect(supUpload.status).toBe(200);
+      .set(bearer(owner.accessToken))
+      .send({ phone: '07701234567' });
+    expect(other.status).toBe(200);
+    expect(other.body.data.details.licenseNumber).toBe('LIC-1');
 
     const byStaff = await request(app)
       .patch(`/api/v1/organizations/${org.id}`)
       .set(bearer(staff.accessToken))
       .send({ licenseNumber: 'STAFF-1' });
     expect(byStaff.status).toBe(403);
-    const staffRemove = await request(app)
-      .delete(`/api/v1/organizations/${org.id}/license-documents`)
-      .query({ storageKey: supUpload.body.data.details.licenseDocumentKeys[0] as string })
-      .set(bearer(staff.accessToken));
-    expect(staffRemove.status).toBe(403);
+
+    const byAdmin = await request(app)
+      .patch(`/api/v1/organizations/${org.id}`)
+      .set(bearer(admin.accessToken))
+      .send({ licenseNumber: 'ADMIN-FIX' });
+    expect(byAdmin.status).toBe(200);
+    expect(byAdmin.body.data.details.licenseNumber).toBe('ADMIN-FIX');
   });
 });

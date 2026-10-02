@@ -22,6 +22,8 @@ interface JoinedRow extends VetServiceListingRequestRow {
   lst_animal_type: string;
   lst_vet_user_id: string;
   lst_price_amount: string | null;
+  vet_first_name: string;
+  vet_last_name: string;
 }
 
 export interface VetServiceListingRequestJoined {
@@ -34,6 +36,8 @@ export interface VetServiceListingRequestJoined {
     animalType: VetServiceAnimalType;
     veterinarianUserId: string;
     priceAmount: string | null;
+    /** The listing's veterinarian — who the pet owner asked / who responds. */
+    veterinarian: VetServiceUserSummary;
   };
 }
 
@@ -48,6 +52,7 @@ export class VetServiceListingRequestRepository {
     return this.conn(trx)(`${T} as lr`)
       .join('users as u', 'u.id', 'lr.pet_owner_user_id')
       .join('vet_service_listings as l', 'l.id', 'lr.listing_id')
+      .join('users as v', 'v.id', 'l.veterinarian_user_id')
       .select(
         'lr.*',
         'u.first_name as owner_first_name',
@@ -57,6 +62,8 @@ export class VetServiceListingRequestRepository {
         'l.animal_type as lst_animal_type',
         'l.veterinarian_user_id as lst_vet_user_id',
         'l.price_amount as lst_price_amount',
+        'v.first_name as vet_first_name',
+        'v.last_name as vet_last_name',
       );
   }
 
@@ -75,6 +82,11 @@ export class VetServiceListingRequestRepository {
         animalType: row.lst_animal_type as VetServiceAnimalType,
         veterinarianUserId: row.lst_vet_user_id,
         priceAmount: row.lst_price_amount,
+        veterinarian: {
+          id: row.lst_vet_user_id,
+          firstName: row.vet_first_name,
+          lastName: row.vet_last_name,
+        },
       },
     };
   }

@@ -24,13 +24,13 @@ export type VaccinationStatus = (typeof VACCINATION_STATUSES)[number];
  * (withdrawn by the owner) applies to every kind. Mirrored by the DB CHECK
  * `chk_animal_publications_resolution`.
  */
-export const PUBLICATION_RESOLUTIONS = ['FOUND', 'ADOPTED', 'CLOSED'] as const;
+export const PUBLICATION_RESOLUTIONS = ['FOUND', 'ADOPTED', 'MATED', 'CLOSED'] as const;
 export type PublicationResolution = (typeof PUBLICATION_RESOLUTIONS)[number];
 
 export const RESOLUTIONS_BY_KIND: Record<PublicationKind, readonly PublicationResolution[]> = {
   LOST: ['FOUND', 'CLOSED'],
   ADOPTION: ['ADOPTED', 'CLOSED'],
-  MATING: ['CLOSED'],
+  MATING: ['MATED', 'CLOSED'],
 };
 
 /** A viewer's fire-and-forget interaction with a listing — notifies the owner, no workflow. */

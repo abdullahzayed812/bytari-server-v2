@@ -149,17 +149,40 @@ export class VetCourseRegistrationRepository {
     courseId: string,
     filter: RegistrationListFilter,
   ): Promise<{ items: VetCourseRegistrationJoined[]; total: number }> {
-    const countRow = await this.conn()(`${T} as r`)
-      .where('r.course_id', courseId)
+    const scope = (qb: Knex.QueryBuilder): Knex.QueryBuilder => {
+      qb.where('r.course_id', courseId);
+      if (filter.status) qb.andWhere('r.status', filter.status);
+      return qb;
+    };
+    const countRow = await scope(this.conn()(`${T} as r`))
       .count<{ count: string }>({ count: '*' })
       .first();
     const total = Number(countRow?.count ?? 0);
-    const rows = (await this.joined(undefined, false)
-      .where('r.course_id', courseId)
+    // PENDING first (the review queue), then newest.
+    const rows = (await scope(this.joined(undefined, false))
+      .orderByRaw(`CASE WHEN r.status = 'PENDING' THEN 0 ELSE 1 END`)
       .orderBy('r.created_at', 'desc')
       .limit(filter.pageSize)
       .offset((filter.page - 1) * filter.pageSize)) as JoinedRow[];
     return { items: rows.map((r) => this.map(r)), total };
+  }
+
+  /** PENDING → APPROVED / REJECTED, only while still PENDING (null = lost the race). */
+  async review(
+    id: string,
+    decision: { status: 'APPROVED' | 'REJECTED'; reviewerUserId: string; reason: string | null },
+    trx: Knex.Transaction,
+  ): Promise<VetCourseRegistration | null> {
+    const [row] = (await trx(T)
+      .where({ id, status: 'PENDING' })
+      .update({
+        status: decision.status,
+        reviewed_at: trx.fn.now(),
+        reviewed_by_user_id: decision.reviewerUserId,
+        rejection_reason: decision.status === 'REJECTED' ? decision.reason : null,
+      })
+      .returning('*')) as VetCourseRegistrationRow[];
+    return row ? rowToRegistration(row) : null;
   }
 
   /** The caller's own registrations ("دوراتي"). */

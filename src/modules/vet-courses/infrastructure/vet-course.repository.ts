@@ -21,6 +21,7 @@ export interface VetCourseWithCreator {
   course: VetCourse;
   creator: VetCourseUserSummary;
   registrationCount?: number;
+  pendingRegistrationCount?: number;
 }
 
 export class VetCourseRepository {
@@ -111,8 +112,15 @@ export class VetCourseRepository {
   ): Promise<VetCourseWithCreator | null> {
     const row = (await this.joined(trx).where('c.id', id).first()) as JoinedRow | undefined;
     if (!row) return null;
-    const counts = await this.registrationCounts([id]);
-    return { ...this.map(row), registrationCount: counts.get(id) ?? 0 };
+    const [counts, pending] = await Promise.all([
+      this.registrationCounts([id]),
+      this.pendingRegistrationCounts([id]),
+    ]);
+    return {
+      ...this.map(row),
+      registrationCount: counts.get(id) ?? 0,
+      pendingRegistrationCount: pending.get(id) ?? 0,
+    };
   }
 
   async update(
@@ -263,11 +271,48 @@ export class VetCourseRepository {
       .orderBy('c.created_at', 'desc')
       .limit(filter.pageSize)
       .offset((filter.page - 1) * filter.pageSize)) as JoinedRow[];
-    const counts = await this.registrationCounts(rows.map((r) => r.id));
+    const ids = rows.map((r) => r.id);
+    const [counts, pending] = await Promise.all([
+      this.registrationCounts(ids),
+      this.pendingRegistrationCounts(ids),
+    ]);
     return {
-      items: rows.map((r) => ({ ...this.map(r), registrationCount: counts.get(r.id) ?? 0 })),
+      items: rows.map((r) => ({
+        ...this.map(r),
+        registrationCount: counts.get(r.id) ?? 0,
+        pendingRegistrationCount: pending.get(r.id) ?? 0,
+      })),
       total,
     };
+  }
+
+  /** Open registrant-review queue per course type (admin dashboard counters). */
+  async pendingRegistrationTotals(): Promise<Record<string, number>> {
+    const rows = (await this.conn()('vet_course_registrations as r')
+      .join(`${T} as c`, 'c.id', 'r.course_id')
+      .where('r.status', 'PENDING')
+      .groupBy('c.type')
+      .select('c.type as type')
+      .count<{ type: string; count: string }[]>({ count: '*' })) as {
+      type: string;
+      count: string;
+    }[];
+    return Object.fromEntries(rows.map((r) => [r.type, Number(r.count)]));
+  }
+
+  /** Registrants awaiting review per course (owner / moderator lists → badge counter). */
+  private async pendingRegistrationCounts(courseIds: string[]): Promise<Map<string, number>> {
+    if (courseIds.length === 0) return new Map();
+    const rows = (await this.conn()('vet_course_registrations')
+      .whereIn('course_id', courseIds)
+      .andWhere('status', 'PENDING')
+      .groupBy('course_id')
+      .select('course_id')
+      .count<{ course_id: string; count: string }[]>({ count: '*' })) as {
+      course_id: string;
+      count: string;
+    }[];
+    return new Map(rows.map((r) => [r.course_id, Number(r.count)]));
   }
 
   /** Of `courseIds`, the ones `userId` has registered for (drives the public "Registered" state). */
@@ -283,8 +328,10 @@ export class VetCourseRepository {
   /** Batched registrant-count lookup for a page of courses (public / owner / moderator list views). */
   private async registrationCounts(courseIds: string[]): Promise<Map<string, number>> {
     if (courseIds.length === 0) return new Map();
+    // A REJECTED registrant does not hold a seat.
     const rows = (await this.conn()('vet_course_registrations')
       .whereIn('course_id', courseIds)
+      .andWhereNot('status', 'REJECTED')
       .groupBy('course_id')
       .select('course_id')
       .count<{ course_id: string; count: string }[]>({ count: '*' })) as {
@@ -298,6 +345,7 @@ export class VetCourseRepository {
   async registrationCount(courseId: string, trx?: Knex.Transaction): Promise<number> {
     const row = await this.conn(trx)('vet_course_registrations')
       .where({ course_id: courseId })
+      .andWhereNot('status', 'REJECTED')
       .count<{ count: string }>({ count: '*' })
       .first();
     return Number(row?.count ?? 0);
