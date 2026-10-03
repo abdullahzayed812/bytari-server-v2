@@ -68,7 +68,7 @@ describe('expired clinics and veterinary offices', () => {
     expect(await ids('CLINIC')).toContain(clinic.id);
   });
 
-  it('an EXPIRED office cannot manage products or message followers; reads still work; admin bypasses', async () => {
+  it('an EXPIRED office is fully locked (no product reads/writes, no dashboard, no broadcast); renewal stays open; admin bypasses', async () => {
     const admin = await registerAdmin(app);
     const owner = await registerApprovedVet(app);
     const office = await createActiveOrganization(app, owner.accessToken, admin.accessToken, {
@@ -98,8 +98,25 @@ describe('expired clinics and veterinary offices', () => {
       .send({ title: 'عرض', body: 'خصم' });
     expect(broadcast.status).toBe(403);
 
-    const list = await request(app).get(base).set(bearer(owner.accessToken));
-    expect(list.status).toBe(200);
+    // Additional corrections §4: management is COMPLETELY blocked — the owner can
+    // no longer even list / view its products or open the dashboard summary.
+    for (const path of [base, `${base}/${created.body.data.id}`]) {
+      const read = await request(app).get(path).set(bearer(owner.accessToken));
+      expect(read.status).toBe(403);
+      expect(read.body.error.code).toBe('ORGANIZATION_SUBSCRIPTION_EXPIRED');
+    }
+    const summary = await request(app)
+      .get(`/api/v1/organizations/${office.id}/office-dashboard/summary`)
+      .set(bearer(owner.accessToken));
+    expect(summary.status).toBe(403);
+    // …but the renewal flow stays reachable
+    const renewals = await request(app)
+      .get(`/api/v1/organizations/${office.id}/subscription-renewals`)
+      .set(bearer(owner.accessToken));
+    expect(renewals.status).not.toBe(403);
+
+    const adminList = await request(app).get(base).set(bearer(admin.accessToken));
+    expect(adminList.status).toBe(200);
 
     const byAdmin = await request(app).post(base).set(bearer(admin.accessToken)).send(productBody);
     expect(byAdmin.status).toBe(201);

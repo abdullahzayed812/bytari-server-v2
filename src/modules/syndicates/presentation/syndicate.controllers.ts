@@ -51,6 +51,9 @@ export class SyndicateController {
     const { items, total } = await this.syndicates.listMain(q, requireAuth(req));
     sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
   };
+  listPinned = async (req: Request, res: Response): Promise<void> => {
+    sendSuccess(res, await this.syndicates.listPinned(requireAuth(req)));
+  };
   listBranches = async (req: Request, res: Response): Promise<void> => {
     const { organizationId } = validatedParams<{ organizationId: string }>(req);
     const q = validatedQuery<SyndicateBrowseQuery>(req);
@@ -88,6 +91,11 @@ export class AdminSyndicateController {
     const { organizationId } = validatedParams<{ organizationId: string }>(req);
     await this.syndicates.delete(organizationId, actor(req));
     res.status(StatusCodes.NO_CONTENT).send();
+  };
+  setPin = async (req: Request, res: Response): Promise<void> => {
+    const { organizationId } = validatedParams<{ organizationId: string }>(req);
+    const { pinned } = validatedBody<{ pinned: boolean }>(req);
+    sendSuccess(res, await this.syndicates.setPinnedToHome(organizationId, pinned, actor(req)));
   };
 }
 

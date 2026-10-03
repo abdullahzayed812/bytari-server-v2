@@ -1,3 +1,4 @@
+import type { AnimalSection } from './animal-section.js';
 import type { TipPriority, TipStatus } from './tip.constants.js';
 
 // --- internal aggregate ---------------------------------------------
@@ -9,6 +10,7 @@ export interface Tip {
   summary: string | null;
   readMinutes: number | null;
   priority: TipPriority;
+  animalSection: AnimalSection | null;
   isTipOfDay: boolean;
   coverImageStorageKey: string | null;
   coverImageStorageProvider: string | null;
@@ -45,6 +47,7 @@ export interface TipListItemDTO {
   summary: string | null;
   readMinutes: number | null;
   priority: TipPriority;
+  animalSection: AnimalSection | null;
   isTipOfDay: boolean;
   category: TipCategoryRef | null;
   coverImageUrl: string | null;
@@ -80,6 +83,7 @@ export interface TipRow {
   summary: string | null;
   read_minutes: number | null;
   priority: string;
+  animal_section: string | null;
   is_tip_of_day: boolean;
   cover_image_storage_key: string | null;
   cover_image_storage_provider: string | null;
@@ -118,6 +122,7 @@ export function rowToTip(row: TipRow): Tip {
     summary: row.summary,
     readMinutes: row.read_minutes,
     priority: row.priority as TipPriority,
+    animalSection: (row.animal_section ?? null) as AnimalSection | null,
     isTipOfDay: row.is_tip_of_day,
     coverImageStorageKey: row.cover_image_storage_key,
     coverImageStorageProvider: row.cover_image_storage_provider,
@@ -144,6 +149,8 @@ export interface ListTipsFilter {
   search?: string;
   categoryId?: string;
   priority?: TipPriority;
+  /** One or more animal sections (OR). */
+  animalSections?: AnimalSection[];
   /** Public: restrict to the caller's bookmarked tips. */
   bookmarkedByUserId?: string;
 }
@@ -154,6 +161,8 @@ export interface ListAdminTipsFilter {
   search?: string;
   categoryId?: string;
   priority?: TipPriority;
+  /** One or more animal sections (OR). */
+  animalSections?: AnimalSection[];
   status?: TipStatus;
   includeDeleted?: boolean;
 }

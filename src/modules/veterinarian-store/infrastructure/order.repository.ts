@@ -80,7 +80,10 @@ export class VeterinarianStoreOrderRepository {
     return row ?? null;
   }
 
-  async listItems(orderId: string, trx?: Knex.Transaction): Promise<VeterinarianStoreOrderItemRow[]> {
+  async listItems(
+    orderId: string,
+    trx?: Knex.Transaction,
+  ): Promise<VeterinarianStoreOrderItemRow[]> {
     return this.conn(trx)<VeterinarianStoreOrderItemRow>(ITEMS)
       .where({ order_id: orderId })
       .orderBy('created_at', 'asc');
@@ -107,6 +110,7 @@ export class VeterinarianStoreOrderRepository {
       const qb = this.db<VeterinarianStoreOrderRow>(ORDERS);
       if (filter.userId) qb.where('user_id', filter.userId);
       if (filter.status) qb.andWhere('status', filter.status);
+      if (filter.newOnly) qb.whereNull('admin_viewed_at');
       return qb;
     };
 
@@ -124,10 +128,34 @@ export class VeterinarianStoreOrderRepository {
     return { items, total };
   }
 
-  async setStatus(id: string, status: string, trx: Knex.Transaction): Promise<VeterinarianStoreOrderRow> {
+  /** Orders no store manager has opened yet — the "new orders" badge. */
+  async countUnviewed(): Promise<number> {
+    const row = await this.db(ORDERS)
+      .whereNull('admin_viewed_at')
+      .count<{ count: string }>({ count: '*' })
+      .first();
+    return Number(row?.count ?? 0);
+  }
+
+  async markViewed(id: string): Promise<void> {
+    await this.db(ORDERS).where({ id }).whereNull('admin_viewed_at').update({
+      admin_viewed_at: new Date(),
+    });
+  }
+
+  async setStatus(
+    id: string,
+    status: string,
+    trx: Knex.Transaction,
+  ): Promise<VeterinarianStoreOrderRow> {
     const [row] = (await trx(ORDERS)
       .where({ id })
-      .update({ status, updated_at: new Date() })
+      .update({
+        status,
+        updated_at: new Date(),
+        // acting on an order means a manager has seen it
+        admin_viewed_at: trx.raw('COALESCE(admin_viewed_at, now())'),
+      })
       .returning('*')) as VeterinarianStoreOrderRow[];
     if (!row) throw new Error('veterinarian store order not found after status change');
     return row;

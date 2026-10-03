@@ -14,6 +14,7 @@ import { PetOwnerStorePolicy, multiplyMoney } from '../domain/pet-owner-store.po
 import type {
   CheckoutInput,
   ListPetStoreOrdersFilter,
+  PetStoreAdminOrderDTO,
   PetStoreOrderDTO,
   PetStoreOrderItemRow,
   PetStoreOrderRow,
@@ -164,19 +165,29 @@ export class PetStoreOrderService {
 
   async listAllOrders(
     filter: ListPetStoreOrdersFilter,
-  ): Promise<{ items: PetStoreOrderDTO[]; total: number }> {
+  ): Promise<{ items: PetStoreAdminOrderDTO[]; total: number }> {
     const { items, total } = await this.orders.list(filter);
     const itemsByOrder = await this.orders.itemsByOrderIds(items.map((o) => o.id));
     return {
-      items: items.map((o) => this.toDTO(o, itemsByOrder.get(o.id) ?? [])),
+      items: items.map((o) => ({
+        ...this.toDTO(o, itemsByOrder.get(o.id) ?? []),
+        isNew: o.admin_viewed_at === null,
+      })),
       total,
     };
   }
 
-  async getOrderForAdmin(orderId: string): Promise<PetStoreOrderDTO> {
+  /** Opening an order as a store manager marks it seen (clears it from the badge). */
+  async getOrderForAdmin(orderId: string): Promise<PetStoreAdminOrderDTO> {
     const order = await this.orders.findById(orderId);
     if (!order) throw new NotFoundError('Order not found');
-    return this.toDTO(order, await this.orders.listItems(orderId));
+    await this.orders.markViewed(orderId);
+    return { ...this.toDTO(order, await this.orders.listItems(orderId)), isNew: false };
+  }
+
+  /** `GET …/orders/summary` — the store-orders "new" badge. */
+  async adminOrdersSummary(): Promise<{ newCount: number }> {
+    return { newCount: await this.orders.countUnviewed() };
   }
 
   async setOrderStatus(

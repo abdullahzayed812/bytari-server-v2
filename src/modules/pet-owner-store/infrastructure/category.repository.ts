@@ -10,6 +10,7 @@ const TABLE = 'pet_owner_store_categories';
 export interface CreatePetStoreCategoryData {
   slug: string;
   name: string;
+  parentId: string | null;
   showOnHome: boolean;
   sortOrder: number;
   status: string;
@@ -18,6 +19,7 @@ export interface CreatePetStoreCategoryData {
 export interface UpdatePetStoreCategoryData {
   slug?: string;
   name?: string;
+  parentId?: string | null;
   showOnHome?: boolean;
   sortOrder?: number;
   status?: string;
@@ -73,6 +75,7 @@ export class PetStoreCategoryRepository {
       .insert({
         slug: data.slug,
         name: data.name,
+        parent_id: data.parentId,
         show_on_home: data.showOnHome,
         sort_order: data.sortOrder,
         status: data.status,
@@ -90,6 +93,7 @@ export class PetStoreCategoryRepository {
     const dbPatch: Record<string, unknown> = { updated_at: new Date() };
     if (patch.slug !== undefined) dbPatch.slug = patch.slug;
     if (patch.name !== undefined) dbPatch.name = patch.name;
+    if (patch.parentId !== undefined) dbPatch.parent_id = patch.parentId;
     if (patch.showOnHome !== undefined) dbPatch.show_on_home = patch.showOnHome;
     if (patch.sortOrder !== undefined) dbPatch.sort_order = patch.sortOrder;
     if (patch.status !== undefined) dbPatch.status = patch.status;
@@ -101,6 +105,15 @@ export class PetStoreCategoryRepository {
       .returning('*')) as PetStoreCategoryRow[];
     if (!row) throw new Error('pet store category not found after update');
     return rowToPetStoreCategory(row);
+  }
+
+  /** Sub-categories under a section (any status). */
+  async countChildren(id: string, trx?: Knex.Transaction): Promise<number> {
+    const row = await this.conn(trx)(TABLE)
+      .where({ parent_id: id })
+      .count<{ count: string }>({ count: '*' })
+      .first();
+    return Number(row?.count ?? 0);
   }
 
   async delete(id: string, trx: Knex.Transaction): Promise<void> {

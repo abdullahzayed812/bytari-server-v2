@@ -36,6 +36,7 @@ export class TipController {
       search: q.q,
       categoryId: q.categoryId,
       priority: q.priority,
+      animalSections: q.section,
       bookmarkedByUserId: q.bookmarked ? userId : undefined,
     });
     sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
@@ -85,6 +86,7 @@ export class TipController {
       search: q.q,
       categoryId: q.categoryId,
       priority: q.priority,
+      animalSections: q.section,
       status: q.status,
       includeDeleted: q.includeDeleted,
     });

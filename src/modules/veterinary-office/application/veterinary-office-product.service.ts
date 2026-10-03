@@ -101,6 +101,8 @@ export class VeterinaryOfficeProductService {
           dosage: input.dosage ?? null,
           shelfLife: input.shelfLife ?? null,
           manufacturer: input.manufacturer ?? null,
+          brand: input.brand ?? null,
+          countryOfOrigin: input.countryOfOrigin ?? null,
           highlights: input.highlights ?? [],
           createdByUserId: actor.actorUserId,
         },
@@ -120,9 +122,11 @@ export class VeterinaryOfficeProductService {
       return created;
     });
 
+    // → NotificationPolicy notifies the office's followers.
     this.events.publish('veterinary_office.product.created', {
       productId: product.id,
       organizationId: org.id,
+      actorUserId: actor.actorUserId,
     });
     return this.toDTO(product);
   }
@@ -157,6 +161,12 @@ export class VeterinaryOfficeProductService {
       hidden: false,
     });
     return { items: await Promise.all(items.map((p) => this.toDTO(p))), total };
+  }
+
+  /** Public filter facets (distinct brands / countries) for the catalog screen. */
+  async publicFacets(organizationId: string): Promise<{ brands: string[]; countries: string[] }> {
+    await this.assertPubliclyBrowsable(organizationId);
+    return this.products.facetsForOrganization(organizationId);
   }
 
   /** Public single-product counterpart of {@link listPublic}. */
@@ -482,6 +492,8 @@ export class VeterinaryOfficeProductService {
       dosage: p.dosage,
       shelfLife: p.shelfLife,
       manufacturer: p.manufacturer,
+      brand: p.brand,
+      countryOfOrigin: p.countryOfOrigin,
       highlights: p.highlights,
       primaryImageUrl: await resolveVeterinaryOfficeProductImageUrlOrNull(
         this.storage,

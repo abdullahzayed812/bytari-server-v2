@@ -50,7 +50,10 @@ export function createVeterinaryOfficeProductRouter(c: Container): Router {
   const { withVeterinaryOfficeProduct } = createVeterinaryOfficeProductMiddleware({
     products: c.veterinaryOfficeProductRepository,
   });
-  // An EXPIRED office cannot manage its catalog (reads stay allowed).
+  // An EXPIRED office cannot manage its catalog AT ALL — not even list / view
+  // its own products from the dashboard — until the subscription is renewed.
+  // The public catalog (`createPublicVeterinaryOfficeProductRouter`) and the
+  // renewal routes stay reachable.
   const activeSubscription = createOrganizationSubscriptionGuard({
     subscriptions: c.farmSubscriptionRenewalRepository,
     authz: c.authorizationService,
@@ -70,6 +73,7 @@ export function createVeterinaryOfficeProductRouter(c: Container): Router {
     withOrganization,
     withVeterinaryOffice,
     authorizeOrg('product.read'),
+    activeSubscription,
     asyncHandler(ctrl.list),
   );
   r.post(
@@ -90,6 +94,7 @@ export function createVeterinaryOfficeProductRouter(c: Container): Router {
     withOrganization,
     withVeterinaryOffice,
     authorizeOrg('product.read'),
+    activeSubscription,
     withVeterinaryOfficeProduct,
     asyncHandler(ctrl.getOne),
   );
@@ -192,6 +197,12 @@ export function createPublicVeterinaryOfficeProductRouter(c: Container): Router 
       query: publicListVeterinaryOfficeProductsQuerySchema,
     }),
     asyncHandler(ctrl.list),
+  );
+  // brand / country filter chips (before `/:productId`)
+  r.get(
+    '/discover/:organizationId/office-products/facets',
+    validate({ params: veterinaryOfficeIdParamSchema }),
+    asyncHandler(ctrl.facets),
   );
   r.get(
     '/discover/:organizationId/office-products/:productId',

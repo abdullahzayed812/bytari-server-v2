@@ -1,3 +1,4 @@
+import type { AnimalSection } from '../domain/animal-section.js';
 import type { Knex } from 'knex';
 import type { Logger } from 'pino';
 import { BadRequestError, NotFoundError } from '../../../shared/errors/app-error.js';
@@ -46,6 +47,7 @@ export interface CreateNewsInput {
   source?: string | null;
   isFeatured?: boolean;
   tag?: NewsTag;
+  animalSection?: AnimalSection | null;
   categoryId?: string | null;
   body?: string | null;
   reasonPoints?: string[];
@@ -156,6 +158,7 @@ export class NewsService {
       source: news.source,
       isFeatured: news.isFeatured,
       tag: news.tag,
+      animalSection: news.animalSection,
       category,
       coverImageUrl: news.coverImageStorageKey
         ? await this.resolveImageUrl(news.coverImageStorageKey)
@@ -206,6 +209,7 @@ export class NewsService {
           source: input.source ?? null,
           isFeatured: input.isFeatured ?? false,
           tag: input.tag ?? 'NORMAL',
+          animalSection: input.animalSection ?? null,
           body: input.body ?? null,
           reasonPoints: input.reasonPoints ?? [],
           advicePoints: input.advicePoints ?? [],
@@ -247,6 +251,7 @@ export class NewsService {
           source: input.source,
           isFeatured: input.isFeatured,
           tag: input.tag,
+          animalSection: input.animalSection,
           body: input.body,
           reasonPoints: input.reasonPoints,
           advicePoints: input.advicePoints,

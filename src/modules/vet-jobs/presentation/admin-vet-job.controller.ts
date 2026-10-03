@@ -41,6 +41,11 @@ export class AdminVetJobOfferController {
     const body = validatedBody<RejectBody>(req);
     sendSuccess(res, await this.offers.reject(id, body.reason, actor(req)));
   };
+  remove = async (req: Request, res: Response): Promise<void> => {
+    const { id } = validatedParams<{ id: string }>(req);
+    await this.offers.remove(id, actor(req));
+    sendSuccess(res, { ok: true });
+  };
 }
 
 export class AdminVetJobSeekerProfileController {

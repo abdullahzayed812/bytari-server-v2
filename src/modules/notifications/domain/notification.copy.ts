@@ -274,4 +274,8 @@ export const NOTIFICATION_COPY: Record<NotificationType, { title: string; body: 
     title: 'رسالة من منشأة تتابعها',
     body: 'أرسلت منشأة تتابعها رسالة.',
   },
+  VETERINARY_OFFICE_PRODUCT_ADDED: {
+    title: 'منتج جديد',
+    body: 'أضاف مكتب بيطري تتابعه منتجًا جديدًا.',
+  },
 };

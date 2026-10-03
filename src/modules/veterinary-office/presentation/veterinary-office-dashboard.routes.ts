@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { asyncHandler } from '../../../shared/http/async-handler.js';
 import { validate } from '../../../shared/http/validate.js';
 import type { Container } from '../../../container.js';
+import { createOrganizationSubscriptionGuard } from '../../organizations/presentation/organization-subscription.middleware.js';
 import { createOrganizationMiddleware } from '../../organizations/presentation/organization.middleware.js';
 import { withVeterinaryOffice } from './veterinary-office-product.middleware.js';
 import { veterinaryOfficeIdParamSchema } from './veterinary-office-product.schemas.js';
@@ -15,6 +16,12 @@ export function createVeterinaryOfficeDashboardRouter(c: Container): Router {
     authz: c.authorizationService,
   });
 
+  // Expired office → the whole dashboard is locked until renewal.
+  const activeSubscription = createOrganizationSubscriptionGuard({
+    subscriptions: c.farmSubscriptionRenewalRepository,
+    authz: c.authorizationService,
+  });
+
   const r = Router();
   r.use(c.authenticate);
 
@@ -24,6 +31,7 @@ export function createVeterinaryOfficeDashboardRouter(c: Container): Router {
     withOrganization,
     withVeterinaryOffice,
     authorizeOrg('product.read'),
+    activeSubscription,
     asyncHandler(ctrl.getSummary),
   );
 

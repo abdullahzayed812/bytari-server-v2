@@ -1,3 +1,4 @@
+import type { AnimalSection } from '../domain/animal-section.js';
 import type { Knex } from 'knex';
 import type { TipPriority, TipStatus } from '../domain/tip.constants.js';
 import {
@@ -22,6 +23,7 @@ export interface CreateTipData {
   summary: string | null;
   readMinutes: number | null;
   priority: TipPriority;
+  animalSection: AnimalSection | null;
   bodyIntro: string | null;
   keyPoints: string[];
   warningPoints: string[];
@@ -35,6 +37,7 @@ export interface UpdateTipData {
   summary?: string | null;
   readMinutes?: number | null;
   priority?: TipPriority;
+  animalSection?: AnimalSection | null;
   bodyIntro?: string | null;
   keyPoints?: string[];
   warningPoints?: string[];
@@ -89,6 +92,7 @@ export class TipRepository {
         summary: data.summary,
         read_minutes: data.readMinutes,
         priority: data.priority,
+        animal_section: data.animalSection,
         body_intro: data.bodyIntro,
         key_points: JSON.stringify(data.keyPoints),
         warning_points: JSON.stringify(data.warningPoints),
@@ -111,6 +115,7 @@ export class TipRepository {
     if (patch.summary !== undefined) dbPatch.summary = patch.summary;
     if (patch.readMinutes !== undefined) dbPatch.read_minutes = patch.readMinutes;
     if (patch.priority !== undefined) dbPatch.priority = patch.priority;
+    if (patch.animalSection !== undefined) dbPatch.animal_section = patch.animalSection;
     if (patch.bodyIntro !== undefined) dbPatch.body_intro = patch.bodyIntro;
     if (patch.keyPoints !== undefined) dbPatch.key_points = JSON.stringify(patch.keyPoints);
     if (patch.warningPoints !== undefined)
@@ -211,10 +216,16 @@ export class TipRepository {
 
   private applyCommon(
     qb: Knex.QueryBuilder,
-    f: { search?: string; categoryId?: string; priority?: TipPriority },
+    f: {
+      search?: string;
+      categoryId?: string;
+      priority?: TipPriority;
+      animalSections?: AnimalSection[];
+    },
   ): void {
     if (f.categoryId) qb.where('t.category_id', f.categoryId);
     if (f.priority) qb.where('t.priority', f.priority);
+    if (f.animalSections?.length) qb.whereIn('t.animal_section', f.animalSections);
     if (f.search && f.search.trim().length > 0) {
       qb.whereRaw("t.search_vector @@ plainto_tsquery('simple', ?)", [f.search.trim()]);
     }

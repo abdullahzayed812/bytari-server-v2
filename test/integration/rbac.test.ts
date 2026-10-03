@@ -190,6 +190,9 @@ describe('roles ↔ permissions', () => {
     expect(keys).toContain('content_report.admin.manage');
     expect(keys).toContain('market.offer.admin.moderate');
     expect(keys).toContain('syndicate.admin.delete');
-    expect(keys.length).toBe(88);
+    expect(keys).toContain('vet_service.delete');
+    expect(keys).toContain('vet_job.delete');
+    expect(keys).toContain('syndicate.admin.pin');
+    expect(keys.length).toBe(91);
   });
 });

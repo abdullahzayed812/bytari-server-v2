@@ -76,6 +76,7 @@ import {
 } from '../modules/vet-services/index.js';
 import { createVetJobRouter, createAdminVetJobRouter } from '../modules/vet-jobs/index.js';
 import { createVetCourseRouter, createAdminVetCourseRouter } from '../modules/vet-courses/index.js';
+import { createSearchRouter } from '../modules/search/search.routes.js';
 import { createSyndicateRouter, createAdminSyndicateRouter } from '../modules/syndicates/index.js';
 import { createChatRoomRouter, createAdminChatRoomRouter } from '../modules/chat-rooms/index.js';
 import { createReportRouter, createAdminReportRouter } from '../modules/reports/index.js';
@@ -259,6 +260,8 @@ export function createApiRouter(c: Container): Router {
   // APPROVED / REJECTED) and veterinarian registrations against them
   // (capacity / deadline / at-most-once enforced synchronously).
   router.use('/vet-courses', createVetCourseRouter(c));
+  // Home header global search across books, stores, clinics, offices, farms, …
+  router.use('/search', createSearchRouter(c));
 
   // Veterinary Syndicates / Unions — a syndicate is an `organizations` row
   // (type SYNDICATE) reusing the organization-scoped membership/supervisor

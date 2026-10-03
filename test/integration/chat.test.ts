@@ -114,7 +114,9 @@ describe('clinic chat — Pet Owner ↔ Clinic', () => {
       .set(bearer(vetOwner.accessToken));
     expect(ownerView.status).toBe(200);
     expect(ownerView.body.data.viewerSide).toBe('CLINIC');
-    expect(ownerView.body.data.unreadCount).toBeNull(); // clinic side has no per-member read state
+    // the clinic side has no read pointer — its count comes from the member's own
+    // unread message alerts (delivered asynchronously), so it is a number now
+    expect(typeof ownerView.body.data.unreadCount).toBe('number');
 
     const reply = await sendChatMessage(app, clinicVet.accessToken, conv.id, 'Please bring him in');
     expect(reply.status).toBe(201);
@@ -599,12 +601,21 @@ describe('chat — conversation listing', () => {
     const clinicList = await listConversations(app, vetOwner.accessToken);
     const ids = (clinicList.body.data as Array<{ id: string }>).map((c) => c.id).sort();
     expect(ids).toEqual([c1.id, c2.id].sort());
-    // clinic-side rows report unreadCount: null
-    expect(
-      (clinicList.body.data as Array<{ unreadCount: number | null }>).every(
-        (c) => c.unreadCount === null,
-      ),
-    ).toBe(true);
+    // clinic-side rows: per-member unread from the member's message alerts
+    await new Promise((r) => setTimeout(r, 60));
+    const again = await listConversations(app, vetOwner.accessToken);
+    const unreadById = new Map(
+      (again.body.data as Array<{ id: string; unreadCount: number }>).map((c) => [
+        c.id,
+        c.unreadCount,
+      ]),
+    );
+    expect(unreadById.get(c1.id)).toBe(1);
+    expect(unreadById.get(c2.id)).toBe(0);
+    const summary = await request(app)
+      .get(`/api/v1/conversations/unread-summary?organizationId=${clinic.id}`)
+      .set(bearer(vetOwner.accessToken));
+    expect(summary.body.data).toEqual({ unreadConversations: 1, unreadMessages: 1 });
   });
 });
 

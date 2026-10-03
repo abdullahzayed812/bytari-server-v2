@@ -42,6 +42,8 @@ export class VeterinaryOfficeProductController {
       productType: q.type,
       hidden: q.hidden,
       search: q.search,
+      brand: q.brand,
+      country: q.country,
       sort: q.sort,
       order: q.order,
     });

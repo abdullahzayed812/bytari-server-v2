@@ -1,3 +1,4 @@
+import { ANIMAL_SECTIONS } from '../domain/animal-section.js';
 import { z } from 'zod';
 import { paginationQuerySchema } from '../../../shared/http/pagination.js';
 import {
@@ -22,6 +23,20 @@ const bodyIntro = z.string().trim().min(1).max(INTRO_MAX);
 const vetAdvice = z.string().trim().min(1).max(VET_ADVICE_MAX);
 const readMinutes = z.number().int().min(READ_MINUTES_MIN).max(READ_MINUTES_MAX);
 const priority = z.enum(TIP_PRIORITIES);
+const animalSection = z.enum(ANIMAL_SECTIONS);
+/** `?section=POULTRY` or `?section=SHEEP,CATTLE` — that section's items only. */
+const sectionList = z
+  .string()
+  .optional()
+  .transform((v) =>
+    v
+      ? v
+          .split(',')
+          .map((x) => x.trim())
+          .filter(Boolean)
+      : undefined,
+  )
+  .pipe(z.array(animalSection).max(ANIMAL_SECTIONS.length).optional());
 const points = z.array(z.string().trim().min(1).max(POINT_MAX)).max(MAX_POINTS);
 const categoryId = z.string().uuid();
 
@@ -32,6 +47,7 @@ export const createTipBodySchema = z
     summary: summary.nullable().optional(),
     readMinutes: readMinutes.nullable().optional(),
     priority: priority.optional(),
+    animalSection: animalSection.nullable().optional(),
     categoryId: categoryId.nullable().optional(),
     bodyIntro: bodyIntro.nullable().optional(),
     keyPoints: points.optional(),
@@ -46,6 +62,7 @@ export const updateTipBodySchema = z
     summary: summary.nullable().optional(),
     readMinutes: readMinutes.nullable().optional(),
     priority: priority.optional(),
+    animalSection: animalSection.nullable().optional(),
     categoryId: categoryId.nullable().optional(),
     bodyIntro: bodyIntro.nullable().optional(),
     keyPoints: points.optional(),
@@ -61,6 +78,7 @@ export const listPublicTipsQuerySchema = paginationQuerySchema.extend({
   q: z.string().trim().min(1).max(200).optional(),
   categoryId: categoryId.optional(),
   priority: priority.optional(),
+  section: sectionList,
   bookmarked: z
     .enum(['true', 'false'])
     .transform((v) => v === 'true')
@@ -71,6 +89,7 @@ export const listAdminTipsQuerySchema = paginationQuerySchema.extend({
   q: z.string().trim().min(1).max(200).optional(),
   categoryId: categoryId.optional(),
   priority: priority.optional(),
+  section: sectionList,
   status: z.enum(TIP_STATUSES).optional(),
   includeDeleted: z
     .enum(['true', 'false'])

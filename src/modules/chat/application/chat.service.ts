@@ -46,6 +46,12 @@ export interface ChatOrgRef {
 
 /** Ceiling on candidate conversations scanned for a list request (cf. Phase 8). */
 const CANDIDATE_CEILING = 500;
+/** Sides resolved live through organization membership — no participant row / read pointer. */
+const ORG_SIDES: ReadonlySet<ConversationSide> = new Set<ConversationSide>([
+  'CLINIC',
+  'VETERINARY_OFFICE',
+  'SYNDICATE',
+]);
 
 function isUniqueViolation(err: unknown): boolean {
   return typeof err === 'object' && err !== null && (err as { code?: string }).code === '23505';
@@ -1022,20 +1028,61 @@ export class ChatService {
     const start = (filter.page - 1) * filter.pageSize;
     const pageSlice = accessible.slice(start, start + filter.pageSize);
 
-    const unread = await this.conversations.unreadCounts(
-      userId,
-      pageSlice.map((x) => x.conversation.id),
-    );
+    const unread = await this.unreadForSlice(userId, pageSlice);
 
     const items = pageSlice.map((x) =>
-      this.toDTO(
-        x.conversation,
-        x.side,
-        this.unreadFor(x.side, unread.get(x.conversation.id)),
-        userId,
-      ),
+      this.toDTO(x.conversation, x.side, unread.get(x.conversation.id) ?? 0, userId),
     );
     return { items, total };
+  }
+
+  /**
+   * Badge counts for the caller's conversations (optionally one organization's
+   * — the clinic / office dashboard "messages" counter): conversations with
+   * anything unread + total unread messages. Same access scoping as the list.
+   */
+  async unreadSummary(
+    userId: string,
+    filter: { organizationId?: string },
+  ): Promise<{ unreadConversations: number; unreadMessages: number }> {
+    const candidates = await this.conversations.listCandidatesForUser(userId, {
+      organizationId: filter.organizationId,
+      limit: CANDIDATE_CEILING,
+    });
+    const accessible: Array<{ conversation: Conversation; side: ConversationSide }> = [];
+    for (const conversation of candidates) {
+      const side = await this.resolveSide(userId, conversation);
+      if (side) accessible.push({ conversation, side });
+    }
+    const unread = await this.unreadForSlice(userId, accessible);
+    let unreadConversations = 0;
+    let unreadMessages = 0;
+    for (const n of unread.values()) {
+      if (n > 0) unreadConversations += 1;
+      unreadMessages += n;
+    }
+    return { unreadConversations, unreadMessages };
+  }
+
+  /**
+   * Unread per conversation. Participant sides use the read pointer; the
+   * dynamic org side (clinic / office / syndicate members — no participant
+   * row) uses the member's own unread CHAT_MESSAGE_RECEIVED alerts, which
+   * `markRead` clears — so each member has a personal, accurate count.
+   */
+  private async unreadForSlice(
+    userId: string,
+    slice: Array<{ conversation: Conversation; side: ConversationSide }>,
+  ): Promise<Map<string, number>> {
+    const orgSide = slice.filter((x) => ORG_SIDES.has(x.side)).map((x) => x.conversation.id);
+    const participant = slice.filter((x) => !ORG_SIDES.has(x.side)).map((x) => x.conversation.id);
+    const [byPointer, byAlerts] = await Promise.all([
+      this.conversations.unreadCounts(userId, participant),
+      this.notificationReads
+        ? this.notificationReads.countUnreadForEntities(userId, 'CONVERSATION', orgSide)
+        : Promise.resolve(new Map<string, number>()),
+    ]);
+    return new Map([...byPointer, ...byAlerts]);
   }
 
   /** Load a conversation by id or 404 (ids do not leak — same message as no-access). */
@@ -1203,12 +1250,6 @@ export class ChatService {
 
   // --- DTO assembly -------------------------------------------------
 
-  private unreadFor(side: ConversationSide, count: number | undefined): number | null {
-    // Dynamic clinic/office/syndicate side has no per-member read state.
-    if (side === 'CLINIC' || side === 'VETERINARY_OFFICE' || side === 'SYNDICATE') return null;
-    return count ?? 0;
-  }
-
   private toDTO(
     conversation: Conversation,
     side: ConversationSide,
@@ -1258,8 +1299,7 @@ export class ChatService {
     conversation: Conversation,
     side: ConversationSide,
   ): Promise<ConversationDTO> {
-    if (side === 'CLINIC') return this.toDTO(conversation, side, null, userId);
-    const unread = await this.conversations.unreadCounts(userId, [conversation.id]);
+    const unread = await this.unreadForSlice(userId, [{ conversation, side }]);
     return this.toDTO(conversation, side, unread.get(conversation.id) ?? 0, userId);
   }
 }

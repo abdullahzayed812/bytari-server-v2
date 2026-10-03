@@ -61,7 +61,10 @@ export class VeterinarianStoreProductRepository {
     return { product: rowToVeterinarianStoreProduct(row), categoryName: row.category_name };
   }
 
-  async listImages(productId: string, trx?: Knex.Transaction): Promise<VeterinarianStoreProductImageRow[]> {
+  async listImages(
+    productId: string,
+    trx?: Knex.Transaction,
+  ): Promise<VeterinarianStoreProductImageRow[]> {
     return this.conn(trx)<VeterinarianStoreProductImageRow>(IMAGES)
       .where({ product_id: productId })
       .orderBy([
@@ -81,7 +84,20 @@ export class VeterinarianStoreProductRepository {
         'p.category_id',
       );
       if (filter.status) qb.where('p.status', filter.status);
-      if (filter.categoryId) qb.andWhere('p.category_id', filter.categoryId);
+      if (filter.categoryId) {
+        // A SECTION matches its own products AND every sub-category's.
+        const categoryId = filter.categoryId;
+        qb.andWhere((w) => {
+          void w
+            .where('p.category_id', categoryId)
+            .orWhereIn(
+              'p.category_id',
+              this.conn(trx)('veterinarian_store_categories')
+                .select('id')
+                .where('parent_id', categoryId),
+            );
+        });
+      }
       if (filter.search) {
         qb.andWhereRaw('lower(p.name) like ?', [`%${filter.search.toLowerCase()}%`]);
       }
@@ -115,7 +131,10 @@ export class VeterinarianStoreProductRepository {
     };
   }
 
-  async create(data: CreateVeterinarianStoreProductData, trx: Knex.Transaction): Promise<VeterinarianStoreProduct> {
+  async create(
+    data: CreateVeterinarianStoreProductData,
+    trx: Knex.Transaction,
+  ): Promise<VeterinarianStoreProduct> {
     const [row] = (await trx(TABLE)
       .insert({
         category_id: data.categoryId,
@@ -174,7 +193,11 @@ export class VeterinarianStoreProductRepository {
     return row ? rowToVeterinarianStoreProduct(row) : null;
   }
 
-  async setStock(id: string, quantity: number, trx: Knex.Transaction): Promise<VeterinarianStoreProduct> {
+  async setStock(
+    id: string,
+    quantity: number,
+    trx: Knex.Transaction,
+  ): Promise<VeterinarianStoreProduct> {
     const [row] = (await trx(TABLE)
       .where({ id })
       .update({ stock_quantity: quantity, updated_at: new Date() })

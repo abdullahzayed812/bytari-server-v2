@@ -41,6 +41,7 @@ export class VeterinarianStoreCatalogService {
         id: c.id,
         slug: c.slug,
         name: c.name,
+        parentId: c.parentId,
         imageUrl: await resolveVeterinarianStoreImageUrlOrNull(this.storage, c.imageKey),
         showOnHome: c.showOnHome,
         sortOrder: c.sortOrder,
@@ -79,7 +80,9 @@ export class VeterinarianStoreCatalogService {
     };
   }
 
-  private async toListItem(pc: VeterinarianStoreProductWithCategory): Promise<VeterinarianStoreProductListItemDTO> {
+  private async toListItem(
+    pc: VeterinarianStoreProductWithCategory,
+  ): Promise<VeterinarianStoreProductListItemDTO> {
     const { product, categoryName } = pc;
     return {
       id: product.id,
@@ -90,7 +93,10 @@ export class VeterinarianStoreCatalogService {
       currency: product.currency,
       inStock: product.stockQuantity > 0,
       status: product.status,
-      primaryImageUrl: await resolveVeterinarianStoreImageUrlOrNull(this.storage, product.primaryImageKey),
+      primaryImageUrl: await resolveVeterinarianStoreImageUrlOrNull(
+        this.storage,
+        product.primaryImageKey,
+      ),
       ratingAverage: product.ratingAverage,
       ratingCount: product.ratingCount,
     };

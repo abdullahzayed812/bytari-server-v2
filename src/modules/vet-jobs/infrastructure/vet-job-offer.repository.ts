@@ -21,6 +21,7 @@ export interface VetJobOfferWithPoster {
   offer: VetJobOffer;
   postedBy: VetJobUserSummary;
   applicationCount?: number;
+  pendingApplicationCount?: number;
 }
 
 export class VetJobOfferRepository {
@@ -99,7 +100,7 @@ export class VetJobOfferRepository {
     const row = (await this.joined(trx).where('o.id', id).first()) as JoinedRow | undefined;
     if (!row) return null;
     const counts = await this.applicationCounts([id]);
-    return { ...this.map(row), applicationCount: counts.get(id) ?? 0 };
+    return { ...this.map(row), ...countsFor(counts, id) };
   }
 
   async update(
@@ -240,22 +241,40 @@ export class VetJobOfferRepository {
       .offset((filter.page - 1) * filter.pageSize)) as JoinedRow[];
     const counts = await this.applicationCounts(rows.map((r) => r.id));
     return {
-      items: rows.map((r) => ({ ...this.map(r), applicationCount: counts.get(r.id) ?? 0 })),
+      items: rows.map((r) => ({ ...this.map(r), ...countsFor(counts, r.id) })),
       total,
     };
   }
 
-  /** Batched applicant-count lookup for a page of offers (owner / moderator list views). */
-  private async applicationCounts(offerIds: string[]): Promise<Map<string, number>> {
+  /**
+   * Batched applicant counts for a page of offers (owner / moderator list
+   * views): every application + the still-PENDING ("new", undecided) ones.
+   */
+  private async applicationCounts(offerIds: string[]): Promise<Map<string, ApplicantCounts>> {
     if (offerIds.length === 0) return new Map();
     const rows = (await this.conn()('vet_job_applications')
       .whereIn('job_offer_id', offerIds)
       .groupBy('job_offer_id')
-      .select('job_offer_id')
-      .count<{ job_offer_id: string; count: string }[]>({ count: '*' })) as {
-      job_offer_id: string;
-      count: string;
-    }[];
-    return new Map(rows.map((r) => [r.job_offer_id, Number(r.count)]));
+      .select(
+        'job_offer_id',
+        this.conn().raw('count(*)::int as total'),
+        this.conn().raw("count(*) filter (where status = 'PENDING')::int as pending"),
+      )) as unknown as { job_offer_id: string; total: number; pending: number }[];
+    return new Map(
+      rows.map((r) => [r.job_offer_id, { total: Number(r.total), pending: Number(r.pending) }]),
+    );
   }
+}
+
+interface ApplicantCounts {
+  total: number;
+  pending: number;
+}
+
+function countsFor(
+  counts: Map<string, ApplicantCounts>,
+  id: string,
+): { applicationCount: number; pendingApplicationCount: number } {
+  const c = counts.get(id);
+  return { applicationCount: c?.total ?? 0, pendingApplicationCount: c?.pending ?? 0 };
 }

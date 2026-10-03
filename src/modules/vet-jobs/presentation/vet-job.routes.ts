@@ -171,6 +171,14 @@ export function createAdminVetJobRouter(c: Container): Router {
     );
   }
 
+  // "حذف الوظيفة" — hard delete from Admin Management, any status.
+  r.delete(
+    '/vet-job-offers/:id',
+    authorize('vet_job.delete'),
+    validate({ params: idParamSchema }),
+    asyncHandler(offers.remove),
+  );
+
   r.get(
     '/vet-job-applications',
     authorize('vet_job.read'),

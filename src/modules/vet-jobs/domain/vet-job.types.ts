@@ -48,6 +48,8 @@ export interface VetJobOfferDTO extends VetJobOffer {
   postedBy: VetJobUserSummary;
   /** Visible to the offer owner / moderators only. */
   applicationCount?: number;
+  /** Applications still awaiting the poster's decision ("new" applicants badge). */
+  pendingApplicationCount?: number;
 }
 
 /** Public browse projection — APPROVED, not closed, deadline not passed. */

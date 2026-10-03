@@ -40,6 +40,11 @@ export class AdminVetServiceListingController {
     const body = validatedBody<RejectBody>(req);
     sendSuccess(res, await this.listings.reject(id, body.reason, actor(req)));
   };
+  remove = async (req: Request, res: Response): Promise<void> => {
+    const { id } = validatedParams<{ id: string }>(req);
+    await this.listings.remove(id, actor(req));
+    sendSuccess(res, { ok: true });
+  };
 }
 
 export class AdminVetServiceRequestController {
@@ -62,5 +67,10 @@ export class AdminVetServiceRequestController {
     const { id } = validatedParams<{ id: string }>(req);
     const body = validatedBody<RejectBody>(req);
     sendSuccess(res, await this.requests.reject(id, body.reason, actor(req)));
+  };
+  remove = async (req: Request, res: Response): Promise<void> => {
+    const { id } = validatedParams<{ id: string }>(req);
+    await this.requests.remove(id, actor(req));
+    sendSuccess(res, { ok: true });
   };
 }

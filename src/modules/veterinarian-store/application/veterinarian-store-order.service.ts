@@ -14,6 +14,7 @@ import { VeterinarianStorePolicy, multiplyMoney } from '../domain/veterinarian-s
 import type {
   CheckoutInput,
   ListVeterinarianStoreOrdersFilter,
+  VeterinarianStoreAdminOrderDTO,
   VeterinarianStoreOrderDTO,
   VeterinarianStoreOrderItemRow,
   VeterinarianStoreOrderRow,
@@ -53,7 +54,10 @@ export class VeterinarianStoreOrderService {
 
   // --- checkout ---------------------------------------------------
 
-  async checkout(actor: VeterinarianStoreActor, input: CheckoutInput): Promise<VeterinarianStoreOrderDTO> {
+  async checkout(
+    actor: VeterinarianStoreActor,
+    input: CheckoutInput,
+  ): Promise<VeterinarianStoreOrderDTO> {
     VeterinarianStorePolicy.assertPaymentMethodEnabled(input.paymentMethod);
 
     const orderId = await this.db.transaction(async (tx) => {
@@ -164,19 +168,29 @@ export class VeterinarianStoreOrderService {
 
   async listAllOrders(
     filter: ListVeterinarianStoreOrdersFilter,
-  ): Promise<{ items: VeterinarianStoreOrderDTO[]; total: number }> {
+  ): Promise<{ items: VeterinarianStoreAdminOrderDTO[]; total: number }> {
     const { items, total } = await this.orders.list(filter);
     const itemsByOrder = await this.orders.itemsByOrderIds(items.map((o) => o.id));
     return {
-      items: items.map((o) => this.toDTO(o, itemsByOrder.get(o.id) ?? [])),
+      items: items.map((o) => ({
+        ...this.toDTO(o, itemsByOrder.get(o.id) ?? []),
+        isNew: o.admin_viewed_at === null,
+      })),
       total,
     };
   }
 
-  async getOrderForAdmin(orderId: string): Promise<VeterinarianStoreOrderDTO> {
+  /** Opening an order as a store manager marks it seen (clears it from the badge). */
+  async getOrderForAdmin(orderId: string): Promise<VeterinarianStoreAdminOrderDTO> {
     const order = await this.orders.findById(orderId);
     if (!order) throw new NotFoundError('Order not found');
-    return this.toDTO(order, await this.orders.listItems(orderId));
+    await this.orders.markViewed(orderId);
+    return { ...this.toDTO(order, await this.orders.listItems(orderId)), isNew: false };
+  }
+
+  /** `GET …/orders/summary` — the store-orders "new" badge. */
+  async adminOrdersSummary(): Promise<{ newCount: number }> {
+    return { newCount: await this.orders.countUnviewed() };
   }
 
   async setOrderStatus(
@@ -186,7 +200,10 @@ export class VeterinarianStoreOrderService {
   ): Promise<VeterinarianStoreOrderDTO> {
     const order = await this.orders.findById(orderId);
     if (!order) throw new NotFoundError('Order not found');
-    VeterinarianStorePolicy.assertOrderTransition(order.status as VeterinarianStoreOrderStatus, status);
+    VeterinarianStorePolicy.assertOrderTransition(
+      order.status as VeterinarianStoreOrderStatus,
+      status,
+    );
 
     const updated = await this.db.transaction(async (tx) => {
       const row = await this.orders.setStatus(orderId, status, tx);
@@ -215,7 +232,10 @@ export class VeterinarianStoreOrderService {
 
   // --- mapping ------------------------------------------------
 
-  private toDTO(order: VeterinarianStoreOrderRow, items: VeterinarianStoreOrderItemRow[]): VeterinarianStoreOrderDTO {
+  private toDTO(
+    order: VeterinarianStoreOrderRow,
+    items: VeterinarianStoreOrderItemRow[],
+  ): VeterinarianStoreOrderDTO {
     return {
       id: order.id,
       orderNumber: order.order_number,

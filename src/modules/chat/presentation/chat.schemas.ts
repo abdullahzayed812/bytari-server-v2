@@ -69,6 +69,12 @@ export const listConversationsQuerySchema = paginationQuerySchema.extend({
   organizationId: z.string().uuid().optional(),
 });
 
+/** `GET /conversations/unread-summary` — badge counts, optionally for one organization. */
+export const unreadSummaryQuerySchema = z.object({
+  organizationId: z.string().uuid().optional(),
+});
+export type UnreadSummaryQuery = z.infer<typeof unreadSummaryQuerySchema>;
+
 export const listMessagesQuerySchema = paginationQuerySchema;
 
 export type CreateConversationBody = z.infer<typeof createConversationBodySchema>;

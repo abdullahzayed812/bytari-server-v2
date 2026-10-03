@@ -23,10 +23,17 @@ export class PublicVeterinaryOfficeProductController {
       pageSize: q.pageSize,
       productType: q.type,
       search: q.search,
+      brand: q.brand,
+      country: q.country,
       sort: q.sort,
       order: q.order,
     });
     sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
+  };
+
+  facets = async (req: Request, res: Response): Promise<void> => {
+    const { organizationId } = validatedParams<{ organizationId: string }>(req);
+    sendSuccess(res, await this.products.publicFacets(organizationId));
   };
 
   getOne = async (req: Request, res: Response): Promise<void> => {

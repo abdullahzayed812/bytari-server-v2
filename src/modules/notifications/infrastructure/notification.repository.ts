@@ -118,6 +118,28 @@ export class NotificationRepository {
     return rows.map((r) => r.id);
   }
 
+  /** Unread notification count per `entity_id` (only ids with ≥1 unread are present). */
+  async countUnreadByEntities(
+    userId: string,
+    entityType: string,
+    entityIds: string[],
+  ): Promise<Map<string, number>> {
+    const out = new Map<string, number>();
+    if (entityIds.length === 0) return out;
+    const rows = (await this.db(T)
+      .where({ recipient_user_id: userId, entity_type: entityType })
+      .whereIn('entity_id', entityIds)
+      .whereNull('read_at')
+      .groupBy('entity_id')
+      .select('entity_id')
+      .count<{ entity_id: string; count: string }[]>({ count: '*' })) as {
+      entity_id: string;
+      count: string;
+    }[];
+    for (const r of rows) out.set(r.entity_id, Number(r.count));
+    return out;
+  }
+
   /** Mark every unread notification read. Returns how many rows changed. */
   async markAllRead(userId: string, trx: Knex.Transaction): Promise<number> {
     return trx(T)

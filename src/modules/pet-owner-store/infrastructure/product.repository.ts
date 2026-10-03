@@ -81,7 +81,20 @@ export class PetStoreProductRepository {
         'p.category_id',
       );
       if (filter.status) qb.where('p.status', filter.status);
-      if (filter.categoryId) qb.andWhere('p.category_id', filter.categoryId);
+      if (filter.categoryId) {
+        // A SECTION matches its own products AND every sub-category's.
+        const categoryId = filter.categoryId;
+        qb.andWhere((w) => {
+          void w
+            .where('p.category_id', categoryId)
+            .orWhereIn(
+              'p.category_id',
+              this.conn(trx)('pet_owner_store_categories')
+                .select('id')
+                .where('parent_id', categoryId),
+            );
+        });
+      }
       if (filter.search) {
         qb.andWhereRaw('lower(p.name) like ?', [`%${filter.search.toLowerCase()}%`]);
       }

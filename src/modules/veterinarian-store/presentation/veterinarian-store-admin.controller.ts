@@ -135,8 +135,13 @@ export class VeterinarianStoreAdminController {
       pageSize: q.pageSize,
       status: q.status,
       userId: q.userId,
+      newOnly: q.newOnly,
     });
     sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
+  };
+
+  ordersSummary = async (_req: Request, res: Response): Promise<void> => {
+    sendSuccess(res, await this.orders.adminOrdersSummary());
   };
 
   getOrder = async (req: Request, res: Response): Promise<void> => {

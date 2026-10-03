@@ -11,6 +11,7 @@ import type { OrganizationService } from '../application/organization.service.js
 import type { MembershipService } from '../application/membership.service.js';
 import type { OrganizationSupervisorService } from '../application/organization-supervisor.service.js';
 import type { OrganizationEngagementService } from '../application/organization-engagement.service.js';
+import { isFarmSectionMembership } from '../domain/organization.policy.js';
 import { requireOrganization } from './organization.middleware.js';
 import type {
   AddMemberBody,
@@ -72,7 +73,8 @@ export class OrganizationController {
   listMine = async (req: Request, res: Response): Promise<void> => {
     const { userId } = requireAuth(req);
     const q = validatedQuery<ListMyOrganizationsQuery>(req);
-    const all = await this.organizations.listMine(userId);
+    const mine = await this.organizations.listMine(userId);
+    const all = q.scope === 'farm_section' ? mine.filter(isFarmSectionMembership) : mine;
     const start = (q.page - 1) * q.pageSize;
     sendSuccess(
       res,

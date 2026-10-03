@@ -109,6 +109,7 @@ export class SyndicateService {
 
     return {
       id: org.id,
+      pinnedToHome: Boolean(d?.pinnedToHomeAt),
       parentOrganizationId: d?.parentOrganizationId ?? null,
       name: org.name,
       description: org.description,
@@ -331,6 +332,45 @@ export class SyndicateService {
       organizationId,
       actorUserId: actor.principal.userId,
     });
+  }
+
+  // --- pin to Veterinarian Home (syndicate.admin.pin; route-authorized) --
+
+  async setPinnedToHome(
+    organizationId: string,
+    pinned: boolean,
+    actor: SyndicateActor,
+  ): Promise<PublicSyndicateDTO> {
+    const org = await this.organizations.findById(organizationId);
+    if (!org || org.type !== 'SYNDICATE') throw new NotFoundError('Syndicate not found');
+    if (pinned && org.status !== 'ACTIVE') {
+      throw new ConflictError('Only an active syndicate can be pinned to the Home page', {
+        code: ErrorCode.CONFLICT,
+      });
+    }
+    await this.db.transaction(async (tx) => {
+      await this.details.setPinnedToHome(organizationId, pinned, tx);
+      await this.audit.record(
+        {
+          action: pinned
+            ? SyndicateAuditAction.PINNED_TO_HOME
+            : SyndicateAuditAction.UNPINNED_FROM_HOME,
+          entityType: SyndicateAuditEntity.SYNDICATE,
+          entityId: organizationId,
+          actorUserId: actor.principal.userId,
+          metadata: { name: org.name },
+          context: actor.context,
+        },
+        tx,
+      );
+    });
+    return this.toPublicDTO(organizationId, actor.principal);
+  }
+
+  /** "النقابات المثبتة" — bottom of the Veterinarian Home. */
+  async listPinned(viewer: AuthPrincipal): Promise<PublicSyndicateDTO[]> {
+    const ids = await this.details.listPinnedOrganizationIds(20);
+    return Promise.all(ids.map((id) => this.toPublicDTO(id, viewer)));
   }
 
   /** Internal — used by the announcement/submission services to load org context. */

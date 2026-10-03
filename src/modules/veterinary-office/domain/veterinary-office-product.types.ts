@@ -1,4 +1,7 @@
-import type { VeterinaryOfficeProductStatus, VeterinaryOfficeProductType } from './veterinary-office-product.constants.js';
+import type {
+  VeterinaryOfficeProductStatus,
+  VeterinaryOfficeProductType,
+} from './veterinary-office-product.constants.js';
 
 /** Free-text display fields shown on the product-details screen. All optional. */
 export interface VeterinaryOfficeProductDetailFields {
@@ -9,6 +12,10 @@ export interface VeterinaryOfficeProductDetailFields {
   dosage: string | null;
   shelfLife: string | null;
   manufacturer: string | null;
+  /** Brand / trade name — a catalog filter. */
+  brand: string | null;
+  /** Country of manufacture ("بلد المنشأ") — a catalog filter. */
+  countryOfOrigin: string | null;
   /** Short highlight badges shown near the title (e.g. "نتائج سريعة"). */
   highlights: string[];
 }
@@ -76,6 +83,8 @@ export interface VeterinaryOfficeProductDetailFieldsInput {
   dosage?: string | null;
   shelfLife?: string | null;
   manufacturer?: string | null;
+  brand?: string | null;
+  countryOfOrigin?: string | null;
   highlights?: string[];
 }
 
@@ -102,7 +111,11 @@ export interface ListVeterinaryOfficeProductsFilter {
   pageSize: number;
   status?: VeterinaryOfficeProductStatus;
   productType?: VeterinaryOfficeProductType;
+  /** Matches name, brand, manufacturer or sub-type (case-insensitive). */
   search?: string;
+  /** Case-insensitive exact brand / country (values come from the facets endpoint). */
+  brand?: string;
+  country?: string;
   sort?: 'name' | 'price' | 'createdAt';
   order?: 'asc' | 'desc';
   /** Owner-facing "Hidden products" screen filter. Ignored by the public catalog (always `false`). */
@@ -128,6 +141,8 @@ export interface VeterinaryOfficeProductRow {
   dosage: string | null;
   shelf_life: string | null;
   manufacturer: string | null;
+  brand: string | null;
+  country_of_origin: string | null;
   highlights: string[] | null;
   primary_image_key: string | null;
   created_by_user_id: string | null;
@@ -143,7 +158,9 @@ export interface VeterinaryOfficeProductImageRow {
   created_at: Date;
 }
 
-export function rowToVeterinaryOfficeProduct(row: VeterinaryOfficeProductRow): VeterinaryOfficeProduct {
+export function rowToVeterinaryOfficeProduct(
+  row: VeterinaryOfficeProductRow,
+): VeterinaryOfficeProduct {
   return {
     id: row.id,
     organizationId: row.organization_id,
@@ -160,6 +177,8 @@ export function rowToVeterinaryOfficeProduct(row: VeterinaryOfficeProductRow): V
     dosage: row.dosage,
     shelfLife: row.shelf_life,
     manufacturer: row.manufacturer,
+    brand: row.brand ?? null,
+    countryOfOrigin: row.country_of_origin ?? null,
     highlights: row.highlights ?? [],
     primaryImageKey: row.primary_image_key,
     createdByUserId: row.created_by_user_id,

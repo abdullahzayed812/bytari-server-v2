@@ -83,7 +83,16 @@ export const updateOrganizationBodySchema = z
   });
 export type UpdateOrganizationBody = z.infer<typeof updateOrganizationBodySchema>;
 
-export const listMyOrganizationsQuerySchema = paginationQuerySchema;
+/**
+ * `GET /organizations` — the caller's memberships. `scope=farm_section` is the
+ * Poultry / Sheep / Cattle sections' view: FARM organizations the caller OWNS
+ * or works at as STAFF only. A veterinarian merely added to supervise a farm
+ * (VETERINARIAN / SUPERVISOR membership) sees that farm under "My
+ * Organizations" (`scope=all`, the default), never as one of "their" farms.
+ */
+export const listMyOrganizationsQuerySchema = paginationQuerySchema.extend({
+  scope: z.enum(['all', 'farm_section']).optional().default('all'),
+});
 export type ListMyOrganizationsQuery = z.infer<typeof listMyOrganizationsQuerySchema>;
 
 /**

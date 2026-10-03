@@ -37,6 +37,7 @@ export class NewsController {
       search: q.q,
       categoryId: q.categoryId,
       tag: q.tag,
+      animalSections: q.section,
       featured: q.featured,
       bookmarkedByUserId: q.bookmarked ? userId : undefined,
     });
@@ -77,6 +78,7 @@ export class NewsController {
       search: q.q,
       categoryId: q.categoryId,
       tag: q.tag,
+      animalSections: q.section,
       status: q.status,
       includeDeleted: q.includeDeleted,
     });

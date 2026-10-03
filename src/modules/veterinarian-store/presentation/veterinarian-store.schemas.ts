@@ -123,6 +123,8 @@ export type UpdateProductBody = z.infer<typeof updateProductBodySchema>;
 export const createCategoryBodySchema = z.object({
   slug: slugSchema,
   name: nameSchema,
+  /** A section (top-level category) id → this becomes a sub-category under it. */
+  parentId: z.string().uuid().nullable().optional(),
   showOnHome: z.boolean().optional(),
   sortOrder: z.coerce.number().int().min(0).max(10_000).optional(),
   status: z.enum(VETERINARIAN_STORE_CATEGORY_STATUSES).optional(),
@@ -133,6 +135,7 @@ export const updateCategoryBodySchema = z
   .object({
     slug: slugSchema.optional(),
     name: nameSchema.optional(),
+    parentId: z.string().uuid().nullable().optional(),
     showOnHome: z.boolean().optional(),
     sortOrder: z.coerce.number().int().min(0).max(10_000).optional(),
     status: z.enum(VETERINARIAN_STORE_CATEGORY_STATUSES).optional(),
@@ -160,6 +163,10 @@ export type RegisterImageBody = z.infer<typeof registerImageBodySchema>;
 export const adminListOrdersQuerySchema = paginationQuerySchema.extend({
   status: z.enum(VETERINARIAN_STORE_ORDER_STATUSES).optional(),
   userId: z.string().uuid().optional(),
+  newOnly: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((v) => (v === undefined ? undefined : v === 'true')),
 });
 export type AdminListOrdersQuery = z.infer<typeof adminListOrdersQuerySchema>;
 

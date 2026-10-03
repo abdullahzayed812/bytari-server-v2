@@ -7,7 +7,12 @@ import type { AuditContext } from '../../audit/audit.types.js';
 import type { AuditService } from '../../audit/audit.service.js';
 import type { AuthorizationService } from '../../authorization/authorization.service.js';
 import type { AuthPrincipal } from '../../authorization/authorization.types.js';
-import { VET_JOB_SUPERVISOR_DOMAIN, VetJobAuditAction, VetJobAuditEntity, VetJobEvent } from '../domain/vet-job.constants.js';
+import {
+  VET_JOB_SUPERVISOR_DOMAIN,
+  VetJobAuditAction,
+  VetJobAuditEntity,
+  VetJobEvent,
+} from '../domain/vet-job.constants.js';
 import { VetJobPolicy } from '../domain/vet-job.policy.js';
 import type {
   CreateVetJobOfferInput,
@@ -19,7 +24,10 @@ import type {
   VetJobOffer,
   VetJobOfferDTO,
 } from '../domain/vet-job.types.js';
-import type { VetJobOfferRepository, VetJobOfferWithPoster } from '../infrastructure/vet-job-offer.repository.js';
+import type {
+  VetJobOfferRepository,
+  VetJobOfferWithPoster,
+} from '../infrastructure/vet-job-offer.repository.js';
 
 export interface VetJobActor {
   principal: AuthPrincipal;
@@ -27,7 +35,10 @@ export interface VetJobActor {
 }
 
 function trimList(list: string[] | undefined): string[] {
-  return (list ?? []).map((d) => d.trim()).filter(Boolean).slice(0, 20);
+  return (list ?? [])
+    .map((d) => d.trim())
+    .filter(Boolean)
+    .slice(0, 20);
 }
 
 /**
@@ -52,7 +63,12 @@ export class VetJobOfferService {
   }
 
   private toDTO(data: VetJobOfferWithPoster): VetJobOfferDTO {
-    return { ...data.offer, postedBy: data.postedBy, applicationCount: data.applicationCount };
+    return {
+      ...data.offer,
+      postedBy: data.postedBy,
+      applicationCount: data.applicationCount,
+      pendingApplicationCount: data.pendingApplicationCount,
+    };
   }
 
   private toPublicDTO(data: VetJobOfferWithPoster): PublicVetJobOfferDTO {
@@ -116,7 +132,9 @@ export class VetJobOfferService {
 
   // --- reads -----------------------------------------------------
 
-  async listPublic(filter: OfferBrowseFilter): Promise<{ items: PublicVetJobOfferDTO[]; total: number }> {
+  async listPublic(
+    filter: OfferBrowseFilter,
+  ): Promise<{ items: PublicVetJobOfferDTO[]; total: number }> {
     const { items, total } = await this.offers.listPublic(filter);
     return { items: items.map((i) => this.toPublicDTO(i)), total };
   }
@@ -140,17 +158,28 @@ export class VetJobOfferService {
     const data = await this.offers.findWithPosterAndCountById(id);
     if (!data) throw new NotFoundError('Job offer not found');
     const isOwner = data.offer.postedByUserId === actor.principal.userId;
-    const isModerator = await this.authz.isSystemSupervisorFor(actor.principal, VET_JOB_SUPERVISOR_DOMAIN);
+    const isModerator = await this.authz.isSystemSupervisorFor(
+      actor.principal,
+      VET_JOB_SUPERVISOR_DOMAIN,
+    );
     if (!isOwner && !isModerator) throw new NotFoundError('Job offer not found');
     return this.toDTO(data);
   }
 
   // --- owner actions -------------------------------------------
 
-  async update(id: string, patch: UpdateVetJobOfferInput, actor: VetJobActor): Promise<VetJobOfferDTO> {
+  async update(
+    id: string,
+    patch: UpdateVetJobOfferInput,
+    actor: VetJobActor,
+  ): Promise<VetJobOfferDTO> {
     const existing = await this.offers.findById(id);
     if (!existing) throw new NotFoundError('Job offer not found');
-    VetJobPolicy.assertOwner({ ownerUserId: existing.postedByUserId }, actor.principal.userId, 'job offer');
+    VetJobPolicy.assertOwner(
+      { ownerUserId: existing.postedByUserId },
+      actor.principal.userId,
+      'job offer',
+    );
 
     await this.db.transaction(async (tx) => {
       const dbPatch: Parameters<VetJobOfferRepository['update']>[1] = {
@@ -206,7 +235,11 @@ export class VetJobOfferService {
   async close(id: string, actor: VetJobActor): Promise<VetJobOfferDTO> {
     const existing = await this.offers.findById(id);
     if (!existing) throw new NotFoundError('Job offer not found');
-    VetJobPolicy.assertOwner({ ownerUserId: existing.postedByUserId }, actor.principal.userId, 'job offer');
+    VetJobPolicy.assertOwner(
+      { ownerUserId: existing.postedByUserId },
+      actor.principal.userId,
+      'job offer',
+    );
     await this.db.transaction((tx) =>
       this.offers.update(id, { closedAt: new Date() }, tx).then(() =>
         this.audit.record(
@@ -226,7 +259,9 @@ export class VetJobOfferService {
 
   // --- moderation (ADMIN / VET_JOBS supervisor) -------------
 
-  async listForModeration(filter: ModerationFilter): Promise<{ items: VetJobOfferDTO[]; total: number }> {
+  async listForModeration(
+    filter: ModerationFilter,
+  ): Promise<{ items: VetJobOfferDTO[]; total: number }> {
     const { items, total } = await this.offers.listForModeration(filter);
     return { items: items.map((i) => this.toDTO(i)), total };
   }
@@ -258,12 +293,20 @@ export class VetJobOfferService {
     await this.db.transaction(async (tx) => {
       await this.offers.update(
         id,
-        { status, reviewedByUserId: actor.principal.userId, reviewedAt: new Date(), rejectionReason: reason },
+        {
+          status,
+          reviewedByUserId: actor.principal.userId,
+          reviewedAt: new Date(),
+          rejectionReason: reason,
+        },
         tx,
       );
       await this.audit.record(
         {
-          action: status === 'APPROVED' ? VetJobAuditAction.OFFER_APPROVED : VetJobAuditAction.OFFER_REJECTED,
+          action:
+            status === 'APPROVED'
+              ? VetJobAuditAction.OFFER_APPROVED
+              : VetJobAuditAction.OFFER_REJECTED,
           entityType: VetJobAuditEntity.OFFER,
           entityId: id,
           actorUserId: actor.principal.userId,
@@ -274,12 +317,15 @@ export class VetJobOfferService {
       );
     });
 
-    this.events.publish(status === 'APPROVED' ? VetJobEvent.OFFER_APPROVED : VetJobEvent.OFFER_REJECTED, {
-      offerId: id,
-      postedByUserId: existing.postedByUserId,
-      actorUserId: actor.principal.userId,
-      ...(status === 'REJECTED' ? { reason } : {}),
-    });
+    this.events.publish(
+      status === 'APPROVED' ? VetJobEvent.OFFER_APPROVED : VetJobEvent.OFFER_REJECTED,
+      {
+        offerId: id,
+        postedByUserId: existing.postedByUserId,
+        actorUserId: actor.principal.userId,
+        ...(status === 'REJECTED' ? { reason } : {}),
+      },
+    );
     return this.mustGetDTO(id);
   }
 

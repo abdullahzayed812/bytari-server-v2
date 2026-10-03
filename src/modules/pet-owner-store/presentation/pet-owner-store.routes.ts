@@ -187,6 +187,7 @@ export function createAdminPetOwnerStoreRouter(c: Container): Router {
     validate({ query: adminListOrdersQuerySchema }),
     asyncHandler(ctrl.listOrders),
   );
+  r.get('/orders/summary', manageOrders, asyncHandler(ctrl.ordersSummary));
   r.get(
     '/orders/:orderId',
     manageOrders,

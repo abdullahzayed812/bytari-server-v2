@@ -12,6 +12,7 @@ import type {
   AttachmentUploadUrlBody,
   CreateConversationBody,
   ListConversationsQuery,
+  UnreadSummaryQuery,
   ListMessagesQuery,
   MarkReadBody,
   SendMessageBody,
@@ -47,6 +48,13 @@ export class ChatController {
       organizationId: q.organizationId,
     });
     sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
+  };
+
+  /** GET /conversations/unread-summary — dashboard "messages" badge. */
+  unreadSummary = async (req: Request, res: Response): Promise<void> => {
+    const { userId } = requireAuth(req);
+    const q = validatedQuery<UnreadSummaryQuery>(req);
+    sendSuccess(res, await this.chat.unreadSummary(userId, { organizationId: q.organizationId }));
   };
 
   /** GET /conversations/:conversationId */

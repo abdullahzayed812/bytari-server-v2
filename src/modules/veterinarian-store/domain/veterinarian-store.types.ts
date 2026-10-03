@@ -15,6 +15,8 @@ export interface VeterinarianStoreCategory {
   id: string;
   slug: string;
   name: string;
+  /** Section (top-level category) this sub-category belongs to; `null` = a section. */
+  parentId: string | null;
   imageKey: string | null;
   showOnHome: boolean;
   sortOrder: number;
@@ -27,6 +29,8 @@ export interface VeterinarianStoreCategoryDTO {
   id: string;
   slug: string;
   name: string;
+  /** `null` = a top-level section; otherwise the section this sub-category is under. */
+  parentId: string | null;
   imageUrl: string | null;
   showOnHome: boolean;
   sortOrder: number;
@@ -38,6 +42,7 @@ export interface VeterinarianStoreCategoryRow {
   id: string;
   slug: string;
   name: string;
+  parent_id: string | null;
   image_key: string | null;
   show_on_home: boolean;
   sort_order: number;
@@ -46,11 +51,14 @@ export interface VeterinarianStoreCategoryRow {
   updated_at: Date;
 }
 
-export function rowToVeterinarianStoreCategory(row: VeterinarianStoreCategoryRow): VeterinarianStoreCategory {
+export function rowToVeterinarianStoreCategory(
+  row: VeterinarianStoreCategoryRow,
+): VeterinarianStoreCategory {
   return {
     id: row.id,
     slug: row.slug,
     name: row.name,
+    parentId: row.parent_id ?? null,
     imageKey: row.image_key,
     showOnHome: row.show_on_home,
     sortOrder: row.sort_order,
@@ -151,7 +159,9 @@ export interface VeterinarianStoreProductRow {
   updated_at: Date;
 }
 
-export function rowToVeterinarianStoreProduct(row: VeterinarianStoreProductRow): VeterinarianStoreProduct {
+export function rowToVeterinarianStoreProduct(
+  row: VeterinarianStoreProductRow,
+): VeterinarianStoreProduct {
   return {
     id: row.id,
     categoryId: row.category_id,
@@ -256,6 +266,8 @@ export interface VeterinarianStoreOrderRow {
   address_line: string;
   note: string | null;
   placed_at: Date;
+  /** NULL until a store manager opens the order / changes its status ("new" badge). */
+  admin_viewed_at: Date | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -309,6 +321,7 @@ export interface UpdateVeterinarianStoreProductInput {
 export interface CreateVeterinarianStoreCategoryInput {
   slug: string;
   name: string;
+  parentId?: string | null;
   showOnHome?: boolean;
   sortOrder?: number;
   status?: VeterinarianStoreCategoryStatus;
@@ -317,6 +330,7 @@ export interface CreateVeterinarianStoreCategoryInput {
 export interface UpdateVeterinarianStoreCategoryInput {
   slug?: string;
   name?: string;
+  parentId?: string | null;
   showOnHome?: boolean;
   sortOrder?: number;
   status?: VeterinarianStoreCategoryStatus;
@@ -337,4 +351,9 @@ export interface ListVeterinarianStoreOrdersFilter {
   status?: VeterinarianStoreOrderStatus;
   /** Admin-only — consumer listing is always the caller's own orders. */
   userId?: string;
+  /** Admin-only — orders no store manager has opened yet. */
+  newOnly?: boolean;
 }
+
+/** Store-manager view of an order: `isNew` = not yet opened by any manager. */
+export type VeterinarianStoreAdminOrderDTO = VeterinarianStoreOrderDTO & { isNew: boolean };

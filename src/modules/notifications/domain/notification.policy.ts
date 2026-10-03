@@ -355,6 +355,15 @@ export class NotificationPolicy {
           p.audience === 'SYNDICATE_MEMBERS' ? 'SYNDICATE_MEMBERS' : 'FOLLOWERS',
         );
 
+      // --- Veterinary Office → followers: a new (visible) product ---
+      case 'veterinary_office.product.created':
+        return this.officeProductToFollowers(
+          event.name,
+          str(p.organizationId),
+          str(p.productId),
+          str(p.actorUserId),
+        );
+
       // --- account -------------------------------------------------
       case 'user.status.changed':
         return this.userStatusChanged(event, p);
@@ -957,6 +966,36 @@ export class NotificationPolicy {
           uid,
           { entityId },
           { entityType, entityId, sourceEventKey: `${eventName}:${entityId}` },
+        ),
+      );
+  }
+
+  /** Notify a Veterinary Office's followers that it added a product (excludes the creator). */
+  private async officeProductToFollowers(
+    eventName: string,
+    organizationId: string,
+    productId: string,
+    actorUserId: string,
+  ): Promise<NotificationSpec[]> {
+    if (!organizationId || !productId) return [];
+    const followerIds = await this.deps.organizationFollows.listFollowerUserIds(
+      organizationId,
+      RECIPIENT_FANOUT_CAP,
+    );
+    const key = `${eventName}:${productId}`;
+    return followerIds
+      .filter((id) => id !== actorUserId)
+      .map((uid) =>
+        this.spec(
+          'VETERINARY_OFFICE_PRODUCT_ADDED',
+          uid,
+          { organizationId, productId },
+          {
+            actorUserId: actorUserId || null,
+            entityType: 'VETERINARY_OFFICE_PRODUCT',
+            entityId: productId,
+            sourceEventKey: key,
+          },
         ),
       );
   }

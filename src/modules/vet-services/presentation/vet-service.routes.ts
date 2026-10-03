@@ -221,6 +221,13 @@ export function createAdminVetServiceRouter(c: Container): Router {
       validate({ params: idParamSchema, body: rejectBodySchema }),
       asyncHandler(ctrl.reject),
     );
+    // Hard delete from Admin Management — any status, approved included.
+    r.delete(
+      `${base}/:id`,
+      authorize('vet_service.delete'),
+      validate({ params: idParamSchema }),
+      asyncHandler(ctrl.remove),
+    );
   }
 
   return r;

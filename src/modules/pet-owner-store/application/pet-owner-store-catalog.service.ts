@@ -41,6 +41,7 @@ export class PetStoreCatalogService {
         id: c.id,
         slug: c.slug,
         name: c.name,
+        parentId: c.parentId,
         imageUrl: await resolvePetStoreImageUrlOrNull(this.storage, c.imageKey),
         showOnHome: c.showOnHome,
         sortOrder: c.sortOrder,

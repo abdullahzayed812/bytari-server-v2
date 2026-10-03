@@ -121,6 +121,8 @@ export const NOTIFICATION_TYPES = [
   'ADMIN_ANNOUNCEMENT',
   // organization → its followers (Veterinary Office Dashboard "إرسال رسالة للمتابعين")
   'ORGANIZATION_BROADCAST',
+  // a followed Veterinary Office added a new product
+  'VETERINARY_OFFICE_PRODUCT_ADDED',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 

@@ -1,3 +1,4 @@
+import type { AnimalSection } from './animal-section.js';
 import type { NewsStatus, NewsTag } from './news.constants.js';
 
 // --- internal aggregate ---------------------------------------------
@@ -10,6 +11,7 @@ export interface News {
   source: string | null;
   isFeatured: boolean;
   tag: NewsTag;
+  animalSection: AnimalSection | null;
   coverImageStorageKey: string | null;
   coverImageStorageProvider: string | null;
   body: string | null;
@@ -41,6 +43,7 @@ export interface NewsListItemDTO {
   source: string | null;
   isFeatured: boolean;
   tag: NewsTag;
+  animalSection: AnimalSection | null;
   category: NewsCategoryRef | null;
   coverImageUrl: string | null;
   bookmarkCount: number;
@@ -76,6 +79,7 @@ export interface NewsRow {
   source: string | null;
   is_featured: boolean;
   tag: string;
+  animal_section: string | null;
   cover_image_storage_key: string | null;
   cover_image_storage_provider: string | null;
   body: string | null;
@@ -115,6 +119,7 @@ export function rowToNews(row: NewsRow): News {
     source: row.source,
     isFeatured: row.is_featured,
     tag: row.tag as NewsTag,
+    animalSection: (row.animal_section ?? null) as AnimalSection | null,
     coverImageStorageKey: row.cover_image_storage_key,
     coverImageStorageProvider: row.cover_image_storage_provider,
     body: row.body,
@@ -141,6 +146,8 @@ export interface ListNewsFilter {
   search?: string;
   categoryId?: string;
   tag?: NewsTag;
+  /** One or more animal sections (OR). */
+  animalSections?: AnimalSection[];
   featured?: boolean;
   /** Public: restrict to the caller's bookmarked news. */
   bookmarkedByUserId?: string;
@@ -152,6 +159,8 @@ export interface ListAdminNewsFilter {
   search?: string;
   categoryId?: string;
   tag?: NewsTag;
+  /** One or more animal sections (OR). */
+  animalSections?: AnimalSection[];
   status?: NewsStatus;
   includeDeleted?: boolean;
 }

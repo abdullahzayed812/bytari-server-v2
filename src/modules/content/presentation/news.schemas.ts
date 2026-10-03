@@ -1,3 +1,4 @@
+import { ANIMAL_SECTIONS } from '../domain/animal-section.js';
 import { z } from 'zod';
 import { paginationQuerySchema } from '../../../shared/http/pagination.js';
 import {
@@ -21,6 +22,20 @@ const source = z.string().trim().min(1).max(SOURCE_MAX);
 const body = z.string().trim().min(1).max(BODY_MAX);
 const alertNote = z.string().trim().min(1).max(ALERT_NOTE_MAX);
 const tag = z.enum(NEWS_TAGS);
+const animalSection = z.enum(ANIMAL_SECTIONS);
+/** `?section=POULTRY` or `?section=SHEEP,CATTLE` — that section's items only. */
+const sectionList = z
+  .string()
+  .optional()
+  .transform((v) =>
+    v
+      ? v
+          .split(',')
+          .map((x) => x.trim())
+          .filter(Boolean)
+      : undefined,
+  )
+  .pipe(z.array(animalSection).max(ANIMAL_SECTIONS.length).optional());
 const points = z.array(z.string().trim().min(1).max(POINT_MAX)).max(MAX_POINTS);
 const categoryId = z.string().uuid();
 
@@ -32,6 +47,7 @@ export const createNewsBodySchema = z
     source: source.nullable().optional(),
     isFeatured: z.boolean().optional(),
     tag: tag.optional(),
+    animalSection: animalSection.nullable().optional(),
     categoryId: categoryId.nullable().optional(),
     body: body.nullable().optional(),
     reasonPoints: points.optional(),
@@ -47,6 +63,7 @@ export const updateNewsBodySchema = z
     source: source.nullable().optional(),
     isFeatured: z.boolean().optional(),
     tag: tag.optional(),
+    animalSection: animalSection.nullable().optional(),
     categoryId: categoryId.nullable().optional(),
     body: body.nullable().optional(),
     reasonPoints: points.optional(),
@@ -62,6 +79,7 @@ export const listPublicNewsQuerySchema = paginationQuerySchema.extend({
   q: z.string().trim().min(1).max(200).optional(),
   categoryId: categoryId.optional(),
   tag: tag.optional(),
+  section: sectionList,
   featured: z
     .enum(['true', 'false'])
     .transform((v) => v === 'true')
@@ -76,6 +94,7 @@ export const listAdminNewsQuerySchema = paginationQuerySchema.extend({
   q: z.string().trim().min(1).max(200).optional(),
   categoryId: categoryId.optional(),
   tag: tag.optional(),
+  section: sectionList,
   status: z.enum(NEWS_STATUSES).optional(),
   includeDeleted: z
     .enum(['true', 'false'])

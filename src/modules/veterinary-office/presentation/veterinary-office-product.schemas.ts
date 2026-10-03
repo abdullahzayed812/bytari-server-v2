@@ -25,6 +25,8 @@ const detailFieldsShape = {
   dosage: detailFieldSchema.nullable().optional(),
   shelfLife: detailFieldSchema.nullable().optional(),
   manufacturer: detailFieldSchema.nullable().optional(),
+  brand: z.string().trim().min(1).max(120).nullable().optional(),
+  countryOfOrigin: z.string().trim().min(1).max(80).nullable().optional(),
   highlights: highlightsSchema.optional(),
 };
 
@@ -118,6 +120,8 @@ export const listVeterinaryOfficeProductsQuerySchema = paginationQuerySchema.ext
     .optional()
     .transform((v) => (v === undefined ? undefined : v === 'true')),
   search: z.string().trim().min(1).max(200).optional(),
+  brand: z.string().trim().min(1).max(120).optional(),
+  country: z.string().trim().min(1).max(80).optional(),
   sort: z.enum(['name', 'price', 'createdAt']).optional(),
   order: z.enum(['asc', 'desc']).optional(),
 });
@@ -129,6 +133,8 @@ export type ListVeterinaryOfficeProductsQuery = z.infer<
 export const publicListVeterinaryOfficeProductsQuerySchema = paginationQuerySchema.extend({
   type: z.enum(VETERINARY_OFFICE_PRODUCT_TYPES).optional(),
   search: z.string().trim().min(1).max(200).optional(),
+  brand: z.string().trim().min(1).max(120).optional(),
+  country: z.string().trim().min(1).max(80).optional(),
   sort: z.enum(['name', 'price', 'createdAt']).optional(),
   order: z.enum(['asc', 'desc']).optional(),
 });

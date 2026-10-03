@@ -132,3 +132,15 @@ export const OrganizationPolicy = {
     return `FARM-${code}`;
   },
 } as const;
+
+/**
+ * Memberships that make a FARM "one of my farms" in the Poultry / Sheep /
+ * Cattle sections: the OWNER and the farm's own STAFF (employees run the
+ * dashboard). A VETERINARIAN / SUPERVISOR added to supervise the farm is NOT
+ * an owner — that farm shows only under "My Organizations".
+ */
+const FARM_SECTION_ROLES: ReadonlySet<string> = new Set(['OWNER', 'STAFF']);
+
+export function isFarmSectionMembership(org: { type: string; myRole: string }): boolean {
+  return org.type === 'FARM' && FARM_SECTION_ROLES.has(org.myRole);
+}

@@ -11,6 +11,7 @@ import {
   conversationIdParamSchema,
   createConversationBodySchema,
   listConversationsQuerySchema,
+  unreadSummaryQuerySchema,
   listMessagesQuerySchema,
   markReadBodySchema,
   messageIdParamSchema,
@@ -42,6 +43,11 @@ export function createChatRouter(c: Container): Router {
     '/',
     validate({ query: listConversationsQuerySchema }),
     asyncHandler(ctrl.listConversations),
+  );
+  r.get(
+    '/unread-summary',
+    validate({ query: unreadSummaryQuerySchema }),
+    asyncHandler(ctrl.unreadSummary),
   );
   r.get(
     '/:conversationId',

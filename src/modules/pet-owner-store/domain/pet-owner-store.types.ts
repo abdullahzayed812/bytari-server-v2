@@ -15,6 +15,8 @@ export interface PetStoreCategory {
   id: string;
   slug: string;
   name: string;
+  /** Section (top-level category) this sub-category belongs to; `null` = a section. */
+  parentId: string | null;
   imageKey: string | null;
   showOnHome: boolean;
   sortOrder: number;
@@ -27,6 +29,8 @@ export interface PetStoreCategoryDTO {
   id: string;
   slug: string;
   name: string;
+  /** `null` = a top-level section; otherwise the section this sub-category is under. */
+  parentId: string | null;
   imageUrl: string | null;
   showOnHome: boolean;
   sortOrder: number;
@@ -38,6 +42,7 @@ export interface PetStoreCategoryRow {
   id: string;
   slug: string;
   name: string;
+  parent_id: string | null;
   image_key: string | null;
   show_on_home: boolean;
   sort_order: number;
@@ -51,6 +56,7 @@ export function rowToPetStoreCategory(row: PetStoreCategoryRow): PetStoreCategor
     id: row.id,
     slug: row.slug,
     name: row.name,
+    parentId: row.parent_id ?? null,
     imageKey: row.image_key,
     showOnHome: row.show_on_home,
     sortOrder: row.sort_order,
@@ -256,6 +262,8 @@ export interface PetStoreOrderRow {
   address_line: string;
   note: string | null;
   placed_at: Date;
+  /** NULL until a store manager opens the order / changes its status ("new" badge). */
+  admin_viewed_at: Date | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -309,6 +317,7 @@ export interface UpdatePetStoreProductInput {
 export interface CreatePetStoreCategoryInput {
   slug: string;
   name: string;
+  parentId?: string | null;
   showOnHome?: boolean;
   sortOrder?: number;
   status?: PetStoreCategoryStatus;
@@ -317,6 +326,7 @@ export interface CreatePetStoreCategoryInput {
 export interface UpdatePetStoreCategoryInput {
   slug?: string;
   name?: string;
+  parentId?: string | null;
   showOnHome?: boolean;
   sortOrder?: number;
   status?: PetStoreCategoryStatus;
@@ -337,4 +347,9 @@ export interface ListPetStoreOrdersFilter {
   status?: PetStoreOrderStatus;
   /** Admin-only — consumer listing is always the caller's own orders. */
   userId?: string;
+  /** Admin-only — orders no store manager has opened yet. */
+  newOnly?: boolean;
 }
+
+/** Store-manager view of an order: `isNew` = not yet opened by any manager. */
+export type PetStoreAdminOrderDTO = PetStoreOrderDTO & { isNew: boolean };

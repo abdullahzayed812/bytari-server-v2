@@ -178,4 +178,30 @@ export class SyndicateDetailsRepository {
       .select('d.organization_id');
     return { ids: rows.map((r) => r.organization_id), total };
   }
+
+  /** Pin (now) / unpin a syndicate on the Veterinarian Home. Idempotent: re-pinning keeps the original order. */
+  async setPinnedToHome(
+    organizationId: string,
+    pinned: boolean,
+    trx: Knex.Transaction,
+  ): Promise<void> {
+    await trx(T)
+      .where({ organization_id: organizationId })
+      .update({
+        pinned_to_home_at: pinned ? trx.raw('COALESCE(pinned_to_home_at, now())') : null,
+        updated_at: trx.fn.now(),
+      });
+  }
+
+  /** ACTIVE pinned syndicates (main or branch), oldest pin first — the Home section. */
+  async listPinnedOrganizationIds(limit: number): Promise<string[]> {
+    const rows: { organization_id: string }[] = await this.db(`${T} as d`)
+      .join('organizations as o', 'o.id', 'd.organization_id')
+      .whereNotNull('d.pinned_to_home_at')
+      .andWhere('o.status', 'ACTIVE')
+      .orderBy('d.pinned_to_home_at', 'asc')
+      .limit(limit)
+      .select('d.organization_id');
+    return rows.map((r) => r.organization_id);
+  }
 }

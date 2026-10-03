@@ -89,6 +89,9 @@ export const PERMISSION_KEYS = [
   'vet_service.read',
   'vet_service.approve',
   'vet_service.reject',
+  // Remove an already-reviewed (e.g. APPROVED) listing / request from Admin
+  // Management. Same holders as the review keys.
+  'vet_service.delete',
   // Admin-only: enable/disable AI responses for consultations / inquiries.
   'ai.settings.manage',
   // Phase 14 — content management (articles / books / magazines). Public reads
@@ -151,6 +154,7 @@ export const PERMISSION_KEYS = [
   'vet_job.read',
   'vet_job.approve',
   'vet_job.reject',
+  'vet_job.delete',
   // Veterinarian Courses & Seminars — courses/seminars/workshops are
   // moderated PENDING → APPROVED/REJECTED, mirroring Veterinarian Jobs. Held
   // by ADMIN (override) or an ACTIVE VET_COURSES system-supervisor (see
@@ -167,6 +171,8 @@ export const PERMISSION_KEYS = [
   // Deleting a syndicate (soft — status DEACTIVATED + registrations ended,
   // the organizations convention) stays ADMIN-only. Granted to NO base role.
   'syndicate.admin.delete',
+  // Pin / unpin a syndicate on the Veterinarian Home (§12 additional corrections).
+  'syndicate.admin.pin',
   // Global Chat rooms — same shape as `syndicate.admin.create`: a room is
   // never self-service, only an ADMIN creates one (it then becomes an
   // `organizations` row of type CHAT_ROOM, moderated via the organization-
@@ -289,6 +295,7 @@ export const PERMISSION_DEFINITIONS: Record<PermissionKey, string> = {
   'vet_service.read': 'View pending vet-service listings / requests for moderation',
   'vet_service.approve': 'Approve a pending vet-service listing / pet-owner request',
   'vet_service.reject': 'Reject a pending vet-service listing / pet-owner request',
+  'vet_service.delete': 'Delete any vet-service listing / pet-owner request (incl. approved)',
   'ai.settings.manage': 'Enable or disable AI responses for consultations / inquiries',
   'content.read': 'List and view content in any state (DRAFT / ARCHIVED included)',
   'content.create': 'Create content items (articles / books / magazines)',
@@ -322,11 +329,13 @@ export const PERMISSION_DEFINITIONS: Record<PermissionKey, string> = {
   'vet_job.read': 'View pending Veterinarian Jobs offers / seeker profiles for moderation',
   'vet_job.approve': 'Approve a pending job offer / job-seeker profile',
   'vet_job.reject': 'Reject a pending job offer / job-seeker profile',
+  'vet_job.delete': 'Delete any job offer from Admin Management (incl. approved)',
   'vet_course.read': 'View pending Veterinarian Courses & Seminars submissions for moderation',
   'vet_course.approve': 'Approve a pending course / seminar / workshop',
   'vet_course.reject': 'Reject a pending course / seminar / workshop',
   'syndicate.admin.create': 'Create a main or subordinate veterinary syndicate',
   'syndicate.admin.delete': 'Delete (deactivate) a veterinary syndicate and end its registrations',
+  'syndicate.admin.pin': 'Pin / unpin a syndicate on the Veterinarian Home page',
   'chat_room.admin.create': 'Create a Global Chat public discussion room',
   'dashboard.admin.read':
     'Read the admin dashboard summary (category counts, recent activity, pending tasks)',
@@ -379,7 +388,12 @@ export const SUPERVISOR_DOMAIN_PERMISSIONS: Record<SupervisorDomain, readonly Pe
   // The "authorized specialist supervisor" for the Veterinary Services
   // marketplace: reviews (approve / reject) service listings + pet-owner
   // requests. Does NOT gain access to the private deal conversations.
-  VET_SERVICE: ['vet_service.read', 'vet_service.approve', 'vet_service.reject'],
+  VET_SERVICE: [
+    'vet_service.read',
+    'vet_service.approve',
+    'vet_service.reject',
+    'vet_service.delete',
+  ],
   // The responsible Advertisement supervisor: full campaign + slide management
   // for every placement.
   ADVERTISEMENT: ['advertisement.manage'],
@@ -410,7 +424,7 @@ export const SUPERVISOR_DOMAIN_PERMISSIONS: Record<SupervisorDomain, readonly Pe
   // The responsible Veterinarian Jobs supervisor: reviews (approve / reject)
   // job offers + job-seeker profiles. Does NOT gain access to applications or
   // the private chat threads.
-  VET_JOBS: ['vet_job.read', 'vet_job.approve', 'vet_job.reject'],
+  VET_JOBS: ['vet_job.read', 'vet_job.approve', 'vet_job.reject', 'vet_job.delete'],
   // The responsible Veterinarian Courses & Seminars supervisor: reviews
   // (approve / reject) courses/seminars/workshops. Does NOT gain access to
   // per-course registrations beyond what `vet_course.read` exposes.
@@ -433,6 +447,7 @@ export const SUPERVISOR_DOMAIN_PERMISSIONS: Record<SupervisorDomain, readonly Pe
   SYNDICATE: [
     'syndicate.admin.create',
     'syndicate.admin.delete',
+    'syndicate.admin.pin',
     'organization.admin.read',
     'organization.admin.status',
     'organization.admin.manage',

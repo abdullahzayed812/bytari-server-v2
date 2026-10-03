@@ -9,6 +9,11 @@ import {
 } from '../domain/veterinary-office-product.types.js';
 
 const TABLE = 'veterinary_office_products';
+
+/** Escape LIKE wildcards in user input (`%`, `_`, `\`). */
+function escapeLike(v: string): string {
+  return v.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
 const IMAGES = 'veterinary_office_product_images';
 
 export interface CreateVeterinaryOfficeProductData extends VeterinaryOfficeProductDetailFieldsInput {
@@ -75,6 +80,8 @@ export class VeterinaryOfficeProductRepository {
         dosage: data.dosage ?? null,
         shelf_life: data.shelfLife ?? null,
         manufacturer: data.manufacturer ?? null,
+        brand: data.brand ?? null,
+        country_of_origin: data.countryOfOrigin ?? null,
         highlights: data.highlights ?? [],
         created_by_user_id: data.createdByUserId,
       })
@@ -101,6 +108,8 @@ export class VeterinaryOfficeProductRepository {
     if (patch.dosage !== undefined) dbPatch.dosage = patch.dosage;
     if (patch.shelfLife !== undefined) dbPatch.shelf_life = patch.shelfLife;
     if (patch.manufacturer !== undefined) dbPatch.manufacturer = patch.manufacturer;
+    if (patch.brand !== undefined) dbPatch.brand = patch.brand;
+    if (patch.countryOfOrigin !== undefined) dbPatch.country_of_origin = patch.countryOfOrigin;
     if (patch.highlights !== undefined) dbPatch.highlights = patch.highlights;
     if (patch.primaryImageKey !== undefined) dbPatch.primary_image_key = patch.primaryImageKey;
 
@@ -140,7 +149,18 @@ export class VeterinaryOfficeProductRepository {
       if (filter.productType) qb.andWhere('product_type', filter.productType);
       if (filter.hidden !== undefined) qb.andWhere('is_hidden', filter.hidden);
       if (filter.search) {
-        qb.andWhereRaw('lower(name) like ?', [`%${filter.search.toLowerCase()}%`]);
+        const like = `%${escapeLike(filter.search.toLowerCase())}%`;
+        qb.andWhere((w) => {
+          void w
+            .whereRaw("lower(name) like ? escape '\\'", [like])
+            .orWhereRaw("lower(coalesce(brand, '')) like ? escape '\\'", [like])
+            .orWhereRaw("lower(coalesce(manufacturer, '')) like ? escape '\\'", [like])
+            .orWhereRaw("lower(coalesce(subtype, '')) like ? escape '\\'", [like]);
+        });
+      }
+      if (filter.brand) qb.andWhereRaw('lower(brand) = ?', [filter.brand.toLowerCase()]);
+      if (filter.country) {
+        qb.andWhereRaw('lower(country_of_origin) = ?', [filter.country.toLowerCase()]);
       }
       return qb;
     };
@@ -163,8 +183,35 @@ export class VeterinaryOfficeProductRepository {
     return { items: rows.map(rowToVeterinaryOfficeProduct), total };
   }
 
+  /**
+   * Distinct brands / countries among an office's ACTIVE, visible products —
+   * the catalog's filter chips. Bounded to 100 values each.
+   */
+  async facetsForOrganization(
+    organizationId: string,
+  ): Promise<{ brands: string[]; countries: string[] }> {
+    const distinct = async (column: 'brand' | 'country_of_origin'): Promise<string[]> => {
+      const rows = (await this.db(TABLE)
+        .where({ organization_id: organizationId, status: 'ACTIVE', is_hidden: false })
+        .whereNotNull(column)
+        .select(this.db.raw(`min(${column}) as value`))
+        .groupByRaw(`lower(${column})`)
+        .orderByRaw(`lower(${column})`)
+        .limit(100)) as { value: string }[];
+      return rows.map((r) => r.value);
+    };
+    const [brands, countries] = await Promise.all([
+      distinct('brand'),
+      distinct('country_of_origin'),
+    ]);
+    return { brands, countries };
+  }
+
   /** Live, visible product count — the Dashboard home's "المنتجات" stat. */
-  async countVisibleForOrganization(organizationId: string, trx?: Knex.Transaction): Promise<number> {
+  async countVisibleForOrganization(
+    organizationId: string,
+    trx?: Knex.Transaction,
+  ): Promise<number> {
     const row = await this.conn(trx)(TABLE)
       .where({ organization_id: organizationId, status: 'ACTIVE', is_hidden: false })
       .count<{ count: string }>({ count: '*' })

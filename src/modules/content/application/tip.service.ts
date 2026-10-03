@@ -1,3 +1,4 @@
+import type { AnimalSection } from '../domain/animal-section.js';
 import type { Knex } from 'knex';
 import type { Logger } from 'pino';
 import { BadRequestError, NotFoundError } from '../../../shared/errors/app-error.js';
@@ -42,6 +43,7 @@ export interface CreateTipInput {
   summary?: string | null;
   readMinutes?: number | null;
   priority?: TipPriority;
+  animalSection?: AnimalSection | null;
   categoryId?: string | null;
   bodyIntro?: string | null;
   keyPoints?: string[];
@@ -54,6 +56,7 @@ export interface UpdateTipInput {
   summary?: string | null;
   readMinutes?: number | null;
   priority?: TipPriority;
+  animalSection?: AnimalSection | null;
   categoryId?: string | null;
   bodyIntro?: string | null;
   keyPoints?: string[];
@@ -172,6 +175,7 @@ export class TipService {
       summary: tip.summary,
       readMinutes: tip.readMinutes,
       priority: tip.priority,
+      animalSection: tip.animalSection,
       isTipOfDay: tip.isTipOfDay,
       category: category,
       coverImageUrl: tip.coverImageStorageKey
@@ -225,6 +229,7 @@ export class TipService {
           summary: input.summary ?? null,
           readMinutes: input.readMinutes ?? null,
           priority: input.priority ?? 'NORMAL',
+          animalSection: input.animalSection ?? null,
           bodyIntro: input.bodyIntro ?? null,
           keyPoints: input.keyPoints ?? [],
           warningPoints: input.warningPoints ?? [],
@@ -265,6 +270,7 @@ export class TipService {
           summary: input.summary,
           readMinutes: input.readMinutes,
           priority: input.priority,
+          animalSection: input.animalSection,
           bodyIntro: input.bodyIntro,
           keyPoints: input.keyPoints,
           warningPoints: input.warningPoints,

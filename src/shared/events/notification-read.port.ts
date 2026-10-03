@@ -8,4 +8,14 @@
  */
 export interface NotificationReadPort {
   markReadForEntity(userId: string, entityType: string, entityId: string): Promise<void>;
+  /**
+   * Unread notifications per entity id — the read state of a side that has no
+   * per-member pointer of its own (a clinic / office conversation's org side:
+   * every member gets a CHAT_MESSAGE_RECEIVED per message, cleared on read).
+   */
+  countUnreadForEntities(
+    userId: string,
+    entityType: string,
+    entityIds: string[],
+  ): Promise<Map<string, number>>;
 }

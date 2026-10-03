@@ -285,6 +285,7 @@ export class PetStoreAdminService {
         id: c.id,
         slug: c.slug,
         name: c.name,
+        parentId: c.parentId,
         imageUrl: await resolvePetStoreImageUrlOrNull(this.storage, c.imageKey),
         showOnHome: c.showOnHome,
         sortOrder: c.sortOrder,
@@ -303,11 +304,13 @@ export class PetStoreAdminService {
         code: ErrorCode.CONFLICT,
       });
     }
+    await this.assertSectionParent(input.parentId ?? null, null);
     const created = await this.db.transaction(async (tx) => {
       const category = await this.categories.create(
         {
           slug: input.slug,
           name: input.name,
+          parentId: input.parentId ?? null,
           showOnHome: input.showOnHome ?? false,
           sortOrder: input.sortOrder ?? 0,
           status: input.status ?? 'ACTIVE',
@@ -345,6 +348,7 @@ export class PetStoreAdminService {
         });
       }
     }
+    if (patch.parentId !== undefined) await this.assertSectionParent(patch.parentId, id);
     await this.db.transaction(async (tx) => {
       await this.categories.update(id, patch, tx);
       await this.audit.record(
@@ -365,6 +369,11 @@ export class PetStoreAdminService {
   async deleteCategory(actor: PetStoreActor, id: string): Promise<void> {
     const existing = await this.categories.findById(id);
     if (!existing) throw new NotFoundError('Category not found');
+    if ((await this.categories.countChildren(id)) > 0) {
+      throw new ConflictError('Delete or move this section\u2019s sub-categories first', {
+        code: ErrorCode.CONFLICT,
+      });
+    }
     await this.db.transaction(async (tx) => {
       // Products keep existing; their `category_id` is nulled by the FK
       // (`ON DELETE SET NULL`).
@@ -433,6 +442,26 @@ export class PetStoreAdminService {
   // =================================================================
   // Helpers
   // =================================================================
+
+  /**
+   * Sections are exactly two levels: a parent must exist and be a top-level
+   * section itself, a category cannot be its own parent, and a section that
+   * already has sub-categories cannot be moved under another section.
+   */
+  private async assertSectionParent(parentId: string | null, selfId: string | null): Promise<void> {
+    if (parentId === null) return;
+    if (parentId === selfId) throw new BadRequestError('A category cannot be its own section');
+    const parent = await this.categories.findById(parentId);
+    if (!parent) throw new BadRequestError(`unknown parentId: ${parentId}`);
+    if (parent.parentId !== null) {
+      throw new BadRequestError('Sub-categories cannot have their own sub-categories');
+    }
+    if (selfId && (await this.categories.countChildren(selfId)) > 0) {
+      throw new BadRequestError(
+        'A section with sub-categories cannot be moved under another section',
+      );
+    }
+  }
 
   private async assertCategory(id: string | null): Promise<void> {
     if (!id) return;
@@ -540,6 +569,7 @@ export class PetStoreAdminService {
       id: c.id,
       slug: c.slug,
       name: c.name,
+      parentId: c.parentId,
       imageUrl: await resolvePetStoreImageUrlOrNull(this.storage, c.imageKey),
       showOnHome: c.showOnHome,
       sortOrder: c.sortOrder,

@@ -184,6 +184,7 @@ import {
   type AiResponderPort,
 } from './modules/consultations/application/ai-responder.port.js';
 import { RorkAiResponder } from './modules/consultations/infrastructure/rork-ai-responder.js';
+import { SearchService } from './modules/search/search.service.js';
 import type { NotificationReadPort } from './shared/events/notification-read.port.js';
 import { createObjectStorage, StoragePrefix, type ObjectStorage } from './infra/storage/index.js';
 import { ContentRepository } from './modules/content/infrastructure/content.repository.js';
@@ -441,6 +442,7 @@ export interface Container {
   newsRepository: NewsRepository;
   newsBookmarkRepository: NewsBookmarkRepository;
   newsService: NewsService;
+  searchService: SearchService;
   adCampaignRepository: AdCampaignRepository;
   adSlideRepository: AdSlideRepository;
   advertisementService: AdvertisementService;
@@ -669,6 +671,8 @@ export function createContainer(deps: ContainerDeps): Container {
         eventBus.publish('notification.read', { notificationId, recipientUserId: userId });
       }
     },
+    countUnreadForEntities: (userId, entityType, entityIds) =>
+      notificationRepository.countUnreadByEntities(userId, entityType, entityIds),
   };
   const syndicateService = new SyndicateService(
     db,
@@ -1531,6 +1535,23 @@ export function createContainer(deps: ContainerDeps): Container {
   });
   const authorization = createAuthorizationMiddleware(authorizationService);
 
+  // Home header global search — composes the public list services above.
+  const searchService = new SearchService(
+    {
+      authz: authorizationService,
+      content: contentService,
+      news: newsService,
+      tips: tipService,
+      organizations: organizationService,
+      petStore: petStoreCatalogService,
+      vetStore: vetStoreCatalogService,
+      courses: vetCourseService,
+      jobs: vetJobOfferService,
+      services: vetServiceListingService,
+    },
+    logger,
+  );
+
   return {
     db,
     config,
@@ -1699,6 +1720,7 @@ export function createContainer(deps: ContainerDeps): Container {
     newsRepository,
     newsBookmarkRepository,
     newsService,
+    searchService,
     adCampaignRepository,
     adSlideRepository,
     advertisementService,

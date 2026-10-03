@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import { asyncHandler } from '../../../shared/http/async-handler.js';
 import { validate } from '../../../shared/http/validate.js';
 import type { Container } from '../../../container.js';
@@ -91,6 +92,8 @@ export function createSyndicateRouter(c: Container): Router {
 
   // --- browse (public) ---------------------------------------------
   r.get('/', validate({ query: syndicateBrowseQuerySchema }), asyncHandler(syndicates.listMain));
+  // pinned to the Veterinarian Home (before `/:organizationId`)
+  r.get('/pinned', asyncHandler(syndicates.listPinned));
   r.get(
     '/:organizationId',
     validate({ params: organizationIdParamSchema }),
@@ -278,6 +281,16 @@ export function createAdminSyndicateRouter(c: Container): Router {
     c.authorization.authorize('syndicate.admin.delete'),
     validate({ params: organizationIdParamSchema }),
     asyncHandler(ctrl.remove),
+  );
+  // "تثبيت في الرئيسية" — ADMIN or an ACTIVE SYNDICATE supervisor only.
+  r.put(
+    '/syndicates/:organizationId/pin',
+    c.authorization.authorize('syndicate.admin.pin'),
+    validate({
+      params: organizationIdParamSchema,
+      body: z.object({ pinned: z.boolean() }).strict(),
+    }),
+    asyncHandler(ctrl.setPin),
   );
   return r;
 }

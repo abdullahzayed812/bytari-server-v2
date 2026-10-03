@@ -1,3 +1,4 @@
+import type { AnimalSection } from '../domain/animal-section.js';
 import type { Knex } from 'knex';
 import type { NewsStatus, NewsTag } from '../domain/news.constants.js';
 import {
@@ -23,6 +24,7 @@ export interface CreateNewsData {
   source: string | null;
   isFeatured: boolean;
   tag: NewsTag;
+  animalSection: AnimalSection | null;
   body: string | null;
   reasonPoints: string[];
   advicePoints: string[];
@@ -37,6 +39,7 @@ export interface UpdateNewsData {
   source?: string | null;
   isFeatured?: boolean;
   tag?: NewsTag;
+  animalSection?: AnimalSection | null;
   body?: string | null;
   reasonPoints?: string[];
   advicePoints?: string[];
@@ -97,6 +100,7 @@ export class NewsRepository {
         source: data.source,
         is_featured: data.isFeatured,
         tag: data.tag,
+        animal_section: data.animalSection,
         body: data.body,
         reason_points: JSON.stringify(data.reasonPoints),
         advice_points: JSON.stringify(data.advicePoints),
@@ -120,6 +124,7 @@ export class NewsRepository {
     if (patch.source !== undefined) dbPatch.source = patch.source;
     if (patch.isFeatured !== undefined) dbPatch.is_featured = patch.isFeatured;
     if (patch.tag !== undefined) dbPatch.tag = patch.tag;
+    if (patch.animalSection !== undefined) dbPatch.animal_section = patch.animalSection;
     if (patch.body !== undefined) dbPatch.body = patch.body;
     if (patch.reasonPoints !== undefined)
       dbPatch.reason_points = JSON.stringify(patch.reasonPoints);
@@ -216,10 +221,11 @@ export class NewsRepository {
 
   private applyCommon(
     qb: Knex.QueryBuilder,
-    f: { search?: string; categoryId?: string; tag?: NewsTag },
+    f: { search?: string; categoryId?: string; tag?: NewsTag; animalSections?: AnimalSection[] },
   ): void {
     if (f.categoryId) qb.where('n.category_id', f.categoryId);
     if (f.tag) qb.where('n.tag', f.tag);
+    if (f.animalSections?.length) qb.whereIn('n.animal_section', f.animalSections);
     if (f.search && f.search.trim().length > 0) {
       qb.whereRaw("n.search_vector @@ plainto_tsquery('simple', ?)", [f.search.trim()]);
     }
