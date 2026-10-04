@@ -110,3 +110,12 @@ export const resetPasswordBodySchema = z.object({
   newPassword: passwordSchema,
 });
 export type ResetPasswordBody = z.infer<typeof resetPasswordBodySchema>;
+
+/** `POST /auth/change-password` — the signed-in user's own password. */
+export const changePasswordBodySchema = z
+  .object({
+    currentPassword: z.string().min(1).max(128),
+    newPassword: passwordSchema,
+  })
+  .strict();
+export type ChangePasswordBody = z.infer<typeof changePasswordBodySchema>;

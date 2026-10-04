@@ -217,6 +217,23 @@ export class VeterinarianService {
   }
 
   /**
+   * "المستندات والتوثيق" — the caller's OWN latest-application documents with
+   * short-lived signed view URLs (private objects; never the storage key).
+   * Read-only: documents approved with the account cannot be edited/removed.
+   */
+  async getMyDocuments(userId: string): Promise<{
+    applicationStatus: VeterinarianApplication['status'] | null;
+    documents: AdminVeterinarianApplicationDocument[];
+  }> {
+    const application = await this.applications.findLatestByUser(userId);
+    if (!application) return { applicationStatus: null, documents: [] };
+    return {
+      applicationStatus: application.status,
+      documents: await this.getLatestApplicationDocumentsForAdmin(userId),
+    };
+  }
+
+  /**
    * Admin view of a user's latest application WITH its identity / licence
    * documents as short-lived signed URLs (private objects — never a public
    * URL, never the storage key). Callers must hold `veterinarian.read`.

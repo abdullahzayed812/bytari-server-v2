@@ -5,6 +5,7 @@ import type { Container } from '../../container.js';
 import { AuthController } from './auth.controller.js';
 import { authRateLimiter } from './auth.rate-limit.js';
 import {
+  changePasswordBodySchema,
   forgotPasswordBodySchema,
   loginBodySchema,
   logoutBodySchema,
@@ -76,6 +77,15 @@ export function createAuthRouter(c: Container): Router {
     c.authenticatePendingOk,
     validate({ body: logoutBodySchema }),
     asyncHandler(controller.logout),
+  );
+  // Own password change — a fully authenticated account only; rate-limited
+  // like every other credential check.
+  router.post(
+    '/change-password',
+    limiter,
+    c.authenticate,
+    validate({ body: changePasswordBodySchema }),
+    asyncHandler(controller.changePassword),
   );
   router.post('/logout-all', c.authenticatePendingOk, asyncHandler(controller.logoutAll));
   // An onboarding account must be able to read its own `/auth/me` — its

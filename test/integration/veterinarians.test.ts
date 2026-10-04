@@ -191,6 +191,34 @@ describe('veterinarian approval workflow', () => {
     expect(reapply.body.data.status).toBe('PENDING');
   });
 
+  it('GET /veterinarians/me/documents — own documents only, signed view URLs, no keys', async () => {
+    const u = await registerUser(app);
+    const none = await request(app)
+      .get('/api/v1/veterinarians/me/documents')
+      .set(bearer(u.accessToken));
+    expect(none.status).toBe(200);
+    expect(none.body.data).toEqual({ applicationStatus: null, documents: [] });
+
+    await applyAsVeterinarian(u.accessToken);
+    const mine = await request(app)
+      .get('/api/v1/veterinarians/me/documents')
+      .set(bearer(u.accessToken));
+    expect(mine.status).toBe(200);
+    expect(mine.body.data.applicationStatus).toBe('PENDING');
+    expect(mine.body.data.documents).toHaveLength(1);
+    expect(mine.body.data.documents[0].kind).toBe('LICENSE_OR_ID');
+    expect(mine.body.data.documents[0].downloadUrl).toBeTypeOf('string');
+    expect(mine.body.data.documents[0]).not.toHaveProperty('storageKey');
+
+    // another user never sees them
+    const other = await registerUser(app);
+    const theirs = await request(app)
+      .get('/api/v1/veterinarians/me/documents')
+      .set(bearer(other.accessToken));
+    expect(theirs.body.data.documents).toEqual([]);
+    expect((await request(app).get('/api/v1/veterinarians/me/documents')).status).toBe(401);
+  });
+
   it('reject requires a reason (422)', async () => {
     const u = await registerUser(app);
     await applyAsVeterinarian(u.accessToken);

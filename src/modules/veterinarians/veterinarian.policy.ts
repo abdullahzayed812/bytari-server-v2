@@ -37,9 +37,12 @@ export const VeterinarianPolicy = {
       });
     }
     if (!ALLOWED_DOCUMENT_MIME[kind].includes(declaredMime)) {
-      throw new BadRequestError(`MIME type "${declaredMime}" is not allowed for a ${kind} document`, {
-        code: ErrorCode.UNSUPPORTED_FILE_TYPE,
-      });
+      throw new BadRequestError(
+        `MIME type "${declaredMime}" is not allowed for a ${kind} document`,
+        {
+          code: ErrorCode.UNSUPPORTED_FILE_TYPE,
+        },
+      );
     }
   },
 

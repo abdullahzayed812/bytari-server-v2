@@ -63,6 +63,10 @@ export interface User {
   governorate: string | null;
   /** Optional veterinarian specialization ("التخصص"). */
   specialization: string | null;
+  /** Self-written "نبذة عني" (≤ 1000 chars), or `null`. */
+  bio: string | null;
+  /** WhatsApp contact number shown on the profile page, or `null`. */
+  whatsapp: string | null;
   /** Object-storage key of the avatar image, or `null`. */
   avatarKey: string | null;
   status: UserStatus;
@@ -84,6 +88,8 @@ export interface PublicUser {
   country: string | null;
   governorate: string | null;
   specialization: string | null;
+  bio: string | null;
+  whatsapp: string | null;
   /**
    * Client-usable avatar URL — the public CDN URL when the bucket is public,
    * else a short-lived signed GET URL. The raw R2 key (`User.avatarKey`) is
@@ -150,6 +156,8 @@ export interface UpdateUserData {
   country?: string | null;
   governorate?: string | null;
   specialization?: string | null;
+  bio?: string | null;
+  whatsapp?: string | null;
   avatarKey?: string | null;
   status?: UserStatus;
   veterinarianStatus?: VeterinarianStatus;
@@ -186,6 +194,8 @@ export interface UserRow {
   country: string | null;
   governorate: string | null;
   specialization: string | null;
+  bio?: string | null;
+  whatsapp?: string | null;
   avatar_key: string | null;
   status: string;
   veterinarian_status: string;

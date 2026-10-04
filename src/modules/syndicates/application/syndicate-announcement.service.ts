@@ -5,7 +5,11 @@ import type { EventBus } from '../../../shared/events/index.js';
 import type { AuditContext } from '../../audit/audit.types.js';
 import type { AuditService } from '../../audit/audit.service.js';
 import type { AuthPrincipal } from '../../authorization/authorization.types.js';
-import { SyndicateAuditAction, SyndicateAuditEntity, SyndicateEvent } from '../domain/syndicate.constants.js';
+import {
+  SyndicateAuditAction,
+  SyndicateAuditEntity,
+  SyndicateEvent,
+} from '../domain/syndicate.constants.js';
 import type {
   AnnouncementListFilter,
   CreateAnnouncementInput,
@@ -43,7 +47,9 @@ export class SyndicateAnnouncementService {
     this.log = logger.child({ component: 'syndicate-announcement-service' });
   }
 
-  private async toDTO(announcement: SyndicateAnnouncement | null): Promise<SyndicateAnnouncementDTO> {
+  private async toDTO(
+    announcement: SyndicateAnnouncement | null,
+  ): Promise<SyndicateAnnouncementDTO> {
     if (!announcement) throw new NotFoundError('Announcement not found');
     const org = await this.syndicates.loadOrganizationContext(announcement.organizationId);
     const { imageStorageKey, ...rest } = announcement;
@@ -61,7 +67,10 @@ export class SyndicateAnnouncementService {
   ): Promise<SyndicateAnnouncementDTO> {
     const org = await this.syndicates.loadOrganizationContext(organizationId);
     if (!org || org.type !== 'SYNDICATE') throw new NotFoundError('Syndicate not found');
-    const imageStorageKey = await this.media.validateKey('ANNOUNCEMENT_IMAGE', input.imageStorageKey);
+    const imageStorageKey = await this.media.validateKey(
+      'ANNOUNCEMENT_IMAGE',
+      input.imageStorageKey,
+    );
 
     const created = await this.db.transaction(async (tx) => {
       const a = await this.announcements.create(

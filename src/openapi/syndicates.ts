@@ -151,6 +151,21 @@ const paths: Obj = {
       },
     },
   },
+  '/syndicates/{organizationId}/pin': {
+    parameters: [{ name: 'organizationId', in: 'path', required: true, schema: uuid }],
+    put: {
+      tags: ['Veterinary Syndicates'],
+      summary: 'تثبيت النقابة — pin / unpin for YOUR OWN Veterinarian Home',
+      description:
+        'Body `{ pinned: boolean }`. Any approved veterinarian (or Admin); per-user — never ' +
+        "affects anyone else's Home. `GET /syndicates/pinned` lists the caller's pins.",
+      security: bearer,
+      responses: {
+        200: ok('Syndicate', dataOf({ $ref: '#/components/schemas/PublicSyndicate' })),
+        ...errs(401, 403, 404, 409, 422),
+      },
+    },
+  },
   '/syndicates/{organizationId}/branches': {
     parameters: [{ name: 'organizationId', in: 'path', required: true, schema: uuid }],
     get: {

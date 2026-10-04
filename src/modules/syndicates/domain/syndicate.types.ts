@@ -28,8 +28,6 @@ export interface SyndicateDetails {
   headOfficerTitle: string | null;
   termStartYear: number | null;
   termEndYear: number | null;
-  /** Pinned to the Veterinarian Home since (ISO); `null` = not pinned. */
-  pinnedToHomeAt: string | null;
 }
 
 export interface SyndicateDetailsRow {
@@ -45,7 +43,6 @@ export interface SyndicateDetailsRow {
   head_officer_title: string | null;
   term_start_year: number | null;
   term_end_year: number | null;
-  pinned_to_home_at?: Date | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -63,14 +60,13 @@ export function rowToSyndicateDetails(row: SyndicateDetailsRow): SyndicateDetail
     headOfficerTitle: row.head_officer_title,
     termStartYear: row.term_start_year,
     termEndYear: row.term_end_year,
-    pinnedToHomeAt: row.pinned_to_home_at ? row.pinned_to_home_at.toISOString() : null,
   };
 }
 
 /** Public syndicate profile — the main/branch home + branch-list card shape. */
 export interface PublicSyndicateDTO {
   id: string;
-  /** Shown at the bottom of the Veterinarian Home (admin-controlled). */
+  /** Pinned by the VIEWER to their own Veterinarian Home (per-user quick access). */
   pinnedToHome: boolean;
   parentOrganizationId: string | null;
   name: string;

@@ -310,6 +310,39 @@ const schemas: Obj = {
 // --- paths -------------------------------------------------------------
 
 const paths: Obj = {
+  '/users/me': {
+    patch: {
+      tags: ['Users'],
+      summary: 'Edit your own profile ("تعديل الملف الشخصي")',
+      description:
+        'Strict allow-list: firstName, lastName, phone, whatsapp, country, governorate, ' +
+        'specialization, bio (≤ 1000 chars; empty → null). Email, status, roles, vet/trader ' +
+        'status, avatar and password are NOT writable here. Fully authenticated accounts only.',
+      security: bearer,
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                firstName: { type: 'string' },
+                lastName: { type: 'string' },
+                phone: { type: 'string', nullable: true },
+                whatsapp: { type: 'string', nullable: true },
+                country: { type: 'string', nullable: true },
+                governorate: { type: 'string', nullable: true },
+                specialization: { type: 'string', nullable: true },
+                bio: { type: 'string', nullable: true, maxLength: 1000 },
+              },
+            },
+          },
+        },
+      },
+      responses: { '200': ok('Updated profile (PublicUser)'), ...errs(400, 401, 403, 422, 429) },
+    },
+  },
   '/users/me/avatar/upload-url': {
     post: {
       tags: ['Users'],
@@ -505,6 +538,19 @@ const paths: Obj = {
       responses: { '200': ok('Session revoked'), ...errs(401) },
     },
   },
+  '/auth/change-password': {
+    post: {
+      tags: ['Auth'],
+      summary: 'Change your own password',
+      description:
+        'Body `{ currentPassword, newPassword }`. A wrong current password is a 400 ' +
+        '`INVALID_CURRENT_PASSWORD` (never 401); an unchanged one is 400 `PASSWORD_UNCHANGED`. ' +
+        'On success every refresh session is revoked (other devices signed out) and a fresh ' +
+        'token pair is returned for this device. Passwords are never logged or returned.',
+      security: bearer,
+      responses: { '200': ok('Password changed; new tokens'), ...errs(400, 401, 422, 429) },
+    },
+  },
   '/auth/logout-all': {
     post: {
       tags: ['Auth'],
@@ -587,6 +633,17 @@ const paths: Obj = {
       summary: 'Current veterinarian status and latest application',
       security: bearer,
       responses: { '200': ok('Status'), ...errs(401) },
+    },
+  },
+  '/veterinarians/me/documents': {
+    get: {
+      tags: ['Veterinarians'],
+      summary: 'Your own latest-application documents ("المستندات والتوثيق")',
+      description:
+        'Read-only, self-scoped. Each document carries a short-lived signed `downloadUrl`; ' +
+        'storage keys are never returned.',
+      security: bearer,
+      responses: { '200': ok('Documents'), ...errs(401) },
     },
   },
   '/admin/veterinarians/pending': {

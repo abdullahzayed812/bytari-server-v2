@@ -1,4 +1,5 @@
 import type { Logger } from 'pino';
+import { ForbiddenError } from '../../shared/errors/app-error.js';
 import type { AuthorizationService } from '../authorization/authorization.service.js';
 import type { AuthPrincipal } from '../authorization/authorization.types.js';
 import type { ContentService } from '../content/application/content.service.js';
@@ -27,6 +28,29 @@ export const SEARCH_TYPES = [
   'TIP',
 ] as const;
 export type SearchType = (typeof SEARCH_TYPES)[number];
+
+/**
+ * The application interface a search runs in. Each interface only ever
+ * searches its OWN sections — a Pet Owner never gets veterinarian-only
+ * entities (books, magazines, courses, jobs, the Veterinarian Store, offices)
+ * and the Veterinarian interface never gets the Pet Owner sections (pet store,
+ * clinics, own farms, news/tips). Vet services exist in both interfaces.
+ */
+export const SEARCH_INTERFACES = ['PET_OWNER', 'VETERINARIAN'] as const;
+export type SearchInterface = (typeof SEARCH_INTERFACES)[number];
+
+export const INTERFACE_SEARCH_TYPES: Record<SearchInterface, readonly SearchType[]> = {
+  PET_OWNER: ['PET_STORE_PRODUCT', 'CLINIC', 'FARM', 'SERVICE', 'NEWS', 'TIP'],
+  VETERINARIAN: [
+    'BOOK',
+    'MAGAZINE',
+    'VET_STORE_PRODUCT',
+    'VETERINARY_OFFICE',
+    'SERVICE',
+    'COURSE',
+    'JOB',
+  ],
+};
 
 export interface SearchHit {
   type: SearchType;
@@ -244,10 +268,24 @@ export class SearchService {
 
   async search(
     principal: AuthPrincipal,
-    input: { q: string; types?: SearchType[]; limit: number },
-  ): Promise<{ query: string; groups: SearchGroup[] }> {
+    input: { q: string; interface: SearchInterface; types?: SearchType[]; limit: number },
+  ): Promise<{ query: string; interface: SearchInterface; groups: SearchGroup[] }> {
     const q = input.q.trim();
-    const types = input.types?.length ? input.types : [...SEARCH_TYPES];
+    // The Veterinarian interface is only for approved veterinarians (and admins).
+    if (
+      input.interface === 'VETERINARIAN' &&
+      !this.deps.authz.isAdmin(principal) &&
+      !this.deps.authz.isApprovedVeterinarian(principal)
+    ) {
+      throw new ForbiddenError(
+        'The veterinarian interface search requires an approved veterinarian',
+      );
+    }
+    const allowed = INTERFACE_SEARCH_TYPES[input.interface];
+    // Requested types are always narrowed to the interface's own sections.
+    const types = input.types?.length
+      ? input.types.filter((t) => allowed.includes(t))
+      : [...allowed];
     const groups = await Promise.all(
       types.map(async (type): Promise<SearchGroup> => {
         try {
@@ -259,6 +297,6 @@ export class SearchService {
         }
       }),
     );
-    return { query: q, groups: groups.filter((g) => g.total > 0) };
+    return { query: q, interface: input.interface, groups: groups.filter((g) => g.total > 0) };
   }
 }

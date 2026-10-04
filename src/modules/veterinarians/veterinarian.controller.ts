@@ -51,6 +51,11 @@ export class VeterinarianController {
     sendSuccess(res, await this.vets.getStatus(auth.userId));
   };
 
+  myDocuments = async (req: Request, res: Response): Promise<void> => {
+    const auth = requireAuth(req);
+    sendSuccess(res, await this.vets.getMyDocuments(auth.userId));
+  };
+
   listPending = async (req: Request, res: Response): Promise<void> => {
     const q = validatedQuery<PendingQuery>(req);
     const { items, total } = await this.vets.listPending(q.page, q.pageSize);

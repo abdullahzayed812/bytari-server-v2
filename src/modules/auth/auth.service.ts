@@ -351,6 +351,52 @@ export class AuthService {
     });
   }
 
+  /**
+   * Change your OWN password ("تغيير كلمة المرور"). The current password is
+   * verified first (a mismatch is a 400 `INVALID_CURRENT_PASSWORD`, never a
+   * 401 — the caller's session is valid). On success the new Argon2id hash is
+   * stored, EVERY refresh session of the user is revoked (other devices are
+   * signed out) and a fresh token pair is issued for this device, all in one
+   * transaction. Neither password is ever logged, audited or returned.
+   */
+  async changePassword(
+    userId: string,
+    input: { currentPassword: string; newPassword: string },
+    ctx: AuditContext,
+  ): Promise<{ tokens: AuthTokens; revokedSessions: number }> {
+    const user = await this.users.getById(userId);
+    if (!(await this.passwords.verify(user.passwordHash, input.currentPassword))) {
+      throw new BadRequestError('Current password is incorrect', {
+        code: ErrorCode.INVALID_CURRENT_PASSWORD,
+        details: [{ path: 'body.currentPassword', message: 'incorrect' }],
+      });
+    }
+    if (input.newPassword === input.currentPassword) {
+      throw new BadRequestError('The new password must differ from the current one', {
+        code: ErrorCode.PASSWORD_UNCHANGED,
+        details: [{ path: 'body.newPassword', message: 'unchanged' }],
+      });
+    }
+    const passwordHash = await this.passwords.hash(input.newPassword);
+    return this.db.transaction(async (tx) => {
+      await this.users.setPasswordHash(userId, passwordHash, tx);
+      const revokedSessions = await this.sessions.revokeAllForUserInTransaction(userId, tx);
+      const tokens = await this.issueTokens(userId, ctx, tx);
+      await this.audit.record(
+        {
+          action: AuditAction.PASSWORD_CHANGED,
+          entityType: AuditEntityType.USER,
+          entityId: userId,
+          actorUserId: userId,
+          metadata: { revokedSessions },
+          context: ctx,
+        },
+        tx,
+      );
+      return { tokens, revokedSessions };
+    });
+  }
+
   private requirePasswordResetCodes(): EmailVerificationService {
     if (!this.passwordResetCodes) throw new InternalError('Password reset is not configured');
     return this.passwordResetCodes;

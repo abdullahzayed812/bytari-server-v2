@@ -40,6 +40,8 @@ export function createVeterinarianRouters(c: Container): { self: Router; admin: 
     asyncHandler(ctrl.requestDocumentUploadUrl),
   );
   self.get('/me/status', asyncHandler(ctrl.myStatus));
+  // Own identity / licence documents (signed view URLs) — self-scoped, read-only.
+  self.get('/me/documents', asyncHandler(ctrl.myDocuments));
 
   const admin = Router();
   admin.use(c.authenticate);

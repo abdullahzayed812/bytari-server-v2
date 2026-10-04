@@ -172,7 +172,6 @@ export const PERMISSION_KEYS = [
   // the organizations convention) stays ADMIN-only. Granted to NO base role.
   'syndicate.admin.delete',
   // Pin / unpin a syndicate on the Veterinarian Home (§12 additional corrections).
-  'syndicate.admin.pin',
   // Global Chat rooms — same shape as `syndicate.admin.create`: a room is
   // never self-service, only an ADMIN creates one (it then becomes an
   // `organizations` row of type CHAT_ROOM, moderated via the organization-
@@ -335,7 +334,6 @@ export const PERMISSION_DEFINITIONS: Record<PermissionKey, string> = {
   'vet_course.reject': 'Reject a pending course / seminar / workshop',
   'syndicate.admin.create': 'Create a main or subordinate veterinary syndicate',
   'syndicate.admin.delete': 'Delete (deactivate) a veterinary syndicate and end its registrations',
-  'syndicate.admin.pin': 'Pin / unpin a syndicate on the Veterinarian Home page',
   'chat_room.admin.create': 'Create a Global Chat public discussion room',
   'dashboard.admin.read':
     'Read the admin dashboard summary (category counts, recent activity, pending tasks)',
@@ -447,7 +445,6 @@ export const SUPERVISOR_DOMAIN_PERMISSIONS: Record<SupervisorDomain, readonly Pe
   SYNDICATE: [
     'syndicate.admin.create',
     'syndicate.admin.delete',
-    'syndicate.admin.pin',
     'organization.admin.read',
     'organization.admin.status',
     'organization.admin.manage',

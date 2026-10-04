@@ -54,6 +54,12 @@ export class SyndicateController {
   listPinned = async (req: Request, res: Response): Promise<void> => {
     sendSuccess(res, await this.syndicates.listPinned(requireAuth(req)));
   };
+  /** `PUT /syndicates/:id/pin` — the caller's own pin (approved vets / Admin). */
+  setPin = async (req: Request, res: Response): Promise<void> => {
+    const { organizationId } = validatedParams<{ organizationId: string }>(req);
+    const { pinned } = validatedBody<{ pinned: boolean }>(req);
+    sendSuccess(res, await this.syndicates.setPinnedToHome(organizationId, pinned, actor(req)));
+  };
   listBranches = async (req: Request, res: Response): Promise<void> => {
     const { organizationId } = validatedParams<{ organizationId: string }>(req);
     const q = validatedQuery<SyndicateBrowseQuery>(req);
@@ -91,11 +97,6 @@ export class AdminSyndicateController {
     const { organizationId } = validatedParams<{ organizationId: string }>(req);
     await this.syndicates.delete(organizationId, actor(req));
     res.status(StatusCodes.NO_CONTENT).send();
-  };
-  setPin = async (req: Request, res: Response): Promise<void> => {
-    const { organizationId } = validatedParams<{ organizationId: string }>(req);
-    const { pinned } = validatedBody<{ pinned: boolean }>(req);
-    sendSuccess(res, await this.syndicates.setPinnedToHome(organizationId, pinned, actor(req)));
   };
 }
 

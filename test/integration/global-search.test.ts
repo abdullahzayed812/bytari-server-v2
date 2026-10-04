@@ -66,13 +66,10 @@ describe('GET /search — Home header global search', () => {
     expect(groupOf(asStranger, 'FARM')).toBeUndefined();
     const asVet = await request(app)
       .get('/api/v1/search')
-      .query({ q: 'نيوكاسل', types: 'VET_STORE_PRODUCT,CLINIC', limit: 3 })
+      .query({ q: 'نيوكاسل', interface: 'VETERINARIAN', types: 'VET_STORE_PRODUCT', limit: 3 })
       .set(bearer(vet.accessToken));
     expect(groupOf(asVet, 'VET_STORE_PRODUCT')?.items[0]?.title).toBe('لقاح نيوكاسل');
-    expect((asVet.body.data.groups as Group[]).map((g) => g.type).sort()).toEqual([
-      'CLINIC',
-      'VET_STORE_PRODUCT',
-    ]);
+    expect((asVet.body.data.groups as Group[]).map((g) => g.type)).toEqual(['VET_STORE_PRODUCT']);
 
     // an expired clinic drops out like in the directory
     await getTestDb()('clinic_details')
@@ -95,5 +92,74 @@ describe('GET /search — Home header global search', () => {
     expect(badType.status).toBe(422);
     const anon = await request(app).get('/api/v1/search?q=abc');
     expect(anon.status).toBe(401);
+  });
+
+  it('is scoped to the caller’s interface — enforced server-side', async () => {
+    const admin = await registerAdmin(app);
+    const vet = await registerApprovedVet(app);
+    const owner = await registerUser(app);
+    await createPetStoreProduct(app, admin.accessToken, { name: 'دواء الواجهة للقطط' });
+    await createVetStoreProduct(app, admin.accessToken, { name: 'دواء الواجهة البيطري' });
+    await createActiveOrganization(app, vet.accessToken, admin.accessToken, {
+      type: 'CLINIC',
+      name: 'عيادة الواجهة',
+    });
+
+    const PET_OWNER_TYPES = ['PET_STORE_PRODUCT', 'CLINIC', 'FARM', 'SERVICE', 'NEWS', 'TIP'];
+    const VET_TYPES = [
+      'BOOK',
+      'MAGAZINE',
+      'VET_STORE_PRODUCT',
+      'VETERINARY_OFFICE',
+      'SERVICE',
+      'COURSE',
+      'JOB',
+    ];
+    const typesOf = (res: request.Response) => (res.body.data.groups as Group[]).map((g) => g.type);
+
+    // Pet Owner interface (the default): never veterinarian-only sections — even for a vet.
+    for (const token of [owner.accessToken, vet.accessToken]) {
+      const res = await request(app)
+        .get('/api/v1/search')
+        .query({ q: 'الواجهة' })
+        .set(bearer(token));
+      expect(res.status).toBe(200);
+      expect(res.body.data.interface).toBe('PET_OWNER');
+      expect(typesOf(res).sort()).toEqual(['CLINIC', 'PET_STORE_PRODUCT']);
+      for (const t of typesOf(res)) expect(PET_OWNER_TYPES).toContain(t);
+    }
+
+    // Veterinarian interface: only veterinarian sections (no pet store, no clinics).
+    const asVet = await request(app)
+      .get('/api/v1/search')
+      .query({ q: 'الواجهة', interface: 'VETERINARIAN' })
+      .set(bearer(vet.accessToken));
+    expect(asVet.status).toBe(200);
+    expect(typesOf(asVet)).toEqual(['VET_STORE_PRODUCT']);
+    for (const t of typesOf(asVet)) expect(VET_TYPES).toContain(t);
+
+    // A plain pet owner cannot search the Veterinarian interface at all.
+    const ownerAsVet = await request(app)
+      .get('/api/v1/search')
+      .query({ q: 'الواجهة', interface: 'VETERINARIAN' })
+      .set(bearer(owner.accessToken));
+    expect(ownerAsVet.status).toBe(403);
+
+    // Asking for another interface's section is rejected, never silently served.
+    const foreign = await request(app)
+      .get('/api/v1/search')
+      .query({ q: 'الواجهة', types: 'VET_STORE_PRODUCT' })
+      .set(bearer(vet.accessToken));
+    expect(foreign.status).toBe(422);
+    const foreignVet = await request(app)
+      .get('/api/v1/search')
+      .query({ q: 'الواجهة', interface: 'VETERINARIAN', types: 'CLINIC' })
+      .set(bearer(vet.accessToken));
+    expect(foreignVet.status).toBe(422);
+    const badInterface = await request(app)
+      .get('/api/v1/search')
+      .query({ q: 'الواجهة', interface: 'ADMIN' })
+      .set(bearer(vet.accessToken));
+    expect(badInterface.status).toBe(422);
   });
 });

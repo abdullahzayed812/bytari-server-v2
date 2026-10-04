@@ -22,6 +22,10 @@ export const ErrorCode = {
   // --- Identity & authorization (Phase 2) ---
   /** Wrong email/password on login. Deliberately generic. */
   INVALID_CREDENTIALS: 'INVALID_CREDENTIALS',
+  /** `POST /auth/change-password` — the current password did not match (400, never 401). */
+  INVALID_CURRENT_PASSWORD: 'INVALID_CURRENT_PASSWORD',
+  /** `POST /auth/change-password` — the new password equals the current one. */
+  PASSWORD_UNCHANGED: 'PASSWORD_UNCHANGED',
   /** Access token missing, malformed, expired or signature-invalid. */
   INVALID_TOKEN: 'INVALID_TOKEN',
   /** Refresh token unknown, expired, revoked or replayed. */

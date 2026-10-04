@@ -10,6 +10,7 @@ import type { AuthService } from './auth.service.js';
 import { requireAuth } from './authenticate.middleware.js';
 import { accessStateFor } from '../users/user-access.js';
 import type {
+  ChangePasswordBody,
   ForgotPasswordBody,
   LoginBody,
   LogoutBody,
@@ -62,6 +63,13 @@ export class AuthController {
   resetPassword = async (req: Request, res: Response): Promise<void> => {
     const body = validatedBody<ResetPasswordBody>(req);
     const result = await this.auth.resetPassword(body, auditContextFromRequest(req));
+    sendSuccess(res, { success: true, ...result });
+  };
+
+  changePassword = async (req: Request, res: Response): Promise<void> => {
+    const auth = requireAuth(req);
+    const body = validatedBody<ChangePasswordBody>(req);
+    const result = await this.auth.changePassword(auth.userId, body, auditContextFromRequest(req));
     sendSuccess(res, { success: true, ...result });
   };
 

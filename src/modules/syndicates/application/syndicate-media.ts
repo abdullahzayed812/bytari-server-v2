@@ -93,7 +93,10 @@ export class SyndicateMedia {
   }
 
   /** Verify a single key belongs to `kind`'s prefix and points at a real uploaded object. */
-  async validateKey(kind: SyndicateMediaKind, key: string | null | undefined): Promise<string | null> {
+  async validateKey(
+    kind: SyndicateMediaKind,
+    key: string | null | undefined,
+  ): Promise<string | null> {
     if (!key) return null;
     const prefix = PREFIX_BY_KIND[kind];
     if (!key.startsWith(`${prefix}/`)) {

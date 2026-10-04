@@ -4,7 +4,11 @@ import { validate } from '../../shared/http/validate.js';
 import { userRateLimiter } from '../../shared/http/user-rate-limit.js';
 import type { Container } from '../../container.js';
 import { SelfUsersController } from './self-users.controller.js';
-import { avatarUploadUrlBodySchema, finalizeAvatarBodySchema } from './user.schemas.js';
+import {
+  avatarUploadUrlBodySchema,
+  finalizeAvatarBodySchema,
+  updateMyProfileBodySchema,
+} from './user.schemas.js';
 
 const UPLOAD_RATE_LIMIT = { windowMs: 15 * 60 * 1000, max: 20 };
 
@@ -37,6 +41,16 @@ export function createSelfUsersRouter(c: Container): Router {
     limiter,
     validate({ body: finalizeAvatarBodySchema }),
     asyncHandler(ctrl.finalizeAvatar),
+  );
+
+  // Own profile edit — a fully authenticated account only (the router-level
+  // pending-ok guard above is deliberately narrowed again here).
+  r.patch(
+    '/me',
+    c.authenticate,
+    limiter,
+    validate({ body: updateMyProfileBodySchema }),
+    asyncHandler(ctrl.updateMe),
   );
 
   return r;

@@ -19,10 +19,7 @@ import type { User } from './user.types.js';
  * their application is reviewed.
  */
 export type AccessState =
-  | 'FULL'
-  | 'EMAIL_VERIFICATION_REQUIRED'
-  | 'VETERINARIAN_APPROVAL_REQUIRED'
-  | 'INACTIVE';
+  'FULL' | 'EMAIL_VERIFICATION_REQUIRED' | 'VETERINARIAN_APPROVAL_REQUIRED' | 'INACTIVE';
 
 export function accessStateFor(
   user: Pick<User, 'status' | 'registrationType' | 'veterinarianStatus'>,

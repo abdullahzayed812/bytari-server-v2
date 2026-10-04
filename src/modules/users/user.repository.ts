@@ -66,6 +66,8 @@ export class UserRepository {
     if (patch.country !== undefined) dbPatch.country = patch.country;
     if (patch.governorate !== undefined) dbPatch.governorate = patch.governorate;
     if (patch.specialization !== undefined) dbPatch.specialization = patch.specialization;
+    if (patch.bio !== undefined) dbPatch.bio = patch.bio;
+    if (patch.whatsapp !== undefined) dbPatch.whatsapp = patch.whatsapp;
     if (patch.avatarKey !== undefined) dbPatch.avatar_key = patch.avatarKey;
     if (patch.status !== undefined) dbPatch.status = patch.status;
     if (patch.veterinarianStatus !== undefined)

@@ -150,6 +150,8 @@ export class UserService {
       country?: string | null;
       governorate?: string | null;
       specialization?: string | null;
+      bio?: string | null;
+      whatsapp?: string | null;
     },
     actor: ActorContext,
   ): Promise<User> {

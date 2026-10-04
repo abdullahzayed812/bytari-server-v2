@@ -99,6 +99,16 @@ export function createSyndicateRouter(c: Container): Router {
     validate({ params: organizationIdParamSchema }),
     asyncHandler(syndicates.getOne),
   );
+  // "تثبيت النقابة" — per-user quick access on the Veterinarian Home. Any
+  // approved veterinarian (or Admin); enforced in `SyndicateService`.
+  r.put(
+    '/:organizationId/pin',
+    validate({
+      params: organizationIdParamSchema,
+      body: z.object({ pinned: z.boolean() }).strict(),
+    }),
+    asyncHandler(syndicates.setPin),
+  );
   r.get(
     '/:organizationId/branches',
     validate({ params: organizationIdParamSchema, query: syndicateBrowseQuerySchema }),
@@ -281,16 +291,6 @@ export function createAdminSyndicateRouter(c: Container): Router {
     c.authorization.authorize('syndicate.admin.delete'),
     validate({ params: organizationIdParamSchema }),
     asyncHandler(ctrl.remove),
-  );
-  // "تثبيت في الرئيسية" — ADMIN or an ACTIVE SYNDICATE supervisor only.
-  r.put(
-    '/syndicates/:organizationId/pin',
-    c.authorization.authorize('syndicate.admin.pin'),
-    validate({
-      params: organizationIdParamSchema,
-      body: z.object({ pinned: z.boolean() }).strict(),
-    }),
-    asyncHandler(ctrl.setPin),
   );
   return r;
 }

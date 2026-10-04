@@ -1,6 +1,6 @@
 import type { Knex } from 'knex';
 import type { Logger } from 'pino';
-import { ConflictError, NotFoundError } from '../../../shared/errors/app-error.js';
+import { ConflictError, ForbiddenError, NotFoundError } from '../../../shared/errors/app-error.js';
 import { ErrorCode } from '../../../shared/errors/error-codes.js';
 import type { EventBus } from '../../../shared/events/index.js';
 import type { AuditContext } from '../../audit/audit.types.js';
@@ -91,25 +91,33 @@ export class SyndicateService {
     const viewerUserId = viewer?.userId ?? null;
     const d = await this.details.findByOrganizationId(organizationId);
 
-    const [branchCount, followersCount, isFollowing, registration, membersCount, counters] =
-      await Promise.all([
-        d && d.parentOrganizationId === null
-          ? this.details.countBranches(organizationId)
-          : Promise.resolve(0),
-        this.follows.count(organizationId),
-        viewerUserId
-          ? this.follows.isFollowing(organizationId, viewerUserId)
-          : Promise.resolve(false),
-        viewerUserId
-          ? this.registrations.findActive(organizationId, viewerUserId)
-          : Promise.resolve(null),
-        this.registrations.countActive(organizationId),
-        this.countersFor(organizationId, viewer),
-      ]);
+    const [
+      branchCount,
+      followersCount,
+      isFollowing,
+      registration,
+      membersCount,
+      counters,
+      pinnedToHome,
+    ] = await Promise.all([
+      d && d.parentOrganizationId === null
+        ? this.details.countBranches(organizationId)
+        : Promise.resolve(0),
+      this.follows.count(organizationId),
+      viewerUserId
+        ? this.follows.isFollowing(organizationId, viewerUserId)
+        : Promise.resolve(false),
+      viewerUserId
+        ? this.registrations.findActive(organizationId, viewerUserId)
+        : Promise.resolve(null),
+      this.registrations.countActive(organizationId),
+      this.countersFor(organizationId, viewer),
+      viewerUserId ? this.details.isPinnedBy(viewerUserId, organizationId) : Promise.resolve(false),
+    ]);
 
     return {
       id: org.id,
-      pinnedToHome: Boolean(d?.pinnedToHomeAt),
+      pinnedToHome,
       parentOrganizationId: d?.parentOrganizationId ?? null,
       name: org.name,
       description: org.description,
@@ -334,13 +342,22 @@ export class SyndicateService {
     });
   }
 
-  // --- pin to Veterinarian Home (syndicate.admin.pin; route-authorized) --
+  // --- per-veterinarian pin to the Veterinarian Home ("تثبيت النقابة") ----
 
+  /**
+   * Pin / unpin a syndicate for the CALLER's own quick access. Any approved
+   * veterinarian (or a global Admin) may pin — the pin belongs to them alone
+   * and never affects anyone else's Home. Enforced here, not only in the UI.
+   */
   async setPinnedToHome(
     organizationId: string,
     pinned: boolean,
     actor: SyndicateActor,
   ): Promise<PublicSyndicateDTO> {
+    const p = actor.principal;
+    if (!this.authz.isAdmin(p) && !this.authz.isApprovedVeterinarian(p)) {
+      throw new ForbiddenError('Only veterinarians can pin a syndicate to their Home page');
+    }
     const org = await this.organizations.findById(organizationId);
     if (!org || org.type !== 'SYNDICATE') throw new NotFoundError('Syndicate not found');
     if (pinned && org.status !== 'ACTIVE') {
@@ -349,7 +366,7 @@ export class SyndicateService {
       });
     }
     await this.db.transaction(async (tx) => {
-      await this.details.setPinnedToHome(organizationId, pinned, tx);
+      await this.details.setUserPin(p.userId, organizationId, pinned, tx);
       await this.audit.record(
         {
           action: pinned
@@ -357,19 +374,19 @@ export class SyndicateService {
             : SyndicateAuditAction.UNPINNED_FROM_HOME,
           entityType: SyndicateAuditEntity.SYNDICATE,
           entityId: organizationId,
-          actorUserId: actor.principal.userId,
-          metadata: { name: org.name },
+          actorUserId: p.userId,
+          metadata: { name: org.name, scope: 'USER' },
           context: actor.context,
         },
         tx,
       );
     });
-    return this.toPublicDTO(organizationId, actor.principal);
+    return this.toPublicDTO(organizationId, p);
   }
 
-  /** "النقابات المثبتة" — bottom of the Veterinarian Home. */
+  /** The caller's pinned syndicates — bottom of their Veterinarian Home. */
   async listPinned(viewer: AuthPrincipal): Promise<PublicSyndicateDTO[]> {
-    const ids = await this.details.listPinnedOrganizationIds(20);
+    const ids = await this.details.listUserPinnedOrganizationIds(viewer.userId, 20);
     return Promise.all(ids.map((id) => this.toPublicDTO(id, viewer)));
   }
 

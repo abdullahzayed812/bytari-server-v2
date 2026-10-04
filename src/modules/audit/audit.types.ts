@@ -30,6 +30,8 @@ export const AuditAction = {
   PASSWORD_SET_BY_ADMIN: 'PASSWORD_SET_BY_ADMIN',
   /** An ADMIN sent a password-reset code to another account's email. */
   PASSWORD_RESET_SENT_BY_ADMIN: 'PASSWORD_RESET_SENT_BY_ADMIN',
+  /** The user changed their own password (current password verified; other sessions revoked). */
+  PASSWORD_CHANGED: 'PASSWORD_CHANGED',
 
   // --- Organizations (Phase 3) ---
   ORGANIZATION_CREATED: 'ORGANIZATION_CREATED',

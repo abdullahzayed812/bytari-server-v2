@@ -5,9 +5,13 @@ import { validatedBody } from '../../shared/http/validate.js';
 import { auditContextFromRequest } from '../audit/audit-context.js';
 import { requireAuth } from '../auth/authenticate.middleware.js';
 import type { UserService } from './user.service.js';
-import type { AvatarUploadUrlBody, FinalizeAvatarBody } from './user.schemas.js';
+import type {
+  AvatarUploadUrlBody,
+  FinalizeAvatarBody,
+  UpdateMyProfileBody,
+} from './user.schemas.js';
 
-/** `/users/me/*` — authenticated self-service (avatar upload). */
+/** `/users/me/*` — authenticated self-service (avatar upload, own profile edit). */
 export class SelfUsersController {
   constructor(private readonly users: UserService) {}
 
@@ -27,5 +31,15 @@ export class SelfUsersController {
       body,
     );
     sendSuccess(res, user);
+  };
+
+  updateMe = async (req: Request, res: Response): Promise<void> => {
+    const auth = requireAuth(req);
+    const body = validatedBody<UpdateMyProfileBody>(req);
+    const user = await this.users.updateProfile(auth.userId, body, {
+      actorUserId: auth.userId,
+      context: auditContextFromRequest(req),
+    });
+    sendSuccess(res, await this.users.toPublicUserWithAvatar(user));
   };
 }

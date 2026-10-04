@@ -8,6 +8,7 @@ import {
 } from '../domain/syndicate.types.js';
 
 const T = 'syndicate_details';
+const PINS = 'syndicate_home_pins';
 
 export class SyndicateDetailsRepository {
   constructor(private readonly db: Knex) {}
@@ -179,29 +180,42 @@ export class SyndicateDetailsRepository {
     return { ids: rows.map((r) => r.organization_id), total };
   }
 
-  /** Pin (now) / unpin a syndicate on the Veterinarian Home. Idempotent: re-pinning keeps the original order. */
-  async setPinnedToHome(
+  // --- per-user "تثبيت النقابة" (syndicate_home_pins) ---------------
+
+  /** Pin (now) / unpin a syndicate for ONE user. Idempotent: re-pinning keeps the original order. */
+  async setUserPin(
+    userId: string,
     organizationId: string,
     pinned: boolean,
     trx: Knex.Transaction,
   ): Promise<void> {
-    await trx(T)
-      .where({ organization_id: organizationId })
-      .update({
-        pinned_to_home_at: pinned ? trx.raw('COALESCE(pinned_to_home_at, now())') : null,
-        updated_at: trx.fn.now(),
-      });
+    if (pinned) {
+      await trx(PINS)
+        .insert({ user_id: userId, organization_id: organizationId })
+        .onConflict(['user_id', 'organization_id'])
+        .ignore();
+    } else {
+      await trx(PINS).where({ user_id: userId, organization_id: organizationId }).delete();
+    }
   }
 
-  /** ACTIVE pinned syndicates (main or branch), oldest pin first — the Home section. */
-  async listPinnedOrganizationIds(limit: number): Promise<string[]> {
-    const rows: { organization_id: string }[] = await this.db(`${T} as d`)
-      .join('organizations as o', 'o.id', 'd.organization_id')
-      .whereNotNull('d.pinned_to_home_at')
+  async isPinnedBy(userId: string, organizationId: string): Promise<boolean> {
+    const row = await this.db(PINS)
+      .where({ user_id: userId, organization_id: organizationId })
+      .first('organization_id');
+    return Boolean(row);
+  }
+
+  /** The user's ACTIVE pinned syndicates (main or branch), oldest pin first — the Home section. */
+  async listUserPinnedOrganizationIds(userId: string, limit: number): Promise<string[]> {
+    const rows: { organization_id: string }[] = await this.db(`${PINS} as p`)
+      .join('organizations as o', 'o.id', 'p.organization_id')
+      .where('p.user_id', userId)
+      .andWhere('o.type', 'SYNDICATE')
       .andWhere('o.status', 'ACTIVE')
-      .orderBy('d.pinned_to_home_at', 'asc')
+      .orderBy('p.pinned_at', 'asc')
       .limit(limit)
-      .select('d.organization_id');
+      .select('p.organization_id');
     return rows.map((r) => r.organization_id);
   }
 }

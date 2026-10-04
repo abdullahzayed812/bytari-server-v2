@@ -192,7 +192,7 @@ describe('roles ↔ permissions', () => {
     expect(keys).toContain('syndicate.admin.delete');
     expect(keys).toContain('vet_service.delete');
     expect(keys).toContain('vet_job.delete');
-    expect(keys).toContain('syndicate.admin.pin');
-    expect(keys.length).toBe(91);
+    expect(keys).not.toContain('syndicate.admin.pin');
+    expect(keys.length).toBe(90);
   });
 });
