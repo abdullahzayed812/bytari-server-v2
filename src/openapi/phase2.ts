@@ -61,7 +61,10 @@ const schemas: Obj = {
           'Client-usable avatar URL — the public CDN URL when the bucket is public, else a ' +
           'short-lived signed GET. The raw R2 key is never exposed.',
       },
-      status: { type: 'string', enum: ['ACTIVE', 'PENDING_VERIFICATION', 'SUSPENDED', 'DEACTIVATED'] },
+      status: {
+        type: 'string',
+        enum: ['ACTIVE', 'PENDING_VERIFICATION', 'SUSPENDED', 'DEACTIVATED'],
+      },
       veterinarianStatus: {
         type: 'string',
         enum: ['NOT_APPLIED', 'PENDING', 'APPROVED', 'REJECTED'],
@@ -115,7 +118,8 @@ const schemas: Obj = {
         type: 'string',
         enum: ['PET_OWNER', 'VETERINARIAN'],
         default: 'PET_OWNER',
-        description: 'PET_OWNER → email verification; VETERINARIAN → no email code, admin approval gate',
+        description:
+          'PET_OWNER → email verification; VETERINARIAN → no email code, admin approval gate',
       },
     },
   },
@@ -124,7 +128,11 @@ const schemas: Obj = {
     required: ['email', 'code'],
     properties: {
       email: { type: 'string', format: 'email' },
-      code: { type: 'string', pattern: '^\\d{6}$', description: '6-digit code emailed at registration / resend' },
+      code: {
+        type: 'string',
+        pattern: '^\\d{6}$',
+        description: '6-digit code emailed at registration / resend',
+      },
     },
   },
   ResendVerificationRequest: {
@@ -505,7 +513,10 @@ const paths: Obj = {
             },
           }),
         ),
-        '429': { description: 'RATE_LIMITED — resend cooldown not yet elapsed', content: jsonError },
+        '429': {
+          description: 'RATE_LIMITED — resend cooldown not yet elapsed',
+          content: jsonError,
+        },
         ...errs(422),
       },
     },
@@ -574,7 +585,8 @@ const paths: Obj = {
               accessState: {
                 type: 'string',
                 enum: ['FULL', 'EMAIL_VERIFICATION_REQUIRED', 'VETERINARIAN_APPROVAL_REQUIRED'],
-                description: 'Onboarding gate — anything but FULL may only use the onboarding allowlist',
+                description:
+                  'Onboarding gate — anything but FULL may only use the onboarding allowlist',
               },
               roles: { type: 'array', items: { type: 'string' } },
               permissions: { type: 'array', items: { type: 'string' } },

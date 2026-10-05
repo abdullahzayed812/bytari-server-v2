@@ -46,8 +46,14 @@ const userSummary = {
 };
 
 const tags = [
-  { name: 'Veterinary Syndicates', description: 'Syndicate profiles, branches, announcements, requests & inquiries.' },
-  { name: 'Veterinary Syndicates (Admin)', description: 'Syndicate creation (syndicate.admin.create).' },
+  {
+    name: 'Veterinary Syndicates',
+    description: 'Syndicate profiles, branches, announcements, requests & inquiries.',
+  },
+  {
+    name: 'Veterinary Syndicates (Admin)',
+    description: 'Syndicate creation (syndicate.admin.create).',
+  },
 ];
 
 const schemas: Obj = {
@@ -98,7 +104,13 @@ const schemas: Obj = {
       requestType: {
         type: 'string',
         nullable: true,
-        enum: ['ID_ISSUANCE', 'ID_RENEWAL', 'OFFICE_LICENSE_ISSUANCE', 'OFFICE_LICENSE_RENEWAL', 'OTHER'],
+        enum: [
+          'ID_ISSUANCE',
+          'ID_RENEWAL',
+          'OFFICE_LICENSE_ISSUANCE',
+          'OFFICE_LICENSE_RENEWAL',
+          'OTHER',
+        ],
       },
       message: { type: 'string' },
       attachmentUrls: { type: 'array', items: { type: 'string' } },
@@ -126,7 +138,8 @@ const paths: Obj = {
   '/syndicates/media/upload-url': {
     post: {
       tags: ['Veterinary Syndicates'],
-      summary: 'Request a presigned R2 upload URL — kind: LOGO | ANNOUNCEMENT_IMAGE | SUBMISSION_ATTACHMENT',
+      summary:
+        'Request a presigned R2 upload URL — kind: LOGO | ANNOUNCEMENT_IMAGE | SUBMISSION_ATTACHMENT',
       security: bearer,
       responses: { 201: ok('Upload URL', uploadUrlResult), ...errs(400, 401, 422) },
     },
@@ -136,7 +149,10 @@ const paths: Obj = {
       tags: ['Veterinary Syndicates'],
       summary: 'Browse main (root) syndicates',
       security: bearer,
-      responses: { 200: ok('Syndicates', listOf('#/components/schemas/PublicSyndicate')), ...errs(401) },
+      responses: {
+        200: ok('Syndicates', listOf('#/components/schemas/PublicSyndicate')),
+        ...errs(401),
+      },
     },
   },
   '/syndicates/{organizationId}': {
@@ -172,14 +188,18 @@ const paths: Obj = {
       tags: ['Veterinary Syndicates'],
       summary: 'فروع النقابة — subordinate/branch syndicates of a main syndicate',
       security: bearer,
-      responses: { 200: ok('Branches', listOf('#/components/schemas/PublicSyndicate')), ...errs(401) },
+      responses: {
+        200: ok('Branches', listOf('#/components/schemas/PublicSyndicate')),
+        ...errs(401),
+      },
     },
   },
   '/syndicates/{organizationId}/my-access': {
     parameters: [{ name: 'organizationId', in: 'path', required: true, schema: uuid }],
     get: {
       tags: ['Veterinary Syndicates'],
-      summary: 'What can the caller do for this syndicate — drives client-side management UI visibility',
+      summary:
+        'What can the caller do for this syndicate — drives client-side management UI visibility',
       security: bearer,
       responses: {
         200: ok(
@@ -216,7 +236,7 @@ const paths: Obj = {
     parameters: [{ name: 'organizationId', in: 'path', required: true, schema: uuid }],
     get: {
       tags: ['Veterinary Syndicates'],
-      summary: 'الإعلانات والتبليغات — this syndicate\'s announcements',
+      summary: "الإعلانات والتبليغات — this syndicate's announcements",
       security: bearer,
       responses: {
         200: ok('Announcements', listOf('#/components/schemas/SyndicateAnnouncement')),
@@ -279,7 +299,7 @@ const paths: Obj = {
     },
     get: {
       tags: ['Veterinary Syndicates'],
-      summary: 'List this syndicate\'s requests/inquiries — syndicate.submission.read',
+      summary: "List this syndicate's requests/inquiries — syndicate.submission.read",
       security: bearer,
       responses: {
         200: ok('Submissions', listOf('#/components/schemas/SyndicateSubmission')),
@@ -347,7 +367,7 @@ const paths: Obj = {
     parameters: [{ name: 'id', in: 'path', required: true, schema: uuid }],
     get: {
       tags: ['Veterinary Syndicates'],
-      summary: 'One of the caller\'s own submissions',
+      summary: "One of the caller's own submissions",
       security: bearer,
       responses: {
         200: ok('Submission', dataOf({ $ref: '#/components/schemas/SyndicateSubmission' })),
