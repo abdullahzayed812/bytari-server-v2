@@ -5,6 +5,7 @@ import { sendSuccess } from '../../../shared/http/response.js';
 import { validatedBody, validatedParams, validatedQuery } from '../../../shared/http/validate.js';
 import { auditContextFromRequest, type AuditContextResult } from '../../audit/audit-context.js';
 import { requireAuth } from '../../auth/authenticate.middleware.js';
+import type { FarmProfileService } from '../../farms/application/farm-profile.service.js';
 import type { FarmSubscriptionService } from '../../farms/application/farm-subscription.service.js';
 import type {
   AdminListFarmsQuery,
@@ -34,6 +35,7 @@ export class AdminOrganizationController {
     private readonly farmRenewals: FarmSubscriptionRenewalRepository,
     private readonly farmSubscription: FarmSubscriptionService,
     private readonly users: UserService,
+    private readonly farmProfiles: FarmProfileService,
   ) {}
 
   private actor(req: Request): { actorUserId: string; context: AuditContextResult } {
@@ -67,12 +69,15 @@ export class AdminOrganizationController {
     // the open renewal request (subscription-capable types only) ride along so
     // the review screen needs no extra round-trips. Admin-only route — never
     // on the public/member organization DTOs.
-    const [owner, pendingRenewalRequest, termsAcceptances] = await Promise.all([
+    const [owner, pendingRenewalRequest, termsAcceptances, farm] = await Promise.all([
       this.users.getByIdOrNull(org.ownerUserId),
       org.type === 'FARM' || org.type === 'CLINIC' || org.type === 'VETERINARY_OFFICE'
         ? this.farmRenewals.findPendingForOrganization(id)
         : Promise.resolve(null),
       this.organizations.getTermsAcceptances(id),
+      // FARM: the full farm file (species, location, capacity, animal counts,
+      // production type, contact) — the org row alone carries none of it.
+      org.type === 'FARM' ? this.farmProfiles.getProfile(id) : Promise.resolve(null),
     ]);
     sendSuccess(res, {
       ...org,
@@ -91,6 +96,7 @@ export class AdminOrganizationController {
       pendingRenewalRequest,
       // Which registration terms the applicant accepted, which version, when.
       termsAcceptances,
+      ...(farm ? { farm } : {}),
     });
   };
 

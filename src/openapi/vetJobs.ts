@@ -51,7 +51,10 @@ const employmentType = {
 
 const tags = [
   { name: 'Veterinarian Jobs', description: 'Job offers, job-seeker profiles, applications.' },
-  { name: 'Veterinarian Jobs (Admin)', description: 'Offer / seeker-profile moderation (vet_job.*).' },
+  {
+    name: 'Veterinarian Jobs (Admin)',
+    description: 'Offer / seeker-profile moderation (vet_job.*).',
+  },
 ];
 
 const schemas: Obj = {
@@ -205,7 +208,10 @@ const paths: Obj = {
       tags: ['Veterinarian Jobs'],
       summary: 'Browse APPROVED, open job offers (search / employmentType / governorate)',
       security: bearer,
-      responses: { 200: ok('Offers', listOf('#/components/schemas/PublicVetJobOffer')), ...errs(401) },
+      responses: {
+        200: ok('Offers', listOf('#/components/schemas/PublicVetJobOffer')),
+        ...errs(401),
+      },
     },
     post: {
       tags: ['Veterinarian Jobs'],
@@ -311,7 +317,7 @@ const paths: Obj = {
   '/vet-jobs/applications/mine': {
     get: {
       tags: ['Veterinarian Jobs'],
-      summary: 'طلباتي — the caller\'s own submitted applications',
+      summary: "طلباتي — the caller's own submitted applications",
       security: bearer,
       responses: {
         200: ok('Applications', listOf('#/components/schemas/VetJobApplication')),
@@ -367,7 +373,7 @@ const paths: Obj = {
     },
     post: {
       tags: ['Veterinarian Jobs'],
-      summary: 'Create the caller\'s own job-seeker profile (approved veterinarian only)',
+      summary: "Create the caller's own job-seeker profile (approved veterinarian only)",
       security: bearer,
       responses: {
         201: ok('Profile', dataOf({ $ref: '#/components/schemas/VetJobSeekerProfile' })),
@@ -437,7 +443,10 @@ const paths: Obj = {
       tags: ['Veterinarian Jobs (Admin)'],
       summary: 'List job offers for moderation — vet_job.read',
       security: bearer,
-      responses: { 200: ok('Offers', listOf('#/components/schemas/VetJobOffer')), ...errs(401, 403) },
+      responses: {
+        200: ok('Offers', listOf('#/components/schemas/VetJobOffer')),
+        ...errs(401, 403),
+      },
     },
   },
   '/admin/vet-job-offers/{id}': {
@@ -497,6 +506,14 @@ const paths: Obj = {
         200: ok('Profile', dataOf({ $ref: '#/components/schemas/VetJobSeekerProfile' })),
         ...errs(401, 403, 404),
       },
+    },
+    delete: {
+      tags: ['Veterinarian Jobs (Admin)'],
+      summary: 'Delete a job-seeker profile (any status) — vet_job.delete',
+      description:
+        'Hard delete; audited. Nothing references a seeker profile (applications keep their own snapshot).',
+      security: bearer,
+      responses: { 200: ok('Deleted'), ...errs(401, 403, 404) },
     },
   },
   '/admin/vet-job-seekers/{id}/approve': {

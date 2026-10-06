@@ -96,7 +96,24 @@ export class PetStoreProductRepository {
         });
       }
       if (filter.search) {
-        qb.andWhereRaw('lower(p.name) like ?', [`%${filter.search.toLowerCase()}%`]);
+        // Name, description, spec attributes (brand / origin / weight …) and
+        // the category + its parent section name — so "أدوية" or "قطط" finds
+        // every product filed under that section.
+        const term = `%${filter.search.toLowerCase().replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
+        qb.andWhere((w) => {
+          void w
+            .whereRaw('lower(p.name) like ?', [term])
+            .orWhereRaw("lower(coalesce(p.description, '')) like ?", [term])
+            .orWhereRaw("lower(coalesce(p.attributes::text, '')) like ?", [term])
+            .orWhereRaw("lower(coalesce(c.name, '')) like ?", [term])
+            .orWhereIn(
+              'p.category_id',
+              this.conn(trx)('pet_owner_store_categories as child')
+                .join('pet_owner_store_categories as parent', 'parent.id', 'child.parent_id')
+                .select('child.id')
+                .whereRaw('lower(parent.name) like ?', [term]),
+            );
+        });
       }
       return qb;
     };

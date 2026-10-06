@@ -65,4 +65,42 @@ describe('Veterinary Office — product search by name, brand and country', () =
     expect(facets.body.data.brands).toHaveLength(2); // Bayer/bayer collapse; hidden excluded
     expect(facets.body.data.countries.sort()).toEqual(['ألمانيا', 'تركيا'].sort());
   });
+
+  it('text search spans country, description, dosage and highlights; every word must match; name matches rank first', async () => {
+    const admin = await registerAdmin(app);
+    const owner = await registerApprovedVet(app);
+    const shopper = await registerUser(app);
+    const office = await createActiveOrganization(app, owner.accessToken, admin.accessToken, {
+      type: 'VETERINARY_OFFICE',
+    });
+    const manage = `/api/v1/organizations/${office.id}/office-products`;
+    const add = async (body: Record<string, unknown>): Promise<string> => {
+      const res = await request(app)
+        .post(manage)
+        .set(bearer(owner.accessToken))
+        .send({ productType: 'MEDICINE', price: '1000', stockQuantity: 3, ...body });
+      expect(res.status).toBe(201);
+      return res.body.data.id as string;
+    };
+    const indian = await add({ name: 'أموكسيسيلين 20%', countryOfOrigin: 'الهند' });
+    const turkish = await add({ name: 'أموكسيسيلين 10%', countryOfOrigin: 'تركيا' });
+    const desc = await add({ name: 'مضاد حيوي', description: 'يحتوي على أموكسيسيلين' });
+    const dosage = await add({ name: 'محلول فموي', dosage: '1 مل لكل 10 كغ' });
+
+    const pub = `/api/v1/organizations/discover/${office.id}/office-products`;
+    const ids = async (search: string): Promise<string[]> => {
+      const res = await request(app).get(pub).query({ search }).set(bearer(shopper.accessToken));
+      expect(res.status).toBe(200);
+      return (res.body.data as { id: string }[]).map((p) => p.id);
+    };
+
+    expect(await ids('الهند')).toEqual([indian]); // country of manufacture
+    expect(await ids('أموكسيسيلين الهند')).toEqual([indian]); // all words must match
+    expect(await ids('كغ')).toEqual([dosage]); // dosage
+    // name matches before a description-only match
+    const amox = await ids('أموكسيسيلين');
+    expect(amox).toHaveLength(3);
+    expect(amox[2]).toBe(desc);
+    expect(amox.slice(0, 2).sort()).toEqual([indian, turkish].sort());
+  });
 });

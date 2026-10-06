@@ -51,6 +51,29 @@ export interface AdminFarmListItem {
   supervisors: Array<{ userId: string; name: string }>;
   /** `POULTRY` | `SHEEP` | `CATTLE` | `MIXED` | `null` (legacy farms). */
   farmSpecies: string | null;
+  /** Owner contact — admin-only route, never on public DTOs. */
+  ownerEmail: string | null;
+  ownerPhone: string | null;
+  /** The farm's own profile (`farm_details`) — what the owner entered at registration. */
+  governorate: string | null;
+  location: string | null;
+  address: string | null;
+  capacity: number | null;
+  establishedOn: string | null;
+  contactName: string | null;
+  contactPhone: string | null;
+  contactEmail: string | null;
+  poultryProductionType: string | null;
+  sheepProductionType: string | null;
+  cattleProductionType: string | null;
+  currentBirdCount: number | null;
+  currentSheepCount: number | null;
+  currentCattleCount: number | null;
+  /** Open (ACTIVE) flocks / batches and ACTIVE members. */
+  poultryFlockCount: number;
+  sheepBatchCount: number;
+  cattleBatchCount: number;
+  memberCount: number;
   /**
    * Raw R2 key of the farm photo (`farm_details.image_key`). The controller
    * resolves it to `imageUrl` — the key itself never reaches a client.
@@ -64,8 +87,12 @@ export interface ListFarmsForAdminFilter {
   status?: string;
   /** Filters on the DERIVED subscription status (date comparison, not a stored column). */
   subscriptionStatus?: 'NOT_STARTED' | 'ACTIVE' | 'EXPIRED';
-  /** `POULTRY` → `farm_species = 'POULTRY'`; `LIVESTOCK` → `farm_species IN ('SHEEP','CATTLE')`. */
-  speciesGroup?: 'POULTRY' | 'LIVESTOCK';
+  /** See `adminListFarmsQuerySchema.speciesGroup`. */
+  speciesGroup?: 'POULTRY' | 'LIVESTOCK' | 'SHEEP' | 'CATTLE';
+}
+
+function numOrNull(v: number | string | null): number | null {
+  return v === null ? null : Number(v);
 }
 
 function dateOnly(v: string | Date | null): string | null {
@@ -229,15 +256,48 @@ export class FarmSubscriptionRenewalRepository {
         .join('farm_details as d', 'd.organization_id', 'o.id')
         .join('users as u', 'u.id', 'o.owner_user_id')
         .where('o.type', 'FARM');
+      // An admin-deleted farm (soft delete → DEACTIVATED) leaves the default
+      // list; it is still reachable with an explicit `status=DEACTIVATED`.
       if (filter.status) qb.where('o.status', filter.status);
-      // Clean partition so no farm request is ever unreviewable: LIVESTOCK is
-      // exactly SHEEP/CATTLE; POULTRY is everything else (POULTRY, MIXED, and
-      // legacy null-species farms created before the column existed).
-      if (filter.speciesGroup === 'LIVESTOCK') {
-        qb.whereIn('d.farm_species', ['SHEEP', 'CATTLE']);
+      else qb.whereNot('o.status', 'DEACTIVATED');
+      // Species partition. A MIXED farm shows under every species it really
+      // holds; one with no batch/flock yet (and legacy null-species farms)
+      // stays under POULTRY, so no farm request is ever unreviewable.
+      const holds = (table: string): Knex.QueryBuilder =>
+        conn(table).select(conn.raw('1')).whereRaw(`${table}.organization_id = o.id`);
+      const mixedHolding = (b: Knex.QueryBuilder, tables: string[]): void => {
+        void b.where('d.farm_species', 'MIXED').andWhere((m) => {
+          for (const t of tables) void m.orWhereExists(holds(t));
+        });
+      };
+      if (filter.speciesGroup === 'SHEEP' || filter.speciesGroup === 'CATTLE') {
+        const species = filter.speciesGroup;
+        const table = species === 'SHEEP' ? 'sheep_batches' : 'cattle_batches';
+        qb.where((b) => {
+          void b.where('d.farm_species', species).orWhere((m) => {
+            mixedHolding(m, [table]);
+          });
+        });
+      } else if (filter.speciesGroup === 'LIVESTOCK') {
+        qb.where((b) => {
+          void b.whereIn('d.farm_species', ['SHEEP', 'CATTLE']).orWhere((m) => {
+            mixedHolding(m, ['sheep_batches', 'cattle_batches']);
+          });
+        });
       } else if (filter.speciesGroup === 'POULTRY') {
         qb.where((b) => {
-          b.whereNull('d.farm_species').orWhereNotIn('d.farm_species', ['SHEEP', 'CATTLE']);
+          void b
+            .whereNull('d.farm_species')
+            .orWhere('d.farm_species', 'POULTRY')
+            .orWhere((m) => {
+              mixedHolding(m, ['poultry_flocks']);
+            })
+            .orWhere((m) => {
+              void m
+                .where('d.farm_species', 'MIXED')
+                .whereNotExists(holds('sheep_batches'))
+                .whereNotExists(holds('cattle_batches'));
+            });
         });
       }
       if (filter.subscriptionStatus === 'NOT_STARTED') {
@@ -274,6 +334,34 @@ export class FarmSubscriptionRenewalRepository {
         'd.subscription_end_date as subscription_end_date',
         'd.farm_species as farm_species',
         'd.image_key as image_key',
+        'u.email as owner_email',
+        'u.phone as owner_phone',
+        'd.governorate',
+        'd.location',
+        'd.address',
+        'd.capacity',
+        'd.established_on',
+        'd.contact_name',
+        'd.contact_phone',
+        'd.contact_email',
+        'd.poultry_production_type',
+        'd.sheep_production_type',
+        'd.cattle_production_type',
+        'd.current_bird_count',
+        'd.current_sheep_count',
+        'd.current_cattle_count',
+        conn.raw(
+          "(SELECT count(*) FROM poultry_flocks f WHERE f.organization_id = o.id AND f.status = 'ACTIVE')::int AS poultry_flock_count",
+        ),
+        conn.raw(
+          "(SELECT count(*) FROM sheep_batches b WHERE b.organization_id = o.id AND b.status = 'ACTIVE')::int AS sheep_batch_count",
+        ),
+        conn.raw(
+          "(SELECT count(*) FROM cattle_batches b WHERE b.organization_id = o.id AND b.status = 'ACTIVE')::int AS cattle_batch_count",
+        ),
+        conn.raw(
+          "(SELECT count(*) FROM organization_memberships m WHERE m.organization_id = o.id AND m.status = 'ACTIVE')::int AS member_count",
+        ),
       )
       .orderBy('o.created_at', 'desc')
       .limit(filter.pageSize)
@@ -291,6 +379,26 @@ export class FarmSubscriptionRenewalRepository {
       subscription_end_date: string | Date | null;
       farm_species: string | null;
       image_key: string | null;
+      owner_email: string | null;
+      owner_phone: string | null;
+      governorate: string | null;
+      location: string | null;
+      address: string | null;
+      capacity: number | string | null;
+      established_on: string | Date | null;
+      contact_name: string | null;
+      contact_phone: string | null;
+      contact_email: string | null;
+      poultry_production_type: string | null;
+      sheep_production_type: string | null;
+      cattle_production_type: string | null;
+      current_bird_count: number | string | null;
+      current_sheep_count: number | string | null;
+      current_cattle_count: number | string | null;
+      poultry_flock_count: number;
+      sheep_batch_count: number;
+      cattle_batch_count: number;
+      member_count: number;
     }>;
 
     const orgIds = rows.map((r) => r.organization_id);
@@ -313,11 +421,34 @@ export class FarmSubscriptionRenewalRepository {
         ownerName: `${r.owner_first_name} ${r.owner_last_name}`.trim(),
         subscriptionStartDate,
         subscriptionEndDate,
-        subscriptionStatus: computeFarmSubscriptionStatus(subscriptionStartDate, subscriptionEndDate),
+        subscriptionStatus: computeFarmSubscriptionStatus(
+          subscriptionStartDate,
+          subscriptionEndDate,
+        ),
         hasOpenRenewalRequest: openRequestOrgIds.has(r.organization_id),
         supervisors: supervisorsByOrg.get(r.organization_id) ?? [],
         farmSpecies: r.farm_species,
         imageKey: r.image_key,
+        ownerEmail: r.owner_email,
+        ownerPhone: r.owner_phone,
+        governorate: r.governorate,
+        location: r.location,
+        address: r.address,
+        capacity: numOrNull(r.capacity),
+        establishedOn: dateOnly(r.established_on),
+        contactName: r.contact_name,
+        contactPhone: r.contact_phone,
+        contactEmail: r.contact_email,
+        poultryProductionType: r.poultry_production_type,
+        sheepProductionType: r.sheep_production_type,
+        cattleProductionType: r.cattle_production_type,
+        currentBirdCount: numOrNull(r.current_bird_count),
+        currentSheepCount: numOrNull(r.current_sheep_count),
+        currentCattleCount: numOrNull(r.current_cattle_count),
+        poultryFlockCount: Number(r.poultry_flock_count),
+        sheepBatchCount: Number(r.sheep_batch_count),
+        cattleBatchCount: Number(r.cattle_batch_count),
+        memberCount: Number(r.member_count),
       };
     });
 
@@ -336,7 +467,10 @@ export class FarmSubscriptionRenewalRepository {
   async listAllPendingForAdmin(
     filter: { page: number; pageSize: number; organizationType?: OrganizationType },
     trx?: Knex.Transaction,
-  ): Promise<{ items: Array<FarmSubscriptionRenewalRequest & { organizationName: string }>; total: number }> {
+  ): Promise<{
+    items: Array<FarmSubscriptionRenewalRequest & { organizationName: string }>;
+    total: number;
+  }> {
     const conn = this.conn(trx);
     const base = (): Knex.QueryBuilder => {
       const qb = conn(`${TABLE} as req`)

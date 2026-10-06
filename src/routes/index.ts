@@ -1,3 +1,4 @@
+import { createSubscriptionRouter } from '../modules/subscriptions/index.js';
 import { Router } from 'express';
 import type { Container } from '../container.js';
 import { createHealthRouter } from '../modules/health/health.routes.js';
@@ -241,6 +242,8 @@ export function createApiRouter(c: Container): Router {
   // "تواصل معنا" — any signed-in user sends a support message to the
   // administration (no recipient); ADMIN or a SUPPORT system-supervisor replies.
   router.use('/support-messages', createSupportMessageRouter(c));
+  // Subscription free-trial info + "إرسال معلومات الاشتراك" (→ a SUPPORT thread).
+  router.use('/subscriptions', createSubscriptionRouter(c));
 
   // --- Veterinary Services marketplace ("الخدمات") ----------
   // Vet-published service listings + pet-owner service requests (both moderated:

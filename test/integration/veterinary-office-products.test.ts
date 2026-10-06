@@ -248,6 +248,46 @@ describe('veterinary office products — authorization', () => {
     expect(upd.status).toBe(403);
   });
 
+  it('a VETERINARIAN member added by email can view the catalogue + dashboard but not write; no duplicates', async () => {
+    const { owner, office } = await setup();
+    const vet = await registerApprovedVet(app);
+    await createVeterinaryOfficeProduct(app, owner.accessToken, office.id);
+
+    const add = await request(app)
+      .post(`/api/v1/organizations/${office.id}/members`)
+      .set(bearer(owner.accessToken))
+      .send({ email: ` ${vet.email.toUpperCase()} `, role: 'VETERINARIAN' });
+    expect(add.status).toBe(201);
+    expect(add.body.data).toMatchObject({ userId: vet.id, roleKey: 'VETERINARIAN' });
+
+    const dup = await request(app)
+      .post(`/api/v1/organizations/${office.id}/members`)
+      .set(bearer(owner.accessToken))
+      .send({ email: vet.email, role: 'VETERINARIAN' });
+    expect(dup.status).toBe(409);
+
+    const read = await request(app).get(pPath(office.id)).set(bearer(vet.accessToken));
+    expect(read.status).toBe(200);
+    const summary = await request(app)
+      .get(`/api/v1/organizations/${office.id}/office-dashboard/summary`)
+      .set(bearer(vet.accessToken));
+    expect(summary.status).toBe(200);
+    const create = await request(app)
+      .post(pPath(office.id))
+      .set(bearer(vet.accessToken))
+      .send({ name: 'x', productType: 'MEDICINE' });
+    expect(create.status).toBe(403);
+
+    // a not-yet-approved veterinarian can never hold the VETERINARIAN role
+    const pending = await registerUser(app);
+    const bad = await request(app)
+      .post(`/api/v1/organizations/${office.id}/members`)
+      .set(bearer(owner.accessToken))
+      .send({ email: pending.email, role: 'VETERINARIAN' });
+    expect(bad.status).toBeGreaterThanOrEqual(400);
+    expect(bad.status).toBeLessThan(500);
+  });
+
   it('a SUPERVISOR gets only the explicitly-assigned product permissions', async () => {
     const { owner, office } = await setup();
     const supervisor = await registerApprovedVet(app);

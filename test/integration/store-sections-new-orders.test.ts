@@ -116,6 +116,33 @@ for (const store of STORES) {
         .set(bearer(admin.accessToken));
       expect(del.status).toBe(409);
     });
+
+    it('search matches product name, attributes, the category and its parent section name', async () => {
+      const admin = await registerAdmin(app);
+      const shopper = await store.shopper(app);
+      const cat = (body: Record<string, unknown>) =>
+        request(app).post(adminApi('/categories')).set(bearer(admin.accessToken)).send(body);
+      const section = await cat({ slug: 'cats-section', name: 'قطط' });
+      const food = await cat({ slug: 'cats-food', name: 'أغذية', parentId: section.body.data.id });
+      const p1 = await store.product(app, admin.accessToken, {
+        name: 'علبة دجاج',
+        categoryId: food.body.data.id,
+        attributes: { الماركة: 'Royal Canin' },
+      });
+      await store.product(app, admin.accessToken, { name: 'منتج آخر' });
+
+      const ids = async (q: string): Promise<string[]> => {
+        const res = await request(app)
+          .get(api(`/products?search=${encodeURIComponent(q)}`))
+          .set(bearer(shopper.accessToken));
+        expect(res.status).toBe(200);
+        return (res.body.data as { id: string }[]).map((p) => p.id);
+      };
+      expect(await ids('قطط')).toEqual([p1.id]); // parent section
+      expect(await ids('أغذية')).toEqual([p1.id]); // category
+      expect(await ids('royal')).toEqual([p1.id]); // attribute (brand)
+      expect(await ids('%')).toEqual([]); // LIKE wildcards are literal
+    });
   });
 
   describe(`${store.label} — new orders badge`, () => {

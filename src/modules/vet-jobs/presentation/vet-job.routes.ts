@@ -178,6 +178,13 @@ export function createAdminVetJobRouter(c: Container): Router {
     validate({ params: idParamSchema }),
     asyncHandler(offers.remove),
   );
+  // "حذف ملف الباحث عن عمل" — same permission, any status.
+  r.delete(
+    '/vet-job-seekers/:id',
+    authorize('vet_job.delete'),
+    validate({ params: idParamSchema }),
+    asyncHandler(seekers.remove),
+  );
 
   r.get(
     '/vet-job-applications',

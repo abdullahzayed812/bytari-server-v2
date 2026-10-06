@@ -69,6 +69,11 @@ export class AdminVetJobSeekerProfileController {
     const body = validatedBody<RejectBody>(req);
     sendSuccess(res, await this.profiles.reject(id, body.reason, actor(req)));
   };
+  remove = async (req: Request, res: Response): Promise<void> => {
+    const { id } = validatedParams<{ id: string }>(req);
+    await this.profiles.remove(id, actor(req));
+    sendSuccess(res, { ok: true });
+  };
 }
 
 /** Read-only oversight of applications ("View applications") — `vet_job.read`. */

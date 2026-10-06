@@ -70,6 +70,7 @@ import { FarmAppointmentRepository } from './modules/farms/infrastructure/farm-a
 import { PoultryCaseRepository } from './modules/farms/infrastructure/poultry-case.repository.js';
 import { FarmJoinService } from './modules/farms/application/farm-join.service.js';
 import { PoultryFlockService } from './modules/farms/application/poultry-flock.service.js';
+import { SubscriptionInfoService } from './modules/subscriptions/index.js';
 import { FarmProfileService } from './modules/farms/application/farm-profile.service.js';
 import { FarmSubscriptionService } from './modules/farms/application/farm-subscription.service.js';
 import { PoultryDailyRecordService } from './modules/farms/application/poultry-daily-record.service.js';
@@ -217,6 +218,7 @@ import { DeviceTokenRepository } from './modules/notifications/infrastructure/de
 import { PreferenceRepository } from './modules/notifications/infrastructure/preference.repository.js';
 import { NotificationPolicy } from './modules/notifications/domain/notification.policy.js';
 import { NotificationService } from './modules/notifications/application/notification.service.js';
+import { VeterinarianApprovalEmailHandler } from './modules/veterinarians/veterinarian-approval-email.handler.js';
 import { NotificationEventHandler } from './modules/notifications/application/notification-event-handler.js';
 import { NotificationRecipientRepository } from './modules/notifications/infrastructure/recipient.repository.js';
 import { SubscriptionExpiryNotifier } from './modules/notifications/application/subscription-expiry-notifier.js';
@@ -393,6 +395,7 @@ export interface Container {
   consultationService: SupportThreadService;
   inquiryService: SupportThreadService;
   supportService: SupportThreadService;
+  subscriptionInfoService: SubscriptionInfoService;
 
   vetServiceMedia: VetServiceMedia;
   vetServiceListingRepository: VetServiceListingRepository;
@@ -458,6 +461,7 @@ export interface Container {
   notificationPolicy: NotificationPolicy;
   notificationService: NotificationService;
   notificationEventHandler: NotificationEventHandler;
+  veterinarianApprovalEmailHandler: VeterinarianApprovalEmailHandler;
   subscriptionExpiryNotifier: SubscriptionExpiryNotifier;
 
   adminDashboardService: AdminDashboardService;
@@ -1272,6 +1276,13 @@ export function createContainer(deps: ContainerDeps): Container {
     logger,
     notificationReads,
   );
+  const subscriptionInfoService = new SubscriptionInfoService(
+    config.subscriptions.freeTrialDays,
+    organizationRepository,
+    traderService,
+    authorizationService,
+    supportService,
+  );
 
   // --- Veterinary Services marketplace ----------------------
   const vetServiceMedia = new VetServiceMedia(objectStorage);
@@ -1496,6 +1507,14 @@ export function createContainer(deps: ContainerDeps): Container {
     logger,
   );
   notificationEventHandler.start();
+  // "تمت الموافقة على حسابك" email — post-commit, failures never affect approval.
+  const veterinarianApprovalEmailHandler = new VeterinarianApprovalEmailHandler(
+    eventBus,
+    userService,
+    emailService,
+    logger,
+  );
+  veterinarianApprovalEmailHandler.start();
 
   const adminDashboardSeenRepository = new AdminDashboardSeenRepository(db);
   const adminDashboardService = new AdminDashboardService({
@@ -1673,6 +1692,7 @@ export function createContainer(deps: ContainerDeps): Container {
     consultationService,
     inquiryService,
     supportService,
+    subscriptionInfoService,
     vetServiceMedia,
     vetServiceListingRepository,
     vetServiceRequestRepository,
@@ -1735,6 +1755,7 @@ export function createContainer(deps: ContainerDeps): Container {
     notificationPolicy,
     notificationService,
     notificationEventHandler,
+    veterinarianApprovalEmailHandler,
     subscriptionExpiryNotifier,
     adminDashboardService,
     authenticate,

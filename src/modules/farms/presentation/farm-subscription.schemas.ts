@@ -46,12 +46,13 @@ export const adminListFarmsQuerySchema = paginationQuerySchema.extend({
   status: z.enum(['PENDING', 'ACTIVE', 'REJECTED', 'SUSPENDED', 'DEACTIVATED']).optional(),
   subscriptionStatus: z.enum(['NOT_STARTED', 'ACTIVE', 'EXPIRED']).optional(),
   /**
-   * Narrow the list to one species family so the admin can review poultry and
-   * livestock farm requests separately. `LIVESTOCK` = `farm_species IN
-   * ('SHEEP','CATTLE')`; `POULTRY` = everything else (`POULTRY`, `MIXED`, and
-   * legacy null-species farms) — a clean partition so no request is orphaned.
+   * Narrow the list to one species family so the admin can review poultry,
+   * sheep and cattle farms separately (`LIVESTOCK` = sheep + cattle, kept for
+   * older clients). A `MIXED` farm is listed under every species it actually
+   * holds batches/flocks of; a MIXED farm with none yet (and legacy
+   * null-species farms) stays under `POULTRY` so no request is orphaned.
    */
-  speciesGroup: z.enum(['POULTRY', 'LIVESTOCK']).optional(),
+  speciesGroup: z.enum(['POULTRY', 'LIVESTOCK', 'SHEEP', 'CATTLE']).optional(),
 });
 export type AdminListFarmsQuery = z.infer<typeof adminListFarmsQuerySchema>;
 

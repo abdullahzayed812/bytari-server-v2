@@ -5,9 +5,11 @@ import { closeTestDb, ensureSchema, resetDb } from '../helpers/db.js';
 import {
   applyToVetJobOffer,
   approveVetJobOffer,
+  approveVetJobSeekerProfile,
   assignSystemSupervisor,
   bearer,
   createVetJobOffer,
+  createVetJobSeekerProfile,
   registerAdmin,
   registerApprovedVet,
   registerUser,
@@ -68,5 +70,41 @@ describe('Veterinarian Jobs — applicant counters + Admin delete', () => {
       .get(adminApi(`/vet-job-offers/${offer.id}`))
       .set(bearer(admin.accessToken));
     expect(gone.status).toBe(404);
+  });
+
+  it('ADMIN / VET_JOBS supervisor deletes a job-seeker profile; the owner / others cannot use the admin route', async () => {
+    const admin = await registerAdmin(app);
+    const vet = await registerApprovedVet(app);
+    const profile = await createVetJobSeekerProfile(app, vet.accessToken);
+    await approveVetJobSeekerProfile(app, admin.accessToken, profile.id);
+
+    for (const token of [vet.accessToken, (await registerUser(app)).accessToken]) {
+      const denied = await request(app)
+        .delete(adminApi(`/vet-job-seekers/${profile.id}`))
+        .set(bearer(token));
+      expect(denied.status).toBe(403);
+    }
+
+    const sup = await registerUser(app);
+    await assignSystemSupervisor(app, admin.accessToken, sup.id, 'VET_JOBS');
+    const del = await request(app)
+      .delete(adminApi(`/vet-job-seekers/${profile.id}`))
+      .set(bearer(sup.accessToken));
+    expect(del.status).toBe(200);
+
+    const gone = await request(app)
+      .get(adminApi(`/vet-job-seekers/${profile.id}`))
+      .set(bearer(admin.accessToken));
+    expect(gone.status).toBe(404);
+    const browse = await request(app).get(api('/seekers')).set(bearer(admin.accessToken));
+    expect(browse.body.data).toHaveLength(0);
+    // the veterinarian may create a fresh profile afterwards (unique per user freed)
+    const again = await createVetJobSeekerProfile(app, vet.accessToken);
+    expect(again.id).not.toBe(profile.id);
+
+    const missing = await request(app)
+      .delete(adminApi(`/vet-job-seekers/${profile.id}`))
+      .set(bearer(admin.accessToken));
+    expect(missing.status).toBe(404);
   });
 });

@@ -11,6 +11,29 @@ import {
 const TABLE = 'veterinary_office_products';
 
 /** Escape LIKE wildcards in user input (`%`, `_`, `\`). */
+/** Free-text columns the office product search looks in (besides `highlights[]`). */
+const SEARCH_COLUMNS = [
+  'name',
+  'brand',
+  'country_of_origin',
+  'manufacturer',
+  'subtype',
+  'description',
+  'dosage',
+  'weight',
+  'usage_instructions',
+] as const;
+
+/** Lower-cased search words (max 6, de-duplicated). */
+function searchTerms(search: string | undefined): string[] {
+  if (!search) return [];
+  const words = search
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((w) => w.length > 0);
+  return [...new Set(words)].slice(0, 6);
+}
+
 function escapeLike(v: string): string {
   return v.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
@@ -148,14 +171,16 @@ export class VeterinaryOfficeProductRepository {
       if (filter.status) qb.andWhere('status', filter.status);
       if (filter.productType) qb.andWhere('product_type', filter.productType);
       if (filter.hidden !== undefined) qb.andWhere('is_hidden', filter.hidden);
-      if (filter.search) {
-        const like = `%${escapeLike(filter.search.toLowerCase())}%`;
+      // Every word must match SOME product attribute (name, brand, country of
+      // manufacture, manufacturer, type, description, dosage, weight, usage,
+      // highlights) — so «أموكس هندي» finds an Indian amoxicillin.
+      for (const term of searchTerms(filter.search)) {
+        const like = `%${escapeLike(term)}%`;
         qb.andWhere((w) => {
-          void w
-            .whereRaw("lower(name) like ? escape '\\'", [like])
-            .orWhereRaw("lower(coalesce(brand, '')) like ? escape '\\'", [like])
-            .orWhereRaw("lower(coalesce(manufacturer, '')) like ? escape '\\'", [like])
-            .orWhereRaw("lower(coalesce(subtype, '')) like ? escape '\\'", [like]);
+          for (const col of SEARCH_COLUMNS) {
+            void w.orWhereRaw(`lower(coalesce(${col}, '')) like ? escape '\\'`, [like]);
+          }
+          void w.orWhereRaw("lower(array_to_string(highlights, ' ')) like ? escape '\\'", [like]);
         });
       }
       if (filter.brand) qb.andWhereRaw('lower(brand) = ?', [filter.brand.toLowerCase()]);
@@ -172,7 +197,18 @@ export class VeterinaryOfficeProductRepository {
       filter.sort === 'price' ? 'price' : filter.sort === 'name' ? 'name' : 'created_at';
     const sortOrder = filter.order === 'asc' ? 'asc' : 'desc';
 
+    // Search without an explicit sort ranks name matches first (prefix, then
+    // contains), then everything else by the default newest-first order.
+    const phrase = filter.search ? filter.search.trim().toLowerCase() : null;
     const rows: VeterinaryOfficeProductRow[] = await base()
+      .modify((qb) => {
+        if (phrase && !filter.sort) {
+          qb.orderByRaw(
+            "CASE WHEN lower(name) LIKE ? escape '\\' THEN 0 WHEN lower(name) LIKE ? escape '\\' THEN 1 ELSE 2 END",
+            [`${escapeLike(phrase)}%`, `%${escapeLike(phrase)}%`],
+          );
+        }
+      })
       .orderBy([
         { column: sortColumn, order: sortOrder },
         { column: 'id', order: 'asc' },

@@ -259,6 +259,9 @@ export const ORG_ROLE_PERMISSIONS: Record<OrgRoleKey, OrgPermissionKey[]> = {
     'organization.read',
     'member.read',
     'organization.veterinarian.read',
+    // An office / store veterinarian views the product catalogue (read only,
+    // same as STAFF) — the office dashboard is gated on it.
+    'product.read',
     // Phase 5: an assigned clinic veterinarian gets full CRUD on the veterinary
     // history of animals the clinic has access to (docs 01 §1.3.3, UC-016/UC-017),
     // and can see the clinic's patient list. Deciding WHICH animals the clinic

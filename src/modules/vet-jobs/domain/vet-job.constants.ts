@@ -65,6 +65,7 @@ export const VetJobAuditAction = {
   SEEKER_PROFILE_APPROVED: 'VET_JOB_SEEKER_PROFILE_APPROVED',
   SEEKER_PROFILE_REJECTED: 'VET_JOB_SEEKER_PROFILE_REJECTED',
   SEEKER_PROFILE_DEACTIVATED: 'VET_JOB_SEEKER_PROFILE_DEACTIVATED',
+  SEEKER_PROFILE_DELETED: 'VET_JOB_SEEKER_PROFILE_DELETED',
   APPLICATION_SUBMITTED: 'VET_JOB_APPLICATION_SUBMITTED',
   APPLICATION_STATUS_CHANGED: 'VET_JOB_APPLICATION_STATUS_CHANGED',
 } as const;
@@ -89,4 +90,8 @@ export const VetJobEvent = {
 
 /** RBAC: the "authorized specialist supervisor" domain for Jobs moderation. */
 export const VET_JOB_SUPERVISOR_DOMAIN = 'VET_JOBS';
-export const VET_JOB_PERMISSION_KEYS = ['vet_job.read', 'vet_job.approve', 'vet_job.reject'] as const;
+export const VET_JOB_PERMISSION_KEYS = [
+  'vet_job.read',
+  'vet_job.approve',
+  'vet_job.reject',
+] as const;

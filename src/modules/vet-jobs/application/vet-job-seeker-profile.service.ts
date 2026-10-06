@@ -7,7 +7,12 @@ import type { AuditContext } from '../../audit/audit.types.js';
 import type { AuditService } from '../../audit/audit.service.js';
 import type { AuthorizationService } from '../../authorization/authorization.service.js';
 import type { AuthPrincipal } from '../../authorization/authorization.types.js';
-import { VET_JOB_SUPERVISOR_DOMAIN, VetJobAuditAction, VetJobAuditEntity, VetJobEvent } from '../domain/vet-job.constants.js';
+import {
+  VET_JOB_SUPERVISOR_DOMAIN,
+  VetJobAuditAction,
+  VetJobAuditEntity,
+  VetJobEvent,
+} from '../domain/vet-job.constants.js';
 import { VetJobPolicy } from '../domain/vet-job.policy.js';
 import type {
   CreateVetJobSeekerProfileInput,
@@ -60,7 +65,9 @@ export class VetJobSeekerProfileService {
     };
   }
 
-  private async toPublicDTO(data: VetJobSeekerProfileWithUser): Promise<PublicVetJobSeekerProfileDTO> {
+  private async toPublicDTO(
+    data: VetJobSeekerProfileWithUser,
+  ): Promise<PublicVetJobSeekerProfileDTO> {
     const p = data.profile;
     return {
       id: p.id,
@@ -129,9 +136,13 @@ export class VetJobSeekerProfileService {
     if (!existing) throw new NotFoundError('Job-seeker profile not found');
 
     const cvStorageKey =
-      patch.cvStorageKey !== undefined ? await this.media.validateKey(patch.cvStorageKey) : undefined;
+      patch.cvStorageKey !== undefined
+        ? await this.media.validateKey(patch.cvStorageKey)
+        : undefined;
     const photoStorageKey =
-      patch.photoStorageKey !== undefined ? await this.media.validateKey(patch.photoStorageKey) : undefined;
+      patch.photoStorageKey !== undefined
+        ? await this.media.validateKey(patch.photoStorageKey)
+        : undefined;
 
     await this.db.transaction(async (tx) => {
       const dbPatch: Parameters<VetJobSeekerProfileRepository['update']>[1] = {
@@ -204,7 +215,8 @@ export class VetJobSeekerProfileService {
 
   async getPublic(id: string): Promise<PublicVetJobSeekerProfileDTO> {
     const data = await this.profiles.findWithUserById(id);
-    if (!data || data.profile.status !== 'APPROVED') throw new NotFoundError('Job-seeker profile not found');
+    if (!data || data.profile.status !== 'APPROVED')
+      throw new NotFoundError('Job-seeker profile not found');
     return this.toPublicDTO(data);
   }
 
@@ -254,7 +266,12 @@ export class VetJobSeekerProfileService {
     await this.db.transaction(async (tx) => {
       await this.profiles.update(
         id,
-        { status, reviewedByUserId: actor.principal.userId, reviewedAt: new Date(), rejectionReason: reason },
+        {
+          status,
+          reviewedByUserId: actor.principal.userId,
+          reviewedAt: new Date(),
+          rejectionReason: reason,
+        },
         tx,
       );
       await this.audit.record(
@@ -274,7 +291,9 @@ export class VetJobSeekerProfileService {
     });
 
     this.events.publish(
-      status === 'APPROVED' ? VetJobEvent.SEEKER_PROFILE_APPROVED : VetJobEvent.SEEKER_PROFILE_REJECTED,
+      status === 'APPROVED'
+        ? VetJobEvent.SEEKER_PROFILE_APPROVED
+        : VetJobEvent.SEEKER_PROFILE_REJECTED,
       {
         profileId: id,
         userId: existing.userId,
@@ -283,6 +302,31 @@ export class VetJobSeekerProfileService {
       },
     );
     return this.mustGetDTO(id);
+  }
+
+  /**
+   * "حذف ملف الباحث عن عمل" — hard delete from Admin Management, any status.
+   * Route-gated by `vet_job.delete` (ADMIN / VET_JOBS supervisor). Nothing
+   * references a seeker profile (applications carry their own snapshot), so
+   * no dependent rows are touched; the veterinarian may create a new profile.
+   */
+  async remove(id: string, actor: VetJobActor): Promise<void> {
+    const existing = await this.profiles.findById(id);
+    if (!existing) throw new NotFoundError('Job-seeker profile not found');
+    await this.db.transaction(async (tx) => {
+      await this.profiles.deleteById(id, tx);
+      await this.audit.record(
+        {
+          action: VetJobAuditAction.SEEKER_PROFILE_DELETED,
+          entityType: VetJobAuditEntity.SEEKER_PROFILE,
+          entityId: id,
+          actorUserId: actor.principal.userId,
+          metadata: { status: existing.status, userId: existing.userId },
+          context: actor.context,
+        },
+        tx,
+      );
+    });
   }
 
   // --- helpers -----------------------------------------------------

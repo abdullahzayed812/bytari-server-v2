@@ -146,6 +146,12 @@ const envSchema = z
     AI_TOOLKIT_ENABLED: booleanFromString.default('true'),
     AI_TOOLKIT_URL: z.string().url().default('https://toolkit.rork.com/text/llm/'),
     AI_TOOLKIT_TIMEOUT_MS: z.coerce.number().int().positive().max(120_000).default(20_000),
+
+    // --- Subscriptions ---------------------------------------------------
+    // The free-trial period (days) shown in every subscription UI (clinics,
+    // offices, poultry / sheep / cattle farms, poultry-market traders) and
+    // offered to admins as a one-tap subscription preset. One value for all.
+    SUBSCRIPTION_FREE_TRIAL_DAYS: z.coerce.number().int().min(0).max(365).default(30),
   })
   .superRefine((env, ctx) => {
     // Firebase: if any single credential field is provided, the whole set must be.
@@ -290,6 +296,9 @@ const envSchema = z
             from: env.EMAIL_FROM ?? (env.EMAIL_USER as string),
           }
         : null,
+      subscriptions: {
+        freeTrialDays: env.SUBSCRIPTION_FREE_TRIAL_DAYS,
+      },
       ai: {
         // `enabled` only picks the provider; the per-kind `ai_settings` flags
         // still gate whether a reply is actually generated.

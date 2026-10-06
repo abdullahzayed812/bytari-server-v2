@@ -77,7 +77,10 @@ export class VetJobSeekerProfileRepository {
     return row ? rowToSeekerProfile(row) : null;
   }
 
-  async findWithUserById(id: string, trx?: Knex.Transaction): Promise<VetJobSeekerProfileWithUser | null> {
+  async findWithUserById(
+    id: string,
+    trx?: Knex.Transaction,
+  ): Promise<VetJobSeekerProfileWithUser | null> {
     const row = (await this.joined(trx).where('p.id', id).first()) as JoinedRow | undefined;
     return row ? this.map(row) : null;
   }
@@ -126,7 +129,10 @@ export class VetJobSeekerProfileRepository {
     if (patch.rejectionReason !== undefined) dbPatch.rejection_reason = patch.rejectionReason;
     if (patch.closedAt !== undefined) dbPatch.closed_at = patch.closedAt;
 
-    const [row] = (await trx(T).where({ id }).update(dbPatch).returning('*')) as VetJobSeekerProfileRow[];
+    const [row] = (await trx(T)
+      .where({ id })
+      .update(dbPatch)
+      .returning('*')) as VetJobSeekerProfileRow[];
     if (!row) throw new Error('vet_job_seeker_profile not found on update');
     return rowToSeekerProfile(row);
   }
@@ -159,6 +165,10 @@ export class VetJobSeekerProfileRepository {
       .limit(filter.pageSize)
       .offset((filter.page - 1) * filter.pageSize)) as JoinedRow[];
     return { items: rows.map((r) => this.map(r)), total };
+  }
+
+  async deleteById(id: string, trx: Knex.Transaction): Promise<number> {
+    return trx(T).where({ id }).del();
   }
 
   async listForModeration(

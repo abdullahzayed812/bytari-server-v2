@@ -562,6 +562,30 @@ const paths: Obj = {
       responses: { '200': ok('Password changed; new tokens'), ...errs(400, 401, 422, 429) },
     },
   },
+  '/subscriptions/info': {
+    get: {
+      tags: ['Subscriptions'],
+      summary: 'Free-trial period for a subscription subject',
+      description:
+        '`?subject=CLINIC|VETERINARY_OFFICE|POULTRY_FARM|SHEEP_FARM|CATTLE_FARM|POULTRY_TRADER` → ' +
+        '`{ subject, freeTrialDays }` (server config `SUBSCRIPTION_FREE_TRIAL_DAYS`).',
+      security: bearer,
+      responses: { '200': ok('Free-trial info'), ...errs(401, 422) },
+    },
+  },
+  '/subscriptions/info-requests': {
+    post: {
+      tags: ['Subscriptions'],
+      summary: 'Send subscription information to the administration',
+      description:
+        'Body `{ subject, organizationId?, note? }`. Opens a SUPPORT thread ("تواصل معنا") carrying the ' +
+        'subject, its name and current subscription state → `{ threadId }`. An organization subject ' +
+        'needs `organization.update` in it (foreign / wrong type → 404); `POULTRY_TRADER` needs the ' +
+        "caller's own trader registration (403 otherwise).",
+      security: bearer,
+      responses: { '201': ok('Support thread created'), ...errs(400, 401, 403, 404, 422) },
+    },
+  },
   '/auth/logout-all': {
     post: {
       tags: ['Auth'],
@@ -1094,6 +1118,7 @@ const paths: Obj = {
 };
 
 const tags = [
+  { name: 'Subscriptions', description: 'Free-trial info + "send subscription information"' },
   { name: 'Auth', description: 'Registration, login, token lifecycle' },
   { name: 'Users', description: 'Authenticated user directory (name-level summary)' },
   { name: 'Veterinarians', description: 'Veterinarian approval workflow (applicant side)' },
