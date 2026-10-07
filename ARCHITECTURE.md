@@ -571,6 +571,25 @@ Domain events (post-commit, ids only): `veterinary_access.granted` / `.revoked`,
 the operation's transaction** with the authenticated caller as `actorUserId` and
 `{ organizationId, animalId, <entityId> }` metadata. No secrets.
 
+### 11.6 Clinic Dashboard (read model)
+
+`ClinicDashboardService` + `ClinicDashboardRepository` (no new tables):
+
+- `GET /organizations/:organizationId/clinic-dashboard/summary` —
+  `withOrganization → CLINIC only (400) → authorizeOrg('organization.read')`.
+  Returns the caller's effective clinic `permissions` (one membership lookup;
+  role ∪ supervisor grants; OWNER / ADMIN override) plus clinic-scoped counts.
+  `animals` / `medical` / `appointments` are `null` unless the caller holds
+  `animal.veterinary.access.read` / `medical_record.read` /
+  `clinic.appointment.read`; vaccination counts are zeroed without
+  `vaccination.read`. "Today" = `CURRENT_DATE`. Not subscription-locked (the
+  clinical routes are not either); broadcast keeps its own guard.
+- `GET /organizations/:organizationId/animals/:animalId` — the clinic-visible
+  animal profile: same chain as the medical routes
+  (`animal.veterinary.access.read` + `withVeterinaryAnimalAccess`, 404 without
+  an ACTIVE grant). Projection excludes `currentOwnerUserId`, `createdBy`,
+  the owner's `notes` and `galleryKeys`; adds full-history stats.
+
 ## 12. Farms & poultry (`src/modules/farms/`, Phase 6)
 
 Four-layer module. A Farm **is** an Organization of type `FARM` — this module

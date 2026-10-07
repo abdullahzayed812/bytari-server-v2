@@ -27,6 +27,7 @@ import {
 } from '../modules/animals/index.js';
 import {
   createClinicalVeterinaryRouter,
+  createClinicDashboardRouter,
   createOwnerMedicalRouter,
 } from '../modules/veterinary-care/index.js';
 import {
@@ -153,6 +154,10 @@ export function createApiRouter(c: Container): Router {
   // `/organizations/:organizationId/clinic-appointments*` (org-permissioned).
   router.use('/organizations', createOrgClinicAppointmentRouter(c));
   router.use('/clinic-appointments', createClinicAppointmentRouter(c));
+
+  // Clinic Dashboard: stats summary + the clinic-visible animal profile
+  // (`/organizations/:organizationId/{clinic-dashboard/summary,animals/:animalId}`).
+  router.use('/organizations', createClinicDashboardRouter(c));
 
   // --- Phase 6: farms & poultry --------------------------------
   // Farm-ID join flow + poultry CRUD extend `/organizations/...`; the farm

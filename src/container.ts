@@ -59,6 +59,8 @@ import { VeterinaryAccessService } from './modules/veterinary-care/application/v
 import { MedicalRecordService } from './modules/veterinary-care/application/medical-record.service.js';
 import { VaccinationService } from './modules/veterinary-care/application/vaccination.service.js';
 import { MedicalHistoryService } from './modules/veterinary-care/application/medical-history.service.js';
+import { ClinicDashboardRepository } from './modules/veterinary-care/infrastructure/clinic-dashboard.repository.js';
+import { ClinicDashboardService } from './modules/veterinary-care/application/clinic-dashboard.service.js';
 import { FarmDetailsRepository } from './modules/farms/infrastructure/farm-details.repository.js';
 import { PoultryFlockRepository } from './modules/farms/infrastructure/poultry-flock.repository.js';
 import { FarmProfileRepository } from './modules/farms/infrastructure/farm-profile.repository.js';
@@ -311,6 +313,7 @@ export interface Container {
   medicalRecordService: MedicalRecordService;
   vaccinationService: VaccinationService;
   medicalHistoryService: MedicalHistoryService;
+  clinicDashboardService: ClinicDashboardService;
 
   farmDetailsRepository: FarmDetailsRepository;
   poultryFlockRepository: PoultryFlockRepository;
@@ -806,6 +809,14 @@ export function createContainer(deps: ContainerDeps): Container {
     medicalRecordRepository,
     vaccinationRepository,
     logger,
+  );
+  // Clinic Dashboard — stats summary + clinic-visible animal profile (read-only).
+  const clinicDashboardService = new ClinicDashboardService(
+    new ClinicDashboardRepository(db),
+    animalClinicAccessRepository,
+    animalService,
+    organizationEngagementService,
+    authorizationService,
   );
 
   // --- farms & poultry (Phase 6) ----------------------------
@@ -1616,6 +1627,7 @@ export function createContainer(deps: ContainerDeps): Container {
     medicalRecordService,
     vaccinationService,
     medicalHistoryService,
+    clinicDashboardService,
     farmDetailsRepository,
     poultryFlockRepository,
     farmProfileRepository,

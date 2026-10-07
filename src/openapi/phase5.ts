@@ -419,6 +419,41 @@ const paths: Obj = {
   },
 };
 
+// --- Clinic Dashboard -----------------------------------------------
+Object.assign(paths, {
+  '/organizations/{organizationId}/clinic-dashboard/summary': {
+    get: {
+      tags: ['Veterinary Care · Clinic Dashboard'],
+      summary: 'Clinic Dashboard stats + the caller’s effective clinic permissions',
+      description:
+        'Requires `organization.read` in a CLINIC. `animals` / `medical` / `appointments` are ' +
+        '`null` unless the caller holds `animal.veterinary.access.read` / `medical_record.read` / ' +
+        '`clinic.appointment.read`. `permissions` is derived from org RBAC (owner / ADMIN override).',
+      security: bearer,
+      parameters: [orgIdParam],
+      responses: {
+        '200': ok('Dashboard summary', dataOf({ type: 'object' })),
+        ...errs(400, 401, 403),
+      },
+    },
+  },
+  '/organizations/{organizationId}/animals/{animalId}': {
+    get: {
+      tags: ['Veterinary Care · Clinic Dashboard'],
+      summary: 'The clinic-visible profile of an animal the clinic has access to',
+      description:
+        'Requires `animal.veterinary.access.read` AND an ACTIVE veterinary-access grant (else 404). ' +
+        'Never includes owner identity, the owner’s private notes, or storage keys.',
+      security: bearer,
+      parameters: [orgIdParam, animalIdParam],
+      responses: {
+        '200': ok('Clinic animal profile', dataOf({ type: 'object' })),
+        ...errs(400, 401, 403, 404),
+      },
+    },
+  },
+});
+
 const tags = [
   { name: 'Veterinary Care · Access', description: 'CLINIC ↔ animal veterinary-access grants' },
   {
@@ -428,6 +463,10 @@ const tags = [
   {
     name: 'Veterinary Care · Vaccinations',
     description: 'Clinic-facing vaccination CRUD (veterinary-access gated)',
+  },
+  {
+    name: 'Veterinary Care · Clinic Dashboard',
+    description: 'Clinic Dashboard summary + clinic-visible animal profile',
   },
   {
     name: 'Animals · Medical History (owner)',

@@ -8,5 +8,8 @@ export { VeterinaryAccessService } from './application/veterinary-access.service
 export { MedicalRecordService } from './application/medical-record.service.js';
 export { VaccinationService } from './application/vaccination.service.js';
 export { MedicalHistoryService } from './application/medical-history.service.js';
+export { ClinicDashboardRepository } from './infrastructure/clinic-dashboard.repository.js';
+export { ClinicDashboardService } from './application/clinic-dashboard.service.js';
 export { createClinicalVeterinaryRouter } from './presentation/clinical.routes.js';
 export { createOwnerMedicalRouter } from './presentation/owner-medical.routes.js';
+export { createClinicDashboardRouter } from './presentation/clinic-dashboard.routes.js';
