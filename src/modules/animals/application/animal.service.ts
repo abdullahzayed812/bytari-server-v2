@@ -86,6 +86,8 @@ export class AnimalService {
           createdBy: actor.actorUserId,
           color: input.color ?? null,
           distinguishingFeatures: input.distinguishingFeatures ?? null,
+          weightKg: input.weightKg ?? null,
+          isNeutered: input.isNeutered ?? null,
           ageEstimate: input.ageEstimate ?? null,
           listingOnly: input.listingOnly ?? false,
         },
@@ -371,14 +373,23 @@ export class AnimalService {
   }
 
   /** Internal helper used by the middleware for authorization context. */
-  async loadContext(
-    animalId: string,
-  ): Promise<{ id: string; status: string; currentOwnerUserId: string | null } | null> {
+  async loadContext(animalId: string): Promise<{
+    id: string;
+    status: string;
+    currentOwnerUserId: string | null;
+    /** Adoption / mating / lost listing subject — never a registered pet / clinic patient. */
+    listingOnly: boolean;
+  } | null> {
     const animal = await this.animals.findById(animalId);
     if (!animal) return null;
     const currentOwnerUserId = await this.ownerships.currentOwnerUserId(animalId);
     if (!currentOwnerUserId) throw new InternalError('animal has no current ownership record');
-    return { id: animal.id, status: animal.status, currentOwnerUserId };
+    return {
+      id: animal.id,
+      status: animal.status,
+      currentOwnerUserId,
+      listingOnly: animal.listingOnly,
+    };
   }
 
   /** The animal, asserting `actorUserId` is its current owner — 404 otherwise (resource-hiding, §Phase 4). */

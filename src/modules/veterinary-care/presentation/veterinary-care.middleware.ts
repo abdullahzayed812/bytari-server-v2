@@ -42,7 +42,8 @@ export function createVeterinaryCareMiddleware(deps: {
     const { animalId } = validatedParams<{ animalId: string }>(req);
 
     const animal = await deps.animals.findById(animalId);
-    if (!animal) throw new NotFoundError('Animal not found');
+    // Listing subjects are never patients — not even through a legacy grant.
+    if (!animal || animal.listingOnly) throw new NotFoundError('Animal not found');
 
     if (!deps.authz.isAdmin(principal)) {
       const allowed = await deps.access.hasActiveAccess(animal.id, org.id);

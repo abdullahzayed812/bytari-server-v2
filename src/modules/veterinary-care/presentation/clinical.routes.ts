@@ -6,6 +6,7 @@ import {
   createOrganizationMiddleware,
   organizationIdParamSchema,
 } from '../../organizations/presentation/organization.middleware.js';
+import { createOrganizationSubscriptionGuard } from '../../organizations/presentation/organization-subscription.middleware.js';
 import { ClinicalController } from './clinical.controller.js';
 import { createVeterinaryCareMiddleware } from './veterinary-care.middleware.js';
 import {
@@ -51,6 +52,13 @@ export function createClinicalVeterinaryRouter(c: Container): Router {
     authz: c.authorizationService,
   });
 
+  // Clinic operability (single rule: ACTIVE status — via authorizeOrg — and a
+  // non-expired subscription). Applies to owner AND staff; ADMIN bypasses.
+  const activeSubscription = createOrganizationSubscriptionGuard({
+    subscriptions: c.farmSubscriptionRenewalRepository,
+    authz: c.authorizationService,
+  });
+
   const r = Router();
   r.use(c.authenticate);
 
@@ -60,6 +68,7 @@ export function createClinicalVeterinaryRouter(c: Container): Router {
     validate({ params: organizationIdParamSchema, query: listClinicAnimalsQuerySchema }),
     withOrganization,
     authorizeOrg('animal.veterinary.access.read'),
+    activeSubscription,
     asyncHandler(ctrl.listAccess),
   );
   r.post(
@@ -67,6 +76,7 @@ export function createClinicalVeterinaryRouter(c: Container): Router {
     validate({ params: organizationIdParamSchema, body: grantAnimalAccessBodySchema }),
     withOrganization,
     authorizeOrg('animal.veterinary.access.manage'),
+    activeSubscription,
     asyncHandler(ctrl.grantAccess),
   );
   r.delete(
@@ -74,6 +84,7 @@ export function createClinicalVeterinaryRouter(c: Container): Router {
     validate({ params: clinicAnimalParamSchema }),
     withOrganization,
     authorizeOrg('animal.veterinary.access.manage'),
+    activeSubscription,
     asyncHandler(ctrl.revokeAccess),
   );
 
@@ -84,6 +95,7 @@ export function createClinicalVeterinaryRouter(c: Container): Router {
     validate({ params: clinicAnimalParamSchema, query: listMedicalRecordsQuerySchema }),
     withOrganization,
     authorizeOrg('medical_record.read'),
+    activeSubscription,
     withVeterinaryAnimalAccess,
     asyncHandler(ctrl.listRecords),
   );
@@ -92,6 +104,7 @@ export function createClinicalVeterinaryRouter(c: Container): Router {
     validate({ params: clinicAnimalParamSchema, body: createMedicalRecordBodySchema }),
     withOrganization,
     authorizeOrg('medical_record.create'),
+    activeSubscription,
     withVeterinaryAnimalAccess,
     asyncHandler(ctrl.createRecord),
   );
@@ -100,6 +113,7 @@ export function createClinicalVeterinaryRouter(c: Container): Router {
     validate({ params: medicalRecordParamSchema }),
     withOrganization,
     authorizeOrg('medical_record.read'),
+    activeSubscription,
     withVeterinaryAnimalAccess,
     asyncHandler(ctrl.getRecord),
   );
@@ -108,6 +122,7 @@ export function createClinicalVeterinaryRouter(c: Container): Router {
     validate({ params: medicalRecordParamSchema, body: updateMedicalRecordBodySchema }),
     withOrganization,
     authorizeOrg('medical_record.update'),
+    activeSubscription,
     withVeterinaryAnimalAccess,
     asyncHandler(ctrl.updateRecord),
   );
@@ -116,6 +131,7 @@ export function createClinicalVeterinaryRouter(c: Container): Router {
     validate({ params: medicalRecordParamSchema }),
     withOrganization,
     authorizeOrg('medical_record.delete'),
+    activeSubscription,
     withVeterinaryAnimalAccess,
     asyncHandler(ctrl.deleteRecord),
   );
@@ -127,6 +143,7 @@ export function createClinicalVeterinaryRouter(c: Container): Router {
     validate({ params: clinicAnimalParamSchema, query: listVaccinationsQuerySchema }),
     withOrganization,
     authorizeOrg('vaccination.read'),
+    activeSubscription,
     withVeterinaryAnimalAccess,
     asyncHandler(ctrl.listVaccinations),
   );
@@ -135,6 +152,7 @@ export function createClinicalVeterinaryRouter(c: Container): Router {
     validate({ params: clinicAnimalParamSchema, body: createVaccinationBodySchema }),
     withOrganization,
     authorizeOrg('vaccination.create'),
+    activeSubscription,
     withVeterinaryAnimalAccess,
     asyncHandler(ctrl.createVaccination),
   );
@@ -143,6 +161,7 @@ export function createClinicalVeterinaryRouter(c: Container): Router {
     validate({ params: vaccinationParamSchema }),
     withOrganization,
     authorizeOrg('vaccination.read'),
+    activeSubscription,
     withVeterinaryAnimalAccess,
     asyncHandler(ctrl.getVaccination),
   );
@@ -151,6 +170,7 @@ export function createClinicalVeterinaryRouter(c: Container): Router {
     validate({ params: vaccinationParamSchema, body: updateVaccinationBodySchema }),
     withOrganization,
     authorizeOrg('vaccination.update'),
+    activeSubscription,
     withVeterinaryAnimalAccess,
     asyncHandler(ctrl.updateVaccination),
   );
@@ -159,6 +179,7 @@ export function createClinicalVeterinaryRouter(c: Container): Router {
     validate({ params: vaccinationParamSchema }),
     withOrganization,
     authorizeOrg('vaccination.delete'),
+    activeSubscription,
     withVeterinaryAnimalAccess,
     asyncHandler(ctrl.deleteVaccination),
   );
@@ -169,6 +190,7 @@ export function createClinicalVeterinaryRouter(c: Container): Router {
     validate({ params: clinicAnimalParamSchema, query: listMedicalHistoryQuerySchema }),
     withOrganization,
     authorizeOrg('medical_record.read'),
+    activeSubscription,
     withVeterinaryAnimalAccess,
     asyncHandler(ctrl.timeline),
   );

@@ -582,13 +582,67 @@ the operation's transaction** with the authenticated caller as `actorUserId` and
   `animals` / `medical` / `appointments` are `null` unless the caller holds
   `animal.veterinary.access.read` / `medical_record.read` /
   `clinic.appointment.read`; vaccination counts are zeroed without
-  `vaccination.read`. "Today" = `CURRENT_DATE`. Not subscription-locked (the
-  clinical routes are not either); broadcast keeps its own guard.
+  `vaccination.read`. "Today" = the business day (`businessToday()`). Locked
+  like every clinic route while the clinic may not operate (§11.7).
 - `GET /organizations/:organizationId/animals/:animalId` — the clinic-visible
   animal profile: same chain as the medical routes
   (`animal.veterinary.access.read` + `withVeterinaryAnimalAccess`, 404 without
   an ACTIVE grant). Projection excludes `currentOwnerUserId`, `createdBy`,
   the owner's `notes` and `galleryKeys`; adds full-history stats.
+
+### 11.7 Clinic operability — one rule, enforced everywhere
+
+`computeOrganizationOperability(org, subscriptionDates)`
+(`organizations/domain/organization-operability.ts`) is the single answer to
+"may this clinic operate now?":
+
+```
+status === 'ACTIVE'                         (PENDING / SUSPENDED / … → denied)
+AND subscription status !== 'EXPIRED'       (CLINIC / VETERINARY_OFFICE only;
+                                             derived from the dates by
+                                             computeFarmSubscriptionStatus —
+                                             the end date itself is still valid)
+```
+
+It applies to the OWNER and to every member alike (the owner override grants
+permissions, never operability); a global ADMIN bypasses. Enforcement points:
+
+| Surface                                                                                                                                                                                                            | How                                                                                                                                       |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| All clinic routes: animal access, medical records, vaccinations, history, reminders, templates, clinic lists, attachments, dashboard summary, clinic animal profile, clinic-side appointments, appointment booking | `authorizeOrg` (status) + `createOrganizationSubscriptionGuard` (expiry) — the existing guard, now delegating to the shared rule          |
+| Clinic members / supervisors / profile + media mutations                                                                                                                                                           | same guard with `types: ['CLINIC']` (Veterinary Office behaviour unchanged)                                                               |
+| Chat (HTTP + realtime room joins)                                                                                                                                                                                  | `ChatService.resolveSide` drops the CLINIC side of a `PET_OWNER_CLINIC` conversation; posting and starting one are refused for both sides |
+
+Still open on purpose: `GET /organizations/:id` (renders the pending / expired
+screens), the owner's pending-registration corrections, the renewal routes,
+and `leave`. Renewing (new dates) or approving restores access immediately —
+nothing is cached server-side.
+
+### 11.8 Owned pets only · search · owner notifications · "new" counters
+
+- **Owned pets only.** Adoption / mating / lost listing subjects (`animals.listing_only`)
+  are never clinic patients: `VeterinaryCarePolicy.assertRegisteredPet` rejects a grant,
+  `withVeterinaryAnimalAccess` 404s them, and the patient list, dashboard counts, clinic
+  lists and appointment booking all filter `a.listing_only = false`.
+- **Search** (`GET /organizations/:id/animal-access?search=`) runs only over the clinic's
+  ACTIVE grants (`idx_animal_clinic_access_org_active_recent`). It matches the full id
+  exactly, a short-id prefix (6–8 hex chars), name, breed, species, owner name and owner
+  phone. Items carry `animal.photoUrl`. A pet without access is a plain 404 on the clinic
+  profile. The response is the same as for an unknown id, so nothing leaks.
+- **Owner notifications** (post-commit, via `NotificationPolicy.petCareToOwner`):
+  - `VACCINATION_ADDED/DUE`, `REMINDER_ADDED/DUE` and `MEDICAL_RECORD_ADDED`.
+  - Drafts are silent. Finalising a draft notifies once, sharing the same
+    `medical_record.created:<id>` key.
+  - The body names the pet and the clinic only (`PET_CARE_BODY`), never any medical
+    content.
+  - `data = { organizationId, animalId, <entity>Id }`. Mobile deep-links to Pet Details.
+- **Pet Details counters.**
+  - `GET /notifications/pets/:animalId/unseen` returns
+    `{ medicalRecords, vaccinations, reminders }`: the caller's own unread notifications
+    of each section's types (`PET_CARE_SECTIONS`, `idx_notifications_unread_pet`).
+  - `POST /notifications/pets/:animalId/seen { section }` marks only that section read
+    and publishes `notification.read`. The normal unread count and inbox stay
+    consistent.
 
 ## 12. Farms & poultry (`src/modules/farms/`, Phase 6)
 

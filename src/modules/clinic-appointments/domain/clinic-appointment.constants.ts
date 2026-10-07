@@ -92,6 +92,9 @@ export const ClinicAppointmentAuditAction = {
   CLINIC_APPOINTMENT_CANCELLED: 'CLINIC_APPOINTMENT_CANCELLED',
   CLINIC_APPOINTMENT_COMPLETED: 'CLINIC_APPOINTMENT_COMPLETED',
   CLINIC_APPOINTMENT_STATUS_UPDATED: 'CLINIC_APPOINTMENT_STATUS_UPDATED',
+  CLINIC_APPOINTMENT_CREATED_BY_CLINIC: 'CLINIC_APPOINTMENT_CREATED_BY_CLINIC',
+  CLINIC_APPOINTMENT_DELETED: 'CLINIC_APPOINTMENT_DELETED',
+  CLINIC_APPOINTMENT_OWNER_REMINDED: 'CLINIC_APPOINTMENT_OWNER_REMINDED',
 } as const;
 
 export const ClinicAppointmentAuditEntity = {
@@ -108,6 +111,9 @@ export const ClinicAppointmentEvent = {
   RESCHEDULE_DECLINED: 'clinic.appointment.reschedule_declined',
   CANCELLED: 'clinic.appointment.cancelled',
   COMPLETED: 'clinic.appointment.completed',
+  CREATED_BY_CLINIC: 'clinic.appointment.created_by_clinic',
+  DELETED: 'clinic.appointment.deleted',
+  OWNER_REMINDED: 'clinic.appointment.owner_reminded',
 } as const;
 
 /** Free-text note cap (matches the app's textarea + Zod). */

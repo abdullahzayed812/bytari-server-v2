@@ -7,6 +7,7 @@ import {
   organizationIdParamSchema,
   requireOrganization,
 } from '../../organizations/presentation/organization.middleware.js';
+import { createOrganizationSubscriptionGuard } from '../../organizations/presentation/organization-subscription.middleware.js';
 import { VeterinaryCarePolicy } from '../domain/veterinary-care.policy.js';
 import { ClinicDashboardController } from './clinic-dashboard.controller.js';
 import { createVeterinaryCareMiddleware } from './veterinary-care.middleware.js';
@@ -42,6 +43,13 @@ export function createClinicDashboardRouter(c: Container): Router {
     authz: c.authorizationService,
   });
 
+  // Clinic operability (single rule: ACTIVE status — via authorizeOrg — and a
+  // non-expired subscription). Applies to owner AND staff; ADMIN bypasses.
+  const activeSubscription = createOrganizationSubscriptionGuard({
+    subscriptions: c.farmSubscriptionRenewalRepository,
+    authz: c.authorizationService,
+  });
+
   const r = Router();
   r.use(c.authenticate);
 
@@ -51,6 +59,7 @@ export function createClinicDashboardRouter(c: Container): Router {
     withOrganization,
     withClinic,
     authorizeOrg('organization.read'),
+    activeSubscription,
     asyncHandler(ctrl.getSummary),
   );
 
@@ -60,6 +69,7 @@ export function createClinicDashboardRouter(c: Container): Router {
     withOrganization,
     withClinic,
     authorizeOrg('animal.veterinary.access.read'),
+    activeSubscription,
     withVeterinaryAnimalAccess,
     asyncHandler(ctrl.getAnimal),
   );

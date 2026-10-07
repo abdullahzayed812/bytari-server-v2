@@ -6,6 +6,7 @@ import { createOrganizationMiddleware } from '../../organizations/presentation/o
 import { ChatController } from './chat.controller.js';
 import { createChatMiddleware } from './chat.middleware.js';
 import {
+  clinicChatActiveBodySchema,
   attachmentUploadUrlBodySchema,
   conversationMessageParamSchema,
   conversationIdParamSchema,
@@ -92,6 +93,12 @@ export function createChatRouter(c: Container): Router {
     validate({ params: conversationIdParamSchema }),
     withConversation,
     asyncHandler(ctrl.closeConversation),
+  );
+  r.post(
+    '/:conversationId/clinic-active',
+    validate({ params: conversationIdParamSchema, body: clinicChatActiveBodySchema }),
+    withConversation,
+    asyncHandler(ctrl.setClinicChatActive),
   );
 
   return r;

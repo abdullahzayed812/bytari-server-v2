@@ -103,6 +103,8 @@ export class ClinicAppointmentRepository {
       organizationId: string;
       petOwnerUserId: string;
       createdByUserId: string;
+      /** Clinic-created appointments start CONFIRMED (legacy behaviour). */
+      status?: 'PENDING' | 'CONFIRMED';
     },
     trx: Knex.Transaction,
   ): Promise<ClinicAppointment> {
@@ -114,7 +116,7 @@ export class ClinicAppointmentRepository {
         visit_type: input.visitType,
         scheduled_for: input.scheduledFor,
         note: input.note ?? null,
-        status: 'PENDING',
+        status: input.status ?? 'PENDING',
         created_by_user_id: input.createdByUserId,
       })
       .returning('*')) as ClinicAppointmentRow[];
@@ -195,6 +197,26 @@ export class ClinicAppointmentRepository {
       .offset((filter.page - 1) * filter.pageSize)) as JoinedRow[];
 
     return { items: rows.map((r) => this.mapJoined(r)), total };
+  }
+
+  async deleteById(id: string, trx: Knex.Transaction): Promise<number> {
+    return trx(TABLE).where({ id }).del();
+  }
+
+  /** A clinic's still-open appointments scheduled on `day` (business calendar). */
+  async listOpenOnDay(
+    organizationId: string,
+    day: string,
+    timeZone: string,
+    limit: number,
+  ): Promise<ClinicAppointment[]> {
+    const rows = (await this.db(TABLE)
+      .where({ organization_id: organizationId })
+      .whereIn('status', ['PENDING', 'CONFIRMED', 'RESCHEDULE_PROPOSED'])
+      .andWhereRaw(`(scheduled_for AT TIME ZONE ?)::date = ?::date`, [timeZone, day])
+      .orderBy('scheduled_for', 'asc')
+      .limit(limit)) as ClinicAppointmentRow[];
+    return rows.map(rowToClinicAppointment);
   }
 
   async insertEvent(data: ClinicAppointmentEventInsert, trx: Knex.Transaction): Promise<void> {

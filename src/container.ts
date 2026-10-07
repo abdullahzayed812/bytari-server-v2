@@ -60,7 +60,13 @@ import { MedicalRecordService } from './modules/veterinary-care/application/medi
 import { VaccinationService } from './modules/veterinary-care/application/vaccination.service.js';
 import { MedicalHistoryService } from './modules/veterinary-care/application/medical-history.service.js';
 import { ClinicDashboardRepository } from './modules/veterinary-care/infrastructure/clinic-dashboard.repository.js';
+import { OrganizationOperabilityService } from './modules/organizations/application/organization-operability.service.js';
 import { ClinicDashboardService } from './modules/veterinary-care/application/clinic-dashboard.service.js';
+import { MedicalAttachments } from './modules/veterinary-care/application/medical-attachments.js';
+import { AnimalReminderService } from './modules/veterinary-care/application/animal-reminder.service.js';
+import { AnimalReminderRepository } from './modules/veterinary-care/infrastructure/animal-reminder.repository.js';
+import { QuickReviewTemplateService } from './modules/veterinary-care/application/quick-review-template.service.js';
+import { QuickReviewTemplateRepository } from './modules/veterinary-care/infrastructure/quick-review-template.repository.js';
 import { FarmDetailsRepository } from './modules/farms/infrastructure/farm-details.repository.js';
 import { PoultryFlockRepository } from './modules/farms/infrastructure/poultry-flock.repository.js';
 import { FarmProfileRepository } from './modules/farms/infrastructure/farm-profile.repository.js';
@@ -314,6 +320,9 @@ export interface Container {
   vaccinationService: VaccinationService;
   medicalHistoryService: MedicalHistoryService;
   clinicDashboardService: ClinicDashboardService;
+  organizationOperabilityService: OrganizationOperabilityService;
+  animalReminderService: AnimalReminderService;
+  quickReviewTemplateService: QuickReviewTemplateService;
 
   farmDetailsRepository: FarmDetailsRepository;
   poultryFlockRepository: PoultryFlockRepository;
@@ -765,6 +774,8 @@ export function createContainer(deps: ContainerDeps): Container {
 
   // --- clinic appointments (Pet Owner ↔ Clinic booking) ----------
   const clinicAppointmentRepository = new ClinicAppointmentRepository(db);
+  // Clinic-created appointments require the clinic's ACTIVE veterinary-access grant.
+  const animalClinicAccessRepository = new AnimalClinicAccessRepository(db);
   const clinicAppointmentService = new ClinicAppointmentService(
     db,
     clinicAppointmentRepository,
@@ -774,10 +785,10 @@ export function createContainer(deps: ContainerDeps): Container {
     auditService,
     eventBus,
     logger,
+    animalClinicAccessRepository,
   );
 
   // --- veterinary care (Phase 5) -----------------------------
-  const animalClinicAccessRepository = new AnimalClinicAccessRepository(db);
   const medicalRecordRepository = new MedicalRecordRepository(db);
   const vaccinationRepository = new VaccinationRepository(db);
   const veterinaryAccessService = new VeterinaryAccessService(
@@ -787,19 +798,25 @@ export function createContainer(deps: ContainerDeps): Container {
     auditService,
     eventBus,
     logger,
+    objectStorage,
   );
+  // Medical-record attachments (prescription photo / files) — clinic-scoped R2 keys.
+  const medicalAttachments = new MedicalAttachments(objectStorage, logger);
   const medicalRecordService = new MedicalRecordService(
     db,
     medicalRecordRepository,
     animalRepository,
     auditService,
     eventBus,
+    medicalAttachments,
     logger,
+    animalOwnershipRepository,
   );
   const vaccinationService = new VaccinationService(
     db,
     vaccinationRepository,
     animalRepository,
+    animalOwnershipRepository,
     auditService,
     eventBus,
     logger,
@@ -808,6 +825,7 @@ export function createContainer(deps: ContainerDeps): Container {
   const medicalHistoryService = new MedicalHistoryService(
     medicalRecordRepository,
     vaccinationRepository,
+    medicalAttachments,
     logger,
   );
   // Clinic Dashboard — stats summary + clinic-visible animal profile (read-only).
@@ -817,6 +835,21 @@ export function createContainer(deps: ContainerDeps): Container {
     animalService,
     organizationEngagementService,
     authorizationService,
+    objectStorage,
+  );
+  // Legacy-parity clinic care: reminders + quick-review templates.
+  const animalReminderService = new AnimalReminderService(
+    db,
+    new AnimalReminderRepository(db),
+    animalOwnershipRepository,
+    auditService,
+    eventBus,
+    logger,
+  );
+  const quickReviewTemplateService = new QuickReviewTemplateService(
+    db,
+    new QuickReviewTemplateRepository(db),
+    auditService,
   );
 
   // --- farms & poultry (Phase 6) ----------------------------
@@ -843,6 +876,11 @@ export function createContainer(deps: ContainerDeps): Container {
 
   const farmProfileRepository = new FarmProfileRepository(db);
   const farmSubscriptionRenewalRepository = new FarmSubscriptionRenewalRepository(db);
+  // "May this organization operate?" — status + subscription expiry, one rule.
+  const organizationOperabilityService = new OrganizationOperabilityService(
+    farmSubscriptionRenewalRepository,
+    authorizationService,
+  );
   const poultryDailyRecordRepository = new PoultryDailyRecordRepository(db);
   const farmExpenseRepository = new FarmExpenseRepository(db);
   const poultryHealthEventRepository = new PoultryHealthEventRepository(db);
@@ -1143,6 +1181,7 @@ export function createContainer(deps: ContainerDeps): Container {
     logger,
     new ChatAttachmentMedia(objectStorage),
     notificationReads,
+    organizationOperabilityService,
   );
   // Listing contact opens an ANIMAL_PUBLICATION conversation — needs the chat service.
   const publicationInteractionService = new PublicationInteractionService(
@@ -1628,6 +1667,9 @@ export function createContainer(deps: ContainerDeps): Container {
     vaccinationService,
     medicalHistoryService,
     clinicDashboardService,
+    organizationOperabilityService,
+    animalReminderService,
+    quickReviewTemplateService,
     farmDetailsRepository,
     poultryFlockRepository,
     farmProfileRepository,

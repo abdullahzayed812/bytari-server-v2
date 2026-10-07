@@ -12,6 +12,7 @@ import {
 } from '../domain/veterinary-care.types.js';
 import type { MedicalRecordRepository } from '../infrastructure/medical-record.repository.js';
 import type { VaccinationRepository } from '../infrastructure/vaccination.repository.js';
+import type { MedicalAttachments } from './medical-attachments.js';
 
 export interface TimelineFilter {
   page: number;
@@ -38,6 +39,7 @@ export class MedicalHistoryService {
   constructor(
     private readonly records: MedicalRecordRepository,
     private readonly vaccinations: VaccinationRepository,
+    private readonly attachments: MedicalAttachments,
     logger: Logger,
   ) {
     this.log = logger.child({ component: 'medical-history-service' });
@@ -76,11 +78,14 @@ export class MedicalHistoryService {
     ]);
 
     const entries = sortTimelineEntries([
-      ...rec.items.map((r) =>
-        medicalRecordToTimelineEntry(
-          ownerView ? toOwnerMedicalRecordDTO(r) : toMedicalRecordDTO(r),
-        ),
-      ),
+      ...(await Promise.all(
+        rec.items.map(async (r) => {
+          const urls = await this.attachments.resolve(r);
+          return medicalRecordToTimelineEntry(
+            ownerView ? toOwnerMedicalRecordDTO(r, urls) : toMedicalRecordDTO(r, urls),
+          );
+        }),
+      )),
       ...vax.items.map((v) =>
         vaccinationToTimelineEntry(ownerView ? toOwnerVaccinationDTO(v) : toVaccinationDTO(v)),
       ),

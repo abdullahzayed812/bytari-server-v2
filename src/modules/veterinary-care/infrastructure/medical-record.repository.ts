@@ -1,4 +1,8 @@
 import type { Knex } from 'knex';
+import type {
+  MedicalRecordSeverity,
+  MedicalRecordType,
+} from '../domain/veterinary-care.constants.js';
 import {
   rowToMedicalRecord,
   type ListMedicalRecordsFilter,
@@ -17,6 +21,13 @@ export interface CreateMedicalRecordData {
   diagnosis: string | null;
   treatment: string | null;
   notes: string | null;
+  symptoms: string | null;
+  severity: MedicalRecordSeverity | null;
+  labNotes: string | null;
+  recordType: MedicalRecordType;
+  isDraft: boolean;
+  prescriptionKey: string | null;
+  attachmentKeys: string[];
 }
 
 export interface UpdateMedicalRecordData {
@@ -25,6 +36,13 @@ export interface UpdateMedicalRecordData {
   diagnosis?: string | null;
   treatment?: string | null;
   notes?: string | null;
+  symptoms?: string | null;
+  severity?: MedicalRecordSeverity | null;
+  labNotes?: string | null;
+  recordType?: MedicalRecordType;
+  isDraft?: boolean;
+  prescriptionKey?: string | null;
+  attachmentKeys?: string[];
 }
 
 export class MedicalRecordRepository {
@@ -62,6 +80,13 @@ export class MedicalRecordRepository {
         diagnosis: data.diagnosis,
         treatment: data.treatment,
         notes: data.notes,
+        symptoms: data.symptoms,
+        severity: data.severity,
+        lab_notes: data.labNotes,
+        record_type: data.recordType,
+        is_draft: data.isDraft,
+        prescription_key: data.prescriptionKey,
+        attachment_keys: data.attachmentKeys,
       })
       .returning('*')) as MedicalRecordRow[];
     if (!row) throw new Error('medical record insert did not return a row');
@@ -79,6 +104,13 @@ export class MedicalRecordRepository {
     if (patch.diagnosis !== undefined) dbPatch.diagnosis = patch.diagnosis;
     if (patch.treatment !== undefined) dbPatch.treatment = patch.treatment;
     if (patch.notes !== undefined) dbPatch.notes = patch.notes;
+    if (patch.symptoms !== undefined) dbPatch.symptoms = patch.symptoms;
+    if (patch.severity !== undefined) dbPatch.severity = patch.severity;
+    if (patch.labNotes !== undefined) dbPatch.lab_notes = patch.labNotes;
+    if (patch.recordType !== undefined) dbPatch.record_type = patch.recordType;
+    if (patch.isDraft !== undefined) dbPatch.is_draft = patch.isDraft;
+    if (patch.prescriptionKey !== undefined) dbPatch.prescription_key = patch.prescriptionKey;
+    if (patch.attachmentKeys !== undefined) dbPatch.attachment_keys = patch.attachmentKeys;
 
     const [row] = (await trx(TABLE)
       .where({ id })

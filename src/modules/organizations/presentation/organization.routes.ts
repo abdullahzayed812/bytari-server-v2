@@ -5,6 +5,7 @@ import { userRateLimiter } from '../../../shared/http/user-rate-limit.js';
 import type { Container } from '../../../container.js';
 import { OrganizationController } from './organization.controller.js';
 import { createLicenseLock } from './organization-license-lock.middleware.js';
+import { createOrganizationSubscriptionGuard } from './organization-subscription.middleware.js';
 import {
   createOrganizationMiddleware,
   organizationIdParamSchema,
@@ -46,6 +47,15 @@ export function createOrganizationRouter(c: Container): Router {
   const { withOrganization, authorizeOrg } = createOrganizationMiddleware({
     organizations: c.organizationRepository,
     authz: c.authorizationService,
+  });
+  // An EXPIRED clinic cannot manage its team or profile (owner AND staff) until
+  // renewed — same shared rule as every clinic route. Clinic-only, so Veterinary
+  // Office behaviour is unchanged. Reading the profile and the renewal routes
+  // stay open so the expired / renewal screens work.
+  const clinicActiveSubscription = createOrganizationSubscriptionGuard({
+    subscriptions: c.farmSubscriptionRenewalRepository,
+    authz: c.authorizationService,
+    types: ['CLINIC'],
   });
   // License number + license images are part of the REVIEWED registration:
   // editable by the owner only while PENDING / REJECTED, then immutable
@@ -97,6 +107,7 @@ export function createOrganizationRouter(c: Container): Router {
     // its profile (e.g. the license number) while it awaits review. NOT while
     // SUSPENDED / DEACTIVATED (deleted) — those stay locked for the owner.
     authorizeOrg('organization.update', { allowInactiveForOwner: ['PENDING', 'REJECTED'] }),
+    clinicActiveSubscription,
     lockLicenseNumber,
     asyncHandler(ctrl.update),
   );
@@ -110,6 +121,7 @@ export function createOrganizationRouter(c: Container): Router {
     validate({ params: organizationIdParamSchema, body: logoUploadUrlBodySchema }),
     withOrganization,
     authorizeOrg('organization.update', { allowInactiveForOwner: true }),
+    clinicActiveSubscription,
     asyncHandler(ctrl.requestLogoUploadUrl),
   );
   r.post(
@@ -117,6 +129,7 @@ export function createOrganizationRouter(c: Container): Router {
     validate({ params: organizationIdParamSchema, body: finalizeLogoBodySchema }),
     withOrganization,
     authorizeOrg('organization.update', { allowInactiveForOwner: true }),
+    clinicActiveSubscription,
     asyncHandler(ctrl.finalizeLogo),
   );
   r.delete(
@@ -124,6 +137,7 @@ export function createOrganizationRouter(c: Container): Router {
     validate({ params: organizationIdParamSchema }),
     withOrganization,
     authorizeOrg('organization.update', { allowInactiveForOwner: true }),
+    clinicActiveSubscription,
     asyncHandler(ctrl.removeLogo),
   );
   // Gallery — same guard as the logo; up to 8 photos, appended one at a time.
@@ -135,6 +149,7 @@ export function createOrganizationRouter(c: Container): Router {
     validate({ params: organizationIdParamSchema, body: galleryUploadUrlBodySchema }),
     withOrganization,
     authorizeOrg('organization.update', { allowInactiveForOwner: true }),
+    clinicActiveSubscription,
     asyncHandler(ctrl.requestGalleryUploadUrl),
   );
   r.post(
@@ -142,6 +157,7 @@ export function createOrganizationRouter(c: Container): Router {
     validate({ params: organizationIdParamSchema, body: finalizeGalleryBodySchema }),
     withOrganization,
     authorizeOrg('organization.update', { allowInactiveForOwner: true }),
+    clinicActiveSubscription,
     asyncHandler(ctrl.addGalleryImage),
   );
   r.delete(
@@ -149,6 +165,7 @@ export function createOrganizationRouter(c: Container): Router {
     validate({ params: organizationIdParamSchema, query: removeGalleryImageQuerySchema }),
     withOrganization,
     authorizeOrg('organization.update', { allowInactiveForOwner: true }),
+    clinicActiveSubscription,
     asyncHandler(ctrl.removeGalleryImage),
   );
 
@@ -160,6 +177,7 @@ export function createOrganizationRouter(c: Container): Router {
     validate({ params: organizationIdParamSchema, body: licenseDocumentUploadUrlBodySchema }),
     withOrganization,
     authorizeOrg('organization.update', { allowInactiveForOwner: true }),
+    clinicActiveSubscription,
     lockLicenseDocuments,
     asyncHandler(ctrl.requestLicenseDocumentUploadUrl),
   );
@@ -168,6 +186,7 @@ export function createOrganizationRouter(c: Container): Router {
     validate({ params: organizationIdParamSchema, body: finalizeLicenseDocumentBodySchema }),
     withOrganization,
     authorizeOrg('organization.update', { allowInactiveForOwner: true }),
+    clinicActiveSubscription,
     lockLicenseDocuments,
     asyncHandler(ctrl.addLicenseDocument),
   );
@@ -176,6 +195,7 @@ export function createOrganizationRouter(c: Container): Router {
     validate({ params: organizationIdParamSchema, query: removeLicenseDocumentQuerySchema }),
     withOrganization,
     authorizeOrg('organization.update', { allowInactiveForOwner: true }),
+    clinicActiveSubscription,
     lockLicenseDocuments,
     asyncHandler(ctrl.removeLicenseDocument),
   );
@@ -250,6 +270,7 @@ export function createOrganizationRouter(c: Container): Router {
     validate({ params: organizationIdParamSchema, query: listMembersQuerySchema }),
     withOrganization,
     authorizeOrg('member.read'),
+    clinicActiveSubscription,
     asyncHandler(ctrl.listMembers),
   );
   r.post(
@@ -257,6 +278,7 @@ export function createOrganizationRouter(c: Container): Router {
     validate({ params: organizationIdParamSchema, body: addMemberBodySchema }),
     withOrganization,
     authorizeOrg('member.add'),
+    clinicActiveSubscription,
     asyncHandler(ctrl.addMember),
   );
   r.get(
@@ -264,6 +286,7 @@ export function createOrganizationRouter(c: Container): Router {
     validate({ params: organizationMemberParamSchema }),
     withOrganization,
     authorizeOrg('member.read'),
+    clinicActiveSubscription,
     asyncHandler(ctrl.getMember),
   );
   r.patch(
@@ -271,6 +294,7 @@ export function createOrganizationRouter(c: Container): Router {
     validate({ params: organizationMemberParamSchema, body: updateMemberBodySchema }),
     withOrganization,
     authorizeOrg('member.update'),
+    clinicActiveSubscription,
     asyncHandler(ctrl.updateMember),
   );
   r.delete(
@@ -278,6 +302,7 @@ export function createOrganizationRouter(c: Container): Router {
     validate({ params: organizationMemberParamSchema }),
     withOrganization,
     authorizeOrg('member.remove'),
+    clinicActiveSubscription,
     asyncHandler(ctrl.removeMember),
   );
 
@@ -287,6 +312,7 @@ export function createOrganizationRouter(c: Container): Router {
     validate({ params: organizationIdParamSchema }),
     withOrganization,
     authorizeOrg('supervisor.read'),
+    clinicActiveSubscription,
     asyncHandler(ctrl.listSupervisors),
   );
   r.post(
@@ -294,6 +320,7 @@ export function createOrganizationRouter(c: Container): Router {
     validate({ params: organizationIdParamSchema, body: assignSupervisorBodySchema }),
     withOrganization,
     authorizeOrg('supervisor.assign'),
+    clinicActiveSubscription,
     asyncHandler(ctrl.assignSupervisor),
   );
   r.patch(
@@ -301,6 +328,7 @@ export function createOrganizationRouter(c: Container): Router {
     validate({ params: organizationSupervisorParamSchema, body: updateSupervisorBodySchema }),
     withOrganization,
     authorizeOrg('supervisor.assign'),
+    clinicActiveSubscription,
     asyncHandler(ctrl.updateSupervisor),
   );
   r.delete(
@@ -308,6 +336,7 @@ export function createOrganizationRouter(c: Container): Router {
     validate({ params: organizationSupervisorParamSchema }),
     withOrganization,
     authorizeOrg('supervisor.remove'),
+    clinicActiveSubscription,
     asyncHandler(ctrl.removeSupervisor),
   );
 

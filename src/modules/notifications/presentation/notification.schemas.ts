@@ -5,6 +5,7 @@ import {
   BODY_MAX,
   DEVICE_PLATFORMS,
   NOTIFICATION_TYPES,
+  PET_CARE_SECTION_KEYS,
   PUSH_DATA_MAX_KEYS,
   TITLE_MAX,
 } from '../domain/notification.constants.js';
@@ -66,6 +67,12 @@ export const adminBroadcastImageUploadUrlBodySchema = z
 export type AdminBroadcastImageUploadUrlBody = z.infer<
   typeof adminBroadcastImageUploadUrlBodySchema
 >;
+
+export const petAnimalIdParamSchema = z.object({ animalId: z.string().uuid() }).strict();
+export const petSectionSeenBodySchema = z
+  .object({ section: z.enum(PET_CARE_SECTION_KEYS) })
+  .strict();
+export type PetSectionSeenBody = z.infer<typeof petSectionSeenBodySchema>;
 
 export type ListNotificationsQuery = z.infer<typeof listNotificationsQuerySchema>;
 export type RegisterDeviceBody = z.infer<typeof registerDeviceBodySchema>;

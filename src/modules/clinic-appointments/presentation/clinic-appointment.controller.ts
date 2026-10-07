@@ -91,7 +91,10 @@ export class ClinicAppointmentController {
     const org = requireOrganization(req);
     const { appointmentId } = validatedParams<{ appointmentId: string }>(req);
     const body = validatedBody<DecisionReasonBody>(req);
-    sendSuccess(res, await this.service.reject(org.id, appointmentId, body.reason, this.actor(req)));
+    sendSuccess(
+      res,
+      await this.service.reject(org.id, appointmentId, body.reason, this.actor(req)),
+    );
   };
 
   proposeReschedule = async (req: Request, res: Response): Promise<void> => {
@@ -102,6 +105,35 @@ export class ClinicAppointmentController {
       res,
       await this.service.proposeReschedule(org.id, appointmentId, body, this.actor(req)),
     );
+  };
+
+  /** Clinic-created appointment (legacy clinic dashboard) — starts CONFIRMED. */
+  createByClinic = async (req: Request, res: Response): Promise<void> => {
+    const org = requireOrganization(req);
+    const body = validatedBody<CreateClinicAppointmentBody>(req);
+    sendSuccess(
+      res,
+      await this.service.createByClinic(org.id, body, this.actor(req)),
+      StatusCodes.CREATED,
+    );
+  };
+
+  deleteByClinic = async (req: Request, res: Response): Promise<void> => {
+    const org = requireOrganization(req);
+    const { appointmentId } = validatedParams<{ appointmentId: string }>(req);
+    await this.service.deleteByClinic(org.id, appointmentId, this.actor(req));
+    sendSuccess(res, { deleted: true });
+  };
+
+  remindOwner = async (req: Request, res: Response): Promise<void> => {
+    const org = requireOrganization(req);
+    const { appointmentId } = validatedParams<{ appointmentId: string }>(req);
+    sendSuccess(res, await this.service.remindOwner(org.id, appointmentId, this.actor(req)));
+  };
+
+  remindToday = async (req: Request, res: Response): Promise<void> => {
+    const org = requireOrganization(req);
+    sendSuccess(res, await this.service.remindToday(org.id, this.actor(req)));
   };
 
   complete = async (req: Request, res: Response): Promise<void> => {
@@ -116,7 +148,13 @@ export class ClinicAppointmentController {
     const body = validatedBody<UpdateStatusBody>(req);
     sendSuccess(
       res,
-      await this.service.updateStatus(org.id, appointmentId, body.status, body.reason, this.actor(req)),
+      await this.service.updateStatus(
+        org.id,
+        appointmentId,
+        body.status,
+        body.reason,
+        this.actor(req),
+      ),
     );
   };
 }

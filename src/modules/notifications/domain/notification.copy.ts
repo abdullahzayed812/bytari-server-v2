@@ -268,6 +268,13 @@ export const NOTIFICATION_COPY: Record<NotificationType, { title: string; body: 
   },
   CLINIC_APPOINTMENT_CANCELLED: { title: 'تم إلغاء الموعد', body: 'تم إلغاء موعد.' },
   CLINIC_APPOINTMENT_COMPLETED: { title: 'اكتمل الموعد', body: 'تم تسجيل موعدك كمكتمل.' },
+  CLINIC_APPOINTMENT_CREATED: { title: 'موعد جديد', body: 'حددت العيادة موعدًا لحيوانك.' },
+  CLINIC_APPOINTMENT_REMINDER: { title: 'تذكير بموعد', body: 'لديك موعد قادم في العيادة.' },
+  VACCINATION_ADDED: { title: 'تم إضافة تطعيم جديد', body: 'أضافت العيادة تطعيمًا لحيوانك.' },
+  VACCINATION_DUE: { title: 'تذكير بالتطعيم', body: 'حان موعد تطعيم حيوانك.' },
+  REMINDER_ADDED: { title: 'تم إضافة تذكير جديد', body: 'أضافت العيادة تذكيرًا لحيوانك.' },
+  REMINDER_DUE: { title: 'تذكير من العيادة', body: 'لديك تذكير لحيوانك من العيادة.' },
+  MEDICAL_RECORD_ADDED: { title: 'سجل طبي جديد', body: 'أضافت العيادة سجلًا طبيًا لحيوانك.' },
   // Real title/body are sender-supplied (organizationBroadcastToFollowers);
   // this entry only satisfies the exhaustiveness check.
   ORGANIZATION_BROADCAST: {
@@ -278,4 +285,19 @@ export const NOTIFICATION_COPY: Record<NotificationType, { title: string; body: 
     title: 'منتج جديد',
     body: 'أضاف مكتب بيطري تتابعه منتجًا جديدًا.',
   },
+};
+
+/**
+ * Pet-care notifications to the owner, personalised with the pet + clinic
+ * names. Identifies WHAT was added and WHERE — never diagnoses, treatments or
+ * other medical content (push previews show on a locked screen).
+ */
+export const PET_CARE_BODY: Partial<
+  Record<NotificationType, (clinic: string, pet: string) => string>
+> = {
+  VACCINATION_ADDED: (clinic, pet) => `أضافت ${clinic} تطعيمًا جديدًا لـ ${pet}.`,
+  VACCINATION_DUE: (clinic, pet) => `تذكير من ${clinic}: حان موعد تطعيم ${pet}.`,
+  REMINDER_ADDED: (clinic, pet) => `أضافت ${clinic} تذكيرًا جديدًا لـ ${pet}.`,
+  REMINDER_DUE: (clinic, pet) => `لديك تذكير من ${clinic} بخصوص ${pet}.`,
+  MEDICAL_RECORD_ADDED: (clinic, pet) => `أضافت ${clinic} سجلًا طبيًا جديدًا لـ ${pet}.`,
 };

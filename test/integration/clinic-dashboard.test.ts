@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
+import { businessToday } from '../../src/shared/time/business-date.js';
 import { buildTestApp } from '../helpers/app.js';
 import { closeTestDb, ensureSchema, getTestDb, resetDb } from '../helpers/db.js';
 import {
@@ -21,13 +22,6 @@ const API = '/api/v1';
 beforeAll(() => ensureSchema());
 beforeEach(() => resetDb());
 afterAll(() => closeTestDb());
-
-async function dbToday(): Promise<string> {
-  const row = (await getTestDb().raw('SELECT CURRENT_DATE::text AS today')) as {
-    rows: Array<{ today: string }>;
-  };
-  return row.rows[0]!.today;
-}
 
 async function setup() {
   const admin = await registerAdmin(app);
@@ -64,7 +58,7 @@ const animalUrl = (orgId: string, animalId: string) =>
 describe('clinic dashboard summary', () => {
   it('gives the owner full permissions and clinic-scoped stats', async () => {
     const { clinicOwner, vet, petOwner, clinic, animal } = await setup();
-    const today = await dbToday();
+    const today = businessToday();
     await createMedicalRecord(app, vet.accessToken, clinic.id, animal.id, { visitDate: today });
     await createMedicalRecord(app, vet.accessToken, clinic.id, animal.id, {
       visitDate: '2026-01-01',
@@ -85,21 +79,28 @@ describe('clinic dashboard summary', () => {
     expect(booked.status).toBe(201);
     await getTestDb()('clinic_appointments')
       .where({ id: booked.body.data.id })
-      .update({ scheduled_for: getTestDb().raw("CURRENT_DATE + interval '12 hours'") });
+      .update({ scheduled_for: new Date(`${today}T12:00:00+03:00`) });
 
     const res = await request(app).get(summaryUrl(clinic.id)).set(bearer(clinicOwner.accessToken));
     expect(res.status).toBe(200);
     const data = res.body.data;
     expect(Object.values(data.permissions).every((v) => v === true)).toBe(true);
     expect(data.animals).toEqual({ activeCount: 1 });
-    expect(data.medical).toEqual({
+    expect(data.medical).toMatchObject({
       medicalRecordsCount: 2,
       medicalRecordsToday: 1,
       vaccinationsCount: 1,
       vaccinationsDueToday: 1,
       visitorsToday: 1,
+      medicalAnimals: 1,
+      vaccinationAnimals: 1,
+      totalDistinctAnimals: 1,
     });
-    expect(data.appointments).toMatchObject({ todayCount: 1, pendingCount: 1 });
+    expect(data.appointments).toMatchObject({
+      todayCount: 1,
+      pendingCount: 1,
+      appointmentAnimals: 1,
+    });
     expect(data.followersCount).toBe(0);
   });
 
@@ -160,7 +161,7 @@ describe('clinic dashboard summary', () => {
 });
 
 describe('clinic-visible animal profile', () => {
-  it('returns the animal profile + stats without owner identity or private notes', async () => {
+  it('returns the animal profile + stats without internal owner ids or the owner’s private notes', async () => {
     const { vet, clinic, animal } = await setup();
     await createMedicalRecord(app, vet.accessToken, clinic.id, animal.id, {
       visitDate: '2026-02-01',

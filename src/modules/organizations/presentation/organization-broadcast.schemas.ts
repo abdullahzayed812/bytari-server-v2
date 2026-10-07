@@ -8,6 +8,8 @@ export const sendOrganizationBroadcastBodySchema = z.object({
   body: z.string().trim().min(1).max(1000),
   imageStorageKey: z.string().trim().min(1).max(1000).nullable().optional(),
   linkUrl: linkUrlSchema.nullable().optional(),
+  /** `CLINIC_VISITORS` = the legacy "إرسال رسالة للمراجعين" (CLINIC only); default followers. */
+  audience: z.enum(['FOLLOWERS', 'CLINIC_VISITORS']).optional(),
 });
 export type SendOrganizationBroadcastBody = z.infer<typeof sendOrganizationBroadcastBodySchema>;
 

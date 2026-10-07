@@ -140,6 +140,44 @@ export class NotificationRepository {
     return out;
   }
 
+  /**
+   * The user's unread notifications about one pet (`data.animalId`), counted
+   * per type — served by `idx_notifications_unread_pet`.
+   */
+  async countUnreadForAnimalByType(
+    userId: string,
+    animalId: string,
+    types: readonly string[],
+  ): Promise<Map<string, number>> {
+    const rows = (await this.db(T)
+      .where({ recipient_user_id: userId })
+      .whereRaw("(data->>'animalId') = ?", [animalId])
+      .whereNull('read_at')
+      .whereIn('type', types)
+      .groupBy('type')
+      .select('type')
+      .count<{ type: string; count: string }[]>({ count: '*' })) as {
+      type: string;
+      count: string;
+    }[];
+    return new Map(rows.map((r) => [r.type, Number(r.count)]));
+  }
+
+  /** Mark the user's unread notifications of `types` about one pet read. */
+  async markReadForAnimalTypes(
+    userId: string,
+    animalId: string,
+    types: readonly string[],
+    trx: Knex.Transaction,
+  ): Promise<number> {
+    return trx(T)
+      .where({ recipient_user_id: userId })
+      .whereRaw("(data->>'animalId') = ?", [animalId])
+      .whereNull('read_at')
+      .whereIn('type', types)
+      .update({ read_at: trx.fn.now(), updated_at: trx.fn.now() });
+  }
+
   /** Mark every unread notification read. Returns how many rows changed. */
   async markAllRead(userId: string, trx: Knex.Transaction): Promise<number> {
     return trx(T)

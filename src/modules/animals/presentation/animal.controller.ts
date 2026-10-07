@@ -1,3 +1,5 @@
+import { ForbiddenError } from '../../../shared/errors/app-error.js';
+import { ErrorCode } from '../../../shared/errors/error-codes.js';
 import type { Request, Response } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import { pageMeta } from '../../../shared/http/pagination.js';
@@ -69,6 +71,12 @@ export class AnimalController {
   update = async (req: Request, res: Response): Promise<void> => {
     const animal = requireAnimal(req);
     const body = validatedBody<UpdateAnimalBody>(req);
+    // Legacy behaviour: the free-text medical history is an ADMIN-only field.
+    if (body.medicalHistory !== undefined && !requireAuth(req).roleKeys.includes('ADMIN')) {
+      throw new ForbiddenError('Only an administrator can edit the medical history field', {
+        code: ErrorCode.PERMISSION_DENIED,
+      });
+    }
     sendSuccess(res, await this.animals.update(animal.id, body, this.actor(req)));
   };
 

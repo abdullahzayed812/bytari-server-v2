@@ -1,4 +1,4 @@
-import { BadRequestError, ConflictError } from '../../../shared/errors/app-error.js';
+import { BadRequestError, ConflictError, NotFoundError } from '../../../shared/errors/app-error.js';
 import { ErrorCode } from '../../../shared/errors/error-codes.js';
 import { VETERINARY_ORG_TYPES } from './veterinary-care.constants.js';
 
@@ -18,6 +18,15 @@ export const VeterinaryCarePolicy = {
         code: ErrorCode.ORGANIZATION_TYPE_NOT_SUPPORTED,
       });
     }
+  },
+
+  /**
+   * Only registered (owned) pet profiles can be clinic patients. A lost /
+   * adoption / mating listing subject (`listing_only`) is a separate public
+   * domain — it is reported as "not found" so its existence is not revealed.
+   */
+  assertRegisteredPet(animal: { listingOnly: boolean }): void {
+    if (animal.listingOnly) throw new NotFoundError('Animal not found');
   },
 
   /** Medical writes require the animal to be ACTIVE (mirrors AnimalPolicy). */

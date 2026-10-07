@@ -1,4 +1,11 @@
-import type { ClinicAccessStatus } from './veterinary-care.constants.js';
+import type {
+  ClinicAccessStatus,
+  MedicalRecordSeverity,
+  MedicalRecordType,
+  QuickReviewTemplateType,
+  ReminderType,
+  VaccinationStatus,
+} from './veterinary-care.constants.js';
 
 // --- internal aggregates ------------------------------------------------
 
@@ -24,6 +31,15 @@ export interface MedicalRecord {
   diagnosis: string | null;
   treatment: string | null;
   notes: string | null;
+  symptoms: string | null;
+  severity: MedicalRecordSeverity | null;
+  labNotes: string | null;
+  recordType: MedicalRecordType;
+  isDraft: boolean;
+  /** R2 key of the prescription photo (legacy `prescriptionImage`). */
+  prescriptionKey: string | null;
+  /** R2 keys of attached images / PDFs (legacy `fileUrls`). */
+  attachmentKeys: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -36,6 +52,7 @@ export interface Vaccination {
   vaccineName: string;
   administeredOn: string;
   nextDueOn: string | null;
+  status: VaccinationStatus;
   notes: string | null;
   createdAt: string;
   updatedAt: string;
@@ -59,6 +76,17 @@ export interface MedicalRecordDTO {
   diagnosis: string | null;
   treatment: string | null;
   notes: string | null;
+  symptoms: string | null;
+  severity: MedicalRecordSeverity | null;
+  labNotes: string | null;
+  recordType: MedicalRecordType;
+  isDraft: boolean;
+  prescriptionKey: string | null;
+  /** Resolved (signed) URL for {@link prescriptionKey}. */
+  prescriptionUrl: string | null;
+  attachmentKeys: string[];
+  /** Resolved (signed) URLs, same order as {@link attachmentKeys}. */
+  attachmentUrls: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -71,6 +99,7 @@ export interface VaccinationDTO {
   vaccineName: string;
   administeredOn: string;
   nextDueOn: string | null;
+  status: VaccinationStatus;
   notes: string | null;
   createdAt: string;
   updatedAt: string;
@@ -143,6 +172,13 @@ export interface CreateMedicalRecordInput {
   diagnosis?: string | null;
   treatment?: string | null;
   notes?: string | null;
+  symptoms?: string | null;
+  severity?: MedicalRecordSeverity | null;
+  labNotes?: string | null;
+  recordType?: MedicalRecordType;
+  isDraft?: boolean;
+  prescriptionKey?: string | null;
+  attachmentKeys?: string[];
 }
 export type UpdateMedicalRecordInput = CreateMedicalRecordInput;
 
@@ -150,12 +186,14 @@ export interface CreateVaccinationInput {
   vaccineName: string;
   administeredOn: string;
   nextDueOn?: string | null;
+  status?: VaccinationStatus;
   notes?: string | null;
 }
 export interface UpdateVaccinationInput {
   vaccineName?: string;
   administeredOn?: string;
   nextDueOn?: string | null;
+  status?: VaccinationStatus;
   notes?: string | null;
 }
 
@@ -173,6 +211,9 @@ export interface ListVaccinationsFilter {
   /** ISO date — only vaccinations whose `nextDueOn` is on/after this date. */
   dueFrom?: string;
 }
+
+/** Clinic-wide vaccination list ("التطعيمات"): `OVERDUE` = SCHEDULED with `nextDueOn` < today. */
+export type ClinicVaccinationListStatus = 'ALL' | VaccinationStatus | 'OVERDUE' | 'DUE_TODAY';
 
 // --- rows -----------------------------------------------------------
 
@@ -198,6 +239,13 @@ export interface MedicalRecordRow {
   diagnosis: string | null;
   treatment: string | null;
   notes: string | null;
+  symptoms: string | null;
+  severity: string | null;
+  lab_notes: string | null;
+  record_type: string;
+  is_draft: boolean;
+  prescription_key: string | null;
+  attachment_keys: string[] | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -210,6 +258,7 @@ export interface VaccinationRow {
   vaccine_name: string;
   administered_on: string | Date;
   next_due_on: string | Date | null;
+  status: string;
   notes: string | null;
   created_at: Date;
   updated_at: Date;
@@ -246,6 +295,13 @@ export function rowToMedicalRecord(row: MedicalRecordRow): MedicalRecord {
     diagnosis: row.diagnosis,
     treatment: row.treatment,
     notes: row.notes,
+    symptoms: row.symptoms,
+    severity: row.severity as MedicalRecordSeverity | null,
+    labNotes: row.lab_notes,
+    recordType: row.record_type as MedicalRecordType,
+    isDraft: row.is_draft,
+    prescriptionKey: row.prescription_key,
+    attachmentKeys: row.attachment_keys ?? [],
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
   };
@@ -260,21 +316,35 @@ export function rowToVaccination(row: VaccinationRow): Vaccination {
     vaccineName: row.vaccine_name,
     administeredOn: dateOnly(row.administered_on) as string,
     nextDueOn: dateOnly(row.next_due_on),
+    status: row.status as VaccinationStatus,
     notes: row.notes,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
   };
 }
 
-export function toMedicalRecordDTO(r: MedicalRecord): MedicalRecordDTO {
-  return { ...r };
+/**
+ * `urls` resolves the record's R2 keys (signed GET URLs) — the service layer
+ * owns storage, so the mapper only stitches them in.
+ */
+export function toMedicalRecordDTO(
+  r: MedicalRecord,
+  urls: { prescriptionUrl: string | null; attachmentUrls: string[] } = {
+    prescriptionUrl: null,
+    attachmentUrls: [],
+  },
+): MedicalRecordDTO {
+  return { ...r, ...urls };
 }
 export function toVaccinationDTO(v: Vaccination): VaccinationDTO {
   return { ...v };
 }
 /** Owner-facing projection. Same fields today; the seam for future redaction. */
-export function toOwnerMedicalRecordDTO(r: MedicalRecord): MedicalRecordDTO {
-  return toMedicalRecordDTO(r);
+export function toOwnerMedicalRecordDTO(
+  r: MedicalRecord,
+  urls?: { prescriptionUrl: string | null; attachmentUrls: string[] },
+): MedicalRecordDTO {
+  return toMedicalRecordDTO(r, urls);
 }
 export function toOwnerVaccinationDTO(v: Vaccination): VaccinationDTO {
   return toVaccinationDTO(v);
@@ -288,4 +358,145 @@ export function toClinicAnimalAccessDTO(a: ClinicAnimalAccess): ClinicAnimalAcce
     grantedByUserId: a.grantedByUserId,
     createdAt: a.createdAt,
   };
+}
+
+// --- reminders (legacy `pet_reminders`) ------------------------------
+
+export interface AnimalReminder {
+  id: string;
+  animalId: string;
+  organizationId: string;
+  recordedByUserId: string | null;
+  title: string;
+  description: string | null;
+  /** YYYY-MM-DD */
+  reminderDate: string;
+  reminderType: ReminderType;
+  isCompleted: boolean;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+export type AnimalReminderDTO = AnimalReminder;
+
+export interface AnimalReminderRow {
+  id: string;
+  animal_id: string;
+  organization_id: string;
+  recorded_by_user_id: string | null;
+  title: string;
+  description: string | null;
+  reminder_date: string | Date;
+  reminder_type: string;
+  is_completed: boolean;
+  completed_at: Date | null;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export function rowToAnimalReminder(row: AnimalReminderRow): AnimalReminder {
+  return {
+    id: row.id,
+    animalId: row.animal_id,
+    organizationId: row.organization_id,
+    recordedByUserId: row.recorded_by_user_id,
+    title: row.title,
+    description: row.description,
+    reminderDate: dateOnly(row.reminder_date) as string,
+    reminderType: row.reminder_type as ReminderType,
+    isCompleted: row.is_completed,
+    completedAt: row.completed_at ? row.completed_at.toISOString() : null,
+    createdAt: row.created_at.toISOString(),
+    updatedAt: row.updated_at.toISOString(),
+  };
+}
+
+export interface CreateReminderInput {
+  title: string;
+  description?: string | null;
+  reminderDate: string;
+  reminderType?: ReminderType;
+}
+export interface UpdateReminderInput {
+  title?: string;
+  description?: string | null;
+  reminderDate?: string;
+  reminderType?: ReminderType;
+  isCompleted?: boolean;
+}
+
+/** Clinic-wide reminder list: `OVERDUE` = not completed and `reminderDate` < today. */
+export type ClinicReminderListStatus = 'ALL' | 'PENDING' | 'OVERDUE' | 'COMPLETED' | 'TODAY';
+
+// --- quick-review templates (legacy `clinic_quick_review_templates`) -----
+
+export interface QuickReviewTemplate {
+  id: string;
+  organizationId: string;
+  name: string;
+  templateType: QuickReviewTemplateType;
+  defaultDiagnosis: string | null;
+  defaultTreatment: string | null;
+  defaultNotes: string | null;
+  intervalDays: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+export type QuickReviewTemplateDTO = QuickReviewTemplate;
+
+export interface QuickReviewTemplateRow {
+  id: string;
+  organization_id: string;
+  name: string;
+  template_type: string;
+  default_diagnosis: string | null;
+  default_treatment: string | null;
+  default_notes: string | null;
+  interval_days: number | null;
+  created_by_user_id: string | null;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export function rowToQuickReviewTemplate(row: QuickReviewTemplateRow): QuickReviewTemplate {
+  return {
+    id: row.id,
+    organizationId: row.organization_id,
+    name: row.name,
+    templateType: row.template_type as QuickReviewTemplateType,
+    defaultDiagnosis: row.default_diagnosis,
+    defaultTreatment: row.default_treatment,
+    defaultNotes: row.default_notes,
+    intervalDays: row.interval_days,
+    createdAt: row.created_at.toISOString(),
+    updatedAt: row.updated_at.toISOString(),
+  };
+}
+
+export interface QuickReviewTemplateInput {
+  name: string;
+  templateType?: QuickReviewTemplateType;
+  defaultDiagnosis?: string | null;
+  defaultTreatment?: string | null;
+  defaultNotes?: string | null;
+  intervalDays?: number | null;
+}
+
+/**
+ * One row of a clinic-wide list (vaccinations / reminders): the item plus the
+ * animal summary and — like the legacy clinic screens — the owner's display
+ * name and phone, only ever returned for animals the clinic holds ACTIVE
+ * access to.
+ */
+export interface ClinicListAnimalSummary {
+  id: string;
+  name: string;
+  species: string;
+  breed: string | null;
+}
+export interface ClinicListOwnerSummary {
+  id: string;
+  firstName: string;
+  lastName: string;
+  phone: string | null;
 }

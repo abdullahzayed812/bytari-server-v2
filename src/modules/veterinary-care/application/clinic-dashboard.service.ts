@@ -1,3 +1,4 @@
+import type { ObjectStorage } from '../../../infra/storage/index.js';
 import type { AnimalService } from '../../animals/application/animal.service.js';
 import type { AnimalDTO } from '../../animals/domain/animal.types.js';
 import type { AuthorizationService } from '../../authorization/authorization.service.js';
@@ -5,10 +6,12 @@ import type { AuthPrincipal } from '../../authorization/authorization.types.js';
 import type { OrganizationEngagementService } from '../../organizations/application/organization-engagement.service.js';
 import type { AnimalClinicAccessRepository } from '../infrastructure/animal-clinic-access.repository.js';
 import type {
+  ClinicAnimalOwnerContact,
   ClinicAnimalStats,
   ClinicAppointmentStats,
   ClinicDashboardRepository,
   ClinicMedicalStats,
+  OwnerAnimalClinicRow,
 } from '../infrastructure/clinic-dashboard.repository.js';
 
 /**
@@ -67,9 +70,10 @@ export interface ClinicDashboardSummary {
 
 /**
  * The clinic-visible projection of an animal — the profile a treating clinic
- * needs, WITHOUT owner identity (`currentOwnerUserId` / `createdBy`), the
- * owner's private `notes`, or storage keys. Owner contact is not disclosed to
- * organizations (MOBILE_ARCHITECTURE §63).
+ * needs. Like the legacy clinic pet page it carries the CURRENT owner's name +
+ * phone (needed to call the owner and to open the clinic ↔ owner chat), but
+ * only while the clinic holds an ACTIVE grant (the route 404s otherwise). The
+ * owner's private `notes`, `createdBy` and storage keys are never included.
  */
 export interface ClinicAnimalDTO {
   id: string;
@@ -83,6 +87,11 @@ export interface ClinicAnimalDTO {
   distinguishingFeatures: string | null;
   status: AnimalDTO['status'];
   galleryUrls: string[];
+  weightKg: number | null;
+  isNeutered: boolean | null;
+  /** Legacy free-text medical history kept on the animal profile. */
+  medicalHistory: string | null;
+  owner: ClinicAnimalOwnerContact | null;
   /** This clinic's ACTIVE grant — `null` only for an ADMIN viewing without one. */
   access: { id: string; grantedAt: string } | null;
   stats: ClinicAnimalStats;
@@ -96,6 +105,7 @@ export class ClinicDashboardService {
     private readonly animals: AnimalService,
     private readonly engagement: OrganizationEngagementService,
     private readonly authz: AuthorizationService,
+    private readonly storage: ObjectStorage,
   ) {}
 
   async permissionsFor(
@@ -149,10 +159,11 @@ export class ClinicDashboardService {
    * ACTIVE grant (or ADMIN) is verified before this runs.
    */
   async getAnimal(organizationId: string, animalId: string): Promise<ClinicAnimalDTO> {
-    const [animal, grant, stats] = await Promise.all([
+    const [animal, grant, stats, owner] = await Promise.all([
       this.animals.getDTOById(animalId),
       this.access.findActive(animalId, organizationId),
       this.dashboard.animalStats(animalId),
+      this.dashboard.ownerContact(animalId),
     ]);
     return {
       id: animal.id,
@@ -166,8 +177,30 @@ export class ClinicDashboardService {
       distinguishingFeatures: animal.distinguishingFeatures,
       status: animal.status,
       galleryUrls: animal.galleryUrls,
+      weightKg: animal.weightKg,
+      isNeutered: animal.isNeutered,
+      medicalHistory: animal.medicalHistory,
+      owner,
       access: grant ? { id: grant.id, grantedAt: grant.createdAt } : null,
       stats,
     };
   }
+
+  /** Owner-facing "العيادات" tab — MUST be reached through the owner guard. */
+  async clinicsForAnimal(animalId: string): Promise<OwnerAnimalClinicDTO[]> {
+    const rows = await this.dashboard.clinicsForAnimal(animalId);
+    return Promise.all(
+      rows.map(async ({ logoKey, ...row }) => ({
+        ...row,
+        logoUrl: logoKey
+          ? (this.storage.getPublicUrl(logoKey) ??
+            (await this.storage.getSignedUrl(logoKey, { operation: 'get', expiresIn: 3600 })))
+          : null,
+      })),
+    );
+  }
 }
+
+export type OwnerAnimalClinicDTO = Omit<OwnerAnimalClinicRow, 'logoKey'> & {
+  logoUrl: string | null;
+};

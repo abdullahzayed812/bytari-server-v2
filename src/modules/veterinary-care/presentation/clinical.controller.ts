@@ -62,14 +62,22 @@ export class ClinicalController {
 
   listAccess = async (req: Request, res: Response): Promise<void> => {
     const org = requireOrganization(req);
-    const q = validatedQuery<PageQuery>(req);
+    const q = validatedQuery<PageQuery & { search?: string }>(req);
     const { items, total } = await this.access.list(org.id, {
       page: q.page,
       pageSize: q.pageSize,
+      search: q.search,
     });
     const data = items.map((it) => ({
       ...toClinicAnimalAccessDTO(it.access),
-      animal: { name: it.animalName, species: it.animalSpecies, status: it.animalStatus },
+      animal: {
+        name: it.animalName,
+        species: it.animalSpecies,
+        status: it.animalStatus,
+        breed: it.animalBreed,
+        photoUrl: it.animalPhotoUrl,
+      },
+      ownerName: it.ownerName,
     }));
     sendSuccess(res, data, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
   };

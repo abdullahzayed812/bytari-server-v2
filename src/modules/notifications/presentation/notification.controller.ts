@@ -10,6 +10,7 @@ import type {
   AdminNotificationBody,
   AdminBroadcastImageUploadUrlBody,
   ListNotificationsQuery,
+  PetSectionSeenBody,
   RegisterDeviceBody,
   UpdatePreferencesBody,
 } from './notification.schemas.js';
@@ -50,6 +51,19 @@ export class NotificationController {
     const { userId } = requireAuth(req);
     const { notificationId } = validatedParams<{ notificationId: string }>(req);
     sendSuccess(res, await this.service.markRead(userId, notificationId));
+  };
+
+  petUnseen = async (req: Request, res: Response): Promise<void> => {
+    const { userId } = requireAuth(req);
+    const { animalId } = validatedParams<{ animalId: string }>(req);
+    sendSuccess(res, await this.service.petUnseenCounts(userId, animalId));
+  };
+
+  markPetSectionSeen = async (req: Request, res: Response): Promise<void> => {
+    const { userId } = requireAuth(req);
+    const { animalId } = validatedParams<{ animalId: string }>(req);
+    const { section } = validatedBody<PetSectionSeenBody>(req);
+    sendSuccess(res, await this.service.markPetSectionSeen(userId, animalId, section));
   };
 
   markAllRead = async (req: Request, res: Response): Promise<void> => {

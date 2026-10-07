@@ -26,10 +26,10 @@ export class OrganizationBroadcastController {
 
   send = async (req: Request, res: Response): Promise<void> => {
     const org = requireOrganization(req);
-    const body = validatedBody<SendOrganizationBroadcastBody>(req);
+    const { audience, ...body } = validatedBody<SendOrganizationBroadcastBody>(req);
     sendSuccess(
       res,
-      await this.broadcasts.send(org.id, body, this.actor(req)),
+      await this.broadcasts.send(org.id, body, this.actor(req), { audience }),
       StatusCodes.CREATED,
     );
   };

@@ -117,6 +117,15 @@ export const NOTIFICATION_TYPES = [
   'CLINIC_APPOINTMENT_RESCHEDULE_PROPOSED',
   'CLINIC_APPOINTMENT_CANCELLED',
   'CLINIC_APPOINTMENT_COMPLETED',
+  // clinic-created appointment + "send reminder" (legacy clinic dashboard)
+  'CLINIC_APPOINTMENT_CREATED',
+  'CLINIC_APPOINTMENT_REMINDER',
+  // clinic veterinary care → the pet owner (legacy owner notifications)
+  'VACCINATION_ADDED',
+  'VACCINATION_DUE',
+  'REMINDER_ADDED',
+  'REMINDER_DUE',
+  'MEDICAL_RECORD_ADDED',
   // admin
   'ADMIN_ANNOUNCEMENT',
   // organization → its followers (Veterinary Office Dashboard "إرسال رسالة للمتابعين")
@@ -125,6 +134,23 @@ export const NOTIFICATION_TYPES = [
   'VETERINARY_OFFICE_PRODUCT_ADDED',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
+
+/**
+ * Pet Details sections → the clinic pet-care notification types that mean
+ * "something new here". The owner's per-section "new" badge is the count of
+ * THEIR unread notifications of these types for the pet; opening a section
+ * marks only that section's notifications read.
+ */
+export const PET_CARE_SECTIONS = {
+  medicalRecords: ['MEDICAL_RECORD_ADDED'],
+  vaccinations: ['VACCINATION_ADDED', 'VACCINATION_DUE'],
+  reminders: ['REMINDER_ADDED', 'REMINDER_DUE'],
+} as const satisfies Record<string, readonly NotificationType[]>;
+export type PetCareSection = keyof typeof PET_CARE_SECTIONS;
+export const PET_CARE_SECTION_KEYS = Object.keys(PET_CARE_SECTIONS) as [
+  PetCareSection,
+  ...PetCareSection[],
+];
 
 export const DEVICE_PLATFORMS = ['ios', 'android', 'web'] as const;
 export type DevicePlatform = (typeof DEVICE_PLATFORMS)[number];

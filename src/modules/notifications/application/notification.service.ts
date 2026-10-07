@@ -16,6 +16,8 @@ import type { AuditService } from '../../audit/audit.service.js';
 import type { UserService } from '../../users/user.service.js';
 import {
   MAX_BROADCAST_RECIPIENTS,
+  PET_CARE_SECTIONS,
+  type PetCareSection,
   type AdminTargetKind,
   type NotificationType,
 } from '../domain/notification.constants.js';
@@ -271,6 +273,38 @@ export class NotificationService {
     if (updated)
       this.events.publish('notification.read', { notificationId: id, recipientUserId: userId });
     return this.withSource(updated ?? existing);
+  }
+
+  /**
+   * Pet Details "new information" badges: the caller's OWN unread clinic
+   * pet-care notifications for `animalId`, per section. Scoped to
+   * `recipient_user_id`, so it reveals nothing about pets the caller does not
+   * hold notifications for (all zeros).
+   */
+  async petUnseenCounts(userId: string, animalId: string): Promise<Record<PetCareSection, number>> {
+    const all = Object.values(PET_CARE_SECTIONS).flat();
+    const byType = await this.notifications.countUnreadForAnimalByType(userId, animalId, all);
+    const sum = (types: readonly string[]): number =>
+      types.reduce((n, t) => n + (byType.get(t) ?? 0), 0);
+    return {
+      medicalRecords: sum(PET_CARE_SECTIONS.medicalRecords),
+      vaccinations: sum(PET_CARE_SECTIONS.vaccinations),
+      reminders: sum(PET_CARE_SECTIONS.reminders),
+    };
+  }
+
+  /** Opening one Pet Details section clears only that section's badge. */
+  async markPetSectionSeen(
+    userId: string,
+    animalId: string,
+    section: PetCareSection,
+  ): Promise<{ updated: number }> {
+    const updated = await this.db.transaction((tx) =>
+      this.notifications.markReadForAnimalTypes(userId, animalId, PET_CARE_SECTIONS[section], tx),
+    );
+    if (updated > 0)
+      this.events.publish('notification.read', { recipientUserId: userId, animalId, section });
+    return { updated };
   }
 
   async markAllRead(userId: string): Promise<{ updated: number }> {

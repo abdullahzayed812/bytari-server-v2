@@ -304,7 +304,8 @@ export async function runDevSeed(knex: Knex, deps: RunDevSeedDeps = {}): Promise
 
     if (!row) {
       const created = await organizationService.create(
-        { type: def.type, name: def.name, description: def.description },
+        // The seeded owner accepts the current terms, as the registration form requires.
+        { type: def.type, name: def.name, description: def.description, terms: { accepted: true } },
         { actorUserId: ownerId, context: SEED_CONTEXT },
       );
       row = { id: created.id, status: created.status };

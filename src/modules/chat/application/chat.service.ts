@@ -10,6 +10,7 @@ import type { NotificationReadPort } from '../../../shared/events/notification-r
 import type { EventBus } from '../../../shared/events/index.js';
 import { AuditAction, AuditEntityType, type AuditContext } from '../../audit/audit.types.js';
 import type { AuditService } from '../../audit/audit.service.js';
+import type { OrganizationOperabilityService } from '../../organizations/application/organization-operability.service.js';
 import type { MembershipRepository } from '../../organizations/infrastructure/membership.repository.js';
 import type { OrganizationRepository } from '../../organizations/infrastructure/organization.repository.js';
 import type { UserService } from '../../users/user.service.js';
@@ -87,6 +88,12 @@ export class ChatService {
     private readonly media: ChatAttachmentMedia | null = null,
     /** Clears the conversation's "new message" alerts when the user reads it. */
     private readonly notificationReads: NotificationReadPort | null = null,
+    /**
+     * The shared "may this organization operate?" rule. A pending / inactive /
+     * subscription-expired CLINIC loses its clinic-side chat access (HTTP and
+     * realtime rooms) and nobody can post into its conversations.
+     */
+    private readonly operability: OrganizationOperabilityService | null = null,
   ) {
     this.log = logger.child({ component: 'chat-service' });
   }
@@ -100,6 +107,12 @@ export class ChatService {
 
   /** Conversation-level "may new messages be posted here" rule (shared by send + attachment upload). */
   private async assertWritable(conversation: Conversation): Promise<void> {
+    // A clinic may pause its chat with a pet owner (legacy "إيقاف المحادثة").
+    if (conversation.type === 'PET_OWNER_CLINIC' && conversation.status === 'CLOSED') {
+      throw new ForbiddenError('This conversation has been paused by the clinic', {
+        code: ErrorCode.CONVERSATION_CLOSED,
+      });
+    }
     if (
       conversation.type === 'PET_OWNER_VETERINARIAN' ||
       conversation.type === 'ANIMAL_PUBLICATION'
@@ -119,6 +132,18 @@ export class ChatService {
         code: ErrorCode.ORGANIZATION_NOT_ACTIVE,
       });
     }
+    if (conversation.type === 'PET_OWNER_CLINIC' && this.operability) {
+      // Expired clinic → read-only for both sides (owner keeps the history).
+      await this.operability.assertOperational(null, org);
+    }
+  }
+
+  /** Clinic side only exists while the clinic may operate (shared rule). */
+  private async clinicOperational(organizationId: string): Promise<boolean> {
+    if (!this.operability) return true;
+    const org = await this.organizations.findById(organizationId);
+    if (!org) return false;
+    return (await this.operability.assess(org)).operational;
   }
 
   private requireMedia(): ChatAttachmentMedia {
@@ -181,7 +206,12 @@ export class ChatService {
       if (!conversation.organizationId) return null;
       const m = await this.memberships.findByUserAndOrg(userId, conversation.organizationId);
       if (m?.status !== 'ACTIVE') return null;
-      return conversation.type === 'PET_OWNER_CLINIC' ? 'CLINIC' : 'VETERINARY_OFFICE';
+      if (conversation.type === 'PET_OWNER_CLINIC') {
+        // Owner AND staff lose the clinic side (incl. realtime room joins) while the
+        // clinic is pending / inactive / subscription-expired.
+        return (await this.clinicOperational(conversation.organizationId)) ? 'CLINIC' : null;
+      }
+      return 'VETERINARY_OFFICE';
     }
     if (conversation.type === 'SYNDICATE_MEMBER') {
       if (userId === conversation.petOwnerUserId) return 'SYNDICATE_MEMBER';
@@ -244,6 +274,7 @@ export class ChatService {
     }
 
     if (ChatPolicy.isClinicType(org.type)) {
+      if (this.operability) await this.operability.assertOperational(null, org);
       const petOwnerUserId = await this.resolveClinicCounterpart(actor, org, targetUserId);
       return this.getOrCreatePetOwnerClinic(actor, org.id, petOwnerUserId);
     }
@@ -977,6 +1008,45 @@ export class ChatService {
       throw new BadRequestError('Only a marketplace deal conversation has a job status');
     }
     const side = await this.assertAccess(actor.actorUserId, conversation);
+    const updated = await this.db.transaction(async (tx) => {
+      const c = await this.conversations.setStatus(conversationId, status, tx);
+      await this.audit.record(
+        {
+          action: AuditAction.CONVERSATION_STATUS_CHANGED,
+          entityType: AuditEntityType.CONVERSATION,
+          entityId: conversationId,
+          actorUserId: actor.actorUserId,
+          metadata: { conversationId, statusChangedTo: status },
+          context: actor.context,
+        },
+        tx,
+      );
+      return c;
+    });
+    return this.decorate(actor.actorUserId, updated, side);
+  }
+
+  /**
+   * Pause / resume a pet owner ↔ clinic conversation (legacy clinic
+   * `chat.toggleActive`). Only the CLINIC side may do it; a paused
+   * conversation rejects new messages from both sides until resumed.
+   */
+  async setClinicChatActive(
+    actor: ChatActor,
+    conversationId: string,
+    active: boolean,
+  ): Promise<ConversationDTO> {
+    const conversation = await this.load(conversationId);
+    if (conversation.type !== 'PET_OWNER_CLINIC') {
+      throw new BadRequestError('Only a pet owner ↔ clinic conversation can be paused');
+    }
+    const side = await this.assertAccess(actor.actorUserId, conversation);
+    if (side !== 'CLINIC') {
+      throw new ForbiddenError('Only the clinic can pause or resume this conversation', {
+        code: ErrorCode.PERMISSION_DENIED,
+      });
+    }
+    const status = active ? 'OPEN' : 'CLOSED';
     const updated = await this.db.transaction(async (tx) => {
       const c = await this.conversations.setStatus(conversationId, status, tx);
       await this.audit.record(

@@ -6,7 +6,8 @@ import {
   presignBroadcastImage,
   type BroadcastImagePresign,
 } from '../../../shared/storage/broadcast-media.js';
-import { NotFoundError } from '../../../shared/errors/app-error.js';
+import { BadRequestError, NotFoundError } from '../../../shared/errors/app-error.js';
+import { ErrorCode } from '../../../shared/errors/error-codes.js';
 import type { EventBus } from '../../../shared/events/index.js';
 import { AuditAction, AuditEntityType, type AuditContext } from '../../audit/audit.types.js';
 import type { AuditService } from '../../audit/audit.service.js';
@@ -29,9 +30,11 @@ export interface SendBroadcastInput {
  * Who receives a broadcast. `FOLLOWERS` (default) — everyone following the
  * organization ("إرسال رسالة للمتابعين"). `SYNDICATE_MEMBERS` — a syndicate's
  * ACTIVE registered members ("رسالة إلى الأعضاء"); the caller has already
- * checked the organization is a SYNDICATE.
+ * checked the organization is a SYNDICATE. `CLINIC_VISITORS` — a clinic's
+ * "المراجعين" (legacy "إرسال رسالة للمراجعين"): current owners of animals the
+ * clinic treats / has records for / booked with it; CLINIC organizations only.
  */
-export type BroadcastAudience = 'FOLLOWERS' | 'SYNDICATE_MEMBERS';
+export type BroadcastAudience = 'FOLLOWERS' | 'SYNDICATE_MEMBERS' | 'CLINIC_VISITORS';
 
 export interface SendBroadcastOptions {
   audience?: BroadcastAudience;
@@ -81,6 +84,14 @@ export class OrganizationBroadcastService {
     options: SendBroadcastOptions = {},
   ): Promise<{ broadcastId: string }> {
     await this.assertActiveOrganization(organizationId);
+    if (options.audience === 'CLINIC_VISITORS') {
+      const org = await this.organizations.findById(organizationId);
+      if (org?.type !== 'CLINIC') {
+        throw new BadRequestError('Visitor messages are only available for clinics', {
+          code: ErrorCode.ORGANIZATION_TYPE_NOT_SUPPORTED,
+        });
+      }
+    }
 
     // The notification rows keep the storage KEY, resolved to a fresh URL on
     // every read — a signed URL stored here would expire an hour later.

@@ -20,6 +20,12 @@ export interface Animal {
   color: string | null;
   distinguishingFeatures: string | null;
   ageEstimate: AnimalAgeEstimate | null;
+  /** Legacy `pets.weight` (kg). */
+  weightKg: number | null;
+  /** Legacy `pets.is_neutered`; `null` = not stated. */
+  isNeutered: boolean | null;
+  /** Legacy `pets.medical_history` free text — ADMIN-editable only. */
+  medicalHistory: string | null;
   /**
    * Created only as the subject of an adoption / mating / lost listing — never
    * shown in the owner's registered pets ("حيواناتي").
@@ -67,6 +73,9 @@ export interface AnimalDTO {
   color: string | null;
   distinguishingFeatures: string | null;
   ageEstimate: AnimalAgeEstimate | null;
+  weightKg: number | null;
+  isNeutered: boolean | null;
+  medicalHistory: string | null;
   /** Adoption / mating / lost listing subject — not one of the owner's registered pets. */
   listingOnly: boolean;
   /** Resolved gallery photo URLs. */
@@ -101,6 +110,8 @@ export interface CreateAnimalInput {
   color?: string | null;
   distinguishingFeatures?: string | null;
   ageEstimate?: AnimalAgeEstimate | null;
+  weightKg?: number | null;
+  isNeutered?: boolean | null;
   /** Listing-only subject (adoption / mating / lost), not a registered pet. */
   listingOnly?: boolean;
 }
@@ -115,6 +126,9 @@ export interface UpdateAnimalInput {
   color?: string | null;
   distinguishingFeatures?: string | null;
   ageEstimate?: AnimalAgeEstimate | null;
+  weightKg?: number | null;
+  isNeutered?: boolean | null;
+  medicalHistory?: string | null;
 }
 
 export interface ListAnimalsFilter {
@@ -153,6 +167,9 @@ export interface AnimalRow {
   color: string | null;
   distinguishing_features: string | null;
   age_estimate: string | null;
+  weight_kg?: string | number | null;
+  is_neutered?: boolean | null;
+  medical_history?: string | null;
   gallery_keys: string[] | null;
   created_at: Date;
   updated_at: Date;
@@ -191,6 +208,9 @@ export function rowToAnimal(row: AnimalRow): Animal {
     color: row.color,
     distinguishingFeatures: row.distinguishing_features,
     ageEstimate: row.age_estimate as AnimalAgeEstimate | null,
+    weightKg: row.weight_kg === null || row.weight_kg === undefined ? null : Number(row.weight_kg),
+    isNeutered: row.is_neutered ?? null,
+    medicalHistory: row.medical_history ?? null,
     listingOnly: row.listing_only === true,
     galleryKeys: row.gallery_keys ?? [],
     createdAt: row.created_at.toISOString(),
@@ -230,6 +250,9 @@ export function toAnimalDTO(
     color: animal.color,
     distinguishingFeatures: animal.distinguishingFeatures,
     ageEstimate: animal.ageEstimate,
+    weightKg: animal.weightKg,
+    isNeutered: animal.isNeutered,
+    medicalHistory: animal.medicalHistory,
     listingOnly: animal.listingOnly,
     galleryUrls,
     galleryKeys: animal.galleryKeys,

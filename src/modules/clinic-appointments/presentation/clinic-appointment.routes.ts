@@ -3,6 +3,7 @@ import { asyncHandler } from '../../../shared/http/async-handler.js';
 import { validate } from '../../../shared/http/validate.js';
 import type { Container } from '../../../container.js';
 import { createOrganizationMiddleware } from '../../organizations/presentation/organization.middleware.js';
+import { createOrganizationSubscriptionGuard } from '../../organizations/presentation/organization-subscription.middleware.js';
 import { ClinicAppointmentController } from './clinic-appointment.controller.js';
 import {
   appointmentIdParamSchema,
@@ -27,11 +28,7 @@ export function createClinicAppointmentRouter(c: Container): Router {
   const r = Router();
   r.use(c.authenticate);
 
-  r.get(
-    '/',
-    validate({ query: listClinicAppointmentsQuerySchema }),
-    asyncHandler(ctrl.listMine),
-  );
+  r.get('/', validate({ query: listClinicAppointmentsQuerySchema }), asyncHandler(ctrl.listMine));
   r.get(
     '/:appointmentId',
     validate({ params: appointmentIdParamSchema }),
@@ -76,6 +73,13 @@ export function createOrgClinicAppointmentRouter(c: Container): Router {
     authz: c.authorizationService,
   });
 
+  // Clinic operability (single rule: ACTIVE status — via authorizeOrg — and a
+  // non-expired subscription). Applies to owner AND staff; ADMIN bypasses.
+  const activeSubscription = createOrganizationSubscriptionGuard({
+    subscriptions: c.farmSubscriptionRenewalRepository,
+    authz: c.authorizationService,
+  });
+
   const r = Router();
   r.use(c.authenticate);
 
@@ -87,10 +91,11 @@ export function createOrgClinicAppointmentRouter(c: Container): Router {
       body: createClinicAppointmentBodySchema,
     }),
     withOrganization,
+    activeSubscription, // an expired clinic takes no new bookings
     asyncHandler(ctrl.create),
   );
 
-  // --- Clinic Dashboard (no UI yet) -----------------------------
+  // --- Clinic Dashboard -----------------------------------------
   r.get(
     '/:organizationId/clinic-appointments',
     validate({
@@ -99,6 +104,7 @@ export function createOrgClinicAppointmentRouter(c: Container): Router {
     }),
     withOrganization,
     authorizeOrg('clinic.appointment.read'),
+    activeSubscription,
     asyncHandler(ctrl.listForClinic),
   );
   r.post(
@@ -106,6 +112,7 @@ export function createOrgClinicAppointmentRouter(c: Container): Router {
     validate({ params: organizationIdParamSchema.merge(appointmentIdParamSchema) }),
     withOrganization,
     authorizeOrg('clinic.appointment.manage'),
+    activeSubscription,
     asyncHandler(ctrl.confirm),
   );
   r.post(
@@ -116,6 +123,7 @@ export function createOrgClinicAppointmentRouter(c: Container): Router {
     }),
     withOrganization,
     authorizeOrg('clinic.appointment.manage'),
+    activeSubscription,
     asyncHandler(ctrl.reject),
   );
   r.post(
@@ -126,6 +134,7 @@ export function createOrgClinicAppointmentRouter(c: Container): Router {
     }),
     withOrganization,
     authorizeOrg('clinic.appointment.manage'),
+    activeSubscription,
     asyncHandler(ctrl.proposeReschedule),
   );
   r.post(
@@ -133,7 +142,41 @@ export function createOrgClinicAppointmentRouter(c: Container): Router {
     validate({ params: organizationIdParamSchema.merge(appointmentIdParamSchema) }),
     withOrganization,
     authorizeOrg('clinic.appointment.manage'),
+    activeSubscription,
     asyncHandler(ctrl.complete),
+  );
+  // --- Clinic Dashboard: legacy clinic-side operations ------------
+  r.post(
+    '/:organizationId/clinic-appointments/by-clinic',
+    validate({ params: organizationIdParamSchema, body: createClinicAppointmentBodySchema }),
+    withOrganization,
+    authorizeOrg('clinic.appointment.manage'),
+    activeSubscription,
+    asyncHandler(ctrl.createByClinic),
+  );
+  r.post(
+    '/:organizationId/clinic-appointments/remind-today',
+    validate({ params: organizationIdParamSchema }),
+    withOrganization,
+    authorizeOrg('clinic.appointment.manage'),
+    activeSubscription,
+    asyncHandler(ctrl.remindToday),
+  );
+  r.post(
+    '/:organizationId/clinic-appointments/:appointmentId/remind',
+    validate({ params: organizationIdParamSchema.merge(appointmentIdParamSchema) }),
+    withOrganization,
+    authorizeOrg('clinic.appointment.manage'),
+    activeSubscription,
+    asyncHandler(ctrl.remindOwner),
+  );
+  r.delete(
+    '/:organizationId/clinic-appointments/:appointmentId',
+    validate({ params: organizationIdParamSchema.merge(appointmentIdParamSchema) }),
+    withOrganization,
+    authorizeOrg('clinic.appointment.manage'),
+    activeSubscription,
+    asyncHandler(ctrl.deleteByClinic),
   );
   r.patch(
     '/:organizationId/clinic-appointments/:appointmentId/status',
@@ -143,6 +186,7 @@ export function createOrgClinicAppointmentRouter(c: Container): Router {
     }),
     withOrganization,
     authorizeOrg('clinic.appointment.manage'),
+    activeSubscription,
     asyncHandler(ctrl.updateStatus),
   );
 

@@ -27,7 +27,9 @@ import {
 } from '../modules/animals/index.js';
 import {
   createClinicalVeterinaryRouter,
+  createClinicCareRouter,
   createClinicDashboardRouter,
+  createOwnerClinicCareRouter,
   createOwnerMedicalRouter,
 } from '../modules/veterinary-care/index.js';
 import {
@@ -158,6 +160,10 @@ export function createApiRouter(c: Container): Router {
   // Clinic Dashboard: stats summary + the clinic-visible animal profile
   // (`/organizations/:organizationId/{clinic-dashboard/summary,animals/:animalId}`).
   router.use('/organizations', createClinicDashboardRouter(c));
+  // Legacy-parity clinic care: reminders, quick-review templates, clinic-wide
+  // vaccination / reminder lists, medical attachments; owner reminders + clinics.
+  router.use('/organizations', createClinicCareRouter(c));
+  router.use('/animals', createOwnerClinicCareRouter(c));
 
   // --- Phase 6: farms & poultry --------------------------------
   // Farm-ID join flow + poultry CRUD extend `/organizations/...`; the farm

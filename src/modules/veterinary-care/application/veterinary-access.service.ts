@@ -1,4 +1,5 @@
 import type { Knex } from 'knex';
+import type { ObjectStorage } from '../../../infra/storage/index.js';
 import type { Logger } from 'pino';
 import { ConflictError, NotFoundError } from '../../../shared/errors/app-error.js';
 import type { EventBus } from '../../../shared/events/index.js';
@@ -40,6 +41,8 @@ export class VeterinaryAccessService {
     private readonly audit: AuditService,
     private readonly events: EventBus,
     logger: Logger,
+    /** Resolves each patient's first photo for the search results. */
+    private readonly storage: ObjectStorage | null = null,
   ) {
     this.log = logger.child({ component: 'veterinary-access-service' });
   }
@@ -54,6 +57,7 @@ export class VeterinaryAccessService {
 
     const animal = await this.animals.findById(animalId);
     if (!animal) throw new NotFoundError('Animal not found');
+    VeterinaryCarePolicy.assertRegisteredPet(animal);
 
     const existing = await this.access.findActive(animalId, org.id);
     if (existing) {
@@ -123,10 +127,30 @@ export class VeterinaryAccessService {
     });
   }
 
-  list(
+  async list(
     organizationId: string,
-    filter: { page: number; pageSize: number },
-  ): Promise<{ items: ClinicAnimalListItem[]; total: number }> {
-    return this.access.listActiveForClinic(organizationId, filter);
+    filter: { page: number; pageSize: number; search?: string },
+  ): Promise<{
+    items: Array<ClinicAnimalListItem & { animalPhotoUrl: string | null }>;
+    total: number;
+  }> {
+    const { items, total } = await this.access.listActiveForClinic(organizationId, filter);
+    const storage = this.storage;
+    return {
+      items: await Promise.all(
+        items.map(async (it) => ({
+          ...it,
+          animalPhotoUrl:
+            it.animalPhotoKey && storage
+              ? (storage.getPublicUrl(it.animalPhotoKey) ??
+                (await storage.getSignedUrl(it.animalPhotoKey, {
+                  operation: 'get',
+                  expiresIn: 3600,
+                })))
+              : null,
+        })),
+      ),
+      total,
+    };
   }
 }

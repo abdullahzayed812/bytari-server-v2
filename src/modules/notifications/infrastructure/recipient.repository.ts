@@ -37,6 +37,75 @@ export class NotificationRecipientRepository {
     return rows.map((r) => r.id);
   }
 
+  /**
+   * Display labels for an owner pet-care notification: the pet's name and the
+   * clinic's name only — never any medical content (push previews are public).
+   */
+  async petCareLabels(
+    animalId: string,
+    organizationId: string,
+  ): Promise<{ petName: string | null; clinicName: string | null }> {
+    const [animal, org] = await Promise.all([
+      animalId
+        ? this.db('animals')
+            .where({ id: animalId })
+            .first<{ name: string | null } | undefined>('name')
+        : undefined,
+      organizationId
+        ? this.db('organizations')
+            .where({ id: organizationId })
+            .first<{ name: string | null } | undefined>('name')
+        : undefined,
+    ]);
+    return { petName: animal?.name ?? null, clinicName: org?.name ?? null };
+  }
+
+  /**
+   * A clinic's "visitors" (legacy `sendMessageToVisitors`): the CURRENT owners
+   * of every animal the clinic holds ACTIVE access to or has any medical
+   * record / vaccination / reminder for, plus pet owners who booked an
+   * appointment with it. ACTIVE users only.
+   */
+  async clinicVisitorUserIds(organizationId: string, limit: number): Promise<string[]> {
+    const animalIds = this.db
+      .select('animal_id')
+      .from('animal_clinic_access')
+      .where({ organization_id: organizationId, status: 'ACTIVE' })
+      .union((qb) => {
+        void qb
+          .select('animal_id')
+          .from('medical_records')
+          .where({ organization_id: organizationId });
+      })
+      .union((qb) => {
+        void qb.select('animal_id').from('vaccinations').where({ organization_id: organizationId });
+      })
+      .union((qb) => {
+        void qb
+          .select('animal_id')
+          .from('animal_reminders')
+          .where({ organization_id: organizationId });
+      });
+    const owners = this.db
+      .select('ow.owner_user_id as user_id')
+      .from('animal_ownerships as ow')
+      .whereNull('ow.ended_at')
+      .whereIn('ow.animal_id', animalIds)
+      .union((qb) => {
+        void qb
+          .select('pet_owner_user_id as user_id')
+          .from('clinic_appointments')
+          .where({ organization_id: organizationId });
+      });
+    const rows: Array<{ id: string }> = await this.db
+      .from(owners.as('v'))
+      .join('users as u', 'u.id', 'v.user_id')
+      .where('u.status', 'ACTIVE')
+      .distinct('u.id as id')
+      .limit(limit);
+    return rows.map((r) => r.id);
+  }
+
   async courseRegistrantUserIds(courseId: string, limit: number): Promise<string[]> {
     const rows: Array<{ registrant_user_id: string }> = await this.db('vet_course_registrations')
       .where({ course_id: courseId })

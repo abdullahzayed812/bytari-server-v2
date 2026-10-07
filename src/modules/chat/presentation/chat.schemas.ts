@@ -65,6 +65,9 @@ export const conversationMessageParamSchema = z.object({
 
 export const markReadBodySchema = z.object({ messageId: z.string().uuid() }).strict();
 
+/** Clinic pauses (`false`) / resumes (`true`) its chat with a pet owner. */
+export const clinicChatActiveBodySchema = z.object({ active: z.boolean() }).strict();
+
 export const listConversationsQuerySchema = paginationQuerySchema.extend({
   organizationId: z.string().uuid().optional(),
 });

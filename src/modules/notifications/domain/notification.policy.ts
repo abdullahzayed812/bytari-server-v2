@@ -8,7 +8,7 @@ import type { SupervisorRepository } from '../../supervisors/supervisor.reposito
 import type { SyndicateRegistrationRepository } from '../../syndicates/infrastructure/syndicate-registration.repository.js';
 import type { NotificationRecipientRepository } from '../infrastructure/recipient.repository.js';
 import type { NotificationType } from './notification.constants.js';
-import { NOTIFICATION_COPY } from './notification.copy.js';
+import { NOTIFICATION_COPY, PET_CARE_BODY } from './notification.copy.js';
 import type { NotificationSpec } from './notification.types.js';
 
 export interface NotificationPolicyDeps {
@@ -174,6 +174,66 @@ export class NotificationPolicy {
         );
       case 'clinic.appointment.completed':
         return this.clinicAppointmentToOwner('CLINIC_APPOINTMENT_COMPLETED', event.name, p);
+      case 'clinic.appointment.created_by_clinic':
+        return this.clinicAppointmentToOwner('CLINIC_APPOINTMENT_CREATED', event.name, p);
+      case 'clinic.appointment.owner_reminded':
+        return this.clinicAppointmentToOwner('CLINIC_APPOINTMENT_REMINDER', event.name, p, true);
+
+      // --- clinic veterinary care → the pet owner ---
+      case 'vaccination.created':
+        return this.petCareToOwner(
+          'VACCINATION_ADDED',
+          event.name,
+          p,
+          'VACCINATION',
+          'vaccinationId',
+        );
+      case 'vaccination.owner_notified':
+        return this.petCareToOwner(
+          'VACCINATION_DUE',
+          event.name,
+          p,
+          'VACCINATION',
+          'vaccinationId',
+          true,
+        );
+      case 'reminder.created':
+        return this.petCareToOwner(
+          'REMINDER_ADDED',
+          event.name,
+          p,
+          'ANIMAL_REMINDER',
+          'reminderId',
+        );
+      case 'medical_record.created':
+        // Drafts are work-in-progress — the owner hears once it is final.
+        if (p.isDraft === true) return [];
+        return this.petCareToOwner(
+          'MEDICAL_RECORD_ADDED',
+          'medical_record.created',
+          p,
+          'MEDICAL_RECORD',
+          'medicalRecordId',
+        );
+      case 'medical_record.updated':
+        if (p.finalized !== true) return [];
+        // Same key as `created`: one "new record" notification per record.
+        return this.petCareToOwner(
+          'MEDICAL_RECORD_ADDED',
+          'medical_record.created',
+          p,
+          'MEDICAL_RECORD',
+          'medicalRecordId',
+        );
+      case 'reminder.owner_notified':
+        return this.petCareToOwner(
+          'REMINDER_DUE',
+          event.name,
+          p,
+          'ANIMAL_REMINDER',
+          'reminderId',
+          true,
+        );
 
       // --- Veterinary Services marketplace ---
       case 'vet_service.listing.submitted':
@@ -352,7 +412,11 @@ export class NotificationPolicy {
             linkUrl: typeof p.linkUrl === 'string' ? p.linkUrl : null,
           },
           str(p.actorUserId),
-          p.audience === 'SYNDICATE_MEMBERS' ? 'SYNDICATE_MEMBERS' : 'FOLLOWERS',
+          p.audience === 'SYNDICATE_MEMBERS'
+            ? 'SYNDICATE_MEMBERS'
+            : p.audience === 'CLINIC_VISITORS'
+              ? 'CLINIC_VISITORS'
+              : 'FOLLOWERS',
         );
 
       // --- Veterinary Office → followers: a new (visible) product ---
@@ -869,15 +933,23 @@ export class NotificationPolicy {
   }
 
   /** Notify the PET OWNER about a clinic-driven appointment decision. */
+  /**
+   * `repeatable` — a manual "send reminder" may be sent many times, so the
+   * idempotency key includes the per-send `sentAt` instead of being one-shot.
+   */
   private clinicAppointmentToOwner(
     type: NotificationType,
     eventName: string,
     p: P,
+    repeatable = false,
   ): NotificationSpec[] {
     const owner = str(p.petOwnerUserId);
     const appointmentId = str(p.appointmentId);
     const actor = str(p.actorUserId);
     if (!owner || !appointmentId || owner === actor) return [];
+    const key = repeatable
+      ? `${eventName}:${appointmentId}:${str(p.sentAt)}`
+      : `${eventName}:${appointmentId}`;
     return [
       this.spec(
         type,
@@ -887,10 +959,66 @@ export class NotificationPolicy {
           actorUserId: actor || null,
           entityType: 'CLINIC_APPOINTMENT',
           entityId: appointmentId,
-          sourceEventKey: `${eventName}:${appointmentId}`,
+          sourceEventKey: key,
         },
       ),
     ];
+  }
+
+  /**
+   * A clinic added / sent a vaccination or reminder for an animal → its current
+   * owner (resolved by the domain service at publish time, like appointments).
+   * Never the acting clinic member themselves.
+   */
+  private async petCareToOwner(
+    type: NotificationType,
+    eventName: string,
+    p: P,
+    entityType: 'VACCINATION' | 'ANIMAL_REMINDER' | 'MEDICAL_RECORD',
+    idKey: 'vaccinationId' | 'reminderId' | 'medicalRecordId',
+    repeatable = false,
+  ): Promise<NotificationSpec[]> {
+    const owner = str(p.petOwnerUserId);
+    const entityId = str(p[idKey]);
+    const actor = str(p.actorUserId);
+    if (!owner || !entityId || owner === actor) return [];
+    const organizationId = str(p.organizationId);
+    const animalId = str(p.animalId);
+    const spec = this.spec(
+      type,
+      owner,
+      { organizationId, animalId, [idKey]: entityId },
+      {
+        actorUserId: actor || null,
+        entityType,
+        entityId,
+        sourceEventKey: repeatable
+          ? `${eventName}:${entityId}:${str(p.sentAt)}`
+          : `${eventName}:${entityId}`,
+      },
+    );
+    const body = await this.petCareBody(type, animalId, organizationId);
+    return [body ? { ...spec, body } : spec];
+  }
+
+  /** Personalised body (pet + clinic names); `null` → the generic copy. */
+  private async petCareBody(
+    type: NotificationType,
+    animalId: string,
+    organizationId: string,
+  ): Promise<string | null> {
+    const template = PET_CARE_BODY[type];
+    if (!template) return null;
+    try {
+      const { petName, clinicName } = await this.deps.recipients.petCareLabels(
+        animalId,
+        organizationId,
+      );
+      return petName && clinicName ? template(clinicName, petName) : null;
+    } catch {
+      // A label lookup must never cost the owner the notification itself.
+      return null;
+    }
   }
 
   private async threadClosed(
@@ -1047,7 +1175,7 @@ export class NotificationPolicy {
     body: string,
     media: { imageKey: string | null; imageUrl: string | null; linkUrl: string | null },
     actorUserId: string,
-    audience: 'FOLLOWERS' | 'SYNDICATE_MEMBERS',
+    audience: 'FOLLOWERS' | 'SYNDICATE_MEMBERS' | 'CLINIC_VISITORS',
   ): Promise<NotificationSpec[]> {
     if (!organizationId || !broadcastId) return [];
     const recipientIds =
@@ -1056,10 +1184,15 @@ export class NotificationPolicy {
             organizationId,
             MEMBER_BROADCAST_FANOUT_CAP,
           )
-        : await this.deps.organizationFollows.listFollowerUserIds(
-            organizationId,
-            RECIPIENT_FANOUT_CAP,
-          );
+        : audience === 'CLINIC_VISITORS'
+          ? await this.deps.recipients.clinicVisitorUserIds(
+              organizationId,
+              MEMBER_BROADCAST_FANOUT_CAP,
+            )
+          : await this.deps.organizationFollows.listFollowerUserIds(
+              organizationId,
+              RECIPIENT_FANOUT_CAP,
+            );
     const key = `${eventName}:${broadcastId}`;
     return recipientIds
       .filter((id) => id !== actorUserId)

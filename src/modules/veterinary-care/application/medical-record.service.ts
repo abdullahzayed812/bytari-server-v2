@@ -4,16 +4,19 @@ import { InternalError, NotFoundError } from '../../../shared/errors/app-error.j
 import type { EventBus } from '../../../shared/events/index.js';
 import { AuditAction, AuditEntityType, type AuditContext } from '../../audit/audit.types.js';
 import type { AuditService } from '../../audit/audit.service.js';
+import type { AnimalOwnershipRepository } from '../../animals/infrastructure/animal-ownership.repository.js';
 import type { AnimalRepository } from '../../animals/infrastructure/animal.repository.js';
 import { VeterinaryCarePolicy } from '../domain/veterinary-care.policy.js';
 import {
   toMedicalRecordDTO,
   toOwnerMedicalRecordDTO,
   type CreateMedicalRecordInput,
+  type MedicalRecord,
   type MedicalRecordDTO,
   type UpdateMedicalRecordInput,
 } from '../domain/veterinary-care.types.js';
 import type { MedicalRecordRepository } from '../infrastructure/medical-record.repository.js';
+import type { MedicalAttachments } from './medical-attachments.js';
 
 export interface VetCareActor {
   actorUserId: string;
@@ -38,9 +41,31 @@ export class MedicalRecordService {
     private readonly animals: AnimalRepository,
     private readonly audit: AuditService,
     private readonly events: EventBus,
+    private readonly attachments: MedicalAttachments,
     logger: Logger,
+    private readonly ownerships: AnimalOwnershipRepository | null = null,
   ) {
     this.log = logger.child({ component: 'medical-record-service' });
+  }
+
+  private async ownerUserId(animalId: string): Promise<string | null> {
+    return this.ownerships ? this.ownerships.currentOwnerUserId(animalId) : null;
+  }
+
+  private async dto(record: MedicalRecord): Promise<MedicalRecordDTO> {
+    return toMedicalRecordDTO(record, await this.attachments.resolve(record));
+  }
+
+  private async ownerDto(record: MedicalRecord): Promise<MedicalRecordDTO> {
+    return toOwnerMedicalRecordDTO(record, await this.attachments.resolve(record));
+  }
+
+  /** Presigned upload for a prescription photo / attachment of this clinic. */
+  requestAttachmentUploadUrl(
+    organizationId: string,
+    input: { filename: string; mimeType: string; size: number },
+  ): ReturnType<MedicalAttachments['requestUploadUrl']> {
+    return this.attachments.requestUploadUrl(organizationId, input);
   }
 
   // --- clinic-facing --------------------------------------------------
@@ -52,6 +77,10 @@ export class MedicalRecordService {
     actor: VetCareActor,
   ): Promise<MedicalRecordDTO> {
     VeterinaryCarePolicy.assertAnimalActive(animal);
+    await this.attachments.assertUsable(organizationId, [
+      ...(input.prescriptionKey ? [input.prescriptionKey] : []),
+      ...(input.attachmentKeys ?? []),
+    ]);
 
     const record = await this.db.transaction(async (tx) => {
       const created = await this.records.create(
@@ -64,6 +93,13 @@ export class MedicalRecordService {
           diagnosis: input.diagnosis ?? null,
           treatment: input.treatment ?? null,
           notes: input.notes ?? null,
+          symptoms: input.symptoms ?? null,
+          severity: input.severity ?? null,
+          labNotes: input.labNotes ?? null,
+          recordType: input.recordType ?? 'GENERAL',
+          isDraft: input.isDraft ?? false,
+          prescriptionKey: input.prescriptionKey ?? null,
+          attachmentKeys: input.attachmentKeys ?? [],
         },
         tx,
       );
@@ -85,14 +121,17 @@ export class MedicalRecordService {
       medicalRecordId: record.id,
       animalId: animal.id,
       organizationId,
+      isDraft: record.isDraft,
+      petOwnerUserId: await this.ownerUserId(animal.id),
+      actorUserId: actor.actorUserId,
     });
-    return toMedicalRecordDTO(record);
+    return this.dto(record);
   }
 
   async getForClinic(animalId: string, recordId: string): Promise<MedicalRecordDTO> {
     const record = await this.records.findByIdForAnimal(recordId, animalId);
     if (!record) throw new NotFoundError('Medical record not found');
-    return toMedicalRecordDTO(record);
+    return this.dto(record);
   }
 
   async listForClinic(
@@ -100,7 +139,7 @@ export class MedicalRecordService {
     filter: { page: number; pageSize: number },
   ): Promise<{ items: MedicalRecordDTO[]; total: number }> {
     const { items, total } = await this.records.listForAnimal(animalId, filter);
-    return { items: items.map(toMedicalRecordDTO), total };
+    return { items: await Promise.all(items.map((r) => this.dto(r))), total };
   }
 
   async updateForClinic(
@@ -118,6 +157,15 @@ export class MedicalRecordService {
     const animal = await this.animals.findById(animalId);
     if (!animal) throw new InternalError('animal missing for an existing medical record');
     VeterinaryCarePolicy.assertAnimalActive(animal);
+    const alreadyAttached = [
+      ...(existing.prescriptionKey ? [existing.prescriptionKey] : []),
+      ...existing.attachmentKeys,
+    ];
+    await this.attachments.assertUsable(
+      organizationId,
+      [...(patch.prescriptionKey ? [patch.prescriptionKey] : []), ...(patch.attachmentKeys ?? [])],
+      alreadyAttached,
+    );
 
     const updated = await this.db.transaction(async (tx) => {
       const rec = await this.records.update(
@@ -128,6 +176,13 @@ export class MedicalRecordService {
           diagnosis: patch.diagnosis,
           treatment: patch.treatment,
           notes: patch.notes,
+          symptoms: patch.symptoms,
+          severity: patch.severity,
+          labNotes: patch.labNotes,
+          recordType: patch.recordType,
+          isDraft: patch.isDraft,
+          prescriptionKey: patch.prescriptionKey,
+          attachmentKeys: patch.attachmentKeys,
         },
         tx,
       );
@@ -154,8 +209,18 @@ export class MedicalRecordService {
       medicalRecordId: recordId,
       animalId,
       organizationId,
+      // A draft finalised now is "new" to the owner (drafts never notify).
+      finalized: existing.isDraft && !updated.isDraft,
+      petOwnerUserId:
+        existing.isDraft && !updated.isDraft ? await this.ownerUserId(animalId) : null,
+      actorUserId: actor.actorUserId,
     });
-    return toMedicalRecordDTO(updated);
+    const stillAttached = new Set([
+      ...(updated.prescriptionKey ? [updated.prescriptionKey] : []),
+      ...updated.attachmentKeys,
+    ]);
+    await this.attachments.deleteQuietly(alreadyAttached.filter((k) => !stillAttached.has(k)));
+    return this.dto(updated);
   }
 
   async deleteForClinic(
@@ -190,6 +255,10 @@ export class MedicalRecordService {
       animalId,
       organizationId,
     });
+    await this.attachments.deleteQuietly([
+      ...(existing.prescriptionKey ? [existing.prescriptionKey] : []),
+      ...existing.attachmentKeys,
+    ]);
   }
 
   // --- owner-facing (read-only) ------------------------------------
@@ -199,12 +268,12 @@ export class MedicalRecordService {
     filter: { page: number; pageSize: number },
   ): Promise<{ items: MedicalRecordDTO[]; total: number }> {
     const { items, total } = await this.records.listForAnimal(animalId, filter);
-    return { items: items.map(toOwnerMedicalRecordDTO), total };
+    return { items: await Promise.all(items.map((r) => this.ownerDto(r))), total };
   }
 
   async getForOwner(animalId: string, recordId: string): Promise<MedicalRecordDTO> {
     const record = await this.records.findByIdForAnimal(recordId, animalId);
     if (!record) throw new NotFoundError('Medical record not found');
-    return toOwnerMedicalRecordDTO(record);
+    return this.ownerDto(record);
   }
 }

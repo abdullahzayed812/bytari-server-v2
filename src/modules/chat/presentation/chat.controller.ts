@@ -124,4 +124,11 @@ export class ChatController {
     const conversation = requireConversation(req);
     sendSuccess(res, await this.chat.setDealStatus(this.actor(req), conversation.id, 'CLOSED'));
   };
+
+  /** POST /conversations/:conversationId/clinic-active — the clinic pauses / resumes an owner chat. */
+  setClinicChatActive = async (req: Request, res: Response): Promise<void> => {
+    const conversation = requireConversation(req);
+    const { active } = validatedBody<{ active: boolean }>(req);
+    sendSuccess(res, await this.chat.setClinicChatActive(this.actor(req), conversation.id, active));
+  };
 }

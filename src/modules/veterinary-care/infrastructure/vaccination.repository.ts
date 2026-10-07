@@ -1,10 +1,27 @@
+import { businessToday } from '../../../shared/time/business-date.js';
 import type { Knex } from 'knex';
+import type { VaccinationStatus } from '../domain/veterinary-care.constants.js';
 import {
   rowToVaccination,
+  type ClinicListAnimalSummary,
+  type ClinicListOwnerSummary,
+  type ClinicVaccinationListStatus,
   type ListVaccinationsFilter,
   type Vaccination,
   type VaccinationRow,
 } from '../domain/veterinary-care.types.js';
+import {
+  CLINIC_LIST_JOIN_COLUMNS,
+  joinClinicAnimalAndOwner,
+  readClinicListJoin,
+  type ClinicListJoinColumns,
+} from './clinic-list-joins.js';
+
+export interface ClinicVaccinationListItem {
+  vaccination: Vaccination;
+  animal: ClinicListAnimalSummary;
+  owner: ClinicListOwnerSummary | null;
+}
 
 const TABLE = 'vaccinations';
 
@@ -15,6 +32,7 @@ export interface CreateVaccinationData {
   vaccineName: string;
   administeredOn: string;
   nextDueOn: string | null;
+  status: VaccinationStatus;
   notes: string | null;
 }
 
@@ -22,6 +40,7 @@ export interface UpdateVaccinationData {
   vaccineName?: string;
   administeredOn?: string;
   nextDueOn?: string | null;
+  status?: VaccinationStatus;
   notes?: string | null;
 }
 
@@ -57,6 +76,7 @@ export class VaccinationRepository {
         vaccine_name: data.vaccineName,
         administered_on: data.administeredOn,
         next_due_on: data.nextDueOn,
+        status: data.status,
         notes: data.notes,
       })
       .returning('*')) as VaccinationRow[];
@@ -73,6 +93,7 @@ export class VaccinationRepository {
     if (patch.vaccineName !== undefined) dbPatch.vaccine_name = patch.vaccineName;
     if (patch.administeredOn !== undefined) dbPatch.administered_on = patch.administeredOn;
     if (patch.nextDueOn !== undefined) dbPatch.next_due_on = patch.nextDueOn;
+    if (patch.status !== undefined) dbPatch.status = patch.status;
     if (patch.notes !== undefined) dbPatch.notes = patch.notes;
 
     const [row] = (await trx(TABLE)
@@ -111,5 +132,53 @@ export class VaccinationRepository {
       .offset((filter.page - 1) * filter.pageSize);
 
     return { items: rows.map(rowToVaccination), total };
+  }
+
+  /**
+   * Clinic-wide list (legacy `getClinicVaccinations`): this clinic's
+   * vaccinations for animals it holds ACTIVE access to. `OVERDUE` = SCHEDULED
+   * with a next dose before today; `DUE_TODAY` = next dose today.
+   */
+  async listForClinic(
+    organizationId: string,
+    filter: { page: number; pageSize: number; status: ClinicVaccinationListStatus },
+  ): Promise<{ items: ClinicVaccinationListItem[]; total: number }> {
+    const base = (): Knex.QueryBuilder => {
+      const qb = joinClinicAnimalAndOwner(this.db(`${TABLE} as v`), 'v', organizationId);
+      switch (filter.status) {
+        case 'ALL':
+          break;
+        case 'OVERDUE':
+          qb.andWhere('v.status', 'SCHEDULED').andWhereRaw('v.next_due_on < ?::date', [
+            businessToday(),
+          ]);
+          break;
+        case 'DUE_TODAY':
+          qb.andWhere('v.status', 'SCHEDULED').andWhereRaw('v.next_due_on = ?::date', [
+            businessToday(),
+          ]);
+          break;
+        default:
+          qb.andWhere('v.status', filter.status);
+      }
+      return qb;
+    };
+
+    const countRow = await base().count<{ count: string }>({ count: '*' }).first();
+    const total = Number(countRow?.count ?? 0);
+
+    const rows: Array<VaccinationRow & ClinicListJoinColumns> = await base()
+      .select('v.*', ...CLINIC_LIST_JOIN_COLUMNS)
+      .orderByRaw('v.next_due_on ASC NULLS LAST, v.administered_on DESC, v.created_at DESC')
+      .limit(filter.pageSize)
+      .offset((filter.page - 1) * filter.pageSize);
+
+    return {
+      items: rows.map((row) => ({
+        vaccination: rowToVaccination(row),
+        ...readClinicListJoin(row.animal_id, row),
+      })),
+      total,
+    };
   }
 }

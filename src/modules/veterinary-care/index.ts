@@ -13,3 +13,7 @@ export { ClinicDashboardService } from './application/clinic-dashboard.service.j
 export { createClinicalVeterinaryRouter } from './presentation/clinical.routes.js';
 export { createOwnerMedicalRouter } from './presentation/owner-medical.routes.js';
 export { createClinicDashboardRouter } from './presentation/clinic-dashboard.routes.js';
+export {
+  createClinicCareRouter,
+  createOwnerClinicCareRouter,
+} from './presentation/clinic-care.routes.js';

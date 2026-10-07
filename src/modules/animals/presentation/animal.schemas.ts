@@ -13,6 +13,9 @@ const breedSchema = z.string().trim().min(1).max(120);
 const notesSchema = z.string().trim().max(2000);
 const colorSchema = z.string().trim().min(1).max(80);
 const distinguishingFeaturesSchema = z.string().trim().min(1).max(500);
+/** Legacy `pets.weight` — kilograms, 2 decimals. */
+const weightKgSchema = z.number().positive().max(9999.99);
+const medicalHistorySchema = z.string().trim().min(1).max(8000);
 /** `YYYY-MM-DD`, not in the future. */
 const dateOfBirthSchema = z
   .string()
@@ -29,6 +32,8 @@ export const createAnimalBodySchema = z.object({
   color: colorSchema.optional(),
   distinguishingFeatures: distinguishingFeaturesSchema.optional(),
   ageEstimate: z.enum(ANIMAL_AGE_ESTIMATES).optional(),
+  weightKg: weightKgSchema.optional(),
+  isNeutered: z.boolean().optional(),
   /**
    * Set by the adoption / mating / lost listing flow: the animal is only the
    * listing's subject and must not appear among the owner's registered pets.
@@ -48,6 +53,10 @@ export const updateAnimalBodySchema = z
     color: colorSchema.nullable().optional(),
     distinguishingFeatures: distinguishingFeaturesSchema.nullable().optional(),
     ageEstimate: z.enum(ANIMAL_AGE_ESTIMATES).nullable().optional(),
+    weightKg: weightKgSchema.nullable().optional(),
+    isNeutered: z.boolean().nullable().optional(),
+    /** ADMIN only (legacy admin pet edit) — the controller rejects it for anyone else. */
+    medicalHistory: medicalHistorySchema.nullable().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: 'At least one field is required' });
 export type UpdateAnimalBody = z.infer<typeof updateAnimalBodySchema>;

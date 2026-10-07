@@ -20,6 +20,8 @@ export interface CreateAnimalData {
   createdBy: string;
   color?: string | null;
   distinguishingFeatures?: string | null;
+  weightKg?: number | null;
+  isNeutered?: boolean | null;
   ageEstimate?: string | null;
   listingOnly?: boolean;
 }
@@ -34,6 +36,9 @@ export interface UpdateAnimalData {
   color?: string | null;
   distinguishingFeatures?: string | null;
   ageEstimate?: string | null;
+  weightKg?: number | null;
+  isNeutered?: boolean | null;
+  medicalHistory?: string | null;
   /** Full replacement of the gallery array — the service reads-modifies-writes. */
   galleryKeys?: string[];
 }
@@ -64,6 +69,8 @@ export class AnimalRepository {
         color: data.color ?? null,
         distinguishing_features: data.distinguishingFeatures ?? null,
         age_estimate: data.ageEstimate ?? null,
+        weight_kg: data.weightKg ?? null,
+        is_neutered: data.isNeutered ?? null,
         listing_only: data.listingOnly ?? false,
       })
       .returning('*')) as AnimalRow[];
@@ -83,6 +90,9 @@ export class AnimalRepository {
     if (patch.distinguishingFeatures !== undefined)
       dbPatch.distinguishing_features = patch.distinguishingFeatures;
     if (patch.ageEstimate !== undefined) dbPatch.age_estimate = patch.ageEstimate;
+    if (patch.weightKg !== undefined) dbPatch.weight_kg = patch.weightKg;
+    if (patch.isNeutered !== undefined) dbPatch.is_neutered = patch.isNeutered;
+    if (patch.medicalHistory !== undefined) dbPatch.medical_history = patch.medicalHistory;
     if (patch.galleryKeys !== undefined) dbPatch.gallery_keys = patch.galleryKeys;
 
     const [row] = (await trx(TABLE).where({ id }).update(dbPatch).returning('*')) as AnimalRow[];

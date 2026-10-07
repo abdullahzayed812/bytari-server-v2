@@ -1,12 +1,9 @@
 import type { Knex } from 'knex';
 import type { Logger } from 'pino';
-import {
-  ConflictError,
-  ForbiddenError,
-  NotFoundError,
-} from '../../../shared/errors/app-error.js';
+import { ConflictError, ForbiddenError, NotFoundError } from '../../../shared/errors/app-error.js';
 import { ErrorCode } from '../../../shared/errors/error-codes.js';
 import type { EventBus } from '../../../shared/events/index.js';
+import { BUSINESS_TIME_ZONE, businessToday } from '../../../shared/time/business-date.js';
 import type { AuditContext } from '../../audit/audit.types.js';
 import type { AuditService } from '../../audit/audit.service.js';
 import type { AnimalService } from '../../animals/application/animal.service.js';
@@ -67,6 +64,9 @@ export class ClinicAppointmentService {
     private readonly audit: AuditService,
     private readonly events: EventBus,
     logger: Logger,
+    private readonly veterinaryAccess?: {
+      hasActiveAccess(animalId: string, organizationId: string): Promise<boolean>;
+    },
   ) {
     this.log = logger.child({ component: 'clinic-appointment-service' });
   }
@@ -118,7 +118,8 @@ export class ClinicAppointmentService {
   ): Promise<ClinicAppointmentDTO> {
     // 1. the selected pet must belong to the caller and be ACTIVE.
     const animalCtx = await this.animals.loadContext(input.animalId);
-    if (!animalCtx || animalCtx.currentOwnerUserId !== actor.actorUserId) {
+    // Only a registered pet can be booked — never a lost / adoption / mating listing subject.
+    if (!animalCtx || animalCtx.listingOnly || animalCtx.currentOwnerUserId !== actor.actorUserId) {
       throw new NotFoundError('Animal not found');
     }
     if (animalCtx.status !== 'ACTIVE') {
@@ -645,6 +646,172 @@ export class ClinicAppointmentService {
       },
       tx,
     );
+  }
+
+  // --- clinic-initiated (legacy clinic dashboard) -------------------
+
+  /**
+   * The clinic books a visit for an animal it treats (legacy
+   * `createClinicAppointment`, status confirmed). The `:organizationId` is
+   * already authorized (`clinic.appointment.manage`); the clinic must also hold
+   * an ACTIVE veterinary-access grant for the animal (else 404), and the
+   * appointment is attached to the animal's CURRENT owner — never a client value.
+   */
+  async createByClinic(
+    organizationId: string,
+    input: CreateClinicAppointmentInput,
+    actor: ClinicAppointmentActor,
+  ): Promise<ClinicAppointmentDTO> {
+    const animalCtx = await this.animals.loadContext(input.animalId);
+    const hasAccess = await this.veterinaryAccess?.hasActiveAccess(input.animalId, organizationId);
+    if (!animalCtx || animalCtx.listingOnly || !hasAccess || !animalCtx.currentOwnerUserId) {
+      throw new NotFoundError('Animal not found');
+    }
+    if (animalCtx.status !== 'ACTIVE') {
+      throw new ConflictError('The animal is deactivated and cannot be booked for a visit', {
+        code: ErrorCode.ANIMAL_NOT_ACTIVE,
+      });
+    }
+    ClinicAppointmentPolicy.assertSlotInFuture(input.scheduledFor);
+    const petOwnerUserId = animalCtx.currentOwnerUserId;
+
+    const created = await this.db.transaction(async (tx) => {
+      const appointment = await this.appointments.create(
+        {
+          ...input,
+          note: input.note?.trim() || null,
+          organizationId,
+          petOwnerUserId,
+          createdByUserId: actor.actorUserId,
+          status: 'CONFIRMED',
+        },
+        tx,
+      );
+      for (const kind of ['REQUESTED', 'CONFIRMED'] as const) {
+        await this.appointments.insertEvent(
+          {
+            appointmentId: appointment.id,
+            kind,
+            actorSide: 'CLINIC',
+            actorUserId: actor.actorUserId,
+            toScheduledFor: appointment.scheduledFor,
+          },
+          tx,
+        );
+      }
+      await this.audit.record(
+        {
+          action: ClinicAppointmentAuditAction.CLINIC_APPOINTMENT_CREATED_BY_CLINIC,
+          entityType: ClinicAppointmentAuditEntity.CLINIC_APPOINTMENT,
+          entityId: appointment.id,
+          actorUserId: actor.actorUserId,
+          metadata: { organizationId, animalId: input.animalId, visitType: input.visitType },
+          context: actor.context,
+        },
+        tx,
+      );
+      return appointment;
+    });
+
+    this.publish(ClinicAppointmentEvent.CREATED_BY_CLINIC, created, actor.actorUserId);
+    return this.mustGetDTO(created.id, 'CLINIC');
+  }
+
+  /** Legacy `deleteClinicAppointment`: only a COMPLETED appointment may be removed. */
+  async deleteByClinic(
+    organizationId: string,
+    appointmentId: string,
+    actor: ClinicAppointmentActor,
+  ): Promise<void> {
+    const existing = await this.appointments.findById(appointmentId);
+    if (!existing) throw new NotFoundError('Appointment not found');
+    this.assertBelongsToOrg(existing, organizationId);
+    ClinicAppointmentPolicy.assertStatus(
+      existing,
+      ['COMPLETED'],
+      'Only completed appointments can be deleted',
+    );
+    await this.db.transaction(async (tx) => {
+      await this.appointments.deleteById(appointmentId, tx);
+      await this.audit.record(
+        {
+          action: ClinicAppointmentAuditAction.CLINIC_APPOINTMENT_DELETED,
+          entityType: ClinicAppointmentAuditEntity.CLINIC_APPOINTMENT,
+          entityId: appointmentId,
+          actorUserId: actor.actorUserId,
+          metadata: { organizationId, animalId: existing.animalId },
+          context: actor.context,
+        },
+        tx,
+      );
+    });
+    this.publish(ClinicAppointmentEvent.DELETED, existing, actor.actorUserId);
+  }
+
+  /** "إرسال تذكير" for one open appointment (legacy `sendAppointmentNotification`). */
+  async remindOwner(
+    organizationId: string,
+    appointmentId: string,
+    actor: ClinicAppointmentActor,
+  ): Promise<{ notified: boolean }> {
+    const existing = await this.appointments.findById(appointmentId);
+    if (!existing) throw new NotFoundError('Appointment not found');
+    this.assertBelongsToOrg(existing, organizationId);
+    ClinicAppointmentPolicy.assertStatus(
+      existing,
+      [...CLINIC_APPOINTMENT_OPEN_STATUSES],
+      'Only an open appointment can be reminded',
+    );
+    await this.audit.record({
+      action: ClinicAppointmentAuditAction.CLINIC_APPOINTMENT_OWNER_REMINDED,
+      entityType: ClinicAppointmentAuditEntity.CLINIC_APPOINTMENT,
+      entityId: appointmentId,
+      actorUserId: actor.actorUserId,
+      metadata: { organizationId },
+      context: actor.context,
+    });
+    this.publishReminder(existing, actor.actorUserId, new Date().toISOString());
+    return { notified: true };
+  }
+
+  /** "تذكير مواعيد اليوم" (legacy `sendTodayAppointmentsNotification`). */
+  async remindToday(
+    organizationId: string,
+    actor: ClinicAppointmentActor,
+  ): Promise<{ sent: number }> {
+    const due = await this.appointments.listOpenOnDay(
+      organizationId,
+      businessToday(),
+      BUSINESS_TIME_ZONE,
+      500,
+    );
+    const sentAt = new Date().toISOString();
+    for (const appointment of due) this.publishReminder(appointment, actor.actorUserId, sentAt);
+    await this.audit.record({
+      action: ClinicAppointmentAuditAction.CLINIC_APPOINTMENT_OWNER_REMINDED,
+      entityType: 'ORGANIZATION',
+      entityId: organizationId,
+      actorUserId: actor.actorUserId,
+      metadata: { organizationId, batch: 'TODAY', sent: due.length },
+      context: actor.context,
+    });
+    return { sent: due.length };
+  }
+
+  private publishReminder(
+    appointment: ClinicAppointment,
+    actorUserId: string,
+    sentAt: string,
+  ): void {
+    this.events.publish(ClinicAppointmentEvent.OWNER_REMINDED, {
+      appointmentId: appointment.id,
+      organizationId: appointment.organizationId,
+      animalId: appointment.animalId,
+      petOwnerUserId: appointment.petOwnerUserId,
+      status: appointment.status,
+      actorUserId,
+      sentAt,
+    });
   }
 
   private publish(name: string, appointment: ClinicAppointment, actorUserId: string): void {

@@ -10,6 +10,8 @@ import {
   deviceIdParamSchema,
   listNotificationsQuerySchema,
   notificationIdParamSchema,
+  petAnimalIdParamSchema,
+  petSectionSeenBodySchema,
   registerDeviceBodySchema,
   updatePreferencesBodySchema,
 } from './notification.schemas.js';
@@ -50,6 +52,17 @@ export function createNotificationRouter(c: Container): Router {
   r.get('/', validate({ query: listNotificationsQuerySchema }), asyncHandler(ctrl.list));
   r.get('/unread-count', asyncHandler(ctrl.unreadCount));
   r.post('/read-all', asyncHandler(ctrl.markAllRead));
+  // Pet Details per-section "new" badges (the caller's own notifications only)
+  r.get(
+    '/pets/:animalId/unseen',
+    validate({ params: petAnimalIdParamSchema }),
+    asyncHandler(ctrl.petUnseen),
+  );
+  r.post(
+    '/pets/:animalId/seen',
+    validate({ params: petAnimalIdParamSchema, body: petSectionSeenBodySchema }),
+    asyncHandler(ctrl.markPetSectionSeen),
+  );
   r.get(
     '/:notificationId',
     validate({ params: notificationIdParamSchema }),
