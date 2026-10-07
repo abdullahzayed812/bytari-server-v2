@@ -22,6 +22,26 @@ const { app, container } = buildTestApp();
 const API = '/api/v1';
 const tick = (): Promise<void> => new Promise((r) => setTimeout(r, 80));
 
+/**
+ * Notifications are written by async event handlers, so a fixed sleep races
+ * on a loaded CI runner. Poll until `min` rows exist (or time out), then
+ * return what's there so the caller's exact assertion still runs.
+ */
+async function notificationsFor(
+  userId: string,
+  type?: string,
+  min = 1,
+  timeoutMs = 5000,
+): Promise<Array<{ type: string }>> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const q = container.db('notifications').where({ recipient_user_id: userId });
+    const rows = await (type ? q.andWhere({ type }) : q);
+    if (rows.length >= min || Date.now() > deadline) return rows;
+    await tick();
+  }
+}
+
 beforeAll(() => ensureSchema());
 beforeEach(() => resetDb());
 afterAll(() => closeTestDb());
@@ -162,10 +182,7 @@ describe('vaccinations — status, clinic-wide list, notify owner', () => {
     const done = await createVaccination(app, vet.accessToken, clinic.id, animal.id, {
       administeredOn: addDays(today, -5),
     });
-    await tick();
-    const added = await container
-      .db('notifications')
-      .where({ recipient_user_id: petOwner.id, type: 'VACCINATION_ADDED' });
+    const added = await notificationsFor(petOwner.id, 'VACCINATION_ADDED', 3);
     expect(added).toHaveLength(3);
 
     const all = await request(app)
@@ -202,10 +219,7 @@ describe('vaccinations — status, clinic-wide list, notify owner', () => {
       .post(`${base(clinic.id, animal.id)}/vaccinations/${done.id}/notify`)
       .set(bearer(vet.accessToken));
     expect(notify.body.data).toEqual({ notified: true });
-    await tick();
-    const due = await container
-      .db('notifications')
-      .where({ recipient_user_id: petOwner.id, type: 'VACCINATION_DUE' });
+    const due = await notificationsFor(petOwner.id, 'VACCINATION_DUE');
     expect(due).toHaveLength(1);
 
     // STAFF has no vaccination.read.
@@ -233,12 +247,7 @@ describe('reminders (legacy pet_reminders)', () => {
     expect(created.status).toBe(201);
     const id: string = created.body.data.id;
     expect(created.body.data).toMatchObject({ reminderType: 'CHECKUP', isCompleted: false });
-    await tick();
-    expect(
-      await container
-        .db('notifications')
-        .where({ recipient_user_id: petOwner.id, type: 'REMINDER_ADDED' }),
-    ).toHaveLength(1);
+    expect(await notificationsFor(petOwner.id, 'REMINDER_ADDED')).toHaveLength(1);
 
     const todayList = await request(app)
       .get(`${API}/organizations/${clinic.id}/clinic-reminders?status=TODAY`)
@@ -250,12 +259,7 @@ describe('reminders (legacy pet_reminders)', () => {
       .post(`${API}/organizations/${clinic.id}/clinic-reminders/notify-today`)
       .set(bearer(vet.accessToken));
     expect(sendToday.body.data).toEqual({ sent: 1 });
-    await tick();
-    expect(
-      await container
-        .db('notifications')
-        .where({ recipient_user_id: petOwner.id, type: 'REMINDER_DUE' }),
-    ).toHaveLength(1);
+    expect(await notificationsFor(petOwner.id, 'REMINDER_DUE')).toHaveLength(1);
 
     const reschedule = await request(app)
       .patch(`${base(clinic.id, animal.id)}/reminders/${id}`)
@@ -438,10 +442,8 @@ describe('clinic appointments — clinic-created, remind, delete', () => {
       .post(`${API}/organizations/${clinic.id}/clinic-appointments/${id}/remind`)
       .set(bearer(vet.accessToken));
     expect(remind.body.data).toEqual({ notified: true });
-    await tick();
-    const types = (
-      await container.db('notifications').where({ recipient_user_id: petOwner.id }).select('type')
-    ).map((r: { type: string }) => r.type);
+    await notificationsFor(petOwner.id, 'CLINIC_APPOINTMENT_REMINDER');
+    const types = (await notificationsFor(petOwner.id)).map((r) => r.type);
     expect(types).toEqual(
       expect.arrayContaining(['CLINIC_APPOINTMENT_CREATED', 'CLINIC_APPOINTMENT_REMINDER']),
     );
@@ -469,12 +471,7 @@ describe('clinic visitors broadcast + chat pause', () => {
       .set(bearer(clinicOwner.accessToken))
       .send({ title: 'تنبيه', body: 'العيادة مغلقة غدًا', audience: 'CLINIC_VISITORS' });
     expect(send.status).toBe(201);
-    await tick();
-    expect(
-      await container
-        .db('notifications')
-        .where({ recipient_user_id: petOwner.id, type: 'ORGANIZATION_BROADCAST' }),
-    ).toHaveLength(1);
+    expect(await notificationsFor(petOwner.id, 'ORGANIZATION_BROADCAST')).toHaveLength(1);
 
     const office = await createActiveOrganization(app, otherOwner.accessToken, admin.accessToken, {
       type: 'VETERINARY_OFFICE',
