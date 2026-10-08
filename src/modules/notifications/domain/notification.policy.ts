@@ -205,26 +205,11 @@ export class NotificationPolicy {
           'ANIMAL_REMINDER',
           'reminderId',
         );
+      // Medical records are clinic-private: the owner is never notified about
+      // one (they cannot see it). Only vaccinations / reminders reach the owner.
       case 'medical_record.created':
-        // Drafts are work-in-progress — the owner hears once it is final.
-        if (p.isDraft === true) return [];
-        return this.petCareToOwner(
-          'MEDICAL_RECORD_ADDED',
-          'medical_record.created',
-          p,
-          'MEDICAL_RECORD',
-          'medicalRecordId',
-        );
       case 'medical_record.updated':
-        if (p.finalized !== true) return [];
-        // Same key as `created`: one "new record" notification per record.
-        return this.petCareToOwner(
-          'MEDICAL_RECORD_ADDED',
-          'medical_record.created',
-          p,
-          'MEDICAL_RECORD',
-          'medicalRecordId',
-        );
+        return [];
       case 'reminder.owner_notified':
         return this.petCareToOwner(
           'REMINDER_DUE',

@@ -9,7 +9,7 @@ import {
   createAnimal,
   createMedicalRecord,
   createVaccination,
-  grantVeterinaryAccess,
+  openClinicPet,
   registerAdmin,
   registerApprovedVet,
   registerUser,
@@ -36,7 +36,7 @@ async function setup() {
     role: 'VETERINARIAN',
   });
   const animal = await createAnimal(app, petOwner.accessToken, { name: 'Milo' });
-  await grantVeterinaryAccess(app, clinicOwner.accessToken, clinic.id, animal.id);
+  await openClinicPet(app, clinicOwner.accessToken, clinic.id, animal.publicCode);
   return { admin, clinicOwner, vet, petOwner, clinic, animal };
 }
 
@@ -142,43 +142,15 @@ describe('medical history timeline — clinic-facing', () => {
     expect(res.body.meta.total).toBe(0);
   });
 
-  it('denies a clinic with no veterinary-access grant (404)', async () => {
-    const { clinicOwner, vet, clinic, animal } = await setup();
-    await createMedicalRecord(app, vet.accessToken, clinic.id, animal.id);
-    // revoke the grant (owner holds `animal.veterinary.access.manage`)
-    await request(app)
-      .delete(`/api/v1/organizations/${clinic.id}/animal-access/${animal.id}`)
-      .set(bearer(clinicOwner.accessToken))
-      .expect(200);
-
+  it('404s an unknown animal', async () => {
+    const { vet, clinic } = await setup();
     const res = await request(app)
-      .get(clinicHistory(clinic.id, animal.id))
+      .get(clinicHistory(clinic.id, '00000000-0000-4000-8000-000000000000'))
       .set(bearer(vet.accessToken));
     expect(res.status).toBe(404);
   });
 
-  it('cross-clinic: a second clinic with no grant cannot read the timeline (404)', async () => {
-    const { admin, vet, clinic, animal } = await setup();
-    await seedEntries(vet.accessToken, clinic.id, animal.id);
-
-    const ownerB = await registerApprovedVet(app);
-    const vetB = await registerApprovedVet(app);
-    const clinicB = await createActiveOrganization(app, ownerB.accessToken, admin.accessToken, {
-      type: 'CLINIC',
-      name: 'Clinic B',
-    });
-    await addOrganizationMember(app, ownerB.accessToken, clinicB.id, {
-      userId: vetB.id,
-      role: 'VETERINARIAN',
-    });
-
-    const res = await request(app)
-      .get(clinicHistory(clinicB.id, animal.id))
-      .set(bearer(vetB.accessToken));
-    expect(res.status).toBe(404);
-  });
-
-  it('a clinic WITH a grant sees the full cross-clinic history', async () => {
+  it('each clinic’s timeline holds ONLY its own entries', async () => {
     const { admin, vet, clinic, animal } = await setup();
     await createMedicalRecord(app, vet.accessToken, clinic.id, animal.id, {
       visitDate: '2026-01-05',
@@ -190,22 +162,30 @@ describe('medical history timeline — clinic-facing', () => {
       type: 'CLINIC',
       name: 'Clinic B',
     });
-    await grantVeterinaryAccess(app, ownerB.accessToken, clinicB.id, animal.id);
+    await openClinicPet(app, ownerB.accessToken, clinicB.id, animal.publicCode);
     await createVaccination(app, ownerB.accessToken, clinicB.id, animal.id, {
       vaccineName: 'Lepto',
       administeredOn: '2026-02-01',
     });
 
-    const res = await request(app)
+    const asB = await request(app)
       .get(clinicHistory(clinicB.id, animal.id))
       .set(bearer(ownerB.accessToken));
-    expect(res.status).toBe(200);
-    expect(res.body.meta.total).toBe(2);
-    const kinds = (res.body.data as Array<{ type: string }>).map((e) => e.type);
-    expect(kinds).toEqual(['VACCINATION', 'MEDICAL_RECORD']);
+    expect(asB.status).toBe(200);
+    expect(asB.body.meta.total).toBe(1);
+    expect((asB.body.data as Array<{ type: string }>).map((e) => e.type)).toEqual(['VACCINATION']);
+    expect(JSON.stringify(asB.body)).not.toContain('A-diag');
+
+    const asA = await request(app)
+      .get(clinicHistory(clinic.id, animal.id))
+      .set(bearer(vet.accessToken));
+    expect(asA.body.meta.total).toBe(1);
+    expect((asA.body.data as Array<{ type: string }>).map((e) => e.type)).toEqual([
+      'MEDICAL_RECORD',
+    ]);
   });
 
-  it('lets an ADMIN read any animal’s timeline without a grant', async () => {
+  it('lets an ADMIN read a clinic’s timeline (as that clinic)', async () => {
     const { admin, vet, clinic, animal } = await setup();
     await createMedicalRecord(app, vet.accessToken, clinic.id, animal.id);
     const res = await request(app)
@@ -217,7 +197,7 @@ describe('medical history timeline — clinic-facing', () => {
 });
 
 describe('medical history timeline — owner-facing', () => {
-  it('the current owner reads the composed timeline; a stranger gets 404', async () => {
+  it('the current owner reads vaccinations only (records are clinic-private); a stranger gets 404', async () => {
     const { petOwner, vet, clinic, animal } = await setup();
     await seedEntries(vet.accessToken, clinic.id, animal.id);
 
@@ -225,8 +205,17 @@ describe('medical history timeline — owner-facing', () => {
       .get(ownerHistory(animal.id))
       .set(bearer(petOwner.accessToken));
     expect(ownerView.status).toBe(200);
-    expect(ownerView.body.meta.total).toBe(4);
+    expect(ownerView.body.meta.total).toBe(2);
+    expect((ownerView.body.data as Array<{ type: string }>).map((e) => e.type)).toEqual([
+      'VACCINATION',
+      'VACCINATION',
+    ]);
     expect(ownerView.body.data[0]).toMatchObject({ type: 'VACCINATION', occurredOn: '2026-04-20' });
+    expect(JSON.stringify(ownerView.body)).not.toMatch(/Checkup|Follow visit/);
+    const onlyRecords = await request(app)
+      .get(`${ownerHistory(animal.id)}?type=MEDICAL_RECORD`)
+      .set(bearer(petOwner.accessToken));
+    expect(onlyRecords.body.data).toEqual([]);
 
     const stranger = await registerUser(app);
     const strangerView = await request(app)
@@ -257,6 +246,6 @@ describe('medical history timeline — owner-facing', () => {
       .get(ownerHistory(animal.id))
       .set(bearer(newOwner.accessToken));
     expect(newOwnerView.status).toBe(200);
-    expect(newOwnerView.body.meta.total).toBe(4);
+    expect(newOwnerView.body.meta.total).toBe(2);
   });
 });

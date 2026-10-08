@@ -6,16 +6,14 @@ import { validatedBody, validatedParams, validatedQuery } from '../../../shared/
 import { auditContextFromRequest, type AuditContextResult } from '../../audit/audit-context.js';
 import { requireAuth } from '../../auth/authenticate.middleware.js';
 import { requireOrganization } from '../../organizations/presentation/organization.middleware.js';
-import { toClinicAnimalAccessDTO } from '../domain/veterinary-care.types.js';
 import type { MedicalHistoryService } from '../application/medical-history.service.js';
 import type { MedicalRecordService } from '../application/medical-record.service.js';
 import type { VaccinationService } from '../application/vaccination.service.js';
-import type { VeterinaryAccessService } from '../application/veterinary-access.service.js';
+import type { ClinicPetService } from '../application/clinic-pet.service.js';
 import { requireVeterinaryAnimal } from './veterinary-care.middleware.js';
 import type {
   CreateMedicalRecordBody,
   CreateVaccinationBody,
-  GrantAnimalAccessBody,
   ListMedicalHistoryQuery,
   ListVaccinationsQuery,
   UpdateMedicalRecordBody,
@@ -30,7 +28,7 @@ interface PageQuery {
 /** Clinic-facing veterinary-care HTTP adapter. No business logic. */
 export class ClinicalController {
   constructor(
-    private readonly access: VeterinaryAccessService,
+    private readonly pets: ClinicPetService,
     private readonly records: MedicalRecordService,
     private readonly vaccinations: VaccinationService,
     private readonly history: MedicalHistoryService,
@@ -40,46 +38,25 @@ export class ClinicalController {
     return { actorUserId: requireAuth(req).userId, context: auditContextFromRequest(req) };
   }
 
-  // --- clinic ↔ animal access -------------------------------------
+  // --- clinic pets (record-derived) ------------------------------
 
-  grantAccess = async (req: Request, res: Response): Promise<void> => {
-    const org = requireOrganization(req);
-    const body = validatedBody<GrantAnimalAccessBody>(req);
-    const dto = await this.access.grant(
-      { id: org.id, type: org.type },
-      body.animalId,
-      this.actor(req),
-    );
-    sendSuccess(res, dto, StatusCodes.CREATED);
-  };
-
-  revokeAccess = async (req: Request, res: Response): Promise<void> => {
-    const org = requireOrganization(req);
-    const { animalId } = validatedParams<{ animalId: string }>(req);
-    await this.access.revoke(org.id, animalId, this.actor(req));
-    sendSuccess(res, { revoked: true });
-  };
-
-  listAccess = async (req: Request, res: Response): Promise<void> => {
+  /** Recent / All Pets: pets this clinic has its own records for, latest activity first. */
+  listPets = async (req: Request, res: Response): Promise<void> => {
     const org = requireOrganization(req);
     const q = validatedQuery<PageQuery & { search?: string }>(req);
-    const { items, total } = await this.access.list(org.id, {
+    const { items, total } = await this.pets.list(org.id, {
       page: q.page,
       pageSize: q.pageSize,
       search: q.search,
     });
-    const data = items.map((it) => ({
-      ...toClinicAnimalAccessDTO(it.access),
-      animal: {
-        name: it.animalName,
-        species: it.animalSpecies,
-        status: it.animalStatus,
-        breed: it.animalBreed,
-        photoUrl: it.animalPhotoUrl,
-      },
-      ownerName: it.ownerName,
-    }));
-    sendSuccess(res, data, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
+    sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
+  };
+
+  /** Open a pet by its short public ID / scanned QR — creates no relationship. */
+  lookupPet = async (req: Request, res: Response): Promise<void> => {
+    const org = requireOrganization(req);
+    const { code } = validatedQuery<{ code: string }>(req);
+    sendSuccess(res, await this.pets.lookup(org.id, code, this.actor(req)));
   };
 
   // --- medical records -------------------------------------------
@@ -93,9 +70,10 @@ export class ClinicalController {
   };
 
   listRecords = async (req: Request, res: Response): Promise<void> => {
+    const org = requireOrganization(req);
     const animal = requireVeterinaryAnimal(req);
     const q = validatedQuery<PageQuery>(req);
-    const { items, total } = await this.records.listForClinic(animal.id, {
+    const { items, total } = await this.records.listForClinic(org.id, animal.id, {
       page: q.page,
       pageSize: q.pageSize,
     });
@@ -103,9 +81,10 @@ export class ClinicalController {
   };
 
   getRecord = async (req: Request, res: Response): Promise<void> => {
+    const org = requireOrganization(req);
     const animal = requireVeterinaryAnimal(req);
     const { recordId } = validatedParams<{ recordId: string }>(req);
-    sendSuccess(res, await this.records.getForClinic(animal.id, recordId));
+    sendSuccess(res, await this.records.getForClinic(org.id, animal.id, recordId));
   };
 
   updateRecord = async (req: Request, res: Response): Promise<void> => {
@@ -138,9 +117,10 @@ export class ClinicalController {
   };
 
   listVaccinations = async (req: Request, res: Response): Promise<void> => {
+    const org = requireOrganization(req);
     const animal = requireVeterinaryAnimal(req);
     const q = validatedQuery<ListVaccinationsQuery>(req);
-    const { items, total } = await this.vaccinations.listForClinic(animal.id, {
+    const { items, total } = await this.vaccinations.listForClinic(org.id, animal.id, {
       page: q.page,
       pageSize: q.pageSize,
       dueFrom: q.dueFrom,
@@ -149,9 +129,10 @@ export class ClinicalController {
   };
 
   getVaccination = async (req: Request, res: Response): Promise<void> => {
+    const org = requireOrganization(req);
     const animal = requireVeterinaryAnimal(req);
     const { vaccinationId } = validatedParams<{ vaccinationId: string }>(req);
-    sendSuccess(res, await this.vaccinations.getForClinic(animal.id, vaccinationId));
+    sendSuccess(res, await this.vaccinations.getForClinic(org.id, animal.id, vaccinationId));
   };
 
   updateVaccination = async (req: Request, res: Response): Promise<void> => {
@@ -182,9 +163,10 @@ export class ClinicalController {
   // --- medical history (composed timeline) -----------------------
 
   timeline = async (req: Request, res: Response): Promise<void> => {
+    const org = requireOrganization(req);
     const animal = requireVeterinaryAnimal(req);
     const q = validatedQuery<ListMedicalHistoryQuery>(req);
-    const { items, total } = await this.history.timelineForClinic(animal.id, {
+    const { items, total } = await this.history.timelineForClinic(org.id, animal.id, {
       page: q.page,
       pageSize: q.pageSize,
       type: q.type,

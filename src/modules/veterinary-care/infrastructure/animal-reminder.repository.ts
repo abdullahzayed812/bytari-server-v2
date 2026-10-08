@@ -104,13 +104,16 @@ export class AnimalReminderRepository {
     return trx(TABLE).where({ id }).del();
   }
 
-  /** An animal's reminders (every clinic's — full-history read), soonest first. */
+  /** An animal's reminders, soonest first — one clinic's when `organizationId` is set. */
   async listForAnimal(
     animalId: string,
-    filter: { page: number; pageSize: number },
+    filter: { page: number; pageSize: number; organizationId?: string },
   ): Promise<{ items: AnimalReminder[]; total: number }> {
-    const base = (): Knex.QueryBuilder =>
-      this.db<AnimalReminderRow>(TABLE).where('animal_id', animalId);
+    const base = (): Knex.QueryBuilder => {
+      const qb = this.db<AnimalReminderRow>(TABLE).where('animal_id', animalId);
+      if (filter.organizationId) void qb.andWhere('organization_id', filter.organizationId);
+      return qb;
+    };
     const countRow = await base().count<{ count: string }>({ count: '*' }).first();
     const rows: AnimalReminderRow[] = await base()
       .orderBy([
@@ -123,7 +126,7 @@ export class AnimalReminderRepository {
     return { items: rows.map(rowToAnimalReminder), total: Number(countRow?.count ?? 0) };
   }
 
-  /** Clinic-wide list (legacy `getClinicReminders`) — only animals the clinic holds ACTIVE access to. */
+  /** Clinic-wide list (legacy `getClinicReminders`) — this clinic's own reminders. */
   async listForClinic(
     organizationId: string,
     filter: { page: number; pageSize: number; status: ClinicReminderListStatus },
@@ -171,7 +174,7 @@ export class AnimalReminderRepository {
     };
   }
 
-  /** Today's open reminders of a clinic (legacy "send today's reminders"), ACTIVE-grant animals only. */
+  /** Today's open reminders of a clinic (legacy "send today's reminders"). */
   async openTodayForClinic(
     organizationId: string,
     limit: number,

@@ -490,40 +490,63 @@ tokens or secrets in payloads or metadata.
 
 ## 11. Veterinary care (`src/modules/veterinary-care/`, Phase 5)
 
-Four-layer module. Two entities — **medical records** and **vaccinations** —
-plus the **CLINIC ↔ animal veterinary-access** relationship that gates them.
+Four-layer module: clinic-authored **medical records**, **vaccinations** and
+**reminders**. Since 2026-10-08 there is **no clinic ↔ pet link**: a pet
+belongs to its owner and exists independently of clinics; a clinic's
+relationship with a pet is exactly the rows it authored.
 
-### 11.1 Three separate authorization concepts
+### 11.1 Authorization model
 
-The spec (docs 01 §1.9) forbids role-only authorization. Phase 5 keeps three
-concerns strictly separate:
-
-| Concept                      | Where it lives                                           | Grants                                          |
-| ---------------------------- | -------------------------------------------------------- | ----------------------------------------------- |
-| **Animal ownership**         | `animal_ownerships` (Phase 4)                            | owner-facing **read-only** view of the history  |
-| **Veterinary/clinic access** | `animal_clinic_access` (this phase)                      | a specific CLINIC may work on a specific animal |
-| **Medical-record authz**     | organization RBAC (`medical_record.*` / `vaccination.*`) | which clinic members may do which operation     |
-
-A medical write requires **all three chained**:
+| Concept                  | Where it lives                                           | Grants                                                 |
+| ------------------------ | -------------------------------------------------------- | ------------------------------------------------------ |
+| **Animal ownership**     | `animal_ownerships` (Phase 4)                            | owner-facing **read-only** view of OWNER-VISIBLE kinds |
+| **Clinic row ownership** | `organization_id` on every clinic-authored row           | only that clinic reads / updates / deletes the row     |
+| **Medical-record authz** | organization RBAC (`medical_record.*` / `vaccination.*`) | which clinic members may do which operation            |
 
 ```
 authenticated user
-  → ACTIVE membership in the URL's organization
+  → ACTIVE membership in the URL's organization (CLINIC, operational)
   → org permission for the operation (authorizeOrg)
-  → ACTIVE animal_clinic_access grant for (animal, that clinic)   ← withVeterinaryAnimalAccess
-  → (writes only) the target record was recorded by this clinic
+  → withClinicAnimal: a registered pet (listing-only subjects → 404)
+  → service: every read AND write is scoped to organization_id = URL clinic
+             (another clinic's row = the same 404 as an unknown id)
 ```
 
-Being an APPROVED veterinarian, or merely a clinic member, grants access to
-**no** animal. ADMIN overrides every step.
+The clinic id is always the authorized URL organization — never a body /
+query value — so cross-clinic IDOR is impossible. ADMIN acts as the URL clinic.
+
+**Visibility rules**
+
+| Data                                                                   | Creating clinic | Other clinics | Pet owner                                 |
+| ---------------------------------------------------------------------- | --------------- | ------------- | ----------------------------------------- |
+| Medical records (diagnosis, treatment, notes, lab, files, attachments) | read / write    | nothing (404) | nothing — no owner route, no notification |
+| Vaccinations                                                           | read / write    | nothing       | **read-only** (every clinic's)            |
+| Reminders                                                              | read / write    | nothing       | **read-only** (every clinic's)            |
+| Pet profile                                                            | read            | read          | owner (Phase 4)                           |
+
+**Opening a pet.** `GET /organizations/:id/clinic-pets/lookup?code=` resolves
+the owner's short public ID (or a legacy UUID / link from an old QR) to a
+registered pet. It creates nothing, is rate-limited per user (120/h) and every
+hit is audited (`CLINIC_PET_LOOKED_UP`). The owner showing / reading the code
+at the clinic is the consent.
+
+**Recent / All Pets.** `GET /organizations/:id/clinic-pets` = pets the clinic
+has its own records for, `max(updated_at)` first (`ClinicPetRepository`, a
+`UNION ALL` of the three tables filtered by `organization_id`, served by
+`idx_*_org_animal_created`). The dashboard `animals.activeCount` counts the same set.
+
+`animal_clinic_access` (the retired grant) is kept untouched for history but is
+no longer read or written; the grant / revoke routes were removed.
 
 ### 11.2 Data model
 
-| Table                  | Key columns / rules                                                                                                                                                                                                                                                                                                                 |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `animal_clinic_access` | `(animal_id, organization_id, status ACTIVE/REVOKED)`, `granted_by` / `revoked_by` (`SET NULL`). Partial unique index `uq_animal_clinic_access_active` → ≤1 ACTIVE grant per pair. `animal_id` / `organization_id` `ON DELETE CASCADE` (a pure relationship, no historical value).                                                  |
-| `medical_records`      | `animal_id` + `organization_id` **`ON DELETE RESTRICT`** (history cannot be cascade-erased), `recorded_by_user_id` **`ON DELETE SET NULL`** (record outlives the vet), `visit_date` (default `CURRENT_DATE`), `reason` / `diagnosis` / `treatment` / `notes`. Each visit is a NEW row → historical diagnoses are never overwritten. |
-| `vaccinations`         | same FK rules; `vaccine_name`, `administered_on`, `next_due_on` (nullable), `notes`. CHECK `next_due_on IS NULL OR next_due_on >= administered_on`.                                                                                                                                                                                 |
+| Table                  | Key columns / rules                                                                                                                                                                                                                                                                                                                    |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `animal_clinic_access` | **Retired** (2026-10-08) — historical rows only.                                                                                                                                                                                                                                                                                       |
+| `medical_records`      | `animal_id` + `organization_id` **`ON DELETE RESTRICT`** (history cannot be cascade-erased), `recorded_by_user_id` **`ON DELETE SET NULL`** (record outlives the vet), `visit_date` (default `CURRENT_DATE`), `reason` / `diagnosis` / `treatment` / `notes`. Each visit is a NEW row → historical diagnoses are never overwritten.    |
+| `vaccinations`         | same FK rules; `vaccine_name`, `administered_on`, `next_due_on` (nullable), `notes`. CHECK `next_due_on IS NULL OR next_due_on >= administered_on`.                                                                                                                                                                                    |
+| `animal_reminders`     | same FK rules; title / date / type / completion.                                                                                                                                                                                                                                                                                       |
+| `animals.public_code`  | Short public pet ID: 7 chars from `23456789ABCDEFGHJKMNPQRSTVWXYZ` (no 0/O, 1/I/L, U), CSPRNG (`gen_random_uuid()` bytes, rejection-sampled), UNIQUE, assigned by the `trg_animals_public_code` BEFORE INSERT trigger, backfilled for existing animals. The UUID PK is unchanged. Shown as `ABC-DEFG`; input is case/dash-insensitive. |
 
 Postgres `date` columns are now parsed as raw `YYYY-MM-DD` strings
 (`pg.types.setTypeParser(1082, …)` in `database/knex.ts`) — the default parser
@@ -532,35 +555,24 @@ timezone.
 
 ### 11.3 Scope decisions (from docs, not invented)
 
-- **Only Medical Records + Vaccinations.** docs 04 §4.25 places exactly these two
-  under "Veterinary Care". "Diagnoses / Treatments / Notes" (§4.4) are modelled
-  as **fields of a medical record**, not separate aggregates. **No**
-  veterinary-visit / examination / follow-up entities — they are not in the
-  confirmed module map. **Attachments** are deferred (file storage is out of
-  Phase 5 scope).
-- **CLINIC only.** docs 01 §1.3.3 / docs 05 UC-016 speak of "the veterinarian
-  assigned **in the clinic**". `VeterinaryCarePolicy.assertVeterinaryOrgType`
-  rejects non-CLINIC orgs on grant; other types are a future extension point.
-- **Full-history read.** docs 01 §1.3.3: "access the animal's **complete**
-  medical record". A clinic with an ACTIVE grant reads every clinic's entries;
-  it may `PATCH` / `DELETE` only its own (`organization_id` match → else 404).
-- **Hard delete.** The spec lists "delete medical records" as an explicit
-  veterinarian capability (docs 01 §1.3.3, UC-016). The audit log preserves the
-  fact of deletion; non-destructive FKs prevent accidental cascade loss.
-- **Clinic-association workflow is minimal** (task §5): a clinic member with
-  `animal.veterinary.access.manage` (OWNER / assigned SUPERVISOR by default,
-  **not** plain VETERINARIAN) grants access; no owner-approval step exists in the
-  spec, so none was invented — it is a documented extension point.
+- **Diagnoses / Treatments / Notes** (§4.4) are fields of a medical record, not
+  separate aggregates.
+- **CLINIC only.** `VeterinaryCarePolicy.assertVeterinaryOrgType` is the gate.
+- **Per-clinic isolation** (2026-10-08, product decision — replaces the earlier
+  "full cross-clinic history"): a clinic reads only its own entries.
+- **Hard delete** by the creating clinic; the audit log preserves the fact.
 
 ### 11.4 Presentation
 
 - **Clinic-facing** router mounted at `/organizations` (alongside the Phase 3
-  router): `/:organizationId/animal-access…` and
-  `/:organizationId/animals/:animalId/{medical-records,vaccinations}…`. Reuses
-  `withOrganization` + `authorizeOrg`, then `withVeterinaryAnimalAccess`.
+  router): `/:organizationId/clinic-pets…` and
+  `/:organizationId/animals/:animalId/{medical-records,vaccinations,reminders}…`.
+  Reuses `withOrganization` + `authorizeOrg`, then `withClinicAnimal`.
 - **Owner-facing** read-only router mounted at `/animals`: reuses the Phase 4
-  `withAnimal` + `authorizeAnimalRead` guards → current owner or ADMIN. Separate
-  DTO mappers (`toOwner*DTO`) are the seam for future field-level redaction.
+  `withAnimal` + `authorizeAnimalRead` guards → current owner or ADMIN. Only
+  `/vaccinations`, `/reminders`, `/medical-history` (vaccinations only) and
+  `/clinics` (clinics with owner-visible additions). There is no owner route for
+  medical records and no owner write route at all.
 
 ### 11.5 Events & audit
 
@@ -586,9 +598,9 @@ the operation's transaction** with the authenticated caller as `actorUserId` and
   like every clinic route while the clinic may not operate (§11.7).
 - `GET /organizations/:organizationId/animals/:animalId` — the clinic-visible
   animal profile: same chain as the medical routes
-  (`animal.veterinary.access.read` + `withVeterinaryAnimalAccess`, 404 without
-  an ACTIVE grant). Projection excludes `currentOwnerUserId`, `createdBy`,
-  the owner's `notes` and `galleryKeys`; adds full-history stats.
+  (`animal.veterinary.access.read` + `withClinicAnimal`). Projection excludes
+  `currentOwnerUserId`, `createdBy`, the owner's `notes` and `galleryKeys`; adds
+  `publicCode`, `relationship` and stats over THIS clinic's records only.
 
 ### 11.7 Clinic operability — one rule, enforced everywhere
 
@@ -621,28 +633,29 @@ nothing is cached server-side.
 ### 11.8 Owned pets only · search · owner notifications · "new" counters
 
 - **Owned pets only.** Adoption / mating / lost listing subjects (`animals.listing_only`)
-  are never clinic patients: `VeterinaryCarePolicy.assertRegisteredPet` rejects a grant,
-  `withVeterinaryAnimalAccess` 404s them, and the patient list, dashboard counts, clinic
-  lists and appointment booking all filter `a.listing_only = false`.
-- **Search** (`GET /organizations/:id/animal-access?search=`) runs only over the clinic's
-  ACTIVE grants (`idx_animal_clinic_access_org_active_recent`). It matches the full id
-  exactly, a short-id prefix (6–8 hex chars), name, breed, species, owner name and owner
-  phone. Items carry `animal.photoUrl`. A pet without access is a plain 404 on the clinic
-  profile. The response is the same as for an unknown id, so nothing leaks.
+  are never clinic patients: lookup and `withClinicAnimal` 404 them, and the clinic pet
+  list, dashboard counts, clinic lists and appointment booking filter `a.listing_only = false`.
+- **Search** (`GET /organizations/:id/clinic-pets?search=`) runs only over the clinic's own
+  pets (record-derived). It matches the full id or the short public ID exactly (any case,
+  dash optional), name, breed, species, owner name and owner phone.
 - **Owner notifications** (post-commit, via `NotificationPolicy.petCareToOwner`):
-  - `VACCINATION_ADDED/DUE`, `REMINDER_ADDED/DUE` and `MEDICAL_RECORD_ADDED`.
-  - Drafts are silent. Finalising a draft notifies once, sharing the same
-    `medical_record.created:<id>` key.
+  - `VACCINATION_ADDED/DUE`, `REMINDER_ADDED/DUE` only. `medical_record.*` events
+    produce NO owner notification (records are clinic-private); `MEDICAL_RECORD_ADDED`
+    stays in the type list only for historical rows.
   - The body names the pet and the clinic only (`PET_CARE_BODY`), never any medical
-    content.
-  - `data = { organizationId, animalId, <entity>Id }`. Mobile deep-links to Pet Details.
-- **Pet Details counters.**
-  - `GET /notifications/pets/:animalId/unseen` returns
-    `{ medicalRecords, vaccinations, reminders }`: the caller's own unread notifications
-    of each section's types (`PET_CARE_SECTIONS`, `idx_notifications_unread_pet`).
-  - `POST /notifications/pets/:animalId/seen { section }` marks only that section read
-    and publishes `notification.read`. The normal unread count and inbox stay
-    consistent.
+    content. `data = { organizationId, animalId, <entity>Id }`; mobile deep-links to Pet Details.
+- **Pet Details counters.** `GET /notifications/pets/:animalId/unseen` →
+  `{ vaccinations, reminders }`; `POST /notifications/pets/:animalId/seen { section }`.
+
+### 11.9 Veterinarian approval email
+
+`VeterinarianApprovalEmailHandler` (on `veterinarian.approved`, published after
+the approval transaction commits) mails the account's email exactly once per
+application: `veterinarian_applications.approval_email_sent_at` is claimed
+atomically before sending and released on failure; `retryPending()` (every
+30 min from `server.ts`, 7-day window) re-sends failed / lost deliveries.
+`decide()` is conditional on `status = 'PENDING'`, so concurrent approvals commit
+(and publish) once. No credentials, tokens or ids in the message.
 
 ## 12. Farms & poultry (`src/modules/farms/`, Phase 6)
 
@@ -786,9 +799,9 @@ authenticated caller (owner for create, moderator for review), metadata
 ## 14. Medical history timeline (`src/modules/veterinary-care/`, Phase 8)
 
 The medical domain — `medical_records` (with `diagnosis` / `treatment` / `notes`
-fields), `vaccinations`, the `animal_clinic_access` grant, and the
+fields), `vaccinations`, and the
 `authenticate → withOrganization → authorizeOrg(medical_record.* | vaccination.*)
-→ withVeterinaryAnimalAccess` gate — is §11 (Phase 5) and is **unchanged**.
+→ withClinicAnimal` gate + per-clinic row scoping — is §11.
 Phase 8 adds one thing: a **composed, read-only medical-history timeline**.
 
 ### 14.1 What was NOT built (spec-checked)
@@ -805,8 +818,8 @@ Phase 8 adds one thing: a **composed, read-only medical-history timeline**.
   fields (Phase 5). No separate aggregate.
 - **Medical Attachments**: deferred with file storage (R2 out of scope).
 - **Owner write access to medical records**: the spec confirms only that
-  veterinarians manage records without owner approval; owner _read_ is Phase 5's
-  `/animals/:animalId/medical-records`. Owner write is intentionally absent.
+  veterinarians manage records without owner approval. Since 2026-10-08 records
+  are clinic-private: no owner read or write.
 
 ### 14.2 The timeline
 
@@ -823,10 +836,10 @@ Two routes, each reusing an existing guard chain verbatim — the service does
 **no** authorization itself:
 
 - `GET /organizations/:organizationId/animals/:animalId/medical-history` —
-  `authorizeOrg('medical_record.read')` + `withVeterinaryAnimalAccess` (grant
-  required; ADMIN overrides; cross-clinic → 404).
+  `authorizeOrg('medical_record.read')` + `withClinicAnimal`; THIS clinic's
+  entries only.
 - `GET /animals/:animalId/medical-history` — Phase 4 `withAnimal` +
-  `authorizeAnimalRead('animal.read')` → current owner or ADMIN.
+  `authorizeAnimalRead('animal.read')` → current owner or ADMIN; vaccinations only.
 
 No migration, no new permission, no audit, no events (read-only). Known limit:
 an animal with >1000 records or >1000 vaccinations would page incompletely via

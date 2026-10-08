@@ -84,9 +84,9 @@ const paths: Obj = {
       tags: ['Veterinary Care · Medical Records'],
       summary: 'Composed medical history timeline (records + vaccinations), newest first',
       description:
-        'Requires `medical_record.read` in the clinic **and** an ACTIVE veterinary-access grant ' +
-        'for the animal (same gate as the medical-records list). Read-only, paginated, no audit. ' +
-        'A clinic with a grant sees the animal’s COMPLETE cross-clinic history.',
+        'Requires `medical_record.read` in the clinic (same gate as the medical-records list). ' +
+        'Read-only, paginated, no audit. Contains ONLY this clinic’s own records and ' +
+        'vaccinations — never another clinic’s.',
       security: bearer,
       parameters: [orgIdParam, animalIdParam, ...pageParams],
       responses: {
@@ -98,8 +98,10 @@ const paths: Obj = {
   '/animals/{animalId}/medical-history': {
     get: {
       tags: ['Animals · Medical History (owner)'],
-      summary: 'The owner reads their animal’s composed medical history timeline',
-      description: 'Current owner or ADMIN only. Read-only, paginated.',
+      summary: 'The owner reads their animal’s vaccination timeline',
+      description:
+        'Current owner or ADMIN only. Read-only, paginated. Owner-visible entries only ' +
+        '(vaccinations) — clinic medical records are private and never included.',
       security: bearer,
       parameters: [animalIdParam, ...pageParams],
       responses: {

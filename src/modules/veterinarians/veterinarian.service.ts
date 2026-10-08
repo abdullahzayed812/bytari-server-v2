@@ -303,6 +303,10 @@ export class VeterinarianService {
         { status: 'APPROVED', decidedBy: actor.actorUserId },
         tx,
       );
+      // Decided concurrently by another admin — nothing to do, no second event / email.
+      if (!application) {
+        throw new NotFoundError('No pending veterinarian application for this user');
+      }
       await this.users.applyVeterinarianStatus(targetUserId, 'APPROVED', tx);
 
       const vetRole = await this.roles.findByKey('VETERINARIAN', tx);
@@ -366,6 +370,9 @@ export class VeterinarianService {
         { status: 'REJECTED', decidedBy: actor.actorUserId, decisionReason: reason },
         tx,
       );
+      if (!application) {
+        throw new NotFoundError('No pending veterinarian application for this user');
+      }
       await this.users.applyVeterinarianStatus(targetUserId, 'REJECTED', tx);
       await this.audit.record(
         {

@@ -1,5 +1,4 @@
 import type {
-  ClinicAccessStatus,
   MedicalRecordSeverity,
   MedicalRecordType,
   QuickReviewTemplateType,
@@ -8,18 +7,6 @@ import type {
 } from './veterinary-care.constants.js';
 
 // --- internal aggregates ------------------------------------------------
-
-export interface ClinicAnimalAccess {
-  id: string;
-  animalId: string;
-  organizationId: string;
-  status: ClinicAccessStatus;
-  grantedByUserId: string | null;
-  revokedByUserId: string | null;
-  revokedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
 
 export interface MedicalRecord {
   id: string;
@@ -103,15 +90,6 @@ export interface VaccinationDTO {
   notes: string | null;
   createdAt: string;
   updatedAt: string;
-}
-
-export interface ClinicAnimalAccessDTO {
-  id: string;
-  animalId: string;
-  organizationId: string;
-  status: ClinicAccessStatus;
-  grantedByUserId: string | null;
-  createdAt: string;
 }
 
 // --- medical history / timeline (Phase 8) --------------------------
@@ -217,18 +195,6 @@ export type ClinicVaccinationListStatus = 'ALL' | VaccinationStatus | 'OVERDUE' 
 
 // --- rows -----------------------------------------------------------
 
-export interface ClinicAnimalAccessRow {
-  id: string;
-  animal_id: string;
-  organization_id: string;
-  status: string;
-  granted_by_user_id: string | null;
-  revoked_by_user_id: string | null;
-  revoked_at: Date | null;
-  created_at: Date;
-  updated_at: Date;
-}
-
 export interface MedicalRecordRow {
   id: string;
   animal_id: string;
@@ -268,20 +234,6 @@ function dateOnly(value: string | Date | null): string | null {
   if (value === null) return null;
   if (value instanceof Date) return value.toISOString().slice(0, 10);
   return value.slice(0, 10);
-}
-
-export function rowToClinicAnimalAccess(row: ClinicAnimalAccessRow): ClinicAnimalAccess {
-  return {
-    id: row.id,
-    animalId: row.animal_id,
-    organizationId: row.organization_id,
-    status: row.status as ClinicAccessStatus,
-    grantedByUserId: row.granted_by_user_id,
-    revokedByUserId: row.revoked_by_user_id,
-    revokedAt: row.revoked_at ? row.revoked_at.toISOString() : null,
-    createdAt: row.created_at.toISOString(),
-    updatedAt: row.updated_at.toISOString(),
-  };
 }
 
 export function rowToMedicalRecord(row: MedicalRecordRow): MedicalRecord {
@@ -339,27 +291,10 @@ export function toMedicalRecordDTO(
 export function toVaccinationDTO(v: Vaccination): VaccinationDTO {
   return { ...v };
 }
-/** Owner-facing projection. Same fields today; the seam for future redaction. */
-export function toOwnerMedicalRecordDTO(
-  r: MedicalRecord,
-  urls?: { prescriptionUrl: string | null; attachmentUrls: string[] },
-): MedicalRecordDTO {
-  return toMedicalRecordDTO(r, urls);
-}
+/** Owner-facing projection of an OWNER-VISIBLE vaccination (read-only). */
 export function toOwnerVaccinationDTO(v: Vaccination): VaccinationDTO {
   return toVaccinationDTO(v);
 }
-export function toClinicAnimalAccessDTO(a: ClinicAnimalAccess): ClinicAnimalAccessDTO {
-  return {
-    id: a.id,
-    animalId: a.animalId,
-    organizationId: a.organizationId,
-    status: a.status,
-    grantedByUserId: a.grantedByUserId,
-    createdAt: a.createdAt,
-  };
-}
-
 // --- reminders (legacy `pet_reminders`) ------------------------------
 
 export interface AnimalReminder {

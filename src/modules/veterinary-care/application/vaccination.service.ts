@@ -41,7 +41,12 @@ function defaultStatus(nextDueOn: string | null | undefined): VaccinationStatus 
   return nextDueOn ? 'SCHEDULED' : 'COMPLETED';
 }
 
-/** Vaccination history — same authorization model as {@link MedicalRecordService}. */
+/**
+ * Vaccinations. Clinic side: same isolation as {@link MedicalRecordService} —
+ * a clinic reads / changes only its own. Owner side: OWNER-VISIBLE, read-only —
+ * the current owner reads every clinic's vaccinations for the pet but can
+ * never change one (no owner write route exists).
+ */
 export class VaccinationService {
   private readonly log: Logger;
 
@@ -105,17 +110,27 @@ export class VaccinationService {
     return toVaccinationDTO(vaccination);
   }
 
-  async getForClinic(animalId: string, vaccinationId: string): Promise<VaccinationDTO> {
+  async getForClinic(
+    organizationId: string,
+    animalId: string,
+    vaccinationId: string,
+  ): Promise<VaccinationDTO> {
     const v = await this.vaccinations.findByIdForAnimal(vaccinationId, animalId);
-    if (!v) throw new NotFoundError('Vaccination not found');
+    // Another clinic's vaccination is hidden behind the same 404.
+    if (!v || v.organizationId !== organizationId) throw new NotFoundError('Vaccination not found');
     return toVaccinationDTO(v);
   }
 
+  /** This clinic's vaccinations for the animal — never another clinic's. */
   async listForClinic(
+    organizationId: string,
     animalId: string,
     filter: ListVaccinationsFilter,
   ): Promise<{ items: VaccinationDTO[]; total: number }> {
-    const { items, total } = await this.vaccinations.listForAnimal(animalId, filter);
+    const { items, total } = await this.vaccinations.listForAnimal(animalId, {
+      ...filter,
+      organizationId,
+    });
     return { items: items.map(toVaccinationDTO), total };
   }
 
@@ -211,7 +226,7 @@ export class VaccinationService {
     });
   }
 
-  /** Clinic-wide list (legacy `getClinicVaccinations`) — only animals with ACTIVE access. */
+  /** Clinic-wide list (legacy `getClinicVaccinations`) — this clinic's own vaccinations. */
   async listClinicWide(
     organizationId: string,
     filter: { page: number; pageSize: number; status: ClinicVaccinationListStatus },

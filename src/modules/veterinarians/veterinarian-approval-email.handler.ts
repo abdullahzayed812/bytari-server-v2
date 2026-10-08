@@ -2,6 +2,15 @@ import type { Logger } from 'pino';
 import type { EmailService } from '../../infra/email/index.js';
 import type { DomainEvent, EventBus } from '../../shared/events/index.js';
 import type { UserService } from '../users/user.service.js';
+import type { VeterinarianRepository } from './veterinarian.repository.js';
+
+/** Retry window: approvals older than this are never (re)mailed by the sweep. */
+export const APPROVAL_EMAIL_RETRY_LOOKBACK_DAYS = 7;
+const RETRY_INTERVAL_MS = 30 * 60 * 1000;
+const FIRST_RETRY_DELAY_MS = 2 * 60 * 1000;
+const RETRY_BATCH = 100;
+
+export type ApprovalEmailOutcome = 'SENT' | 'DUPLICATE' | 'FAILED';
 
 /** Escape the few characters that matter inside an HTML text node. */
 function escapeHtml(v: string): string {
@@ -10,24 +19,33 @@ function escapeHtml(v: string): string {
 
 /**
  * "تمت الموافقة على حسابك" — emails a veterinarian once an admin approves
- * their account.
+ * their application, at the account's email (the one used to register).
  *
  * - Listens to `veterinarian.approved`, which `VeterinarianService.approve`
  *   publishes only AFTER the approval transaction commits — a rolled-back
- *   approval never sends anything.
- * - Delivery failures (SMTP down, unknown user …) are logged and swallowed:
- *   the approval itself is already committed and is never undone by email.
- * - The message carries no sensitive data: no ids, tokens, links with
- *   credentials or document details — just the greeting and the outcome.
+ *   approval (or a pending / rejected vet) never gets anything.
+ * - Exactly once per application: `approval_email_sent_at` is claimed
+ *   atomically before sending, so a duplicate event, a retry, or a second
+ *   node is a no-op. (A concurrent second approval cannot commit at all —
+ *   `decide` is conditional on PENDING.)
+ * - Never blocks or undoes the approval: delivery failures are logged, the
+ *   claim is released, and the {@link retryPending} sweep (every 30 min,
+ *   started by `server.ts`) re-sends approvals of the last 7 days that are
+ *   still unsent — including ones lost to a crash between commit and send.
+ * - The message carries no sensitive data: no ids, tokens, passwords, links
+ *   with credentials or document details — just the greeting and the outcome.
  */
 export class VeterinarianApprovalEmailHandler {
   private readonly log: Logger;
   private unsubscribe: (() => void) | null = null;
+  private timer: NodeJS.Timeout | null = null;
+  private firstRun: NodeJS.Timeout | null = null;
 
   constructor(
     private readonly eventBus: EventBus,
     private readonly users: UserService,
     private readonly email: EmailService,
+    private readonly applications: VeterinarianRepository,
     logger: Logger,
   ) {
     this.log = logger.child({ component: 'veterinarian-approval-email' });
@@ -35,20 +53,62 @@ export class VeterinarianApprovalEmailHandler {
 
   start(): void {
     if (this.unsubscribe) return;
-    this.unsubscribe = this.eventBus.subscribe<{ userId: string }>(
+    this.unsubscribe = this.eventBus.subscribe<{ userId: string; applicationId: string }>(
       'veterinarian.approved',
-      (event) => this.handle(event),
+      (event) => this.handle(event).then(() => undefined),
     );
+  }
+
+  /** Periodic retry of failed / lost deliveries — process entry point only (not tests). */
+  startRetrySweep(): void {
+    if (this.timer) return;
+    const run = (): void => {
+      void this.retryPending().catch((err: unknown) =>
+        this.log.error({ err }, 'veterinarian approval email retry sweep failed'),
+      );
+    };
+    this.firstRun = setTimeout(run, FIRST_RETRY_DELAY_MS);
+    this.firstRun.unref();
+    this.timer = setInterval(run, RETRY_INTERVAL_MS);
+    this.timer.unref();
   }
 
   stop(): void {
     this.unsubscribe?.();
     this.unsubscribe = null;
+    if (this.firstRun) clearTimeout(this.firstRun);
+    if (this.timer) clearInterval(this.timer);
+    this.firstRun = null;
+    this.timer = null;
   }
 
-  async handle(event: DomainEvent<{ userId: string }>): Promise<void> {
+  handle(
+    event: DomainEvent<{ userId: string; applicationId: string }>,
+  ): Promise<ApprovalEmailOutcome> {
+    return this.deliver(event.payload.applicationId, event.payload.userId);
+  }
+
+  /** Re-send recent approvals whose email is still unsent. */
+  async retryPending(now: Date = new Date()): Promise<{ sent: number; failed: number }> {
+    const since = new Date(now.getTime() - APPROVAL_EMAIL_RETRY_LOOKBACK_DAYS * 86_400_000);
+    const due = await this.applications.listApprovedAwaitingEmail(since, RETRY_BATCH);
+    let sent = 0;
+    let failed = 0;
+    for (const app of due) {
+      const outcome = await this.deliver(app.id, app.userId);
+      if (outcome === 'SENT') sent += 1;
+      else if (outcome === 'FAILED') failed += 1;
+    }
+    if (due.length > 0) this.log.info({ sent, failed }, 'veterinarian approval email retry sweep');
+    return { sent, failed };
+  }
+
+  private async deliver(applicationId: string, userId: string): Promise<ApprovalEmailOutcome> {
+    let claimed = false;
     try {
-      const user = await this.users.getById(event.payload.userId);
+      claimed = await this.applications.claimApprovalEmail(applicationId);
+      if (!claimed) return 'DUPLICATE';
+      const user = await this.users.getById(userId);
       const name = user.firstName?.trim() || '';
       const result = await this.email.send({
         to: user.email,
@@ -77,13 +137,23 @@ export class VeterinarianApprovalEmailHandler {
           '<p>If you did not create this account, please contact support.</p></div>',
       });
       if (!result.success) {
-        this.log.warn({ userId: user.id }, 'veterinarian approval email was not delivered');
+        await this.applications.releaseApprovalEmail(applicationId);
+        this.log.warn(
+          { userId, applicationId },
+          'veterinarian approval email was not delivered — will retry',
+        );
+        return 'FAILED';
       }
+      return 'SENT';
     } catch (err) {
+      if (claimed) {
+        await this.applications.releaseApprovalEmail(applicationId).catch(() => undefined);
+      }
       this.log.error(
-        { err, userId: event.payload.userId },
-        'veterinarian approval email failed — approval unaffected',
+        { err, userId, applicationId },
+        'veterinarian approval email failed — approval unaffected, will retry',
       );
+      return 'FAILED';
     }
   }
 }

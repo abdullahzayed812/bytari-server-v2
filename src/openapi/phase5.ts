@@ -4,13 +4,14 @@
  *
  * Authorization for a clinic-facing route:
  *   authenticate → withOrganization → authorizeOrg(<org permission>)
- *                → veterinary-access gate (the clinic must hold an ACTIVE
- *                  `animal_clinic_access` grant for the animal; ADMIN bypasses).
+ *                → operability guard → registered pet (no clinic ↔ pet link).
  *
- * A clinic with an active grant reads the animal's COMPLETE medical /
- * vaccination history (every clinic's entries); it may create / update / delete
- * only entries it recorded itself. Owner-facing routes are read-only and reuse
- * the Phase 4 ownership guard (current owner or ADMIN).
+ * CLINIC ISOLATION: a clinic reads, updates and deletes ONLY the entries it
+ * created (`organization_id`); another clinic's entry is the same 404 as an
+ * unknown id. Its Recent / All Pets are the pets it has entries for.
+ * Owner-facing routes are read-only, reuse the Phase 4 ownership guard
+ * (current owner or ADMIN) and expose only the owner-visible kinds:
+ * vaccinations and reminders. Medical records have no owner route.
  */
 
 type Obj = Record<string, unknown>;
@@ -25,8 +26,8 @@ function errs(...codes: number[]): Obj {
     400: 'Malformed request (e.g. organization is not a CLINIC)',
     401: 'Missing or invalid access token',
     403: 'Authenticated but lacks the organization permission (or organization not ACTIVE)',
-    404: 'Not found, or not visible to the caller (no veterinary-access grant / not the owner)',
-    409: 'Conflict with current state (animal deactivated, access already granted, concurrent change)',
+    404: 'Not found, or not visible to the caller (another clinic’s entry / not the owner)',
+    409: 'Conflict with current state (animal deactivated, concurrent change)',
     422: 'Request failed validation',
   };
   const out: Obj = {};
@@ -92,15 +93,37 @@ const schemas: Obj = {
       updatedAt: { type: 'string', format: 'date-time' },
     },
   },
-  ClinicAnimalAccess: {
+  ClinicPet: {
+    type: 'object',
+    description: 'A pet this clinic has its own records for (derived — no link row).',
+    properties: {
+      animalId: uuid,
+      publicCode: { type: 'string', example: 'K7M4QXR', description: 'Short public pet ID' },
+      animal: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          species: { type: 'string' },
+          status: { type: 'string' },
+          breed: { type: 'string', nullable: true },
+          photoUrl: { type: 'string', nullable: true },
+        },
+      },
+      ownerName: { type: 'string', nullable: true },
+      firstActivityAt: { type: 'string', format: 'date-time' },
+      lastActivityAt: { type: 'string', format: 'date-time' },
+    },
+  },
+  ClinicPetLookup: {
     type: 'object',
     properties: {
-      id: uuid,
       animalId: uuid,
-      organizationId: uuid,
-      status: { type: 'string', enum: ['ACTIVE', 'REVOKED'] },
-      grantedByUserId: { type: 'string', format: 'uuid', nullable: true },
-      createdAt: { type: 'string', format: 'date-time' },
+      publicCode: { type: 'string' },
+      name: { type: 'string' },
+      species: { type: 'string' },
+      breed: { type: 'string', nullable: true },
+      photoUrl: { type: 'string', nullable: true },
+      workedWith: { type: 'boolean', description: 'This clinic already has its own records' },
     },
   },
   CreateMedicalRecordRequest: {
@@ -154,68 +177,57 @@ const schemas: Obj = {
       notes: { type: 'string', nullable: true },
     },
   },
-  GrantVeterinaryAccessRequest: {
-    type: 'object',
-    required: ['animalId'],
-    properties: { animalId: uuid },
-  },
 };
 
 const recordsBase = '/organizations/{organizationId}/animals/{animalId}/medical-records';
 const vaxBase = '/organizations/{organizationId}/animals/{animalId}/vaccinations';
 
 const paths: Obj = {
-  '/organizations/{organizationId}/animal-access': {
+  '/organizations/{organizationId}/clinic-pets': {
     get: {
-      tags: ['Veterinary Care · Access'],
-      summary: 'List the animals this clinic has veterinary access to',
-      description: 'Requires `animal.veterinary.access.read` in the clinic.',
-      security: bearer,
-      parameters: [orgIdParam, ...pageParams],
-      responses: {
-        '200': ok('Paginated access grants', listOf('#/components/schemas/ClinicAnimalAccess')),
-        ...errs(401, 403),
-      },
-    },
-    post: {
-      tags: ['Veterinary Care · Access'],
-      summary: 'Grant this clinic veterinary access to an animal',
+      tags: ['Veterinary Care · Clinic Pets'],
+      summary: 'Recent / All Pets — pets this clinic has its own records for',
       description:
-        'Requires `animal.veterinary.access.manage` (clinic OWNER / empowered SUPERVISOR by ' +
-        'default — NOT the plain VETERINARIAN role). The organization must be a CLINIC. ' +
-        'Independent of animal ownership; revocable; audited.',
+        'Requires `animal.veterinary.access.read`. Derived from THIS clinic’s medical records, ' +
+        'vaccinations and reminders; newest activity first. `search` matches the full id or ' +
+        'short public ID exactly, or name / breed / species / owner name / phone.',
       security: bearer,
-      parameters: [orgIdParam],
-      requestBody: {
-        required: true,
-        content: {
-          'application/json': {
-            schema: { $ref: '#/components/schemas/GrantVeterinaryAccessRequest' },
-          },
-        },
-      },
+      parameters: [
+        orgIdParam,
+        ...pageParams,
+        { name: 'search', in: 'query', schema: { type: 'string', maxLength: 100 } },
+      ],
       responses: {
-        '201': ok('Access granted', dataOf({ $ref: '#/components/schemas/ClinicAnimalAccess' })),
-        ...errs(400, 401, 403, 404, 409, 422),
+        '200': ok('Paginated clinic pets', listOf('#/components/schemas/ClinicPet')),
+        ...errs(400, 401, 403),
       },
     },
   },
-  '/organizations/{organizationId}/animal-access/{animalId}': {
-    delete: {
-      tags: ['Veterinary Care · Access'],
-      summary: 'Revoke this clinic’s veterinary access to an animal',
-      description: 'Requires `animal.veterinary.access.manage`. Medical history is NOT deleted.',
+  '/organizations/{organizationId}/clinic-pets/lookup': {
+    get: {
+      tags: ['Veterinary Care · Clinic Pets'],
+      summary: 'Open a pet by its short public ID or scanned QR',
+      description:
+        'Requires `animal.veterinary.access.read`. Accepts the short public ID (any case, ' +
+        'dash optional) or a legacy UUID / link. Creates no relationship; rate-limited and ' +
+        'audited. Unknown codes and listing-only animals are the same 404.',
       security: bearer,
-      parameters: [orgIdParam, animalIdParam],
-      responses: { '200': ok('Access revoked'), ...errs(401, 403, 404) },
+      parameters: [
+        orgIdParam,
+        { name: 'code', in: 'query', required: true, schema: { type: 'string', maxLength: 300 } },
+      ],
+      responses: {
+        '200': ok('Pet summary', dataOf({ $ref: '#/components/schemas/ClinicPetLookup' })),
+        ...errs(400, 401, 403, 404, 422),
+      },
     },
   },
 
   [recordsBase]: {
     get: {
       tags: ['Veterinary Care · Medical Records'],
-      summary: 'List an animal’s medical history (complete — all clinics)',
-      description: 'Requires `medical_record.read` + an ACTIVE veterinary-access grant.',
+      summary: 'List the medical records THIS clinic created for the animal',
+      description: 'Requires `medical_record.read`. Other clinics’ records are never returned.',
       security: bearer,
       parameters: [orgIdParam, animalIdParam, ...pageParams],
       responses: {
@@ -227,7 +239,8 @@ const paths: Obj = {
       tags: ['Veterinary Care · Medical Records'],
       summary: 'Add a medical record for the animal',
       description:
-        'Requires `medical_record.create` + veterinary access. The animal must be ACTIVE. ' +
+        'Requires `medical_record.create`. The animal must be ACTIVE. Clinic-private: never ' +
+        'shown to the owner or to another clinic. ' +
         'The recording user and clinic are taken from the server, never the body.',
       security: bearer,
       parameters: [orgIdParam, animalIdParam],
@@ -248,7 +261,7 @@ const paths: Obj = {
   [`${recordsBase}/{recordId}`]: {
     get: {
       tags: ['Veterinary Care · Medical Records'],
-      summary: 'Get one medical record',
+      summary: 'Get one medical record created by THIS clinic',
       description: 'Requires `medical_record.read` + veterinary access.',
       security: bearer,
       parameters: [orgIdParam, animalIdParam, recordIdParam],
@@ -293,7 +306,7 @@ const paths: Obj = {
   [vaxBase]: {
     get: {
       tags: ['Veterinary Care · Vaccinations'],
-      summary: 'List an animal’s vaccination history (complete — all clinics)',
+      summary: 'List the vaccinations THIS clinic recorded for the animal',
       description:
         'Requires `vaccination.read` + veterinary access. `dueFrom=YYYY-MM-DD` filters to ' +
         'upcoming/future due dates.',
@@ -330,7 +343,7 @@ const paths: Obj = {
   [`${vaxBase}/{vaccinationId}`]: {
     get: {
       tags: ['Veterinary Care · Vaccinations'],
-      summary: 'Get one vaccination',
+      summary: 'Get one vaccination recorded by THIS clinic',
       security: bearer,
       parameters: [orgIdParam, animalIdParam, vaccinationIdParam],
       responses: {
@@ -364,35 +377,10 @@ const paths: Obj = {
   },
 
   // --- owner-facing (read-only) ------------------------------------
-  '/animals/{animalId}/medical-records': {
-    get: {
-      tags: ['Animals · Medical History (owner)'],
-      summary: 'The owner reads their animal’s complete medical history',
-      description: 'Current owner or ADMIN only. Read-only.',
-      security: bearer,
-      parameters: [animalIdParam, ...pageParams],
-      responses: {
-        '200': ok('Paginated medical records', listOf('#/components/schemas/MedicalRecord')),
-        ...errs(401, 404),
-      },
-    },
-  },
-  '/animals/{animalId}/medical-records/{recordId}': {
-    get: {
-      tags: ['Animals · Medical History (owner)'],
-      summary: 'The owner reads one medical record',
-      security: bearer,
-      parameters: [animalIdParam, recordIdParam],
-      responses: {
-        '200': ok('Medical record', dataOf({ $ref: '#/components/schemas/MedicalRecord' })),
-        ...errs(401, 404),
-      },
-    },
-  },
   '/animals/{animalId}/vaccinations': {
     get: {
       tags: ['Animals · Medical History (owner)'],
-      summary: 'The owner reads their animal’s complete vaccination history',
+      summary: 'The owner reads every clinic’s vaccinations for their animal (read-only)',
       security: bearer,
       parameters: [
         animalIdParam,
@@ -440,10 +428,12 @@ Object.assign(paths, {
   '/organizations/{organizationId}/animals/{animalId}': {
     get: {
       tags: ['Veterinary Care · Clinic Dashboard'],
-      summary: 'The clinic-visible profile of an animal the clinic has access to',
+      summary: 'The clinic-visible profile of a pet (stats over THIS clinic’s records only)',
       description:
-        'Requires `animal.veterinary.access.read` AND an ACTIVE veterinary-access grant (else 404). ' +
-        'Never includes owner identity, the owner’s private notes, or storage keys.',
+        'Requires `animal.veterinary.access.read`; 404 for unknown / listing-only animals. ' +
+        'Carries the short `publicCode`, the current owner’s contact, and `relationship` / ' +
+        '`stats` computed over THIS clinic’s own records only. Never the owner’s private ' +
+        'notes or storage keys.',
       security: bearer,
       parameters: [orgIdParam, animalIdParam],
       responses: {
@@ -455,10 +445,13 @@ Object.assign(paths, {
 });
 
 const tags = [
-  { name: 'Veterinary Care · Access', description: 'CLINIC ↔ animal veterinary-access grants' },
+  {
+    name: 'Veterinary Care · Clinic Pets',
+    description: 'Record-derived clinic pets (Recent / All) and open-by-short-ID',
+  },
   {
     name: 'Veterinary Care · Medical Records',
-    description: 'Clinic-facing medical record CRUD (veterinary-access gated)',
+    description: 'Clinic-facing medical record CRUD (clinic-private, per-clinic isolation)',
   },
   {
     name: 'Veterinary Care · Vaccinations',

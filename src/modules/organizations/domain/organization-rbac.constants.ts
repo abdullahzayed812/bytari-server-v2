@@ -23,8 +23,10 @@ export const ORG_PERMISSION_KEYS = [
   'organization.veterinarian.read',
   'organization.veterinarian.manage',
   // --- Veterinary care (Phase 5) — CLINIC organizations ---
-  // Access to an animal's veterinary information is gated by a dedicated
-  // per-animal grant (`animal_clinic_access`) ON TOP of these permissions.
+  // On top of these permissions every clinic read / write is limited to rows
+  // the clinic itself created (`organization_id`). `animal.veterinary.access.read`
+  // = see the clinic's pets + open a pet by its short ID. `.manage` is retained
+  // for compatibility (it used to gate the retired per-animal access grant).
   'animal.veterinary.access.read',
   'animal.veterinary.access.manage',
   'medical_record.read',

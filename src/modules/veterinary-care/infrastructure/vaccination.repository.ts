@@ -135,8 +135,8 @@ export class VaccinationRepository {
   }
 
   /**
-   * Clinic-wide list (legacy `getClinicVaccinations`): this clinic's
-   * vaccinations for animals it holds ACTIVE access to. `OVERDUE` = SCHEDULED
+   * Clinic-wide list (legacy `getClinicVaccinations`): this clinic's own
+   * vaccinations. `OVERDUE` = SCHEDULED
    * with a next dose before today; `DUE_TODAY` = next dose today.
    */
   async listForClinic(

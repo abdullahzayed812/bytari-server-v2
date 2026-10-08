@@ -114,8 +114,7 @@ export async function runDevSeed(knex: Knex, deps: RunDevSeedDeps = {}): Promise
   const { authService, userService, veterinarianService, organizationService } = container;
   const { organizationEngagementService } = container;
   const { membershipService, membershipRepository, organizationSupervisorService } = container;
-  const { animalService, veterinaryAccessService, medicalRecordService, vaccinationService } =
-    container;
+  const { animalService, medicalRecordService, vaccinationService } = container;
   const {
     poultryFlockService,
     veterinaryStoreProductService,
@@ -477,13 +476,7 @@ export async function runDevSeed(knex: Knex, deps: RunDevSeedDeps = {}): Promise
       actorUserId: must(userIdsByKey, 'clinicOwner', 'user'),
       context: SEED_CONTEXT,
     };
-    const clinicRef = { id: clinicId, type: 'CLINIC' as const };
-
-    const hasAccess = await veterinaryAccessService.hasActiveAccess(maxId, clinicId);
-    if (!hasAccess) {
-      await veterinaryAccessService.grant(clinicRef, maxId, clinicOwnerActor);
-    }
-
+    // No link step: the clinic's own records below ARE its relationship with Max.
     const existingRecord = await knex('medical_records')
       .where({ animal_id: maxId, organization_id: clinicId })
       .first();

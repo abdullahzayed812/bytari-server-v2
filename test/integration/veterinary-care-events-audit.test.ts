@@ -10,7 +10,7 @@ import {
   createActiveOrganization,
   createAnimal,
   createMedicalRecord,
-  grantVeterinaryAccess,
+  openClinicPet,
   registerAdmin,
   registerApprovedVet,
   registerUser,
@@ -67,21 +67,26 @@ async function auditRows(
 }
 
 describe('veterinary-care events + audit', () => {
-  it('grant → audit ANIMAL_CLINIC_ACCESS_GRANTED + event after commit', async () => {
+  it('open-by-code → audit CLINIC_PET_LOOKED_UP; no link row, no grant event', async () => {
     const { clinicOwner, clinic, animal } = await setup();
-    const grant = await grantVeterinaryAccess(app, clinicOwner.accessToken, clinic.id, animal.id);
+    await openClinicPet(app, clinicOwner.accessToken, clinic.id, animal.publicCode);
     await tick();
 
-    expect(captured).toContain('veterinary_access.granted');
-    const rows = await auditRows(grant.id);
-    expect(rows.map((r) => r.action)).toContain('ANIMAL_CLINIC_ACCESS_GRANTED');
-    expect(rows[0]?.actor_user_id).toBe(clinicOwner.id);
-    expect(rows[0]?.metadata).toMatchObject({ organizationId: clinic.id, animalId: animal.id });
+    expect(captured).not.toContain('veterinary_access.granted');
+    expect(await getTestDb()('animal_clinic_access')).toHaveLength(0);
+    const rows = await auditRows(animal.id);
+    const lookup = rows.find((r) => r.action === 'CLINIC_PET_LOOKED_UP');
+    expect(lookup?.actor_user_id).toBe(clinicOwner.id);
+    expect(lookup?.metadata).toMatchObject({
+      organizationId: clinic.id,
+      animalId: animal.id,
+      via: 'PUBLIC_CODE',
+    });
   });
 
   it('medical record create/update/delete emit events and write audit with the acting vet', async () => {
     const { clinicOwner, vet, clinic, animal } = await setup();
-    await grantVeterinaryAccess(app, clinicOwner.accessToken, clinic.id, animal.id);
+    await openClinicPet(app, clinicOwner.accessToken, clinic.id, animal.publicCode);
     captured.length = 0;
 
     const rec = await createMedicalRecord(app, vet.accessToken, clinic.id, animal.id);
@@ -114,12 +119,14 @@ describe('veterinary-care events + audit', () => {
     }
   });
 
-  it('a failed create (no access grant) writes no audit and emits no event', async () => {
-    const { vet, clinic, animal } = await setup();
+  it('a failed create (unknown animal) writes no audit and emits no event', async () => {
+    const { vet, clinic } = await setup();
     captured.length = 0;
 
     const res = await request(app)
-      .post(`/api/v1/organizations/${clinic.id}/animals/${animal.id}/medical-records`)
+      .post(
+        `/api/v1/organizations/${clinic.id}/animals/00000000-0000-4000-8000-000000000000/medical-records`,
+      )
       .set(bearer(vet.accessToken))
       .send({ diagnosis: 'x' });
     await tick();
@@ -135,7 +142,7 @@ describe('veterinary-care events + audit', () => {
 
   it('does not leak secrets into veterinary-care audit metadata', async () => {
     const { clinicOwner, vet, clinic, animal } = await setup();
-    await grantVeterinaryAccess(app, clinicOwner.accessToken, clinic.id, animal.id);
+    await openClinicPet(app, clinicOwner.accessToken, clinic.id, animal.publicCode);
     const rec = await createMedicalRecord(app, vet.accessToken, clinic.id, animal.id);
     const blob = JSON.stringify(await auditRows(rec.id));
     expect(blob.toLowerCase()).not.toContain('password');

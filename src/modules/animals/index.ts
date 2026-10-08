@@ -1,6 +1,7 @@
 export * from './domain/animal.constants.js';
 export * from './domain/animal.types.js';
 export * from './domain/animal.policy.js';
+export * from './domain/public-code.js';
 export * from './domain/publication.constants.js';
 export * from './domain/publication.types.js';
 export * from './domain/transfer-request.types.js';

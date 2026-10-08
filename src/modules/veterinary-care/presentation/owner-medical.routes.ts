@@ -9,9 +9,7 @@ import {
 import { OwnerMedicalController } from './owner-medical.controller.js';
 import {
   listMedicalHistoryQuerySchema,
-  listMedicalRecordsQuerySchema,
   listVaccinationsQuerySchema,
-  ownerMedicalRecordParamSchema,
   ownerVaccinationParamSchema,
 } from './veterinary-care.schemas.js';
 
@@ -19,15 +17,13 @@ import {
  * Owner-facing veterinary-care reads. Mounted at `/animals` (alongside the
  * animals router). Reuses the animals module's ownership-scoped guards
  * (`withAnimal` + `authorizeAnimalRead`), so only the animal's current owner
- * (or ADMIN) can read. No create/update/delete — owners never mutate
- * veterinary records.
+ * (or ADMIN) can read. Exposes ONLY the owner-visible kinds — vaccinations
+ * and the vaccinations-only history; clinic medical records (diagnoses,
+ * treatments, notes, lab, files) have no owner route at all. No
+ * create/update/delete — owners never mutate clinic-created data.
  */
 export function createOwnerMedicalRouter(c: Container): Router {
-  const ctrl = new OwnerMedicalController(
-    c.medicalRecordService,
-    c.vaccinationService,
-    c.medicalHistoryService,
-  );
+  const ctrl = new OwnerMedicalController(c.vaccinationService, c.medicalHistoryService);
   const { withAnimal, authorizeAnimalRead } = createAnimalMiddleware({
     animals: c.animalService,
     authz: c.authorizationService,
@@ -36,20 +32,6 @@ export function createOwnerMedicalRouter(c: Container): Router {
   const r = Router();
   r.use(c.authenticate);
 
-  r.get(
-    '/:animalId/medical-records',
-    validate({ params: animalIdParamSchema, query: listMedicalRecordsQuerySchema }),
-    withAnimal,
-    authorizeAnimalRead('animal.read'),
-    asyncHandler(ctrl.listRecords),
-  );
-  r.get(
-    '/:animalId/medical-records/:recordId',
-    validate({ params: ownerMedicalRecordParamSchema }),
-    withAnimal,
-    authorizeAnimalRead('animal.read'),
-    asyncHandler(ctrl.getRecord),
-  );
   r.get(
     '/:animalId/vaccinations',
     validate({ params: animalIdParamSchema, query: listVaccinationsQuerySchema }),

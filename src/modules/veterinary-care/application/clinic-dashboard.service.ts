@@ -4,7 +4,10 @@ import type { AnimalDTO } from '../../animals/domain/animal.types.js';
 import type { AuthorizationService } from '../../authorization/authorization.service.js';
 import type { AuthPrincipal } from '../../authorization/authorization.types.js';
 import type { OrganizationEngagementService } from '../../organizations/application/organization-engagement.service.js';
-import type { AnimalClinicAccessRepository } from '../infrastructure/animal-clinic-access.repository.js';
+import type {
+  ClinicPetActivity,
+  ClinicPetRepository,
+} from '../infrastructure/clinic-pet.repository.js';
 import type {
   ClinicAnimalOwnerContact,
   ClinicAnimalStats,
@@ -57,7 +60,7 @@ const PERMISSION_KEYS: Record<keyof ClinicDashboardPermissions, string> = {
  */
 export interface ClinicDashboardSummary {
   permissions: ClinicDashboardPermissions;
-  /** `animal.veterinary.access.read` */
+  /** `animal.veterinary.access.read` — pets this clinic has its own records for. */
   animals: { activeCount: number } | null;
   /** `medical_record.read` (vaccination counts additionally need `vaccination.read`). */
   medical: ClinicMedicalStats | null;
@@ -69,14 +72,16 @@ export interface ClinicDashboardSummary {
 }
 
 /**
- * The clinic-visible projection of an animal — the profile a treating clinic
+ * The clinic-visible projection of a pet — the profile a treating clinic
  * needs. Like the legacy clinic pet page it carries the CURRENT owner's name +
- * phone (needed to call the owner and to open the clinic ↔ owner chat), but
- * only while the clinic holds an ACTIVE grant (the route 404s otherwise). The
- * owner's private `notes`, `createdBy` and storage keys are never included.
+ * phone (needed to call the owner and to open the clinic ↔ owner chat). The
+ * owner's private `notes`, `createdBy` and storage keys are never included,
+ * and `stats` / `relationship` describe THIS clinic's own work only.
  */
 export interface ClinicAnimalDTO {
   id: string;
+  /** Short public pet ID. */
+  publicCode: string;
   name: string;
   species: AnimalDTO['species'];
   breed: string | null;
@@ -92,8 +97,9 @@ export interface ClinicAnimalDTO {
   /** Legacy free-text medical history kept on the animal profile. */
   medicalHistory: string | null;
   owner: ClinicAnimalOwnerContact | null;
-  /** This clinic's ACTIVE grant — `null` only for an ADMIN viewing without one. */
-  access: { id: string; grantedAt: string } | null;
+  /** This clinic's first / last record for the pet — `null` before it adds anything. */
+  relationship: ClinicPetActivity | null;
+  /** Counts / dates over THIS clinic's own records only. */
   stats: ClinicAnimalStats;
 }
 
@@ -101,7 +107,7 @@ export interface ClinicAnimalDTO {
 export class ClinicDashboardService {
   constructor(
     private readonly dashboard: ClinicDashboardRepository,
-    private readonly access: AnimalClinicAccessRepository,
+    private readonly pets: ClinicPetRepository,
     private readonly animals: AnimalService,
     private readonly engagement: OrganizationEngagementService,
     private readonly authz: AuthorizationService,
@@ -134,7 +140,7 @@ export class ClinicDashboardService {
     const permissions = await this.permissionsFor(principal, organizationId);
 
     const [animalsCount, medical, appointments, engagement] = await Promise.all([
-      permissions.canViewAnimals ? this.dashboard.countActiveAnimals(organizationId) : null,
+      permissions.canViewAnimals ? this.pets.countForClinic(organizationId) : null,
       permissions.canViewMedicalRecords ? this.dashboard.medicalStats(organizationId) : null,
       permissions.canViewAppointments ? this.dashboard.appointmentStats(organizationId) : null,
       this.engagement.getSummary(organizationId, principal.userId),
@@ -155,18 +161,19 @@ export class ClinicDashboardService {
   }
 
   /**
-   * MUST be reached only through `withVeterinaryAnimalAccess` — the clinic's
-   * ACTIVE grant (or ADMIN) is verified before this runs.
+   * MUST be reached only through `withClinicAnimal` (registered pet) after the
+   * clinic's membership + permission checks.
    */
   async getAnimal(organizationId: string, animalId: string): Promise<ClinicAnimalDTO> {
-    const [animal, grant, stats, owner] = await Promise.all([
+    const [animal, relationship, stats, owner] = await Promise.all([
       this.animals.getDTOById(animalId),
-      this.access.findActive(animalId, organizationId),
-      this.dashboard.animalStats(animalId),
+      this.pets.activityFor(organizationId, animalId),
+      this.dashboard.animalStats(organizationId, animalId),
       this.dashboard.ownerContact(animalId),
     ]);
     return {
       id: animal.id,
+      publicCode: animal.publicCode,
       name: animal.name,
       species: animal.species,
       breed: animal.breed,
@@ -181,7 +188,7 @@ export class ClinicDashboardService {
       isNeutered: animal.isNeutered,
       medicalHistory: animal.medicalHistory,
       owner,
-      access: grant ? { id: grant.id, grantedAt: grant.createdAt } : null,
+      relationship,
       stats,
     };
   }

@@ -8,7 +8,7 @@ import {
   bearer,
   createActiveOrganization,
   createAnimal,
-  grantVeterinaryAccess,
+  openClinicPet,
   registerAdmin,
   registerApprovedVet,
   registerUser,
@@ -65,7 +65,7 @@ async function setup() {
     role: 'STAFF',
   });
   const animal = await createAnimal(app, petOwner.accessToken, { name: 'Milo' });
-  await grantVeterinaryAccess(app, owner.accessToken, clinic.id, animal.id);
+  await openClinicPet(app, owner.accessToken, clinic.id, animal.publicCode);
   const conv = await startConversation(app, petOwner.accessToken, clinic.id);
   const today = businessToday();
   await setPeriod(clinic.id, addDays(today, -30), addDays(today, 30));
@@ -85,7 +85,15 @@ function clinicOperations(ctx: Ctx, token: string) {
       'dashboard summary',
       () => request(app).get(`${org}/clinic-dashboard/summary`).set(bearer(token)),
     ],
-    ['animal list', () => request(app).get(`${org}/animal-access`).set(bearer(token))],
+    ['animal list', () => request(app).get(`${org}/clinic-pets`).set(bearer(token))],
+    [
+      'open pet by code',
+      () =>
+        request(app)
+          .get(`${org}/clinic-pets/lookup`)
+          .query({ code: animal.publicCode })
+          .set(bearer(token)),
+    ],
     ['animal profile', () => request(app).get(a).set(bearer(token))],
     ['medical records list', () => request(app).get(`${a}/medical-records`).set(bearer(token))],
     [

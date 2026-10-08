@@ -1,14 +1,14 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { buildTestApp } from '../helpers/app.js';
-import { closeTestDb, ensureSchema, resetDb } from '../helpers/db.js';
+import { closeTestDb, ensureSchema, getTestDb, resetDb } from '../helpers/db.js';
 import {
   addOrganizationMember,
   bearer,
   createActiveOrganization,
   createAnimal,
   createVaccination,
-  grantVeterinaryAccess,
+  openClinicPet,
   registerAdmin,
   registerApprovedVet,
   registerUser,
@@ -34,7 +34,7 @@ async function setup() {
     role: 'VETERINARIAN',
   });
   const animal = await createAnimal(app, petOwner.accessToken, { name: 'Nala' });
-  await grantVeterinaryAccess(app, clinicOwner.accessToken, clinic.id, animal.id);
+  await openClinicPet(app, clinicOwner.accessToken, clinic.id, animal.publicCode);
   return { admin, clinicOwner, vet, petOwner, clinic, animal };
 }
 
@@ -120,14 +120,59 @@ describe('vaccinations', () => {
     expect(strangerRead.status).toBe(404);
   });
 
-  it('denies a clinic with no veterinary-access grant (404)', async () => {
-    const { admin, vet, clinic } = await setup();
-    const petOwner2 = await registerUser(app);
-    const otherAnimal = await createAnimal(app, petOwner2.accessToken);
-    void admin;
-    const res = await request(app)
-      .get(vaxPath(clinic.id, otherAnimal.id))
-      .set(bearer(vet.accessToken));
-    expect(res.status).toBe(404);
+  it('another clinic sees none of this clinic’s vaccinations and cannot change them', async () => {
+    const { admin, vet, clinic, animal } = await setup();
+    const v = await createVaccination(app, vet.accessToken, clinic.id, animal.id);
+    const ownerB = await registerApprovedVet(app);
+    const clinicB = await createActiveOrganization(app, ownerB.accessToken, admin.accessToken, {
+      type: 'CLINIC',
+      name: 'Clinic B',
+    });
+    const list = await request(app)
+      .get(vaxPath(clinicB.id, animal.id))
+      .set(bearer(ownerB.accessToken));
+    expect(list.status).toBe(200);
+    expect(list.body.data).toEqual([]);
+    for (const req of [
+      request(app).get(vaxPath(clinicB.id, animal.id, v.id)),
+      request(app)
+        .patch(vaxPath(clinicB.id, animal.id, v.id))
+        .send({ vaccineName: 'x' }),
+      request(app).delete(vaxPath(clinicB.id, animal.id, v.id)),
+      request(app).post(`${vaxPath(clinicB.id, animal.id, v.id)}/notify`),
+    ]) {
+      expect((await req.set(bearer(ownerB.accessToken))).status).toBe(404);
+    }
+    const clinicWide = await request(app)
+      .get(`/api/v1/organizations/${clinicB.id}/clinic-vaccinations`)
+      .set(bearer(ownerB.accessToken));
+    expect(clinicWide.body.data).toEqual([]);
+  });
+
+  it('the owner reads every clinic’s vaccinations but can never modify one', async () => {
+    const { petOwner, vet, clinic, animal } = await setup();
+    const v = await createVaccination(app, vet.accessToken, clinic.id, animal.id);
+    const one = await request(app)
+      .get(`/api/v1/animals/${animal.id}/vaccinations/${v.id}`)
+      .set(bearer(petOwner.accessToken));
+    expect(one.status).toBe(200);
+    for (const req of [
+      request(app).patch(`/api/v1/animals/${animal.id}/vaccinations/${v.id}`).send({ notes: 'x' }),
+      request(app).delete(`/api/v1/animals/${animal.id}/vaccinations/${v.id}`),
+      request(app).post(`/api/v1/animals/${animal.id}/vaccinations`).send({ vaccineName: 'x' }),
+    ]) {
+      expect((await req.set(bearer(petOwner.accessToken))).status).toBe(404);
+    }
+    // Clinic routes: the owner is not a member → 403.
+    for (const req of [
+      request(app)
+        .patch(vaxPath(clinic.id, animal.id, v.id))
+        .send({ notes: 'x' }),
+      request(app).delete(vaxPath(clinic.id, animal.id, v.id)),
+    ]) {
+      expect((await req.set(bearer(petOwner.accessToken))).status).toBe(403);
+    }
+    const row = await getTestDb()('vaccinations').where({ id: v.id }).first();
+    expect(row.notes).not.toBe('x');
   });
 });

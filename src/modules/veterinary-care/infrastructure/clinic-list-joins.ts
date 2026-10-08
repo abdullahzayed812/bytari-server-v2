@@ -9,9 +9,8 @@ import type {
  * `clinic-vaccinations` / `clinic-reminders` screens): each row carries the
  * animal summary and its CURRENT owner's name + phone.
  *
- * The inner join on an ACTIVE `animal_clinic_access` grant for the SAME clinic
- * is the privacy gate: a clinic only ever sees rows (and owner contact) for
- * animals it currently treats — revoking access hides them immediately.
+ * The privacy gate is `<alias>.organization_id = clinic`: a clinic only ever
+ * sees rows it authored itself (and owner contact for those pets).
  */
 export function joinClinicAnimalAndOwner(
   qb: Knex.QueryBuilder,
@@ -20,11 +19,6 @@ export function joinClinicAnimalAndOwner(
 ): Knex.QueryBuilder {
   return qb
     .join('animals as a', 'a.id', `${alias}.animal_id`)
-    .join('animal_clinic_access as ac', function joinGrant() {
-      this.on('ac.animal_id', '=', `${alias}.animal_id`)
-        .andOn('ac.organization_id', '=', `${alias}.organization_id`)
-        .andOnVal('ac.status', '=', 'ACTIVE');
-    })
     .leftJoin('animal_ownerships as ow', function joinOwner() {
       this.on('ow.animal_id', '=', `${alias}.animal_id`).andOnNull('ow.ended_at');
     })

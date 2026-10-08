@@ -73,13 +73,19 @@ export class VeterinarianRepository {
     return rowToApplication(row as VeterinarianApplicationRow);
   }
 
+  /**
+   * Decide a PENDING application. Conditional on `status = 'PENDING'`, so of two
+   * concurrent decisions only the first commits; the second (blocked on the row
+   * lock, then re-checking the predicate) gets `null` and must abort — one
+   * approval, one `veterinarian.approved` event, one email.
+   */
   async decide(
     id: string,
     decision: { status: VetApplicationStatus; decidedBy: string; decisionReason?: string | null },
     trx?: Knex.Transaction,
-  ): Promise<VeterinarianApplicationRecord> {
+  ): Promise<VeterinarianApplicationRecord | null> {
     const [row] = await this.conn(trx)<VeterinarianApplicationRow>(TABLE)
-      .where({ id })
+      .where({ id, status: 'PENDING' })
       .update({
         status: decision.status,
         decided_by: decision.decidedBy,
@@ -88,7 +94,41 @@ export class VeterinarianRepository {
         updated_at: new Date(),
       })
       .returning('*');
-    return rowToApplication(row as VeterinarianApplicationRow);
+    return row ? rowToApplication(row) : null;
+  }
+
+  // --- approval email (exactly-once claim) ---------------------------
+
+  /**
+   * Atomically claim the approval email of an APPROVED application. `true` only
+   * for the first caller — a duplicate event / retry / second node gets `false`.
+   */
+  async claimApprovalEmail(id: string): Promise<boolean> {
+    const n = await this.db(TABLE)
+      .where({ id, status: 'APPROVED' })
+      .whereNull('approval_email_sent_at')
+      .update({ approval_email_sent_at: new Date() });
+    return n === 1;
+  }
+
+  /** Delivery failed — release the claim so the retry sweep sends it later. */
+  async releaseApprovalEmail(id: string): Promise<void> {
+    await this.db(TABLE).where({ id }).update({ approval_email_sent_at: null });
+  }
+
+  /** APPROVED applications decided since `since` whose email is still unsent. */
+  async listApprovedAwaitingEmail(
+    since: Date,
+    limit: number,
+  ): Promise<Array<{ id: string; userId: string }>> {
+    const rows: Array<{ id: string; user_id: string }> = await this.db(TABLE)
+      .where({ status: 'APPROVED' })
+      .whereNull('approval_email_sent_at')
+      .andWhere('decided_at', '>=', since)
+      .orderBy('decided_at', 'asc')
+      .limit(limit)
+      .select('id', 'user_id');
+    return rows.map((r) => ({ id: r.id, userId: r.user_id }));
   }
 
   async listPending(

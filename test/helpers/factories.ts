@@ -376,6 +376,7 @@ export async function addOrganizationMember(
 
 export interface TestAnimal {
   id: string;
+  publicCode: string;
   name: string;
   species: string;
   status: string;
@@ -509,21 +510,25 @@ export async function assignOrganizationSupervisor(
   return res.body.data as { id: string };
 }
 
-/** Grant a clinic ACTIVE veterinary access to an animal. */
-export async function grantVeterinaryAccess(
+/**
+ * A clinic opens a pet by its code (short public ID or UUID) — the real
+ * "scan / type the pet ID" step. Creates NO relationship; the clinic's own
+ * records are what later make the pet "its" pet.
+ */
+export async function openClinicPet(
   app: Express,
   actorToken: string,
   organizationId: string,
-  animalId: string,
-): Promise<{ id: string }> {
+  code: string,
+): Promise<{ animalId: string; publicCode: string; workedWith: boolean }> {
   const res = await request(app)
-    .post(`/api/v1/organizations/${organizationId}/animal-access`)
-    .set(bearer(actorToken))
-    .send({ animalId });
-  if (res.status !== 201) {
-    throw new Error(`grantVeterinaryAccess failed: ${res.status} ${JSON.stringify(res.body)}`);
+    .get(`/api/v1/organizations/${organizationId}/clinic-pets/lookup`)
+    .query({ code })
+    .set(bearer(actorToken));
+  if (res.status !== 200) {
+    throw new Error(`openClinicPet failed: ${res.status} ${JSON.stringify(res.body)}`);
   }
-  return res.body.data as { id: string };
+  return res.body.data as { animalId: string; publicCode: string; workedWith: boolean };
 }
 
 export interface TestMedicalRecord {

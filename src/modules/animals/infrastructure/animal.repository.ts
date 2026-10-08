@@ -7,8 +7,18 @@ import {
   type ListAdminAnimalsFilter,
   type ListAnimalsFilter,
 } from '../domain/animal.types.js';
+import { normalizePublicCode } from '../domain/public-code.js';
 
 const TABLE = 'animals';
+
+/** Name substring, or the exact short public ID (any case / with a dash). */
+function searchNameOrCode(qb: Knex.QueryBuilder, search: string): void {
+  const code = normalizePublicCode(search);
+  void qb.where((w) => {
+    void w.whereRaw('lower(a.name) like ?', [`%${search.toLowerCase()}%`]);
+    if (code) void w.orWhere('a.public_code', code);
+  });
+}
 
 export interface CreateAnimalData {
   name: string;
@@ -52,6 +62,12 @@ export class AnimalRepository {
 
   async findById(id: string, trx?: Knex.Transaction): Promise<Animal | null> {
     const row = await this.conn(trx)<AnimalRow>(TABLE).where({ id }).first();
+    return row ? rowToAnimal(row) : null;
+  }
+
+  /** Exact match on the short public ID (already normalised by the caller). */
+  async findByPublicCode(code: string, trx?: Knex.Transaction): Promise<Animal | null> {
+    const row = await this.conn(trx)<AnimalRow>(TABLE).where({ public_code: code }).first();
     return row ? rowToAnimal(row) : null;
   }
 
@@ -127,9 +143,7 @@ export class AnimalRepository {
       if (!filter.includeListingOnly) qb.where('a.listing_only', false);
       if (filter.status) qb.where('a.status', filter.status);
       if (filter.species) qb.where('a.species', filter.species);
-      if (filter.search) {
-        qb.whereRaw('lower(a.name) like ?', [`%${filter.search.toLowerCase()}%`]);
-      }
+      if (filter.search) searchNameOrCode(qb, filter.search);
       return qb;
     };
 
@@ -170,9 +184,7 @@ export class AnimalRepository {
       if (filter.ownerUserId) qb.where('o.owner_user_id', filter.ownerUserId);
       if (filter.status) qb.where('a.status', filter.status);
       if (filter.species) qb.where('a.species', filter.species);
-      if (filter.search) {
-        qb.whereRaw('lower(a.name) like ?', [`%${filter.search.toLowerCase()}%`]);
-      }
+      if (filter.search) searchNameOrCode(qb, filter.search);
       return qb;
     };
 

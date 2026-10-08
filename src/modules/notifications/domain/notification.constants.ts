@@ -125,6 +125,8 @@ export const NOTIFICATION_TYPES = [
   'VACCINATION_DUE',
   'REMINDER_ADDED',
   'REMINDER_DUE',
+  // Retired: medical records are clinic-private, the owner is no longer told
+  // about them. Kept so historical notification rows stay valid.
   'MEDICAL_RECORD_ADDED',
   // admin
   'ADMIN_ANNOUNCEMENT',
@@ -139,10 +141,10 @@ export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
  * Pet Details sections → the clinic pet-care notification types that mean
  * "something new here". The owner's per-section "new" badge is the count of
  * THEIR unread notifications of these types for the pet; opening a section
- * marks only that section's notifications read.
+ * marks only that section's notifications read. Only the OWNER-VISIBLE kinds
+ * (vaccinations, reminders) have a section.
  */
 export const PET_CARE_SECTIONS = {
-  medicalRecords: ['MEDICAL_RECORD_ADDED'],
   vaccinations: ['VACCINATION_ADDED', 'VACCINATION_DUE'],
   reminders: ['REMINDER_ADDED', 'REMINDER_DUE'],
 } as const satisfies Record<string, readonly NotificationType[]>;

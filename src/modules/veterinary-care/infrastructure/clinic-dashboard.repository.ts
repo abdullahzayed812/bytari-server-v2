@@ -48,27 +48,13 @@ function toCount(row: { count?: string | number } | undefined): number {
 }
 
 /**
- * Read-only aggregates for the Clinic Dashboard. Every query is scoped by the
- * trusted `organizationId` (or, for {@link animalStats}, by an animal the
- * caller's clinic was already verified to hold ACTIVE access to) — no row is
- * ever selected by a client-supplied filter. "Today" is the database's
+ * Read-only aggregates for the Clinic Dashboard. Every clinic query is scoped
+ * by the trusted (authorized URL) `organizationId` — no row is ever selected
+ * by a client-supplied filter, and no clinic ever counts another's rows. "Today" is the database's
  * the business day (`businessToday()`, Asia/Baghdad), like farm daily records.
  */
 export class ClinicDashboardRepository {
   constructor(private readonly db: Knex) {}
-
-  async countActiveAnimals(organizationId: string): Promise<number> {
-    const row = await this.db('animal_clinic_access as ac')
-      .join('animals as a', 'a.id', 'ac.animal_id')
-      .where({
-        'ac.organization_id': organizationId,
-        'ac.status': 'ACTIVE',
-        'a.listing_only': false,
-      })
-      .count<{ count: string }>({ count: '*' })
-      .first();
-    return toCount(row);
-  }
 
   async medicalStats(organizationId: string): Promise<ClinicMedicalStats> {
     const today = businessToday();
@@ -204,20 +190,18 @@ export class ClinicDashboardRepository {
     };
   }
 
-  /**
-   * The animal's full veterinary history summary (every clinic's entries — a
-   * clinic with an ACTIVE grant reads the complete history, ARCHITECTURE §11.3).
-   */
-  async animalStats(animalId: string): Promise<ClinicAnimalStats> {
+  /** Summary of THIS clinic's own records for the animal — never another clinic's. */
+  async animalStats(organizationId: string, animalId: string): Promise<ClinicAnimalStats> {
+    const scope = { organization_id: organizationId, animal_id: animalId };
     const [records, vaccinations] = await Promise.all([
       this.db('medical_records')
-        .where({ animal_id: animalId })
+        .where(scope)
         .first<{ count: string; last_visit: string | null }>(
           this.db.raw('count(*) as count'),
           this.db.raw('max(visit_date)::text as last_visit'),
         ),
       this.db('vaccinations')
-        .where({ animal_id: animalId })
+        .where(scope)
         .first<{ count: string; next_due: string | null }>(
           this.db.raw('count(*) as count'),
           this.db.raw('min(next_due_on) FILTER (WHERE next_due_on >= ?::date)::text as next_due', [
@@ -233,7 +217,7 @@ export class ClinicDashboardRepository {
     };
   }
 
-  /** The animal's CURRENT owner (name + phone) — the caller must already hold an ACTIVE grant. */
+  /** The animal's CURRENT owner (name + phone) — clinic pet profile only. */
   async ownerContact(animalId: string): Promise<ClinicAnimalOwnerContact | null> {
     const row:
       { id: string; first_name: string; last_name: string; phone: string | null } | undefined =
@@ -248,22 +232,15 @@ export class ClinicDashboardRepository {
   }
 
   /**
-   * Owner-facing "العيادات" tab: every clinic that holds ACTIVE access to the
-   * animal or has recorded anything for it, with per-clinic counts.
+   * Owner-facing "العيادات" tab: the clinics that added OWNER-VISIBLE items
+   * (vaccinations / reminders) for the animal, with those counts. A clinic's
+   * private medical records are neither counted nor used to list it.
    */
   async clinicsForAnimal(animalId: string): Promise<OwnerAnimalClinicRow[]> {
     const clinicIds = this.db
       .select('organization_id')
-      .from('animal_clinic_access')
-      .where({ animal_id: animalId, status: 'ACTIVE' })
-      .union(
-        (qb) =>
-          void qb.select('organization_id').from('medical_records').where({ animal_id: animalId }),
-      )
-      .union(
-        (qb) =>
-          void qb.select('organization_id').from('vaccinations').where({ animal_id: animalId }),
-      )
+      .from('vaccinations')
+      .where({ animal_id: animalId })
       .union(
         (qb) =>
           void qb.select('organization_id').from('animal_reminders').where({ animal_id: animalId }),
@@ -276,17 +253,10 @@ export class ClinicDashboardRepository {
       logo_key: string | null;
       phone: string | null;
       address: string | null;
-      granted_at: Date | null;
-      records: string;
       vaccinations: string;
       reminders: string;
     }> = await this.db('organizations as o')
       .leftJoin('clinic_details as d', 'd.organization_id', 'o.id')
-      .leftJoin('animal_clinic_access as ac', function joinGrant() {
-        this.on('ac.organization_id', '=', 'o.id')
-          .andOnVal('ac.animal_id', '=', animalId)
-          .andOnVal('ac.status', '=', 'ACTIVE');
-      })
       .whereIn('o.id', clinicIds)
       .select(
         'o.id',
@@ -294,8 +264,6 @@ export class ClinicDashboardRepository {
         'd.logo_key',
         'd.phone',
         'd.address',
-        'ac.created_at as granted_at',
-        sub('medical_records').as('records'),
         sub('vaccinations').as('vaccinations'),
         sub('animal_reminders').as('reminders'),
       )
@@ -306,9 +274,6 @@ export class ClinicDashboardRepository {
       logoKey: r.logo_key,
       phone: r.phone,
       address: r.address,
-      hasActiveAccess: r.granted_at !== null,
-      grantedAt: r.granted_at ? r.granted_at.toISOString() : null,
-      medicalRecordsCount: Number(r.records),
       vaccinationsCount: Number(r.vaccinations),
       remindersCount: Number(r.reminders),
     }));
@@ -328,9 +293,6 @@ export interface OwnerAnimalClinicRow {
   logoKey: string | null;
   phone: string | null;
   address: string | null;
-  hasActiveAccess: boolean;
-  grantedAt: string | null;
-  medicalRecordsCount: number;
   vaccinationsCount: number;
   remindersCount: number;
 }

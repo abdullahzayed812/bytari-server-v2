@@ -4,10 +4,8 @@ import { NotFoundError } from '../../../shared/errors/app-error.js';
 import { asyncHandler } from '../../../shared/http/async-handler.js';
 import { validatedParams } from '../../../shared/http/validate.js';
 import { requireAuth } from '../../auth/authenticate.middleware.js';
-import type { AuthorizationService } from '../../authorization/authorization.service.js';
 import type { AnimalRepository } from '../../animals/infrastructure/animal.repository.js';
 import { requireOrganization } from '../../organizations/presentation/organization.middleware.js';
-import type { VeterinaryAccessService } from '../application/veterinary-access.service.js';
 
 export const clinicAnimalParamSchema = z.object({
   organizationId: z.string().uuid(),
@@ -23,36 +21,31 @@ export function requireVeterinaryAnimal(req: Request): Express.VeterinaryAnimalC
 }
 
 /**
- * MUST run after `withOrganization` + `authorizeOrg(<perm>)`.
+ * MUST run after `withOrganization` + `authorizeOrg(<perm>)` (+ the
+ * operability guard).
  *
- * Resolves `:animalId`, then enforces the dedicated veterinary-access gate: the
- * URL's clinic must hold an ACTIVE `animal_clinic_access` grant for this animal.
- * A caller without it — even an authorized clinic member — gets a `404`, so the
- * existence of animals a clinic has no relationship with is never revealed
- * (cross-clinic isolation). ADMIN bypasses the grant requirement.
+ * Resolves `:animalId` to a registered pet. There is no clinic ↔ pet link:
+ * any operational clinic may open a pet (it reaches the id through the
+ * owner's short ID / QR, its own lists, or an appointment) and add its own
+ * records. What the clinic may then READ or CHANGE is enforced per row by
+ * the services — only rows whose `organization_id` is this clinic — so
+ * opening a pet never exposes another clinic's work. Listing-only subjects
+ * (adoption / mating / lost) are never patients: `404`, like an unknown id.
  */
-export function createVeterinaryCareMiddleware(deps: {
-  animals: AnimalRepository;
-  access: VeterinaryAccessService;
-  authz: AuthorizationService;
-}): { withVeterinaryAnimalAccess: RequestHandler } {
-  const withVeterinaryAnimalAccess: RequestHandler = asyncHandler(async (req, _res, next) => {
-    const principal = requireAuth(req);
-    const org = requireOrganization(req);
+export function createVeterinaryCareMiddleware(deps: { animals: AnimalRepository }): {
+  withClinicAnimal: RequestHandler;
+} {
+  const withClinicAnimal: RequestHandler = asyncHandler(async (req, _res, next) => {
+    requireAuth(req);
+    requireOrganization(req);
     const { animalId } = validatedParams<{ animalId: string }>(req);
 
     const animal = await deps.animals.findById(animalId);
-    // Listing subjects are never patients — not even through a legacy grant.
     if (!animal || animal.listingOnly) throw new NotFoundError('Animal not found');
-
-    if (!deps.authz.isAdmin(principal)) {
-      const allowed = await deps.access.hasActiveAccess(animal.id, org.id);
-      if (!allowed) throw new NotFoundError('Animal not found');
-    }
 
     req.veterinaryAnimal = { id: animal.id, status: animal.status };
     next();
   });
 
-  return { withVeterinaryAnimalAccess };
+  return { withClinicAnimal };
 }

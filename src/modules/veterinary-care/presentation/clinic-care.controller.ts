@@ -73,9 +73,10 @@ export class ClinicCareController {
 
   // --- reminders (clinic) ------------------------------------------
   listReminders = async (req: Request, res: Response): Promise<void> => {
+    const org = requireOrganization(req);
     const animal = requireVeterinaryAnimal(req);
     const q = validatedQuery<PageQuery>(req);
-    const { items, total } = await this.reminders.listForAnimal(animal.id, q);
+    const { items, total } = await this.reminders.listForClinic(org.id, animal.id, q);
     sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
   };
 
@@ -91,9 +92,10 @@ export class ClinicCareController {
   };
 
   getReminder = async (req: Request, res: Response): Promise<void> => {
+    const org = requireOrganization(req);
     const animal = requireVeterinaryAnimal(req);
     const { reminderId } = validatedParams<{ reminderId: string }>(req);
-    sendSuccess(res, await this.reminders.getForAnimal(animal.id, reminderId));
+    sendSuccess(res, await this.reminders.getForClinic(org.id, animal.id, reminderId));
   };
 
   updateReminder = async (req: Request, res: Response): Promise<void> => {
@@ -167,19 +169,12 @@ export class ClinicCareController {
     sendSuccess(res, { deleted: true });
   };
 
-  // --- owner-facing -------------------------------------------------
+  // --- owner-facing (read-only) --------------------------------------
   ownerListReminders = async (req: Request, res: Response): Promise<void> => {
     const animal = requireAnimal(req);
     const q = validatedQuery<PageQuery>(req);
-    const { items, total } = await this.reminders.listForAnimal(animal.id, q);
+    const { items, total } = await this.reminders.listForOwner(animal.id, q);
     sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
-  };
-
-  ownerDeleteReminder = async (req: Request, res: Response): Promise<void> => {
-    const animal = requireAnimal(req);
-    const { reminderId } = validatedParams<{ reminderId: string }>(req);
-    await this.reminders.deleteForOwner(animal.id, reminderId, this.actor(req));
-    sendSuccess(res, { deleted: true });
   };
 
   ownerListClinics = async (req: Request, res: Response): Promise<void> => {

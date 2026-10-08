@@ -3,7 +3,6 @@ import {
   medicalRecordToTimelineEntry,
   sortTimelineEntries,
   toMedicalRecordDTO,
-  toOwnerMedicalRecordDTO,
   toOwnerVaccinationDTO,
   toVaccinationDTO,
   vaccinationToTimelineEntry,
@@ -22,12 +21,15 @@ export interface TimelineFilter {
 }
 
 /**
- * Read-only composed view of an animal's medical history: `medical_records`
- * ∪ `vaccinations`, merged newest-first. No new storage — it just reshapes the
- * two Phase-5 tables into one chronological list (docs 04 §4.4 / §4.5). Access
- * is gated by the caller's route (clinic: `authorizeOrg('medical_record.read')`
- * + veterinary-access grant; owner: `authorizeAnimalRead`), exactly like the
- * underlying list endpoints — this service performs no authorization itself.
+ * Read-only composed view of an animal's medical history, merged newest-first.
+ * No new storage. The two views differ by visibility, not just shape:
+ *
+ *  - CLINIC: `medical_records` ∪ `vaccinations` authored by THAT clinic only;
+ *  - OWNER:  `vaccinations` only (every clinic's) — medical records are
+ *    clinic-private and never part of the owner's history.
+ *
+ * Route access (clinic: `authorizeOrg('medical_record.read')`; owner:
+ * `authorizeAnimalRead`) is enforced by the caller's route.
  */
 export class MedicalHistoryService {
   private readonly log: Logger;
@@ -45,46 +47,49 @@ export class MedicalHistoryService {
     this.log = logger.child({ component: 'medical-history-service' });
   }
 
+  /** The clinic's OWN records + vaccinations for the animal. */
   timelineForClinic(
+    organizationId: string,
     animalId: string,
     filter: TimelineFilter,
   ): Promise<{ items: MedicalTimelineEntryDTO[]; total: number }> {
-    return this.buildTimeline(animalId, filter, false);
+    return this.buildTimeline(animalId, filter, { organizationId });
   }
 
+  /** The owner's view: vaccinations only (clinic records are private). */
   timelineForOwner(
     animalId: string,
     filter: TimelineFilter,
   ): Promise<{ items: MedicalTimelineEntryDTO[]; total: number }> {
-    return this.buildTimeline(animalId, filter, true);
+    return this.buildTimeline(animalId, filter, { owner: true });
   }
 
   private async buildTimeline(
     animalId: string,
     filter: TimelineFilter,
-    ownerView: boolean,
+    scope: { organizationId: string; owner?: never } | { owner: true; organizationId?: never },
   ): Promise<{ items: MedicalTimelineEntryDTO[]; total: number }> {
-    const wantRecords = filter.type === undefined || filter.type === 'MEDICAL_RECORD';
+    const ownerView = scope.owner === true;
+    const wantRecords =
+      !ownerView && (filter.type === undefined || filter.type === 'MEDICAL_RECORD');
     const wantVaccinations = filter.type === undefined || filter.type === 'VACCINATION';
     const ceil = MedicalHistoryService.PER_TABLE_CEILING;
+    const organizationId = scope.organizationId;
 
     const [rec, vax] = await Promise.all([
       wantRecords
-        ? this.records.listForAnimal(animalId, { page: 1, pageSize: ceil })
+        ? this.records.listForAnimal(animalId, { page: 1, pageSize: ceil, organizationId })
         : Promise.resolve({ items: [], total: 0 }),
       wantVaccinations
-        ? this.vaccinations.listForAnimal(animalId, { page: 1, pageSize: ceil })
+        ? this.vaccinations.listForAnimal(animalId, { page: 1, pageSize: ceil, organizationId })
         : Promise.resolve({ items: [], total: 0 }),
     ]);
 
     const entries = sortTimelineEntries([
       ...(await Promise.all(
-        rec.items.map(async (r) => {
-          const urls = await this.attachments.resolve(r);
-          return medicalRecordToTimelineEntry(
-            ownerView ? toOwnerMedicalRecordDTO(r, urls) : toMedicalRecordDTO(r, urls),
-          );
-        }),
+        rec.items.map(async (r) =>
+          medicalRecordToTimelineEntry(toMedicalRecordDTO(r, await this.attachments.resolve(r))),
+        ),
       )),
       ...vax.items.map((v) =>
         vaccinationToTimelineEntry(ownerView ? toOwnerVaccinationDTO(v) : toVaccinationDTO(v)),

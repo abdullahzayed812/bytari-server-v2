@@ -287,7 +287,6 @@ export class NotificationService {
     const sum = (types: readonly string[]): number =>
       types.reduce((n, t) => n + (byType.get(t) ?? 0), 0);
     return {
-      medicalRecords: sum(PET_CARE_SECTIONS.medicalRecords),
       vaccinations: sum(PET_CARE_SECTIONS.vaccinations),
       reminders: sum(PET_CARE_SECTIONS.reminders),
     };

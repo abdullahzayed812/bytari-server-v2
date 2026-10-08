@@ -34,11 +34,11 @@ export interface ClinicReminderDTO {
 const TODAY_BATCH_CAP = 500;
 
 /**
- * Animal reminders (legacy `pet_reminders`). Same authorization model as
- * medical records / vaccinations: clinic writes are gated by org permission +
- * the clinic's ACTIVE grant, and a clinic may change only reminders IT
- * created; the current owner reads every reminder and — as in the legacy app —
- * may delete one (it is the owner's own to-do list, not medical history).
+ * Animal reminders (legacy `pet_reminders`). Clinic side: same isolation as
+ * medical records — a clinic reads / changes only reminders IT created.
+ * Owner side: OWNER-VISIBLE, read-only — the current owner reads every
+ * clinic's reminders for the pet but cannot edit or delete them (only the
+ * creating clinic can).
  */
 export class AnimalReminderService {
   private readonly log: Logger;
@@ -110,13 +110,25 @@ export class AnimalReminderService {
     return reminder;
   }
 
-  async getForAnimal(animalId: string, reminderId: string): Promise<AnimalReminderDTO> {
-    const r = await this.reminders.findByIdForAnimal(reminderId, animalId);
-    if (!r) throw new NotFoundError('Reminder not found');
-    return r;
+  getForClinic(
+    organizationId: string,
+    animalId: string,
+    reminderId: string,
+  ): Promise<AnimalReminderDTO> {
+    return this.mustOwnInClinic(organizationId, animalId, reminderId);
   }
 
-  listForAnimal(
+  /** This clinic's reminders for the animal — never another clinic's. */
+  listForClinic(
+    organizationId: string,
+    animalId: string,
+    filter: { page: number; pageSize: number },
+  ): Promise<{ items: AnimalReminderDTO[]; total: number }> {
+    return this.reminders.listForAnimal(animalId, { ...filter, organizationId });
+  }
+
+  /** Owner view: every clinic's reminders for the pet (read-only). */
+  listForOwner(
     animalId: string,
     filter: { page: number; pageSize: number },
   ): Promise<{ items: AnimalReminderDTO[]; total: number }> {
@@ -163,22 +175,6 @@ export class AnimalReminderService {
     actor: ReminderActor,
   ): Promise<void> {
     await this.mustOwnInClinic(organizationId, animalId, reminderId);
-    await this.delete(organizationId, animalId, reminderId, actor);
-  }
-
-  /** The current owner removes a reminder from their pet (legacy owner delete). */
-  async deleteForOwner(animalId: string, reminderId: string, actor: ReminderActor): Promise<void> {
-    const existing = await this.reminders.findByIdForAnimal(reminderId, animalId);
-    if (!existing) throw new NotFoundError('Reminder not found');
-    await this.delete(existing.organizationId, animalId, reminderId, actor);
-  }
-
-  private async delete(
-    organizationId: string,
-    animalId: string,
-    reminderId: string,
-    actor: ReminderActor,
-  ): Promise<void> {
     await this.db.transaction(async (tx) => {
       const deleted = await this.reminders.deleteById(reminderId, tx);
       if (deleted !== 1) throw new NotFoundError('Reminder not found');

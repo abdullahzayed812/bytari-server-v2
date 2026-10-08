@@ -62,21 +62,15 @@ export class NotificationRecipientRepository {
 
   /**
    * A clinic's "visitors" (legacy `sendMessageToVisitors`): the CURRENT owners
-   * of every animal the clinic holds ACTIVE access to or has any medical
-   * record / vaccination / reminder for, plus pet owners who booked an
-   * appointment with it. ACTIVE users only.
+   * of every animal the clinic has its own medical record / vaccination /
+   * reminder for (the clinic's worked-with pets), plus pet owners who booked
+   * an appointment with it. ACTIVE users only.
    */
   async clinicVisitorUserIds(organizationId: string, limit: number): Promise<string[]> {
     const animalIds = this.db
       .select('animal_id')
-      .from('animal_clinic_access')
-      .where({ organization_id: organizationId, status: 'ACTIVE' })
-      .union((qb) => {
-        void qb
-          .select('animal_id')
-          .from('medical_records')
-          .where({ organization_id: organizationId });
-      })
+      .from('medical_records')
+      .where({ organization_id: organizationId })
       .union((qb) => {
         void qb.select('animal_id').from('vaccinations').where({ organization_id: organizationId });
       })

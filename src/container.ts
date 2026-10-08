@@ -52,10 +52,10 @@ import { PublicationInteractionService } from './modules/animals/application/pub
 import { AnimalTransferRequestService } from './modules/animals/application/animal-transfer-request.service.js';
 import { ClinicAppointmentRepository } from './modules/clinic-appointments/infrastructure/clinic-appointment.repository.js';
 import { ClinicAppointmentService } from './modules/clinic-appointments/application/clinic-appointment.service.js';
-import { AnimalClinicAccessRepository } from './modules/veterinary-care/infrastructure/animal-clinic-access.repository.js';
+import { ClinicPetRepository } from './modules/veterinary-care/infrastructure/clinic-pet.repository.js';
 import { MedicalRecordRepository } from './modules/veterinary-care/infrastructure/medical-record.repository.js';
 import { VaccinationRepository } from './modules/veterinary-care/infrastructure/vaccination.repository.js';
-import { VeterinaryAccessService } from './modules/veterinary-care/application/veterinary-access.service.js';
+import { ClinicPetService } from './modules/veterinary-care/application/clinic-pet.service.js';
 import { MedicalRecordService } from './modules/veterinary-care/application/medical-record.service.js';
 import { VaccinationService } from './modules/veterinary-care/application/vaccination.service.js';
 import { MedicalHistoryService } from './modules/veterinary-care/application/medical-history.service.js';
@@ -312,10 +312,10 @@ export interface Container {
   clinicAppointmentRepository: ClinicAppointmentRepository;
   clinicAppointmentService: ClinicAppointmentService;
 
-  animalClinicAccessRepository: AnimalClinicAccessRepository;
+  clinicPetRepository: ClinicPetRepository;
   medicalRecordRepository: MedicalRecordRepository;
   vaccinationRepository: VaccinationRepository;
-  veterinaryAccessService: VeterinaryAccessService;
+  clinicPetService: ClinicPetService;
   medicalRecordService: MedicalRecordService;
   vaccinationService: VaccinationService;
   medicalHistoryService: MedicalHistoryService;
@@ -596,9 +596,10 @@ export function createContainer(deps: ContainerDeps): Container {
   );
 
   // --- veterinarian workflow -----------------------------------
+  const veterinarianRepository = new VeterinarianRepository(db);
   const veterinarianService = new VeterinarianService(
     db,
-    new VeterinarianRepository(db),
+    veterinarianRepository,
     new VeterinarianDocumentRepository(db),
     userService,
     roleRepository,
@@ -774,8 +775,8 @@ export function createContainer(deps: ContainerDeps): Container {
 
   // --- clinic appointments (Pet Owner ↔ Clinic booking) ----------
   const clinicAppointmentRepository = new ClinicAppointmentRepository(db);
-  // Clinic-created appointments require the clinic's ACTIVE veterinary-access grant.
-  const animalClinicAccessRepository = new AnimalClinicAccessRepository(db);
+  // Clinic ↔ pet relationship = the clinic's own records (no link table).
+  const clinicPetRepository = new ClinicPetRepository(db);
   const clinicAppointmentService = new ClinicAppointmentService(
     db,
     clinicAppointmentRepository,
@@ -785,19 +786,15 @@ export function createContainer(deps: ContainerDeps): Container {
     auditService,
     eventBus,
     logger,
-    animalClinicAccessRepository,
   );
 
   // --- veterinary care (Phase 5) -----------------------------
   const medicalRecordRepository = new MedicalRecordRepository(db);
   const vaccinationRepository = new VaccinationRepository(db);
-  const veterinaryAccessService = new VeterinaryAccessService(
-    db,
-    animalClinicAccessRepository,
+  const clinicPetService = new ClinicPetService(
+    clinicPetRepository,
     animalRepository,
     auditService,
-    eventBus,
-    logger,
     objectStorage,
   );
   // Medical-record attachments (prescription photo / files) — clinic-scoped R2 keys.
@@ -810,7 +807,6 @@ export function createContainer(deps: ContainerDeps): Container {
     eventBus,
     medicalAttachments,
     logger,
-    animalOwnershipRepository,
   );
   const vaccinationService = new VaccinationService(
     db,
@@ -831,7 +827,7 @@ export function createContainer(deps: ContainerDeps): Container {
   // Clinic Dashboard — stats summary + clinic-visible animal profile (read-only).
   const clinicDashboardService = new ClinicDashboardService(
     new ClinicDashboardRepository(db),
-    animalClinicAccessRepository,
+    clinicPetRepository,
     animalService,
     organizationEngagementService,
     authorizationService,
@@ -1562,6 +1558,7 @@ export function createContainer(deps: ContainerDeps): Container {
     eventBus,
     userService,
     emailService,
+    veterinarianRepository,
     logger,
   );
   veterinarianApprovalEmailHandler.start();
@@ -1659,10 +1656,10 @@ export function createContainer(deps: ContainerDeps): Container {
     animalTransferRequestService,
     clinicAppointmentRepository,
     clinicAppointmentService,
-    animalClinicAccessRepository,
+    clinicPetRepository,
     medicalRecordRepository,
     vaccinationRepository,
-    veterinaryAccessService,
+    clinicPetService,
     medicalRecordService,
     vaccinationService,
     medicalHistoryService,

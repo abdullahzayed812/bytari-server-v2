@@ -2,12 +2,9 @@
  * Phase 5 — Veterinary Care domain constants.
  *
  * All authorization for this module is ORGANIZATION-scoped (a CLINIC context)
- * plus a dedicated per-animal access grant. Nothing here is a global permission.
+ * plus per-row clinic ownership (`organization_id`). Nothing here is a global
+ * permission.
  */
-
-/** Access-grant lifecycle for `animal_clinic_access`. */
-export const CLINIC_ACCESS_STATUSES = ['ACTIVE', 'REVOKED'] as const;
-export type ClinicAccessStatus = (typeof CLINIC_ACCESS_STATUSES)[number];
 
 /** Organization types that may hold veterinary access to an animal (Phase 5). */
 export const VETERINARY_ORG_TYPES = ['CLINIC'] as const;

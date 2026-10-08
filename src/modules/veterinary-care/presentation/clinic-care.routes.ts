@@ -23,7 +23,6 @@ import {
   listClinicVaccinationsQuerySchema,
   listRemindersQuerySchema,
   medicalAttachmentUploadUrlBodySchema,
-  ownerReminderParamSchema,
   quickReviewTemplateParamSchema,
   reminderParamSchema,
   updateQuickReviewTemplateBodySchema,
@@ -40,10 +39,11 @@ const withClinic: RequestHandler = asyncHandler((req, _res, next) => {
 /**
  * Legacy-parity clinic care, mounted at `/organizations`. Same chain as the
  * Phase 5 medical routes — membership + org permission, then (per-animal
- * routes) the clinic's ACTIVE veterinary-access grant:
+ * routes) a registered pet; every read / write is then limited to rows this
+ * clinic authored (services):
  *
  *   authenticate → withOrganization → CLINIC → authorizeOrg(<perm>)
- *                → withVeterinaryAnimalAccess
+ *                → withClinicAnimal
  *
  * Reminders reuse the `medical_record.*` permissions (they are part of the
  * medical workflow); templates are clinic settings (`organization.update` to
@@ -61,11 +61,7 @@ export function createClinicCareRouter(c: Container): Router {
     organizations: c.organizationRepository,
     authz: c.authorizationService,
   });
-  const { withVeterinaryAnimalAccess } = createVeterinaryCareMiddleware({
-    animals: c.animalRepository,
-    access: c.veterinaryAccessService,
-    authz: c.authorizationService,
-  });
+  const { withClinicAnimal } = createVeterinaryCareMiddleware({ animals: c.animalRepository });
   const activeSubscription = createOrganizationSubscriptionGuard({
     subscriptions: c.farmSubscriptionRenewalRepository,
     authz: c.authorizationService,
@@ -78,10 +74,7 @@ export function createClinicCareRouter(c: Container): Router {
     authorizeOrg(permission),
     activeSubscription,
   ];
-  const animal = (permission: string): RequestHandler[] => [
-    ...org(permission),
-    withVeterinaryAnimalAccess,
-  ];
+  const animal = (permission: string): RequestHandler[] => [...org(permission), withClinicAnimal];
 
   const r = Router();
   r.use(c.authenticate);
@@ -189,9 +182,10 @@ export function createClinicCareRouter(c: Container): Router {
 }
 
 /**
- * Owner-facing additions, mounted at `/animals`: reminders (read + delete, as
- * in the legacy app) and the "العيادات" tab. Current owner or ADMIN only —
- * anyone else gets 404 from the animals module's ownership guard.
+ * Owner-facing additions, mounted at `/animals`: reminders (READ-ONLY — only
+ * the creating clinic may change or delete a reminder) and the "العيادات"
+ * tab. Current owner or ADMIN only — anyone else gets 404 from the animals
+ * module's ownership guard.
  */
 export function createOwnerClinicCareRouter(c: Container): Router {
   const ctrl = new ClinicCareController(
@@ -201,7 +195,7 @@ export function createOwnerClinicCareRouter(c: Container): Router {
     c.quickReviewTemplateService,
     c.clinicDashboardService,
   );
-  const { withAnimal, authorizeAnimalRead, authorizeAnimalWrite } = createAnimalMiddleware({
+  const { withAnimal, authorizeAnimalRead } = createAnimalMiddleware({
     animals: c.animalService,
     authz: c.authorizationService,
   });
@@ -215,13 +209,6 @@ export function createOwnerClinicCareRouter(c: Container): Router {
     withAnimal,
     authorizeAnimalRead('animal.read'),
     asyncHandler(ctrl.ownerListReminders),
-  );
-  r.delete(
-    '/:animalId/reminders/:reminderId',
-    validate({ params: ownerReminderParamSchema }),
-    withAnimal,
-    authorizeAnimalWrite(),
-    asyncHandler(ctrl.ownerDeleteReminder),
   );
   r.get(
     '/:animalId/clinics',

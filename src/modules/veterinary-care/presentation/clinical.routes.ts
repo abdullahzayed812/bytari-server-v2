@@ -1,20 +1,23 @@
-import { Router } from 'express';
+import { Router, type RequestHandler } from 'express';
 import { asyncHandler } from '../../../shared/http/async-handler.js';
+import { userRateLimiter } from '../../../shared/http/user-rate-limit.js';
 import { validate } from '../../../shared/http/validate.js';
 import type { Container } from '../../../container.js';
 import {
   createOrganizationMiddleware,
   organizationIdParamSchema,
+  requireOrganization,
 } from '../../organizations/presentation/organization.middleware.js';
 import { createOrganizationSubscriptionGuard } from '../../organizations/presentation/organization-subscription.middleware.js';
+import { VeterinaryCarePolicy } from '../domain/veterinary-care.policy.js';
 import { ClinicalController } from './clinical.controller.js';
 import { createVeterinaryCareMiddleware } from './veterinary-care.middleware.js';
 import {
   clinicAnimalParamSchema,
   createMedicalRecordBodySchema,
   createVaccinationBodySchema,
-  grantAnimalAccessBodySchema,
-  listClinicAnimalsQuerySchema,
+  clinicPetLookupQuerySchema,
+  listClinicPetsQuerySchema,
   listMedicalHistoryQuerySchema,
   listMedicalRecordsQuerySchema,
   listVaccinationsQuerySchema,
@@ -29,15 +32,22 @@ import {
  * organizations router). Every route is:
  *
  *   authenticate → validate → withOrganization → authorizeOrg(<org perm>)
- *                → withVeterinaryAnimalAccess (dedicated per-animal access gate)
+ *                → operability guard → withClinicAnimal (registered pet)
  *
- * so a caller must be an ACTIVE member of the clinic with the right org
- * permission AND the clinic must hold an ACTIVE veterinary-access grant for the
- * animal. ADMIN overrides both.
+ * There is no clinic ↔ pet link: the per-row rule lives in the services —
+ * every read and write is restricted to rows whose `organization_id` is the
+ * URL clinic (whose membership + permission were just verified), so a clinic
+ * only ever sees and changes its own work. ADMIN acts as the URL clinic.
  */
+/** MUST run after `withOrganization` — non-CLINIC organizations get 400 ORGANIZATION_TYPE_NOT_SUPPORTED. */
+const withClinic: RequestHandler = asyncHandler((req, _res, next) => {
+  VeterinaryCarePolicy.assertVeterinaryOrgType(requireOrganization(req));
+  next();
+});
+
 export function createClinicalVeterinaryRouter(c: Container): Router {
   const ctrl = new ClinicalController(
-    c.veterinaryAccessService,
+    c.clinicPetService,
     c.medicalRecordService,
     c.vaccinationService,
     c.medicalHistoryService,
@@ -46,11 +56,7 @@ export function createClinicalVeterinaryRouter(c: Container): Router {
     organizations: c.organizationRepository,
     authz: c.authorizationService,
   });
-  const { withVeterinaryAnimalAccess } = createVeterinaryCareMiddleware({
-    animals: c.animalRepository,
-    access: c.veterinaryAccessService,
-    authz: c.authorizationService,
-  });
+  const { withClinicAnimal } = createVeterinaryCareMiddleware({ animals: c.animalRepository });
 
   // Clinic operability (single rule: ACTIVE status — via authorizeOrg — and a
   // non-expired subscription). Applies to owner AND staff; ADMIN bypasses.
@@ -62,30 +68,28 @@ export function createClinicalVeterinaryRouter(c: Container): Router {
   const r = Router();
   r.use(c.authenticate);
 
-  // --- clinic ↔ animal veterinary-access grants -------------------
+  // --- clinic pets: Recent / All Pets + open-by-code ---------------
+  // Lookups are rate-limited per user: a short public ID is guessable in
+  // principle, so bulk enumeration is throttled (and every hit is audited).
+  const lookupLimiter = userRateLimiter(c.config, { windowMs: 60 * 60 * 1000, max: 120 });
   r.get(
-    '/:organizationId/animal-access',
-    validate({ params: organizationIdParamSchema, query: listClinicAnimalsQuerySchema }),
+    '/:organizationId/clinic-pets',
+    validate({ params: organizationIdParamSchema, query: listClinicPetsQuerySchema }),
     withOrganization,
+    withClinic,
     authorizeOrg('animal.veterinary.access.read'),
     activeSubscription,
-    asyncHandler(ctrl.listAccess),
+    asyncHandler(ctrl.listPets),
   );
-  r.post(
-    '/:organizationId/animal-access',
-    validate({ params: organizationIdParamSchema, body: grantAnimalAccessBodySchema }),
+  r.get(
+    '/:organizationId/clinic-pets/lookup',
+    validate({ params: organizationIdParamSchema, query: clinicPetLookupQuerySchema }),
     withOrganization,
-    authorizeOrg('animal.veterinary.access.manage'),
+    withClinic,
+    authorizeOrg('animal.veterinary.access.read'),
     activeSubscription,
-    asyncHandler(ctrl.grantAccess),
-  );
-  r.delete(
-    '/:organizationId/animal-access/:animalId',
-    validate({ params: clinicAnimalParamSchema }),
-    withOrganization,
-    authorizeOrg('animal.veterinary.access.manage'),
-    activeSubscription,
-    asyncHandler(ctrl.revokeAccess),
+    lookupLimiter,
+    asyncHandler(ctrl.lookupPet),
   );
 
   // --- medical records ------------------------------------------
@@ -96,7 +100,7 @@ export function createClinicalVeterinaryRouter(c: Container): Router {
     withOrganization,
     authorizeOrg('medical_record.read'),
     activeSubscription,
-    withVeterinaryAnimalAccess,
+    withClinicAnimal,
     asyncHandler(ctrl.listRecords),
   );
   r.post(
@@ -105,7 +109,7 @@ export function createClinicalVeterinaryRouter(c: Container): Router {
     withOrganization,
     authorizeOrg('medical_record.create'),
     activeSubscription,
-    withVeterinaryAnimalAccess,
+    withClinicAnimal,
     asyncHandler(ctrl.createRecord),
   );
   r.get(
@@ -114,7 +118,7 @@ export function createClinicalVeterinaryRouter(c: Container): Router {
     withOrganization,
     authorizeOrg('medical_record.read'),
     activeSubscription,
-    withVeterinaryAnimalAccess,
+    withClinicAnimal,
     asyncHandler(ctrl.getRecord),
   );
   r.patch(
@@ -123,7 +127,7 @@ export function createClinicalVeterinaryRouter(c: Container): Router {
     withOrganization,
     authorizeOrg('medical_record.update'),
     activeSubscription,
-    withVeterinaryAnimalAccess,
+    withClinicAnimal,
     asyncHandler(ctrl.updateRecord),
   );
   r.delete(
@@ -132,7 +136,7 @@ export function createClinicalVeterinaryRouter(c: Container): Router {
     withOrganization,
     authorizeOrg('medical_record.delete'),
     activeSubscription,
-    withVeterinaryAnimalAccess,
+    withClinicAnimal,
     asyncHandler(ctrl.deleteRecord),
   );
 
@@ -144,7 +148,7 @@ export function createClinicalVeterinaryRouter(c: Container): Router {
     withOrganization,
     authorizeOrg('vaccination.read'),
     activeSubscription,
-    withVeterinaryAnimalAccess,
+    withClinicAnimal,
     asyncHandler(ctrl.listVaccinations),
   );
   r.post(
@@ -153,7 +157,7 @@ export function createClinicalVeterinaryRouter(c: Container): Router {
     withOrganization,
     authorizeOrg('vaccination.create'),
     activeSubscription,
-    withVeterinaryAnimalAccess,
+    withClinicAnimal,
     asyncHandler(ctrl.createVaccination),
   );
   r.get(
@@ -162,7 +166,7 @@ export function createClinicalVeterinaryRouter(c: Container): Router {
     withOrganization,
     authorizeOrg('vaccination.read'),
     activeSubscription,
-    withVeterinaryAnimalAccess,
+    withClinicAnimal,
     asyncHandler(ctrl.getVaccination),
   );
   r.patch(
@@ -171,7 +175,7 @@ export function createClinicalVeterinaryRouter(c: Container): Router {
     withOrganization,
     authorizeOrg('vaccination.update'),
     activeSubscription,
-    withVeterinaryAnimalAccess,
+    withClinicAnimal,
     asyncHandler(ctrl.updateVaccination),
   );
   r.delete(
@@ -180,7 +184,7 @@ export function createClinicalVeterinaryRouter(c: Container): Router {
     withOrganization,
     authorizeOrg('vaccination.delete'),
     activeSubscription,
-    withVeterinaryAnimalAccess,
+    withClinicAnimal,
     asyncHandler(ctrl.deleteVaccination),
   );
 
@@ -191,7 +195,7 @@ export function createClinicalVeterinaryRouter(c: Container): Router {
     withOrganization,
     authorizeOrg('medical_record.read'),
     activeSubscription,
-    withVeterinaryAnimalAccess,
+    withClinicAnimal,
     asyncHandler(ctrl.timeline),
   );
 

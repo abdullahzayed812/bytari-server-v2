@@ -4,12 +4,10 @@ import { InternalError, NotFoundError } from '../../../shared/errors/app-error.j
 import type { EventBus } from '../../../shared/events/index.js';
 import { AuditAction, AuditEntityType, type AuditContext } from '../../audit/audit.types.js';
 import type { AuditService } from '../../audit/audit.service.js';
-import type { AnimalOwnershipRepository } from '../../animals/infrastructure/animal-ownership.repository.js';
 import type { AnimalRepository } from '../../animals/infrastructure/animal.repository.js';
 import { VeterinaryCarePolicy } from '../domain/veterinary-care.policy.js';
 import {
   toMedicalRecordDTO,
-  toOwnerMedicalRecordDTO,
   type CreateMedicalRecordInput,
   type MedicalRecord,
   type MedicalRecordDTO,
@@ -24,11 +22,12 @@ export interface VetCareActor {
 }
 
 /**
- * Medical records are the ANIMAL's shared veterinary history:
- *  - a clinic with an ACTIVE veterinary-access grant reads the animal's COMPLETE
- *    history (every clinic's entries — docs 01 §1.3.3);
- *  - a clinic may create / update / delete only entries IT recorded
- *    (`organization_id` match) — no clinic can alter another's records;
+ * Medical records are CLINIC-PRIVATE:
+ *  - a clinic reads, updates and deletes only the records IT created
+ *    (`organization_id` match) — another clinic's record is the same `404` as
+ *    an unknown id, for every read and write (IDOR-safe: the clinic is the
+ *    authorized URL organization, never a client-supplied value);
+ *  - the pet owner never sees them (no owner route exists);
  *  - records are never owned by the recording veterinarian and survive
  *    membership / ownership changes untouched.
  */
@@ -43,21 +42,12 @@ export class MedicalRecordService {
     private readonly events: EventBus,
     private readonly attachments: MedicalAttachments,
     logger: Logger,
-    private readonly ownerships: AnimalOwnershipRepository | null = null,
   ) {
     this.log = logger.child({ component: 'medical-record-service' });
   }
 
-  private async ownerUserId(animalId: string): Promise<string | null> {
-    return this.ownerships ? this.ownerships.currentOwnerUserId(animalId) : null;
-  }
-
   private async dto(record: MedicalRecord): Promise<MedicalRecordDTO> {
     return toMedicalRecordDTO(record, await this.attachments.resolve(record));
-  }
-
-  private async ownerDto(record: MedicalRecord): Promise<MedicalRecordDTO> {
-    return toOwnerMedicalRecordDTO(record, await this.attachments.resolve(record));
   }
 
   /** Presigned upload for a prescription photo / attachment of this clinic. */
@@ -122,23 +112,33 @@ export class MedicalRecordService {
       animalId: animal.id,
       organizationId,
       isDraft: record.isDraft,
-      petOwnerUserId: await this.ownerUserId(animal.id),
       actorUserId: actor.actorUserId,
     });
     return this.dto(record);
   }
 
-  async getForClinic(animalId: string, recordId: string): Promise<MedicalRecordDTO> {
+  async getForClinic(
+    organizationId: string,
+    animalId: string,
+    recordId: string,
+  ): Promise<MedicalRecordDTO> {
     const record = await this.records.findByIdForAnimal(recordId, animalId);
-    if (!record) throw new NotFoundError('Medical record not found');
+    if (!record || record.organizationId !== organizationId) {
+      throw new NotFoundError('Medical record not found');
+    }
     return this.dto(record);
   }
 
+  /** This clinic's records for the animal — never another clinic's. */
   async listForClinic(
+    organizationId: string,
     animalId: string,
     filter: { page: number; pageSize: number },
   ): Promise<{ items: MedicalRecordDTO[]; total: number }> {
-    const { items, total } = await this.records.listForAnimal(animalId, filter);
+    const { items, total } = await this.records.listForAnimal(animalId, {
+      ...filter,
+      organizationId,
+    });
     return { items: await Promise.all(items.map((r) => this.dto(r))), total };
   }
 
@@ -209,10 +209,7 @@ export class MedicalRecordService {
       medicalRecordId: recordId,
       animalId,
       organizationId,
-      // A draft finalised now is "new" to the owner (drafts never notify).
       finalized: existing.isDraft && !updated.isDraft,
-      petOwnerUserId:
-        existing.isDraft && !updated.isDraft ? await this.ownerUserId(animalId) : null,
       actorUserId: actor.actorUserId,
     });
     const stillAttached = new Set([
@@ -259,21 +256,5 @@ export class MedicalRecordService {
       ...(existing.prescriptionKey ? [existing.prescriptionKey] : []),
       ...existing.attachmentKeys,
     ]);
-  }
-
-  // --- owner-facing (read-only) ------------------------------------
-
-  async listForOwner(
-    animalId: string,
-    filter: { page: number; pageSize: number },
-  ): Promise<{ items: MedicalRecordDTO[]; total: number }> {
-    const { items, total } = await this.records.listForAnimal(animalId, filter);
-    return { items: await Promise.all(items.map((r) => this.ownerDto(r))), total };
-  }
-
-  async getForOwner(animalId: string, recordId: string): Promise<MedicalRecordDTO> {
-    const record = await this.records.findByIdForAnimal(recordId, animalId);
-    if (!record) throw new NotFoundError('Medical record not found');
-    return this.ownerDto(record);
   }
 }

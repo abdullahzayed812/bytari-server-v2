@@ -25,12 +25,7 @@ const anyDate = z
 const shortText = z.string().trim().min(1).max(2000);
 const longText = z.string().trim().min(1).max(8000);
 
-// --- clinic ↔ animal access ------------------------------------------
-
-export const grantAnimalAccessBodySchema = z.object({
-  animalId: z.string().uuid(),
-});
-export type GrantAnimalAccessBody = z.infer<typeof grantAnimalAccessBodySchema>;
+// --- clinic pets (record-derived, no link) ------------------------------
 
 /** `{ organizationId, animalId }` — clinic-scoped animal sub-resources. */
 export const clinicAnimalParamSchema = z.object({
@@ -39,12 +34,17 @@ export const clinicAnimalParamSchema = z.object({
 });
 
 /**
- * `search` (legacy dashboard search / barcode scan): matches the animal id
- * exactly, or the name / breed / species / current owner's name (ILIKE) —
- * ONLY among animals this clinic already holds ACTIVE access to.
+ * `GET /organizations/:id/clinic-pets` — `search` matches the full id or the
+ * short public ID exactly, or the name / breed / species / current owner's
+ * name / phone (ILIKE) — ONLY among pets this clinic has its own records for.
  */
-export const listClinicAnimalsQuerySchema = paginationQuerySchema.extend({
+export const listClinicPetsQuerySchema = paginationQuerySchema.extend({
   search: z.string().trim().min(1).max(100).optional(),
+});
+
+/** `GET /organizations/:id/clinic-pets/lookup?code=` — short public ID or (legacy QR) UUID / link. */
+export const clinicPetLookupQuerySchema = z.object({
+  code: z.string().trim().min(1).max(300),
 });
 
 // --- medical records ------------------------------------------------
@@ -142,10 +142,6 @@ export type ListMedicalHistoryQuery = z.infer<typeof listMedicalHistoryQuerySche
 // --- owner-facing -------------------------------------------------
 
 export const ownerAnimalParamSchema = z.object({ animalId: z.string().uuid() });
-export const ownerMedicalRecordParamSchema = z.object({
-  animalId: z.string().uuid(),
-  recordId: z.string().uuid(),
-});
 export const ownerVaccinationParamSchema = z.object({
   animalId: z.string().uuid(),
   vaccinationId: z.string().uuid(),
@@ -195,10 +191,6 @@ export type UpdateReminderBody = z.infer<typeof updateReminderBodySchema>;
 
 export const reminderParamSchema = z.object({
   organizationId: z.string().uuid(),
-  animalId: z.string().uuid(),
-  reminderId: z.string().uuid(),
-});
-export const ownerReminderParamSchema = z.object({
   animalId: z.string().uuid(),
   reminderId: z.string().uuid(),
 });

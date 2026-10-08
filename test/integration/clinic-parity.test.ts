@@ -2,7 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { businessToday } from '../../src/shared/time/business-date.js';
 import { buildTestApp } from '../helpers/app.js';
-import { closeTestDb, ensureSchema, resetDb } from '../helpers/db.js';
+import { closeTestDb, ensureSchema, getTestDb, resetDb } from '../helpers/db.js';
 import {
   addOrganizationMember,
   bearer,
@@ -11,7 +11,7 @@ import {
   createMedicalRecord,
   createVaccination,
   fixtureBytes,
-  grantVeterinaryAccess,
+  openClinicPet,
   registerAdmin,
   registerApprovedVet,
   registerUser,
@@ -78,7 +78,7 @@ async function setup() {
     role: 'STAFF',
   });
   const animal = await createAnimal(app, petOwner.accessToken, { name: 'Milo', breed: 'Husky' });
-  await grantVeterinaryAccess(app, clinicOwner.accessToken, clinic.id, animal.id);
+  await openClinicPet(app, clinicOwner.accessToken, clinic.id, animal.publicCode);
   return { admin, clinicOwner, vet, staff, petOwner, otherOwner, clinic, otherClinic, animal };
 }
 
@@ -133,7 +133,11 @@ describe('medical records — legacy full exam / lab / file fields + attachments
       )
       .set(bearer(otherOwner.accessToken))
       .send({ filename: 'x.jpg', mimeType: 'image/jpeg', size: 10 });
-    expect(foreign.status).toBe(404); // other clinic has no grant for the animal
+    // Any clinic may work on the pet, but its upload keys live under ITS prefix.
+    expect(foreign.status).toBe(201);
+    expect(foreign.body.data.storageKey.startsWith(`medical-records/${otherClinic.id}/`)).toBe(
+      true,
+    );
     const bad = await request(app)
       .post(`${base(clinic.id, animal.id)}/medical-records`)
       .set(bearer(vet.accessToken))
@@ -231,7 +235,7 @@ describe('vaccinations — status, clinic-wide list, notify owner', () => {
 });
 
 describe('reminders (legacy pet_reminders)', () => {
-  it('clinic CRUD + complete + clinic list; owner reads + deletes; other clinics are isolated', async () => {
+  it('clinic CRUD + complete + clinic list; owner reads only; other clinics are isolated', async () => {
     const { vet, staff, clinic, otherClinic, otherOwner, animal, petOwner } = await setup();
     const today = businessToday();
 
@@ -271,12 +275,17 @@ describe('reminders (legacy pet_reminders)', () => {
     });
     expect(reschedule.body.data.completedAt).toEqual(expect.any(String));
 
-    // Another clinic: no grant → 404; with its own grant it still cannot edit this clinic's reminder.
+    // Another clinic sees none of this clinic's reminders and cannot touch them.
+    await openClinicPet(app, otherOwner.accessToken, otherClinic.id, animal.publicCode);
     const cross = await request(app)
       .get(`${API}/organizations/${otherClinic.id}/animals/${animal.id}/reminders`)
       .set(bearer(otherOwner.accessToken));
-    expect(cross.status).toBe(404);
-    await grantVeterinaryAccess(app, otherOwner.accessToken, otherClinic.id, animal.id);
+    expect(cross.status).toBe(200);
+    expect(cross.body.data).toEqual([]);
+    const crossGet = await request(app)
+      .get(`${API}/organizations/${otherClinic.id}/animals/${animal.id}/reminders/${id}`)
+      .set(bearer(otherOwner.accessToken));
+    expect(crossGet.status).toBe(404);
     const crossEdit = await request(app)
       .patch(`${API}/organizations/${otherClinic.id}/animals/${animal.id}/reminders/${id}`)
       .set(bearer(otherOwner.accessToken))
@@ -289,19 +298,21 @@ describe('reminders (legacy pet_reminders)', () => {
       .set(bearer(staff.accessToken));
     expect(asStaff.status).toBe(403);
 
-    // Owner reads + deletes; a stranger gets 404.
+    // Owner reads (read-only); a stranger gets 404.
     const ownerList = await request(app)
       .get(`${API}/animals/${animal.id}/reminders`)
       .set(bearer(petOwner.accessToken));
     expect(ownerList.body.data).toHaveLength(1);
-    const stranger = await request(app)
-      .delete(`${API}/animals/${animal.id}/reminders/${id}`)
+    const strangerList = await request(app)
+      .get(`${API}/animals/${animal.id}/reminders`)
       .set(bearer(otherOwner.accessToken));
-    expect(stranger.status).toBe(404);
-    const del = await request(app)
+    expect(strangerList.status).toBe(404);
+    // The owner can NOT delete a clinic-created reminder (no owner write route).
+    const ownerDelete = await request(app)
       .delete(`${API}/animals/${animal.id}/reminders/${id}`)
       .set(bearer(petOwner.accessToken));
-    expect(del.status).toBe(200);
+    expect(ownerDelete.status).toBe(404);
+    expect(await getTestDb()('animal_reminders').where({ id }).first()).toBeDefined();
   });
 });
 
@@ -379,23 +390,32 @@ describe('animal profile parity + clinic view', () => {
     });
     expect(profile.body.data).not.toHaveProperty('notes');
 
+    // Searching the clinic's pets needs the clinic to have worked with the pet.
+    await createMedicalRecord(app, vet.accessToken, clinic.id, animal.id);
     const search = await request(app)
-      .get(`${API}/organizations/${clinic.id}/animal-access?search=hus`)
+      .get(`${API}/organizations/${clinic.id}/clinic-pets?search=hus`)
       .set(bearer(vet.accessToken));
     expect(search.body.data).toHaveLength(1);
     const byId = await request(app)
-      .get(`${API}/organizations/${clinic.id}/animal-access?search=${animal.id}`)
+      .get(`${API}/organizations/${clinic.id}/clinic-pets?search=${animal.id}`)
       .set(bearer(vet.accessToken));
     expect(byId.body.data).toHaveLength(1);
     const miss = await request(app)
-      .get(`${API}/organizations/${clinic.id}/animal-access?search=zzz`)
+      .get(`${API}/organizations/${clinic.id}/clinic-pets?search=zzz`)
       .set(bearer(vet.accessToken));
     expect(miss.body.data).toHaveLength(0);
   });
 
-  it('owner "clinics" tab lists clinics that treat / recorded the pet', async () => {
+  it('owner "clinics" tab lists clinics by their OWNER-VISIBLE additions only', async () => {
     const { vet, clinic, animal, petOwner, otherOwner } = await setup();
+    // A private medical record alone does not surface the clinic to the owner.
     await createMedicalRecord(app, vet.accessToken, clinic.id, animal.id);
+    const onlyPrivate = await request(app)
+      .get(`${API}/animals/${animal.id}/clinics`)
+      .set(bearer(petOwner.accessToken));
+    expect(onlyPrivate.body.data).toEqual([]);
+
+    await createVaccination(app, vet.accessToken, clinic.id, animal.id);
     const res = await request(app)
       .get(`${API}/animals/${animal.id}/clinics`)
       .set(bearer(petOwner.accessToken));
@@ -403,10 +423,12 @@ describe('animal profile parity + clinic view', () => {
     expect(res.body.data).toEqual([
       expect.objectContaining({
         organizationId: clinic.id,
-        hasActiveAccess: true,
-        medicalRecordsCount: 1,
+        vaccinationsCount: 1,
+        remindersCount: 0,
       }),
     ]);
+    expect(res.body.data[0]).not.toHaveProperty('medicalRecordsCount');
+    expect(res.body.data[0]).not.toHaveProperty('hasActiveAccess');
     const stranger = await request(app)
       .get(`${API}/animals/${animal.id}/clinics`)
       .set(bearer(otherOwner.accessToken));
@@ -415,15 +437,20 @@ describe('animal profile parity + clinic view', () => {
 });
 
 describe('clinic appointments — clinic-created, remind, delete', () => {
-  it('requires the grant, notifies the owner, and deletes only COMPLETED', async () => {
+  it('needs a registered pet, notifies the owner, and deletes only COMPLETED', async () => {
     const { vet, clinic, otherClinic, otherOwner, animal, petOwner } = await setup();
     const when = new Date(Date.now() + 2 * 3_600_000).toISOString();
+    void animal;
 
-    const noGrant = await request(app)
+    const unknown = await request(app)
       .post(`${API}/organizations/${otherClinic.id}/clinic-appointments/by-clinic`)
       .set(bearer(otherOwner.accessToken))
-      .send({ animalId: animal.id, visitType: 'CHECKUP', scheduledFor: when });
-    expect(noGrant.status).toBe(404);
+      .send({
+        animalId: '00000000-0000-4000-8000-000000000000',
+        visitType: 'CHECKUP',
+        scheduledFor: when,
+      });
+    expect(unknown.status).toBe(404);
 
     const created = await request(app)
       .post(`${API}/organizations/${clinic.id}/clinic-appointments/by-clinic`)
@@ -465,7 +492,10 @@ describe('clinic appointments — clinic-created, remind, delete', () => {
 
 describe('clinic visitors broadcast + chat pause', () => {
   it('reaches the owners of treated animals; clinic-only; pause blocks messages', async () => {
-    const { admin, clinicOwner, clinic, animal, petOwner, otherOwner } = await setup();
+    const { admin, clinicOwner, vet, clinic, animal, petOwner, otherOwner } = await setup();
+    // "Visitors" = owners of pets the clinic has its own records for.
+    await createVaccination(app, vet.accessToken, clinic.id, animal.id);
+    await notificationsFor(petOwner.id, 'VACCINATION_ADDED');
     const send = await request(app)
       .post(`${API}/organizations/${clinic.id}/broadcast`)
       .set(bearer(clinicOwner.accessToken))

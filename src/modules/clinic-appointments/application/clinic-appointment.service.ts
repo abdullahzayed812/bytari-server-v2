@@ -64,9 +64,6 @@ export class ClinicAppointmentService {
     private readonly audit: AuditService,
     private readonly events: EventBus,
     logger: Logger,
-    private readonly veterinaryAccess?: {
-      hasActiveAccess(animalId: string, organizationId: string): Promise<boolean>;
-    },
   ) {
     this.log = logger.child({ component: 'clinic-appointment-service' });
   }
@@ -653,8 +650,8 @@ export class ClinicAppointmentService {
   /**
    * The clinic books a visit for an animal it treats (legacy
    * `createClinicAppointment`, status confirmed). The `:organizationId` is
-   * already authorized (`clinic.appointment.manage`); the clinic must also hold
-   * an ACTIVE veterinary-access grant for the animal (else 404), and the
+   * already authorized (`clinic.appointment.manage`); the animal must be a
+   * registered pet (else 404 — there is no clinic ↔ pet link to check), and the
    * appointment is attached to the animal's CURRENT owner — never a client value.
    */
   async createByClinic(
@@ -663,8 +660,7 @@ export class ClinicAppointmentService {
     actor: ClinicAppointmentActor,
   ): Promise<ClinicAppointmentDTO> {
     const animalCtx = await this.animals.loadContext(input.animalId);
-    const hasAccess = await this.veterinaryAccess?.hasActiveAccess(input.animalId, organizationId);
-    if (!animalCtx || animalCtx.listingOnly || !hasAccess || !animalCtx.currentOwnerUserId) {
+    if (!animalCtx || animalCtx.listingOnly || !animalCtx.currentOwnerUserId) {
       throw new NotFoundError('Animal not found');
     }
     if (animalCtx.status !== 'ACTIVE') {

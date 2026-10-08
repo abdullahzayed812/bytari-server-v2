@@ -58,6 +58,7 @@ function bootstrap(): void {
 
   // Time-driven "subscription expiring / expired" notifications (idempotent).
   container.subscriptionExpiryNotifier.start();
+  container.veterinarianApprovalEmailHandler.startRetrySweep();
 
   server.listen(config.port, () => {
     logger.info(
@@ -84,6 +85,7 @@ function bootstrap(): void {
     shuttingDown = true;
     logger.info({ signal }, 'Shutting down gracefully');
     container.subscriptionExpiryNotifier.stop();
+    container.veterinarianApprovalEmailHandler.stop();
 
     server.close((closeErr) => {
       if (closeErr) logger.error({ err: closeErr }, 'Error closing HTTP server');

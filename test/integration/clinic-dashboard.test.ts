@@ -10,7 +10,7 @@ import {
   createAnimal,
   createMedicalRecord,
   createVaccination,
-  grantVeterinaryAccess,
+  openClinicPet,
   registerAdmin,
   registerApprovedVet,
   registerUser,
@@ -47,7 +47,7 @@ async function setup() {
     breed: 'Husky',
     notes: 'owner-private note',
   });
-  await grantVeterinaryAccess(app, clinicOwner.accessToken, clinic.id, animal.id);
+  await openClinicPet(app, clinicOwner.accessToken, clinic.id, animal.publicCode);
   return { admin, clinicOwner, vet, staff, petOwner, outsider, clinic, animal };
 }
 
@@ -118,7 +118,8 @@ describe('clinic dashboard summary', () => {
       canSendBroadcast: false,
       canEditOrganization: false,
     });
-    expect(res.body.data.animals).toEqual({ activeCount: 1 });
+    // Opening a pet links nothing: the clinic "has" no pet until it records one.
+    expect(res.body.data.animals).toEqual({ activeCount: 0 });
   });
 
   it('withholds animal + medical counts from STAFF (no animal / medical read permission)', async () => {
@@ -186,40 +187,68 @@ describe('clinic-visible animal profile', () => {
         nextVaccinationDue: '2099-01-01',
       },
     });
-    expect(res.body.data.access).toMatchObject({ id: expect.any(String) });
+    expect(res.body.data.publicCode).toBe(animal.publicCode);
+    expect(res.body.data.relationship).toMatchObject({
+      firstActivityAt: expect.any(String),
+      lastActivityAt: expect.any(String),
+    });
+    expect(res.body.data).not.toHaveProperty('access');
     expect(res.body.data).not.toHaveProperty('currentOwnerUserId');
     expect(res.body.data).not.toHaveProperty('createdBy');
     expect(res.body.data).not.toHaveProperty('notes');
     expect(res.body.data).not.toHaveProperty('galleryKeys');
   });
 
-  it('404s for another clinic (no grant) and after access is revoked — no cross-clinic reads', async () => {
-    const { admin, clinicOwner, outsider, clinic, animal } = await setup();
+  it('stats are THIS clinic’s only — another clinic opening the same pet sees none of them', async () => {
+    const { admin, vet, outsider, clinic, animal } = await setup();
+    await createMedicalRecord(app, vet.accessToken, clinic.id, animal.id, {
+      visitDate: '2026-02-01',
+      diagnosis: 'Clinic A private diagnosis',
+    });
+    await createVaccination(app, vet.accessToken, clinic.id, animal.id, {
+      administeredOn: '2026-01-01',
+      nextDueOn: '2099-01-01',
+    });
     const otherClinic = await createActiveOrganization(
       app,
       outsider.accessToken,
       admin.accessToken,
       { type: 'CLINIC', name: 'Other Clinic' },
     );
+    const opened = await openClinicPet(
+      app,
+      outsider.accessToken,
+      otherClinic.id,
+      animal.publicCode,
+    );
+    expect(opened).toMatchObject({ animalId: animal.id, workedWith: false });
+
     const crossClinic = await request(app)
       .get(animalUrl(otherClinic.id, animal.id))
       .set(bearer(outsider.accessToken));
-    expect(crossClinic.status).toBe(404);
+    expect(crossClinic.status).toBe(200);
+    expect(crossClinic.body.data.relationship).toBeNull();
+    expect(crossClinic.body.data.stats).toEqual({
+      medicalRecordsCount: 0,
+      vaccinationsCount: 0,
+      lastVisitDate: null,
+      nextVaccinationDue: null,
+    });
+    expect(JSON.stringify(crossClinic.body)).not.toContain('Clinic A private diagnosis');
 
     // Outsider is not a member of the first clinic at all.
     const nonMember = await request(app)
       .get(animalUrl(clinic.id, animal.id))
       .set(bearer(outsider.accessToken));
     expect(nonMember.status).toBe(403);
+  });
 
-    await request(app)
-      .delete(`${API}/organizations/${clinic.id}/animal-access/${animal.id}`)
-      .set(bearer(clinicOwner.accessToken))
-      .expect(200);
-    const afterRevoke = await request(app)
-      .get(animalUrl(clinic.id, animal.id))
-      .set(bearer(clinicOwner.accessToken));
-    expect(afterRevoke.status).toBe(404);
+  it('404s an unknown animal id (no existence leak)', async () => {
+    const { vet, clinic } = await setup();
+    const res = await request(app)
+      .get(animalUrl(clinic.id, '00000000-0000-4000-8000-000000000000'))
+      .set(bearer(vet.accessToken));
+    expect(res.status).toBe(404);
   });
 
   it('403s clinic STAFF (no animal.veterinary.access.read)', async () => {

@@ -26,10 +26,10 @@ const withClinic: RequestHandler = asyncHandler((req, _res, next) => {
  *    effective clinic permissions. Gated like the organization profile
  *    (`organization.read`); each stats section is additionally withheld unless
  *    the caller holds the permission of the list it summarises.
- *  - `GET /:organizationId/animals/:animalId` — the clinic-visible animal
- *    profile (no owner identity). Same chain as the medical routes:
- *    `animal.veterinary.access.read` + the clinic's ACTIVE grant for the animal,
- *    so Clinic A can never read an animal only Clinic B treats (404).
+ *  - `GET /:organizationId/animals/:animalId` — the clinic-visible pet
+ *    profile. Same chain as the medical routes (`animal.veterinary.access.read`
+ *    + a registered pet). Its stats count ONLY this clinic's own records, so
+ *    opening a pet never reveals what another clinic did.
  */
 export function createClinicDashboardRouter(c: Container): Router {
   const ctrl = new ClinicDashboardController(c.clinicDashboardService);
@@ -37,11 +37,7 @@ export function createClinicDashboardRouter(c: Container): Router {
     organizations: c.organizationRepository,
     authz: c.authorizationService,
   });
-  const { withVeterinaryAnimalAccess } = createVeterinaryCareMiddleware({
-    animals: c.animalRepository,
-    access: c.veterinaryAccessService,
-    authz: c.authorizationService,
-  });
+  const { withClinicAnimal } = createVeterinaryCareMiddleware({ animals: c.animalRepository });
 
   // Clinic operability (single rule: ACTIVE status — via authorizeOrg — and a
   // non-expired subscription). Applies to owner AND staff; ADMIN bypasses.
@@ -70,7 +66,7 @@ export function createClinicDashboardRouter(c: Container): Router {
     withClinic,
     authorizeOrg('animal.veterinary.access.read'),
     activeSubscription,
-    withVeterinaryAnimalAccess,
+    withClinicAnimal,
     asyncHandler(ctrl.getAnimal),
   );
 

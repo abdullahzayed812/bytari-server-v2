@@ -8,6 +8,11 @@ import type {
 /** Full animal aggregate (internal). Never returned raw from a controller. */
 export interface Animal {
   id: string;
+  /**
+   * Short human-facing pet ID (7 chars, no look-alikes) — what the owner reads
+   * out / shows as a QR at a clinic. Never the UUID primary key.
+   */
+  publicCode: string;
   name: string;
   species: AnimalSpecies;
   breed: string | null;
@@ -61,6 +66,8 @@ export interface UserSummary {
 /** Client-safe animal shape. Includes the resolved current owner id. */
 export interface AnimalDTO {
   id: string;
+  /** Short public pet ID (see {@link Animal.publicCode}). */
+  publicCode: string;
   name: string;
   species: AnimalSpecies;
   breed: string | null;
@@ -155,6 +162,7 @@ export interface AdminAnimalDTO extends AnimalDTO {
 
 export interface AnimalRow {
   id: string;
+  public_code: string;
   name: string;
   species: string;
   breed: string | null;
@@ -196,6 +204,7 @@ function toDateOnly(value: string | Date | null): string | null {
 export function rowToAnimal(row: AnimalRow): Animal {
   return {
     id: row.id,
+    publicCode: row.public_code,
     name: row.name,
     species: row.species as AnimalSpecies,
     breed: row.breed,
@@ -238,6 +247,7 @@ export function toAnimalDTO(
 ): AnimalDTO {
   return {
     id: animal.id,
+    publicCode: animal.publicCode,
     name: animal.name,
     species: animal.species,
     breed: animal.breed,
