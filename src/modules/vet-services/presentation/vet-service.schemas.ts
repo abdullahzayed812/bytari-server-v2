@@ -14,10 +14,11 @@ import {
   VET_SERVICE_TYPES,
   VET_SERVICE_URGENCIES,
 } from '../domain/vet-service.constants.js';
+import { dateOnlySchema } from '../../../shared/validation/date-only.js';
 
 const money = z.string().regex(/^\d{1,10}(\.\d{1,2})?$/, 'invalid amount');
 const imageKeys = z.array(z.string().min(1)).max(VET_SERVICE_MAX_IMAGES).optional();
-const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'expected YYYY-MM-DD');
+const isoDate = dateOnlySchema();
 const isoDateTime = z.string().datetime({ offset: true });
 
 export const idParamSchema = z.object({ id: z.string().uuid() });

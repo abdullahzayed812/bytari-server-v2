@@ -10,6 +10,7 @@ import {
   PUBLICATION_STATUSES,
   VACCINATION_STATUSES,
 } from '../domain/publication.constants.js';
+import { dateOnlySchema } from '../../../shared/validation/date-only.js';
 
 // --- owner: create a publication -------------------------------
 //
@@ -23,10 +24,7 @@ const cityField = z.string().trim().min(1).max(120);
 const noteField = z.string().trim().max(2000);
 const extraNotesField = z.string().trim().max(2000);
 /** `YYYY-MM-DD`, not in the future. */
-const dateField = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD')
-  .refine((v) => !Number.isNaN(Date.parse(v)) && v <= businessToday(), 'Invalid or future date');
+const dateField = dateOnlySchema().refine((v) => v <= businessToday(), 'Invalid or future date');
 /** `HH:MM` (24h). */
 const timeField = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Expected HH:MM');
 

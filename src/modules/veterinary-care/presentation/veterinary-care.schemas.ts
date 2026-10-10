@@ -9,18 +9,16 @@ import {
   REMINDER_TYPES,
   VACCINATION_STATUSES,
 } from '../domain/veterinary-care.constants.js';
+import { dateOnlySchema } from '../../../shared/validation/date-only.js';
 
 /** `YYYY-MM-DD`, a real calendar date, not in the future. */
-const pastOrTodayDate = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD')
-  .refine((v) => !Number.isNaN(Date.parse(v)) && v <= businessToday(), 'Invalid or future date');
+const pastOrTodayDate = dateOnlySchema().refine(
+  (v) => v <= businessToday(),
+  'Invalid or future date',
+);
 
 /** `YYYY-MM-DD`, a real calendar date (may be in the future — e.g. next-due). */
-const anyDate = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD')
-  .refine((v) => !Number.isNaN(Date.parse(v)), 'Invalid date');
+const anyDate = dateOnlySchema();
 
 const shortText = z.string().trim().min(1).max(2000);
 const longText = z.string().trim().min(1).max(8000);

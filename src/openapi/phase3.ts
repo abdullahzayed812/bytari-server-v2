@@ -412,9 +412,13 @@ const paths: Obj = {
     post: {
       tags: ['Organizations'],
       summary: 'Leave the organization (non-owner members only)',
+      description:
+        'Ends the caller’s own ACTIVE membership (status LEFT) and clears its supervisor ' +
+        'permissions. 404 when the caller is not an active member, 409 for the owner, 400 ' +
+        '`ORGANIZATION_TYPE_NOT_SUPPORTED` for chat rooms (use `/chat-rooms/{id}/leave`).',
       security: bearer,
       parameters: [orgIdParam],
-      responses: { '200': ok('Left'), ...errs(401, 403, 404, 409) },
+      responses: { '200': ok('Left'), ...errs(400, 401, 403, 404, 409) },
     },
   },
   '/organizations/{organizationId}/members': {
@@ -733,7 +737,10 @@ const paths: Obj = {
         {
           name: 'status',
           in: 'query',
-          schema: { type: 'string', enum: ['PENDING', 'ACTIVE', 'REJECTED', 'SUSPENDED', 'DEACTIVATED'] },
+          schema: {
+            type: 'string',
+            enum: ['PENDING', 'ACTIVE', 'REJECTED', 'SUSPENDED', 'DEACTIVATED'],
+          },
         },
         {
           name: 'subscriptionStatus',
@@ -794,7 +801,12 @@ const paths: Obj = {
       security: bearer,
       parameters: [
         idParam,
-        { name: 'requestId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+        {
+          name: 'requestId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string', format: 'uuid' },
+        },
       ],
       requestBody: {
         required: true,
@@ -821,7 +833,12 @@ const paths: Obj = {
       security: bearer,
       parameters: [
         idParam,
-        { name: 'requestId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+        {
+          name: 'requestId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string', format: 'uuid' },
+        },
       ],
       requestBody: {
         required: true,

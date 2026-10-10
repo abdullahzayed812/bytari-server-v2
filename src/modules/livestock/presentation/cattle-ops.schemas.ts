@@ -11,11 +11,9 @@ import {
   LIVESTOCK_HEALTH_EVENT_STATUSES,
 } from '../domain/livestock-ops.constants.js';
 import { batchParamSchema } from './cattle-batch.schemas.js';
+import { dateOnlySchema } from '../../../shared/validation/date-only.js';
 
-const isoDate = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD')
-  .refine((v) => !Number.isNaN(Date.parse(v)), 'Invalid date');
+const isoDate = dateOnlySchema();
 const pastOrToday = isoDate.refine((v) => v <= businessToday(), 'Date cannot be in the future');
 const shortText = z.string().trim().min(1).max(200);
 const longText = z.string().trim().min(1).max(4000);

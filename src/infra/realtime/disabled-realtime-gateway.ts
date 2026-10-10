@@ -22,6 +22,10 @@ export class DisabledRealtimeGateway implements RealtimeGateway {
     return Promise.resolve();
   }
 
+  revalidateUserRooms(_userId: string): Promise<void> {
+    return Promise.resolve();
+  }
+
   emitToUser(_userId: string, _event: RealtimeEvent): void {
     /* no-op */
   }

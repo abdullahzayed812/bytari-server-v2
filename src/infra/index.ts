@@ -77,6 +77,16 @@ export function createInfrastructure(deps: InfrastructureDeps): Infrastructure {
   realtimeBridge.start();
   pushBridge.start();
 
+  // A removed / departed member must not keep receiving org or conversation
+  // events on an already-open socket — re-check that user's subscriptions.
+  const unsubscribeMemberRemoved = eventBus.subscribe('organization.member.removed', (event) => {
+    const userId = (event.payload as { userId?: unknown }).userId;
+    if (typeof userId !== 'string') return;
+    realtime.revalidateUserRooms(userId).catch((err: unknown) => {
+      logger.warn({ err, userId }, 'realtime room revalidation failed');
+    });
+  });
+
   return {
     realtime,
     realtimeBridge,
@@ -87,6 +97,7 @@ export function createInfrastructure(deps: InfrastructureDeps): Infrastructure {
       realtime.attach(server);
     },
     async shutdown(): Promise<void> {
+      unsubscribeMemberRemoved();
       realtimeBridge.stop();
       pushBridge.stop();
       await realtime.close();

@@ -1,11 +1,9 @@
 import { z } from 'zod';
 import { paginationQuerySchema } from '../../../shared/http/pagination.js';
 import { RENEWAL_REQUEST_STATUSES } from '../domain/farm-subscription.types.js';
+import { dateOnlySchema } from '../../../shared/validation/date-only.js';
 
-const isoDate = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD')
-  .refine((v) => !Number.isNaN(Date.parse(v)), 'Invalid date');
+const isoDate = dateOnlySchema();
 const uuid = z.string().uuid();
 
 export const organizationParamSchema = z.object({ organizationId: uuid });

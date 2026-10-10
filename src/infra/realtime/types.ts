@@ -71,6 +71,12 @@ export interface RealtimeGateway extends RealtimePublisher {
   attach(server: HttpServer): void;
   /** Stop the gateway and close all sockets. */
   close(): Promise<void>;
+  /**
+   * Re-run the authorizer for every room the user's sockets are subscribed
+   * to and drop the ones it now denies — e.g. after the user lost an
+   * organization membership, so an open socket stops receiving its events.
+   */
+  revalidateUserRooms(userId: string): Promise<void>;
 }
 
 export class RealtimeAuthError extends Error {

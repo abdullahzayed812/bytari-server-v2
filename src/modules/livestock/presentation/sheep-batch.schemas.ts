@@ -3,20 +3,18 @@ import { termsAcceptanceShape } from '../../../shared/validation/terms.js';
 import { businessToday } from '../../../shared/time/business-date.js';
 import { paginationQuerySchema } from '../../../shared/http/pagination.js';
 import { SHEEP_BATCH_STATUSES, SHEEP_PRODUCTION_TYPES } from '../domain/sheep-batch.constants.js';
+import { dateOnlySchema } from '../../../shared/validation/date-only.js';
 
 const notesSchema = z.string().trim().min(1).max(4000);
 const nameSchema = z.string().trim().min(1).max(120);
 const headCountSchema = z.coerce.number().int().min(0).max(100_000_000);
 const weightKgSchema = z.coerce.number().nonnegative().max(1_000_000);
 const priceSchema = z.coerce.number().nonnegative().max(1_000_000_000);
-const pastOrTodayDate = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD')
-  .refine((v) => !Number.isNaN(Date.parse(v)) && v <= businessToday(), 'Invalid or future date');
-const futureOrTodayDate = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD')
-  .refine((v) => !Number.isNaN(Date.parse(v)), 'Invalid date');
+const pastOrTodayDate = dateOnlySchema().refine(
+  (v) => v <= businessToday(),
+  'Invalid or future date',
+);
+const futureOrTodayDate = dateOnlySchema();
 const shortText = (max: number): z.ZodString => z.string().trim().min(1).max(max);
 const capacityCount = z.coerce.number().int().min(0).max(100_000_000);
 

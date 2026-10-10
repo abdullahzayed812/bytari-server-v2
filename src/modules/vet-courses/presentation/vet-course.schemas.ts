@@ -12,9 +12,10 @@ import {
   VET_COURSE_TITLE_MAX,
   VET_COURSE_TYPES,
 } from '../domain/vet-course.constants.js';
+import { dateOnlySchema } from '../../../shared/validation/date-only.js';
 
 const money = z.string().regex(/^\d{1,10}(\.\d{1,2})?$/, 'invalid amount');
-const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'expected YYYY-MM-DD');
+const isoDate = dateOnlySchema();
 const isoTime = z.string().regex(/^\d{2}:\d{2}$/, 'expected HH:MM');
 const topics = z
   .array(z.string().trim().min(1).max(VET_COURSE_LIST_ITEM_MAX))

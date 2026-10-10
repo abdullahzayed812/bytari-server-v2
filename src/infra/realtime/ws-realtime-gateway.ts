@@ -310,6 +310,25 @@ export class WsRealtimeGateway implements RealtimeGateway {
     }
   }
 
+  async revalidateUserRooms(userId: string): Promise<void> {
+    const own = rooms.user(userId);
+    for (const [ws, state] of this.connections) {
+      if (state.principal.userId !== userId) continue;
+      for (const room of [...state.rooms]) {
+        if (room === own) continue;
+        let allowed = false;
+        try {
+          allowed = await this.options.authorizer.canSubscribe(state.principal, room);
+        } catch (err) {
+          this.log.warn({ err, connId: state.id, room }, 'realtime revalidation failed');
+        }
+        if (allowed) continue;
+        this.leaveRoom(ws, room);
+        this.send(ws, { type: 'unsubscribed', data: { room, reason: 'access_revoked' } });
+      }
+    }
+  }
+
   private cleanupConnection(ws: WebSocket): void {
     const state = this.connections.get(ws);
     if (state) {

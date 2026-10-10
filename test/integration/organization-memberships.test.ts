@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { buildTestApp } from '../helpers/app.js';
-import { closeTestDb, ensureSchema, resetDb } from '../helpers/db.js';
+import { closeTestDb, ensureSchema, getTestDb, resetDb } from '../helpers/db.js';
 import {
   addOrganizationMember,
   bearer,
@@ -255,6 +255,102 @@ describe('leaving an organization', () => {
     const activeUserIds = (members.body.data as Array<{ userId: string }>).map((m) => m.userId);
     expect(activeUserIds).toContain(other.id);
     expect(activeUserIds).not.toContain(staff.id);
+  });
+
+  it('a clinic supervisor who leaves loses access, supervisor permissions and stays audited', async () => {
+    const admin = await registerAdmin(app);
+    const owner = await registerApprovedVet(app);
+    const vet = await registerApprovedVet(app);
+    const clinic = await createActiveOrganization(app, owner.accessToken, admin.accessToken, {
+      type: 'CLINIC',
+    });
+    const sup = await request(app)
+      .post(`/api/v1/organizations/${clinic.id}/supervisors`)
+      .set(bearer(owner.accessToken))
+      .send({ userId: vet.id, permissions: ['member.read'] })
+      .expect(201);
+    const membershipId = sup.body.data.id as string;
+    await request(app)
+      .get(`/api/v1/organizations/${clinic.id}/members`)
+      .set(bearer(vet.accessToken))
+      .expect(200);
+
+    await request(app)
+      .post(`/api/v1/organizations/${clinic.id}/leave`)
+      .set(bearer(vet.accessToken))
+      .expect(200);
+
+    const db = getTestDb();
+    expect(await db('organization_memberships').where({ id: membershipId }).first()).toMatchObject({
+      status: 'LEFT',
+    });
+    expect(
+      await db('organization_supervisor_permissions').where({ membership_id: membershipId }),
+    ).toHaveLength(0);
+    const denied = await request(app)
+      .get(`/api/v1/organizations/${clinic.id}/members`)
+      .set(bearer(vet.accessToken));
+    expect([403, 404]).toContain(denied.status);
+
+    // The clinic and its owner are untouched.
+    const org = await db('organizations').where({ id: clinic.id }).first();
+    expect(org).toMatchObject({ status: 'ACTIVE', owner_user_id: owner.id });
+    await request(app)
+      .get(`/api/v1/organizations/${clinic.id}`)
+      .set(bearer(owner.accessToken))
+      .expect(200);
+
+    const audit = await db('audit_logs')
+      .where({ entity_id: membershipId, action: 'ORGANIZATION_MEMBER_REMOVED' })
+      .first();
+    expect(audit?.actor_user_id).toBe(vet.id);
+    expect(audit?.metadata).toMatchObject({ reason: 'left', organizationType: 'CLINIC' });
+
+    // A second leave is a non-member call → 404.
+    await request(app)
+      .post(`/api/v1/organizations/${clinic.id}/leave`)
+      .set(bearer(vet.accessToken))
+      .expect(404);
+  });
+
+  it('a non-member cannot leave (404) and nothing changes', async () => {
+    const admin = await registerAdmin(app);
+    const owner = await registerApprovedVet(app);
+    const stranger = await registerApprovedVet(app);
+    const office = await createActiveOrganization(app, owner.accessToken, admin.accessToken, {
+      type: 'VETERINARY_OFFICE',
+    });
+    await request(app)
+      .post(`/api/v1/organizations/${office.id}/leave`)
+      .set(bearer(stranger.accessToken))
+      .expect(404);
+    const rows = await getTestDb()('organization_memberships').where({
+      organization_id: office.id,
+      status: 'ACTIVE',
+    });
+    expect(rows).toHaveLength(1);
+  });
+
+  it('ownership comes from the organization row — an owner cannot leave even if the role row was altered', async () => {
+    const admin = await registerAdmin(app);
+    const owner = await registerApprovedVet(app);
+    const farm = await createActiveOrganization(app, owner.accessToken, admin.accessToken, {
+      type: 'FARM',
+    });
+    const db = getTestDb();
+    const vetRole = await db('organization_roles').where({ key: 'VETERINARIAN' }).first();
+    await db('organization_memberships')
+      .where({ organization_id: farm.id, user_id: owner.id })
+      .update({ organization_role_id: vetRole.id });
+    await request(app)
+      .post(`/api/v1/organizations/${farm.id}/leave`)
+      .set(bearer(owner.accessToken))
+      .expect(409);
+    expect(
+      await db('organization_memberships')
+        .where({ organization_id: farm.id, user_id: owner.id })
+        .first(),
+    ).toMatchObject({ status: 'ACTIVE' });
   });
 
   it('the owner cannot leave (organization must not become ownerless) → 409', async () => {

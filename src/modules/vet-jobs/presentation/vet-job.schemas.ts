@@ -11,9 +11,10 @@ import {
   VET_JOB_TEXT_MAX,
   VET_JOB_TITLE_MAX,
 } from '../domain/vet-job.constants.js';
+import { dateOnlySchema } from '../../../shared/validation/date-only.js';
 
 const money = z.string().regex(/^\d{1,10}(\.\d{1,2})?$/, 'invalid amount');
-const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'expected YYYY-MM-DD');
+const isoDate = dateOnlySchema();
 const listItems = z
   .array(z.string().trim().min(1).max(VET_JOB_LIST_ITEM_MAX))
   .max(VET_JOB_MAX_LIST_ITEMS);

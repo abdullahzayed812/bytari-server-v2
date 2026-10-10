@@ -356,4 +356,56 @@ describe('vet services — pet-owner requests a listing (Flow A)', () => {
       .set(bearer(owner.accessToken));
     expect(conv2.body.data.conversationId).toBe(conv.body.data.conversationId);
   });
+
+  it('service details expose status/closedAt for the details-page actions; requests are not duplicated', async () => {
+    const admin = await registerAdmin(app);
+    const vet = await registerApprovedVet(app);
+    const owner = await registerUser(app);
+    const lc = await request(app)
+      .post(`${API}/vet-services/listings`)
+      .set(bearer(vet.accessToken))
+      .send(LISTING);
+    const listingId = lc.body.data.id as string;
+    await approveListing(app, admin.accessToken, listingId);
+
+    const detail = await request(app)
+      .get(`${API}/vet-services/listings/${listingId}`)
+      .set(bearer(owner.accessToken));
+    expect(detail.status).toBe(200);
+    expect(detail.body.data).toMatchObject({ status: 'APPROVED', closedAt: null });
+
+    const body = { animalType: 'POULTRY', animalCount: 10, needsFieldVisit: false };
+    const first = await request(app)
+      .post(`${API}/vet-services/listings/${listingId}/requests`)
+      .set(bearer(owner.accessToken))
+      .send(body);
+    expect(first.status).toBe(201);
+    // A second submit while the first is still open is refused (no duplicate).
+    const dup = await request(app)
+      .post(`${API}/vet-services/listings/${listingId}/requests`)
+      .set(bearer(owner.accessToken))
+      .send(body);
+    expect(dup.status).toBe(409);
+
+    // The provider cannot contact themselves about their own service.
+    const self = await request(app)
+      .post(`${API}/vet-services/listings/${listingId}/conversation`)
+      .set(bearer(vet.accessToken));
+    expect([403, 409]).toContain(self.status);
+
+    await request(app)
+      .post(`${API}/vet-services/listings/${listingId}/close`)
+      .set(bearer(vet.accessToken))
+      .expect(200);
+    const closed = await request(app)
+      .get(`${API}/vet-services/listings/${listingId}`)
+      .set(bearer(owner.accessToken));
+    if (closed.status === 200) expect(closed.body.data.closedAt).not.toBeNull();
+    const latecomer = await registerUser(app);
+    const late = await request(app)
+      .post(`${API}/vet-services/listings/${listingId}/requests`)
+      .set(bearer(latecomer.accessToken))
+      .send(body);
+    expect(late.status).toBe(409);
+  });
 });

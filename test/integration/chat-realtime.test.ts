@@ -3,6 +3,7 @@ import request from 'supertest';
 import { closeTestDb, ensureSchema, resetDb } from '../helpers/db.js';
 import { buildRealtimeHarness, TestWs, type RealtimeHarness } from '../helpers/realtime.js';
 import {
+  addOrganizationMember,
   bearer,
   createActiveOrganization,
   registerAdmin,
@@ -138,5 +139,39 @@ describe('chat realtime — message delivery', () => {
     ownerWs.close();
     clinicWs.close();
     outWs.close();
+  });
+});
+
+describe('chat realtime — membership revocation', () => {
+  it('a clinic member who leaves is dropped from the clinic conversation room on an open socket', async () => {
+    const { app, vetOwner, clinic, petOwner, conv } = await clinicConversation();
+    const staff = await registerUser(app);
+    await addOrganizationMember(app, vetOwner.accessToken, clinic.id, {
+      userId: staff.id,
+      role: 'STAFF',
+    });
+
+    const ws = await TestWs.connect(harness.wsUrl(staff.accessToken));
+    await ws.next('welcome');
+    ws.send('subscribe', { room: `conversation:${conv.id}` });
+    await ws.next('subscribed');
+
+    await request(app)
+      .post(`/api/v1/organizations/${clinic.id}/leave`)
+      .set(bearer(staff.accessToken))
+      .expect(200);
+    const dropped = await ws.next('unsubscribed');
+    expect(dropped.data).toMatchObject({
+      room: `conversation:${conv.id}`,
+      reason: 'access_revoked',
+    });
+
+    await request(app)
+      .post(`/api/v1/conversations/${conv.id}/messages`)
+      .set(bearer(petOwner.accessToken))
+      .send({ body: 'after leaving' })
+      .expect(201);
+    await expect(ws.next('chat.message.created', 300)).rejects.toThrow(/timeout/);
+    ws.close();
   });
 });

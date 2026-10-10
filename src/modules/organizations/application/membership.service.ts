@@ -259,13 +259,29 @@ export class MembershipService {
     });
   }
 
-  /** The authenticated user leaves an organization. Owners cannot leave (spec §20). */
-  async leave(organizationId: string, userId: string, context?: AuditContext): Promise<void> {
+  /**
+   * The authenticated user leaves an organization (clinic / office / farm /
+   * store / syndicate). Owners cannot leave (spec §20) — checked against both
+   * the organization row and the membership role, never client input. Only
+   * the caller's own membership changes: the organization, its owner and the
+   * other members are untouched. Chat rooms have their own leave flow.
+   */
+  async leave(
+    org: { id: string; type: string; ownerUserId: string },
+    userId: string,
+    context?: AuditContext,
+  ): Promise<void> {
+    const organizationId = org.id;
+    if (org.type === 'CHAT_ROOM') {
+      throw new BadRequestError('Use the chat-room leave endpoint for chat rooms', {
+        code: ErrorCode.ORGANIZATION_TYPE_NOT_SUPPORTED,
+      });
+    }
     const membership = await this.memberships.findByUserAndOrg(userId, organizationId);
     if (!membership || membership.status !== 'ACTIVE') {
       throw new NotFoundError('You are not an active member of this organization');
     }
-    if (membership.roleKey === 'OWNER') {
+    if (membership.roleKey === 'OWNER' || org.ownerUserId === userId) {
       throw new ConflictError(
         'The owner cannot leave the organization; transfer ownership first (not available yet)',
       );
@@ -280,7 +296,13 @@ export class MembershipService {
           entityType: AuditEntityType.ORGANIZATION_MEMBERSHIP,
           entityId: membership.id,
           actorUserId: userId,
-          metadata: { organizationId, userId, reason: 'left' },
+          metadata: {
+            organizationId,
+            organizationType: org.type,
+            userId,
+            roleKey: membership.roleKey,
+            reason: 'left',
+          },
           context,
         },
         tx,

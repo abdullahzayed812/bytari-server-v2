@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { paginationQuerySchema } from '../../../shared/http/pagination.js';
 import { phoneSchema } from '../../../shared/validation/common.js';
 import { TRADER_STATUSES, TRADER_TYPES } from '../domain/trader.constants.js';
+import { dateOnlySchema } from '../../../shared/validation/date-only.js';
 
 export const registerTraderBodySchema = z.object({
   displayName: z.string().trim().min(2).max(160),
@@ -25,11 +26,7 @@ export const suspendTraderBodySchema = z.object({
 });
 export type SuspendTraderBody = z.infer<typeof suspendTraderBodySchema>;
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const dayString = z
-  .string()
-  .regex(DATE_RE, 'Expected YYYY-MM-DD')
-  .refine((v) => !Number.isNaN(Date.parse(v)), 'Invalid date');
+const dayString = dateOnlySchema();
 
 /** The trader's activation period (both dates, or neither → one year from today). */
 export const traderSubscriptionBodySchema = z

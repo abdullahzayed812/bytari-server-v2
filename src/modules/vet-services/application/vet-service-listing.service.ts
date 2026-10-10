@@ -66,9 +66,7 @@ export class VetServiceListingService {
     };
   }
 
-  private async toPublicDTO(
-    data: VetServiceListingWithVet,
-  ): Promise<PublicVetServiceListingDTO> {
+  private async toPublicDTO(data: VetServiceListingWithVet): Promise<PublicVetServiceListingDTO> {
     const l = data.listing;
     return {
       id: l.id,
@@ -91,6 +89,8 @@ export class VetServiceListingService {
       imageUrls: await this.media.resolveUrls(l.imageKeys),
       veterinarian: data.veterinarian,
       publishedAt: l.reviewedAt ?? l.createdAt,
+      status: l.status,
+      closedAt: l.closedAt,
     };
   }
 
@@ -107,7 +107,10 @@ export class VetServiceListingService {
       const created = await this.listings.create(
         {
           ...input,
-          details: (input.details ?? []).map((d) => d.trim()).filter(Boolean).slice(0, 12),
+          details: (input.details ?? [])
+            .map((d) => d.trim())
+            .filter(Boolean)
+            .slice(0, 12),
           imageKeys,
           veterinarianUserId: actor.principal.userId,
         },
@@ -294,12 +297,20 @@ export class VetServiceListingService {
   // --- helpers -------------------------------------------------
 
   /** Internal — used by the listing-request service to gate submissions. */
-  async loadEngageContext(
-    id: string,
-  ): Promise<{ id: string; veterinarianUserId: string; status: string; closedAt: string | null } | null> {
+  async loadEngageContext(id: string): Promise<{
+    id: string;
+    veterinarianUserId: string;
+    status: string;
+    closedAt: string | null;
+  } | null> {
     const l = await this.listings.findById(id);
     return l
-      ? { id: l.id, veterinarianUserId: l.veterinarianUserId, status: l.status, closedAt: l.closedAt }
+      ? {
+          id: l.id,
+          veterinarianUserId: l.veterinarianUserId,
+          status: l.status,
+          closedAt: l.closedAt,
+        }
       : null;
   }
 

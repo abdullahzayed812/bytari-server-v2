@@ -75,6 +75,12 @@ export interface PublicVetServiceListingDTO {
   imageUrls: string[];
   veterinarian: VetServiceUserSummary;
   publishedAt: string;
+  /**
+   * Always `APPROVED` on this projection; sent (with `closedAt`) so the
+   * details page can decide whether to offer its engage actions.
+   */
+  status: VetServiceModerationStatus;
+  closedAt: string | null;
 }
 
 // ==================================================================
@@ -136,6 +142,12 @@ export interface PublicVetServiceRequestDTO {
   imageUrls: string[];
   petOwner: VetServiceUserSummary;
   publishedAt: string;
+  /**
+   * Always `APPROVED` on this projection; sent (with `closedAt`) so the
+   * details page can decide whether to offer its engage actions.
+   */
+  status: VetServiceModerationStatus;
+  closedAt: string | null;
 }
 
 // ==================================================================

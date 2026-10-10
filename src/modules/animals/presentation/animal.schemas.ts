@@ -7,6 +7,7 @@ import {
   ANIMAL_SPECIES,
   ANIMAL_STATUSES,
 } from '../domain/animal.constants.js';
+import { dateOnlySchema } from '../../../shared/validation/date-only.js';
 
 const nameSchema = z.string().trim().min(1).max(120);
 const breedSchema = z.string().trim().min(1).max(120);
@@ -17,10 +18,10 @@ const distinguishingFeaturesSchema = z.string().trim().min(1).max(500);
 const weightKgSchema = z.number().positive().max(9999.99);
 const medicalHistorySchema = z.string().trim().min(1).max(8000);
 /** `YYYY-MM-DD`, not in the future. */
-const dateOfBirthSchema = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD')
-  .refine((v) => !Number.isNaN(Date.parse(v)) && v <= businessToday(), 'Invalid or future date');
+const dateOfBirthSchema = dateOnlySchema().refine(
+  (v) => v <= businessToday(),
+  'Invalid or future date',
+);
 
 export const createAnimalBodySchema = z.object({
   name: nameSchema,

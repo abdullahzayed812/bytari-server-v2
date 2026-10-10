@@ -1,11 +1,8 @@
 import { z } from 'zod';
 import { isMarketGovernorate } from '../domain/market-governorates.js';
+import { dateOnlySchema } from '../../../shared/validation/date-only.js';
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const dateSchema = z
-  .string()
-  .regex(DATE_RE, 'Expected YYYY-MM-DD')
-  .refine((v) => !Number.isNaN(Date.parse(v)), 'Invalid date');
+const dateSchema = dateOnlySchema();
 
 /** Money as a string — never parsed to a float. `numeric(12,2)`, non-negative. Empty clears the cell. */
 const moneySchema = z

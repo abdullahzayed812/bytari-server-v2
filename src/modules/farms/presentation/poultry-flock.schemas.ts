@@ -7,22 +7,20 @@ import {
   POULTRY_FLOCK_STATUSES,
   POULTRY_PRODUCTION_TYPES,
 } from '../domain/poultry-ops.constants.js';
+import { dateOnlySchema } from '../../../shared/validation/date-only.js';
 
 /** `YYYY-MM-DD`, a real calendar date, not in the future. */
-const pastOrTodayDate = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD')
-  .refine((v) => !Number.isNaN(Date.parse(v)) && v <= businessToday(), 'Invalid or future date');
+const pastOrTodayDate = dateOnlySchema().refine(
+  (v) => v <= businessToday(),
+  'Invalid or future date',
+);
 
 const notesSchema = z.string().trim().min(1).max(4000);
 const nameSchema = z.string().trim().min(1).max(120);
 const birdCountSchema = z.coerce.number().int().min(0).max(100_000_000);
 const weightGramsSchema = z.coerce.number().nonnegative().max(1_000_000);
 const priceSchema = z.coerce.number().nonnegative().max(1_000_000_000);
-const futureOrTodayDate = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD')
-  .refine((v) => !Number.isNaN(Date.parse(v)), 'Invalid date');
+const futureOrTodayDate = dateOnlySchema();
 
 // --- "Add Poultry Farm" creation form -------------------------------
 

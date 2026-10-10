@@ -96,6 +96,40 @@ describe('animal creation', () => {
       .send({ name: 'TimeTraveller', species: 'DOG', dateOfBirth: '2999-01-01' });
     expect(res.status).toBe(422);
   });
+
+  it('accepts a date of birth with or without leading zeros and stores the same calendar day', async () => {
+    const user = await registerUser(app);
+    for (const [input, stored] of [
+      ['2024-4-7', '2024-04-07'],
+      ['2024-04-7', '2024-04-07'],
+      ['2024-4-07', '2024-04-07'],
+      ['2024-07-04', '2024-07-04'],
+      ['2024-1-1', '2024-01-01'], // a day boundary that a UTC/local mix-up would shift
+    ] as const) {
+      const res = await request(app)
+        .post('/api/v1/animals')
+        .set(bearer(user.accessToken))
+        .send({ name: 'Padless', species: 'CAT', dateOfBirth: input });
+      expect(res.status).toBe(201);
+      expect(res.body.data.dateOfBirth).toBe(stored);
+      const row = await getTestDb()('animals')
+        .where({ id: res.body.data.id })
+        .select(getTestDb().raw("to_char(date_of_birth, 'YYYY-MM-DD') as dob"))
+        .first();
+      expect(row?.dob).toBe(stored);
+    }
+  });
+
+  it('rejects impossible calendar dates with 422 (never rolled over to another day)', async () => {
+    const user = await registerUser(app);
+    for (const bad of ['2024-2-30', '2024-13-4', '2024-00-10', '2024-4-0', '2023-2-29']) {
+      const res = await request(app)
+        .post('/api/v1/animals')
+        .set(bearer(user.accessToken))
+        .send({ name: 'Nope', species: 'CAT', dateOfBirth: bad });
+      expect(res.status).toBe(422);
+    }
+  });
 });
 
 describe('animal read', () => {

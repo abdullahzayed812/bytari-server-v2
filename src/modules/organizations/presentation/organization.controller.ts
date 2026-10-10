@@ -279,7 +279,7 @@ export class OrganizationController {
   leave = async (req: Request, res: Response): Promise<void> => {
     const auth = requireAuth(req);
     const org = requireOrganization(req);
-    await this.members.leave(org.id, auth.userId, auditContextFromRequest(req));
+    await this.members.leave(org, auth.userId, auditContextFromRequest(req));
     sendSuccess(res, { success: true });
   };
 

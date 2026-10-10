@@ -82,6 +82,8 @@ export class VetServiceRequestService {
       imageUrls: await this.media.resolveUrls(r.imageKeys),
       petOwner: data.petOwner,
       publishedAt: r.reviewedAt ?? r.createdAt,
+      status: r.status,
+      closedAt: r.closedAt,
     };
   }
 
@@ -289,9 +291,12 @@ export class VetServiceRequestService {
   // --- helpers -----------------------------------------
 
   /** Internal — the offer service uses this to gate submissions. */
-  async loadEngageContext(
-    id: string,
-  ): Promise<{ id: string; petOwnerUserId: string; status: string; closedAt: string | null } | null> {
+  async loadEngageContext(id: string): Promise<{
+    id: string;
+    petOwnerUserId: string;
+    status: string;
+    closedAt: string | null;
+  } | null> {
     const r = await this.requests.findById(id);
     return r
       ? { id: r.id, petOwnerUserId: r.petOwnerUserId, status: r.status, closedAt: r.closedAt }
