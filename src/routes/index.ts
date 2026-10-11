@@ -44,6 +44,7 @@ import {
 } from '../modules/veterinary-store/index.js';
 import {
   createPublicVeterinaryOfficeProductRouter,
+  createOfficeProductSearchRouter,
   createVeterinaryOfficeProductRouter,
   createVeterinaryOfficeDashboardRouter,
 } from '../modules/veterinary-office/index.js';
@@ -195,6 +196,8 @@ export function createApiRouter(c: Container): Router {
   router.use('/organizations', createPublicVeterinaryStoreProductRouter(c));
   router.use('/organizations', createVeterinaryOfficeProductRouter(c));
   router.use('/organizations', createPublicVeterinaryOfficeProductRouter(c));
+  // Product search across every Veterinary Office (results say which office).
+  router.use('/office-products', createOfficeProductSearchRouter(c));
 
   // Veterinary Office Dashboard: stats summary (products/followers/rating) extends
   // `/organizations/:organizationId/office-dashboard/summary`.

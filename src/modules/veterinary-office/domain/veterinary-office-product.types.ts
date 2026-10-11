@@ -186,3 +186,18 @@ export function rowToVeterinaryOfficeProduct(
     updatedAt: row.updated_at.toISOString(),
   };
 }
+
+/**
+ * One hit of the cross-office product search (`GET /office-products/search`):
+ * the public product DTO plus WHICH office sells it.
+ */
+export interface OfficeProductSearchResultDTO {
+  product: VeterinaryOfficeProductDTO;
+  office: {
+    id: string;
+    name: string;
+    logoUrl: string | null;
+    address: string | null;
+    phone: string | null;
+  };
+}

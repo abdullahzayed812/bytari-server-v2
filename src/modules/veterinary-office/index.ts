@@ -7,5 +7,6 @@ export { VeterinaryOfficeDashboardService } from './application/veterinary-offic
 export {
   createVeterinaryOfficeProductRouter,
   createPublicVeterinaryOfficeProductRouter,
+  createOfficeProductSearchRouter,
 } from './presentation/veterinary-office-product.routes.js';
 export { createVeterinaryOfficeDashboardRouter } from './presentation/veterinary-office-dashboard.routes.js';

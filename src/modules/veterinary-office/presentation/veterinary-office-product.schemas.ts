@@ -146,3 +146,12 @@ export const publicVeterinaryOfficeProductParamSchema = z.object({
   organizationId: z.string().uuid(),
   productId: z.string().uuid(),
 });
+
+/** `GET /office-products/search` — product search across every public Veterinary Office. */
+export const searchOfficeProductsQuerySchema = paginationQuerySchema.extend({
+  search: z.string().trim().min(1).max(200).optional(),
+  type: z.enum(VETERINARY_OFFICE_PRODUCT_TYPES).optional(),
+  sort: z.enum(['name', 'price', 'createdAt']).optional(),
+  order: z.enum(['asc', 'desc']).optional(),
+});
+export type SearchOfficeProductsQuery = z.infer<typeof searchOfficeProductsQuerySchema>;

@@ -264,7 +264,8 @@ function buildPaths(k: Kind): Obj {
       get: {
         tags: [tag],
         summary: 'Get one product (management)',
-        description: 'Requires `product.read`. A product id not under this organization returns 404.',
+        description:
+          'Requires `product.read`. A product id not under this organization returns 404.',
         security: bearer,
         parameters: [orgIdParam, productIdParam],
         responses: {
@@ -429,7 +430,68 @@ function buildPaths(k: Kind): Obj {
 }
 
 const schemas: Obj = KINDS.reduce((acc, k) => ({ ...acc, ...buildSchemas(k) }), {});
-const paths: Obj = KINDS.reduce((acc, k) => ({ ...acc, ...buildPaths(k) }), {});
+const paths: Obj = {
+  ...KINDS.reduce((acc, k) => ({ ...acc, ...buildPaths(k) }), {}),
+  '/office-products/search': {
+    get: {
+      tags: ['Veterinary Office · Products'],
+      summary: 'Search products across every Veterinary Office',
+      description:
+        "Any authenticated user. Same visibility as one office's public catalog (ACTIVE, " +
+        'non-expired VETERINARY_OFFICE; ACTIVE, non-hidden product). Every search word must match ' +
+        'a product attribute; name matches rank first. Each hit carries the office that sells it.',
+      security: [{ bearerAuth: [] }],
+      parameters: [
+        { name: 'search', in: 'query', schema: { type: 'string', maxLength: 200 } },
+        { name: 'type', in: 'query', schema: { type: 'string' } },
+        {
+          name: 'sort',
+          in: 'query',
+          schema: { type: 'string', enum: ['name', 'price', 'createdAt'] },
+        },
+        { name: 'order', in: 'query', schema: { type: 'string', enum: ['asc', 'desc'] } },
+        { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
+        { name: 'pageSize', in: 'query', schema: { type: 'integer', minimum: 1 } },
+      ],
+      responses: {
+        '200': {
+          description: 'Paginated hits',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  data: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        product: { $ref: '#/components/schemas/VeterinaryOfficeProduct' },
+                        office: {
+                          type: 'object',
+                          properties: {
+                            id: { type: 'string', format: 'uuid' },
+                            name: { type: 'string' },
+                            logoUrl: { type: 'string', nullable: true },
+                            address: { type: 'string', nullable: true },
+                            phone: { type: 'string', nullable: true },
+                          },
+                        },
+                      },
+                    },
+                  },
+                  meta: { type: 'object' },
+                },
+              },
+            },
+          },
+        },
+        '401': { description: 'Unauthenticated' },
+        '422': { description: 'Invalid query' },
+      },
+    },
+  },
+};
 
 const tags = [
   {

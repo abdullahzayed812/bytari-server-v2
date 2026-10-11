@@ -4,7 +4,10 @@ import { pageMeta } from '../../../shared/http/pagination.js';
 import { sendSuccess } from '../../../shared/http/response.js';
 import { validatedParams, validatedQuery } from '../../../shared/http/validate.js';
 import type { VeterinaryOfficeProductService } from '../application/veterinary-office-product.service.js';
-import type { PublicListVeterinaryOfficeProductsQuery } from './veterinary-office-product.schemas.js';
+import type {
+  PublicListVeterinaryOfficeProductsQuery,
+  SearchOfficeProductsQuery,
+} from './veterinary-office-product.schemas.js';
 
 /**
  * Public product-catalog browse for VETERINARY_OFFICE organizations — the
@@ -25,6 +28,20 @@ export class PublicVeterinaryOfficeProductController {
       search: q.search,
       brand: q.brand,
       country: q.country,
+      sort: q.sort,
+      order: q.order,
+    });
+    sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
+  };
+
+  /** `GET /office-products/search` — every public office's products, each with its office. */
+  searchAll = async (req: Request, res: Response): Promise<void> => {
+    const q = validatedQuery<SearchOfficeProductsQuery>(req);
+    const { items, total } = await this.products.searchAcrossOffices({
+      page: q.page,
+      pageSize: q.pageSize,
+      search: q.search,
+      productType: q.type,
       sort: q.sort,
       order: q.order,
     });

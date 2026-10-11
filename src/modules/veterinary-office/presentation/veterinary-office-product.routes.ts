@@ -16,6 +16,7 @@ import {
   finalizeVeterinaryOfficeProductImageBodySchema,
   listVeterinaryOfficeProductsQuerySchema,
   publicListVeterinaryOfficeProductsQuerySchema,
+  searchOfficeProductsQuerySchema,
   publicVeterinaryOfficeProductParamSchema,
   updateVeterinaryOfficeProductBodySchema,
   veterinaryOfficeIdParamSchema,
@@ -210,5 +211,23 @@ export function createPublicVeterinaryOfficeProductRouter(c: Container): Router 
     asyncHandler(ctrl.getOne),
   );
 
+  return r;
+}
+
+/**
+ * Product search across EVERY Veterinary Office — `GET /office-products/search`.
+ * Its own top-level mount: under `/organizations` the path would be captured
+ * by `/:organizationId/office-products/:productId`. Any authenticated user;
+ * the service applies the public-catalog visibility rule.
+ */
+export function createOfficeProductSearchRouter(c: Container): Router {
+  const ctrl = new PublicVeterinaryOfficeProductController(c.veterinaryOfficeProductService);
+  const r = Router();
+  r.use(c.authenticate);
+  r.get(
+    '/search',
+    validate({ query: searchOfficeProductsQuerySchema }),
+    asyncHandler(ctrl.searchAll),
+  );
   return r;
 }

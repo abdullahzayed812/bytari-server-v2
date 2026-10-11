@@ -39,6 +39,18 @@ function escapeLike(v: string): string {
 }
 const IMAGES = 'veterinary_office_product_images';
 
+/** One hit of {@link VeterinaryOfficeProductRepository.searchAcrossOffices}. */
+export interface OfficeProductSearchRow {
+  product: VeterinaryOfficeProduct;
+  office: {
+    id: string;
+    name: string;
+    logoKey: string | null;
+    address: string | null;
+    phone: string | null;
+  };
+}
+
 export interface CreateVeterinaryOfficeProductData extends VeterinaryOfficeProductDetailFieldsInput {
   organizationId: string;
   name: string;
@@ -217,6 +229,98 @@ export class VeterinaryOfficeProductRepository {
       .offset((filter.page - 1) * filter.pageSize);
 
     return { items: rows.map(rowToVeterinaryOfficeProduct), total };
+  }
+
+  /**
+   * Product search across EVERY publicly browsable Veterinary Office — the
+   * same visibility rule as one office's public catalog (ACTIVE office of type
+   * VETERINARY_OFFICE, subscription not expired; ACTIVE, non-hidden product)
+   * and the same word matching as {@link listForOrganization}. Each row
+   * carries its office's public identity (id, name, logo key, address, phone).
+   */
+  async searchAcrossOffices(filter: {
+    page: number;
+    pageSize: number;
+    search?: string;
+    productType?: string;
+    sort?: 'name' | 'price' | 'createdAt';
+    order?: 'asc' | 'desc';
+  }): Promise<{ items: OfficeProductSearchRow[]; total: number }> {
+    const base = (): Knex.QueryBuilder => {
+      const qb = this.db(`${TABLE} as p`)
+        .join('organizations as o', 'o.id', 'p.organization_id')
+        .leftJoin('veterinary_office_details as d', 'd.organization_id', 'o.id')
+        .where('o.type', 'VETERINARY_OFFICE')
+        .where('o.status', 'ACTIVE')
+        .where((w) => {
+          // An EXPIRED office is off the public market until renewed.
+          void w
+            .whereNull('d.subscription_end_date')
+            .orWhereRaw('d.subscription_end_date >= CURRENT_DATE');
+        })
+        .where('p.status', 'ACTIVE')
+        .where('p.is_hidden', false);
+      if (filter.productType) qb.andWhere('p.product_type', filter.productType);
+      for (const term of searchTerms(filter.search)) {
+        const like = `%${escapeLike(term)}%`;
+        qb.andWhere((w) => {
+          for (const col of SEARCH_COLUMNS) {
+            void w.orWhereRaw(`lower(coalesce(p.${col}, '')) like ? escape '\\'`, [like]);
+          }
+          void w.orWhereRaw("lower(array_to_string(p.highlights, ' ')) like ? escape '\\'", [like]);
+        });
+      }
+      return qb;
+    };
+
+    const countRow = (await base().count<{ count: string }>({ count: '*' }).first()) as
+      { count?: string } | undefined;
+    const sortColumn =
+      filter.sort === 'price' ? 'p.price' : filter.sort === 'name' ? 'p.name' : 'p.created_at';
+    const phrase = filter.search ? filter.search.trim().toLowerCase() : null;
+    const rows = (await base()
+      .select(
+        'p.*',
+        'o.name as office_name',
+        'd.logo_key as office_logo_key',
+        'd.address as office_address',
+        'd.phone as office_phone',
+      )
+      .modify((qb) => {
+        if (phrase && !filter.sort) {
+          qb.orderByRaw(
+            "CASE WHEN lower(p.name) LIKE ? escape '\\' THEN 0 WHEN lower(p.name) LIKE ? escape '\\' THEN 1 ELSE 2 END",
+            [`${escapeLike(phrase)}%`, `%${escapeLike(phrase)}%`],
+          );
+        }
+      })
+      .orderBy([
+        { column: sortColumn, order: filter.order === 'asc' ? 'asc' : 'desc' },
+        { column: 'p.id', order: 'asc' },
+      ])
+      .limit(filter.pageSize)
+      .offset((filter.page - 1) * filter.pageSize)) as Array<
+      VeterinaryOfficeProductRow & {
+        office_name: string;
+        office_logo_key: string | null;
+        office_address: string | null;
+        office_phone: string | null;
+      }
+    >;
+
+    return {
+      total: Number(countRow?.count ?? 0),
+      items: rows.map((r) => ({
+        product: rowToVeterinaryOfficeProduct(r),
+        office: {
+          id: r.organization_id,
+          name: r.office_name,
+          logoKey: r.office_logo_key,
+          address: r.office_address,
+          phone: r.office_phone,
+        },
+      })),
+    };
   }
 
   /**

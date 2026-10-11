@@ -5,6 +5,7 @@ import { StoragePrefix, buildObjectKey } from '../../../infra/storage/index.js';
 import { BadRequestError, ConflictError, NotFoundError } from '../../../shared/errors/app-error.js';
 import { ErrorCode } from '../../../shared/errors/error-codes.js';
 import type { EventBus } from '../../../shared/events/index.js';
+import { resolveStorageUrlOrNull } from '../../../shared/storage/media-url.js';
 import { AuditAction, AuditEntityType, type AuditContext } from '../../audit/audit.types.js';
 import type { AuditService } from '../../audit/audit.service.js';
 import type { OrganizationRepository } from '../../organizations/infrastructure/organization.repository.js';
@@ -18,10 +19,12 @@ import { VeterinaryOfficeProductPolicy } from '../domain/veterinary-office-produ
 import type {
   CreateVeterinaryOfficeProductInput,
   ListVeterinaryOfficeProductsFilter,
+  OfficeProductSearchResultDTO,
   UpdateVeterinaryOfficeProductInput,
   VeterinaryOfficeProduct,
   VeterinaryOfficeProductDTO,
 } from '../domain/veterinary-office-product.types.js';
+import type { VeterinaryOfficeProductType } from '../domain/veterinary-office-product.constants.js';
 import type { VeterinaryOfficeProductRepository } from '../infrastructure/veterinary-office-product.repository.js';
 import { resolveVeterinaryOfficeProductImageUrlOrNull } from './veterinary-office-product-media.js';
 
@@ -161,6 +164,48 @@ export class VeterinaryOfficeProductService {
       hidden: false,
     });
     return { items: await Promise.all(items.map((p) => this.toDTO(p))), total };
+  }
+
+  /**
+   * Product search across EVERY publicly browsable Veterinary Office (any
+   * authenticated user) — each hit says which office sells it. Same visibility
+   * rule as {@link listPublic}: ACTIVE, non-expired offices; ACTIVE, non-hidden
+   * products.
+   */
+  async searchAcrossOffices(filter: {
+    page: number;
+    pageSize: number;
+    search?: string;
+    productType?: VeterinaryOfficeProductType;
+    sort?: 'name' | 'price' | 'createdAt';
+    order?: 'asc' | 'desc';
+  }): Promise<{ items: OfficeProductSearchResultDTO[]; total: number }> {
+    const { items, total } = await this.products.searchAcrossOffices(filter);
+    const logoUrls = new Map<string, Promise<string | null>>();
+    const logoUrl = (key: string | null): Promise<string | null> => {
+      if (!key) return Promise.resolve(null);
+      let url = logoUrls.get(key);
+      if (!url) {
+        url = resolveStorageUrlOrNull(this.storage, key, 3600);
+        logoUrls.set(key, url);
+      }
+      return url;
+    };
+    return {
+      total,
+      items: await Promise.all(
+        items.map(async ({ product, office }) => ({
+          product: await this.toDTO(product),
+          office: {
+            id: office.id,
+            name: office.name,
+            logoUrl: await logoUrl(office.logoKey),
+            address: office.address,
+            phone: office.phone,
+          },
+        })),
+      ),
+    };
   }
 
   /** Public filter facets (distinct brands / countries) for the catalog screen. */
