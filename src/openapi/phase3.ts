@@ -323,6 +323,22 @@ const paths: Obj = {
         { name: 'sort', in: 'query', schema: { type: 'string', enum: ['default', 'nearest'] } },
         { name: 'lat', in: 'query', schema: { type: 'number', minimum: -90, maximum: 90 } },
         { name: 'lng', in: 'query', schema: { type: 'number', minimum: -180, maximum: 180 } },
+        {
+          name: 'productBrand',
+          in: 'query',
+          description:
+            'VETERINARY_OFFICE only — offices with at least one public product of this brand ' +
+            '(case-insensitive exact match).',
+          schema: { type: 'string', maxLength: 100 },
+        },
+        {
+          name: 'productCountry',
+          in: 'query',
+          description:
+            'VETERINARY_OFFICE only — offices with at least one public product from this ' +
+            'country of origin (case-insensitive exact match).',
+          schema: { type: 'string', maxLength: 100 },
+        },
       ],
       responses: {
         '200': ok(

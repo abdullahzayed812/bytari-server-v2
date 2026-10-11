@@ -347,6 +347,40 @@ export class VeterinaryOfficeProductRepository {
     return { brands, countries };
   }
 
+  /**
+   * Distinct brands / countries of origin across every publicly browsable
+   * office's ACTIVE, visible products (same visibility as
+   * {@link searchAcrossOffices}) — the offices list's product filter chips.
+   * Bounded to 200 values each.
+   */
+  async facetsAcrossOffices(): Promise<{ brands: string[]; countries: string[] }> {
+    const distinct = async (column: 'brand' | 'country_of_origin'): Promise<string[]> => {
+      const rows = (await this.db(`${TABLE} as p`)
+        .join('organizations as o', 'o.id', 'p.organization_id')
+        .leftJoin('veterinary_office_details as d', 'd.organization_id', 'o.id')
+        .where('o.type', 'VETERINARY_OFFICE')
+        .where('o.status', 'ACTIVE')
+        .where((w) => {
+          void w
+            .whereNull('d.subscription_end_date')
+            .orWhereRaw('d.subscription_end_date >= CURRENT_DATE');
+        })
+        .where('p.status', 'ACTIVE')
+        .where('p.is_hidden', false)
+        .whereRaw(`coalesce(trim(p.${column}), '') <> ''`)
+        .select(this.db.raw(`min(trim(p.${column})) as value`))
+        .groupByRaw(`lower(trim(p.${column}))`)
+        .orderByRaw(`lower(trim(p.${column}))`)
+        .limit(200)) as { value: string }[];
+      return rows.map((r) => r.value);
+    };
+    const [brands, countries] = await Promise.all([
+      distinct('brand'),
+      distinct('country_of_origin'),
+    ]);
+    return { brands, countries };
+  }
+
   /** Live, visible product count — the Dashboard home's "المنتجات" stat. */
   async countVisibleForOrganization(
     organizationId: string,

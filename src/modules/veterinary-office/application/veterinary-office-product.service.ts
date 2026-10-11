@@ -214,6 +214,11 @@ export class VeterinaryOfficeProductService {
     return this.products.facetsForOrganization(organizationId);
   }
 
+  /** Brand / country-of-origin facets across every public office — the offices list filter. */
+  facetsAcrossOffices(): Promise<{ brands: string[]; countries: string[] }> {
+    return this.products.facetsAcrossOffices();
+  }
+
   /** Public single-product counterpart of {@link listPublic}. */
   async getPublic(organizationId: string, productId: string): Promise<VeterinaryOfficeProductDTO> {
     await this.assertPubliclyBrowsable(organizationId);

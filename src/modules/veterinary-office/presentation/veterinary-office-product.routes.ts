@@ -229,5 +229,6 @@ export function createOfficeProductSearchRouter(c: Container): Router {
     validate({ query: searchOfficeProductsQuerySchema }),
     asyncHandler(ctrl.searchAll),
   );
+  r.get('/facets', asyncHandler(ctrl.facetsAll));
   return r;
 }

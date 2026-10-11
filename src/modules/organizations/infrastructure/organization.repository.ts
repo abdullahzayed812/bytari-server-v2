@@ -87,6 +87,12 @@ export interface DiscoverWithDetailsFilter {
   minRating?: number;
   /** Case-insensitive substring match against any entry of `services`. */
   service?: string;
+  /**
+   * VETERINARY_OFFICE only — the office has at least one ACTIVE, non-hidden
+   * product with this brand / country of origin (case-insensitive exact).
+   */
+  productBrand?: string;
+  productCountry?: string;
   /** Order by average rating (then review count) instead of recency. */
   topRated?: boolean;
   page: number;
@@ -288,6 +294,21 @@ export class OrganizationRepository {
           `EXISTS (SELECT 1 FROM unnest(coalesce(d.services, '{}'::text[])) AS s(v) WHERE v ILIKE ?)`,
           [`%${filter.service.replace(/[\\%_]/g, (c) => `\\${c}`)}%`],
         );
+      }
+      if (filter.type === 'VETERINARY_OFFICE') {
+        const products: Array<[string, string | undefined]> = [
+          ['brand', filter.productBrand],
+          ['country_of_origin', filter.productCountry],
+        ];
+        for (const [column, value] of products) {
+          if (!value) continue;
+          qb.whereRaw(
+            `EXISTS (SELECT 1 FROM veterinary_office_products vp
+               WHERE vp.organization_id = o.id AND vp.status = 'ACTIVE'
+                 AND vp.is_hidden = false AND lower(vp.${column}) = ?)`,
+            [value.toLowerCase()],
+          );
+        }
       }
       if (filter.minRating !== undefined) {
         qb.whereRaw(

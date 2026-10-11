@@ -491,6 +491,39 @@ const paths: Obj = {
       },
     },
   },
+  '/office-products/facets': {
+    get: {
+      tags: ['Veterinary Office · Products'],
+      summary: 'Brands / countries of origin across every Veterinary Office',
+      description:
+        'Distinct values among public products (same visibility as /office-products/search) — ' +
+        'the Veterinary Offices list filter chips (`productBrand` / `productCountry` on ' +
+        '/organizations/discover).',
+      security: [{ bearerAuth: [] }],
+      responses: {
+        '200': {
+          description: 'Facets',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  data: {
+                    type: 'object',
+                    properties: {
+                      brands: { type: 'array', items: { type: 'string' } },
+                      countries: { type: 'array', items: { type: 'string' } },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        '401': { description: 'Unauthenticated' },
+      },
+    },
+  },
 };
 
 const tags = [

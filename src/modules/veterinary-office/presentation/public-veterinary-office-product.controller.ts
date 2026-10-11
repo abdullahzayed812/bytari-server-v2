@@ -48,6 +48,11 @@ export class PublicVeterinaryOfficeProductController {
     sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
   };
 
+  /** `GET /office-products/facets` — brands / countries across every public office. */
+  facetsAll = async (_req: Request, res: Response): Promise<void> => {
+    sendSuccess(res, await this.products.facetsAcrossOffices());
+  };
+
   facets = async (req: Request, res: Response): Promise<void> => {
     const { organizationId } = validatedParams<{ organizationId: string }>(req);
     sendSuccess(res, await this.products.publicFacets(organizationId));
