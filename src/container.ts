@@ -16,6 +16,7 @@ import {
 } from './modules/authorization/authorization.middleware.js';
 import { UserRepository } from './modules/users/user.repository.js';
 import { UserService } from './modules/users/user.service.js';
+import { UserDeletionService } from './modules/users/user-deletion.service.js';
 import { RefreshSessionRepository } from './modules/auth/refresh-session.repository.js';
 import { RefreshSessionService } from './modules/auth/refresh-session.service.js';
 import { PasswordService } from './modules/auth/password.service.js';
@@ -277,6 +278,7 @@ export interface Container {
 
   auditService: AuditService;
   userService: UserService;
+  userDeletionService: UserDeletionService;
   roleRepository: RoleRepository;
   rbacService: RbacService;
   authorizationService: AuthorizationService;
@@ -581,6 +583,14 @@ export function createContainer(deps: ContainerDeps): Container {
     logger,
   );
 
+  const userDeletionService = new UserDeletionService(
+    db,
+    objectStorage,
+    auditService,
+    eventBus,
+    logger,
+  );
+
   // --- auth orchestration -----------------------------------------
   const authService = new AuthService(
     db,
@@ -796,6 +806,8 @@ export function createContainer(deps: ContainerDeps): Container {
     animalRepository,
     auditService,
     objectStorage,
+    db,
+    eventBus,
   );
   // Medical-record attachments (prescription photo / files) — clinic-scoped R2 keys.
   const medicalAttachments = new MedicalAttachments(objectStorage, logger);
@@ -1625,6 +1637,7 @@ export function createContainer(deps: ContainerDeps): Container {
     eventBus,
     auditService,
     userService,
+    userDeletionService,
     roleRepository,
     rbacService,
     authorizationService,

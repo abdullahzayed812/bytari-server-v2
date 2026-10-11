@@ -10,6 +10,8 @@ export const AuditAction = {
   USER_SUSPENDED: 'USER_SUSPENDED',
   USER_ACTIVATED: 'USER_ACTIVATED',
   USER_DEACTIVATED: 'USER_DEACTIVATED',
+  /** An ADMIN permanently deleted an account (metadata: roles + retained/removed row counts only). */
+  USER_DELETED: 'USER_DELETED',
   USER_AVATAR_UPDATED: 'USER_AVATAR_UPDATED',
   ROLE_ASSIGNED: 'ROLE_ASSIGNED',
   ROLE_REMOVED: 'ROLE_REMOVED',
@@ -69,6 +71,8 @@ export const AuditAction = {
   ANIMAL_CLINIC_ACCESS_REVOKED: 'ANIMAL_CLINIC_ACCESS_REVOKED',
   /** A clinic member opened a pet by its short public ID / QR. */
   CLINIC_PET_LOOKED_UP: 'CLINIC_PET_LOOKED_UP',
+  /** A clinic removed a pet from its list — its rows for the pet were detached (archived), not deleted. */
+  CLINIC_PET_REMOVED: 'CLINIC_PET_REMOVED',
   MEDICAL_RECORD_CREATED: 'MEDICAL_RECORD_CREATED',
   MEDICAL_RECORD_UPDATED: 'MEDICAL_RECORD_UPDATED',
   MEDICAL_RECORD_DELETED: 'MEDICAL_RECORD_DELETED',
@@ -409,6 +413,17 @@ export interface AuditLogRecord {
   userAgent: string | null;
   requestId: string | null;
   createdAt: string;
+}
+
+/**
+ * One entry opened from the admin audit log / dashboard activity feed. Same
+ * fields as {@link AuditLogRecord} (metadata re-redacted at read time, deeply)
+ * plus the resolved organization context when the entry carries one.
+ */
+export interface AuditLogDetail extends AuditLogRecord {
+  /** `false` when the actor's account no longer exists (deleted / anonymised). */
+  actorExists: boolean;
+  organization: { id: string; name: string | null; type: string | null } | null;
 }
 
 export interface ListAuditFilter {

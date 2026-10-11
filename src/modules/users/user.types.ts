@@ -204,3 +204,13 @@ export interface UserRow {
   created_at: Date;
   updated_at: Date;
 }
+
+/**
+ * The placeholder account that RETAINED records are re-attributed to when a
+ * user is permanently deleted (pets + their clinic medical history, store
+ * orders, clinic appointments, syndicate announcements). It can never sign in
+ * (DEACTIVATED, unusable password hash, `.invalid` e-mail), is hidden from the
+ * admin user list, and can never itself be deleted. Created lazily on first
+ * use so a fresh / truncated database needs no seed.
+ */
+export const DELETED_USER_ID = '00000000-0000-4000-8000-00000000d31e';

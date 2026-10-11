@@ -77,6 +77,8 @@ export interface RealtimeGateway extends RealtimePublisher {
    * organization membership, so an open socket stops receiving its events.
    */
   revalidateUserRooms(userId: string): Promise<void>;
+  /** Close every open socket of a user — e.g. the account was permanently deleted. */
+  disconnectUser(userId: string): void;
 }
 
 export class RealtimeAuthError extends Error {

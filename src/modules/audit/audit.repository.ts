@@ -46,6 +46,28 @@ export class AuditRepository {
     return (inserted as { id: string }).id;
   }
 
+  /** One entry with the actor's name (and whether the actor still exists). */
+  async findById(id: string): Promise<(AuditLogRecord & { actorExists: boolean }) | null> {
+    const row = await this.db(TABLE)
+      .leftJoin('users', 'users.id', `${TABLE}.actor_user_id`)
+      .where(`${TABLE}.id`, id)
+      .first(
+        `${TABLE}.*`,
+        'users.id as actor_existing_id',
+        'users.first_name as actor_first_name',
+        'users.last_name as actor_last_name',
+      );
+    if (!row) return null;
+    return { ...rowToRecord(row), actorExists: row.actor_existing_id !== null };
+  }
+
+  async findOrganization(
+    id: string,
+  ): Promise<{ id: string; name: string | null; type: string | null } | null> {
+    const row = await this.db('organizations').where({ id }).first('id', 'name', 'type');
+    return row ?? null;
+  }
+
   async list(
     filter: ListAuditFilter,
     trx?: Knex.Transaction,

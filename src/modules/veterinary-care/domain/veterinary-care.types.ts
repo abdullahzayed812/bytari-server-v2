@@ -34,7 +34,8 @@ export interface MedicalRecord {
 export interface Vaccination {
   id: string;
   animalId: string;
-  organizationId: string;
+  /** `null` once the clinic removed the pet from its list (attribution hidden). */
+  organizationId: string | null;
   recordedByUserId: string | null;
   vaccineName: string;
   administeredOn: string;
@@ -81,7 +82,8 @@ export interface MedicalRecordDTO {
 export interface VaccinationDTO {
   id: string;
   animalId: string;
-  organizationId: string;
+  /** `null` once the clinic removed the pet from its list (attribution hidden). */
+  organizationId: string | null;
   recordedByUserId: string | null;
   vaccineName: string;
   administeredOn: string;
@@ -104,7 +106,8 @@ export interface MedicalTimelineEntryDTO {
   type: MedicalTimelineEntryType;
   /** `visitDate` for a record, `administeredOn` for a vaccination (YYYY-MM-DD). */
   occurredOn: string;
-  organizationId: string;
+  /** `null` once the clinic removed the pet from its list (attribution hidden). */
+  organizationId: string | null;
   recordedByUserId: string | null;
   createdAt: string;
   medicalRecord?: MedicalRecordDTO;
@@ -219,7 +222,7 @@ export interface MedicalRecordRow {
 export interface VaccinationRow {
   id: string;
   animal_id: string;
-  organization_id: string;
+  organization_id: string | null;
   recorded_by_user_id: string | null;
   vaccine_name: string;
   administered_on: string | Date;
@@ -300,7 +303,8 @@ export function toOwnerVaccinationDTO(v: Vaccination): VaccinationDTO {
 export interface AnimalReminder {
   id: string;
   animalId: string;
-  organizationId: string;
+  /** `null` once the clinic removed the pet from its list (attribution hidden). */
+  organizationId: string | null;
   recordedByUserId: string | null;
   title: string;
   description: string | null;
@@ -317,7 +321,7 @@ export type AnimalReminderDTO = AnimalReminder;
 export interface AnimalReminderRow {
   id: string;
   animal_id: string;
-  organization_id: string;
+  organization_id: string | null;
   recorded_by_user_id: string | null;
   title: string;
   description: string | null;

@@ -1,4 +1,6 @@
+import type { Knex } from 'knex';
 import type { ObjectStorage } from '../../../infra/storage/index.js';
+import type { EventBus } from '../../../shared/events/index.js';
 import { NotFoundError } from '../../../shared/errors/app-error.js';
 import { AuditAction, AuditEntityType, type AuditContext } from '../../audit/audit.types.js';
 import type { AuditService } from '../../audit/audit.service.js';
@@ -7,6 +9,7 @@ import type { AnimalRepository } from '../../animals/infrastructure/animal.repos
 import type { Animal } from '../../animals/domain/animal.types.js';
 import type {
   ClinicPetActivity,
+  ClinicPetDetachCounts,
   ClinicPetListItem,
   ClinicPetRepository,
 } from '../infrastructure/clinic-pet.repository.js';
@@ -57,6 +60,8 @@ export class ClinicPetService {
     private readonly audit: AuditService,
     /** Resolves each pet's first photo. */
     private readonly storage: ObjectStorage | null = null,
+    private readonly db: Knex | null = null,
+    private readonly events: EventBus | null = null,
   ) {}
 
   private async photoUrl(key: string | null): Promise<string | null> {
@@ -124,6 +129,48 @@ export class ClinicPetService {
       photoUrl: await this.photoUrl(animal.galleryKeys[0] ?? null),
       workedWith: activity !== null,
     };
+  }
+
+  /**
+   * "إزالة الحيوان من العيادة" — the pet leaves THIS clinic's Recent / All Pets
+   * and pet file; the pet itself, its owner and every other clinic's data are
+   * untouched. Owner-visible vaccinations / reminders stay with the owner,
+   * anonymised (no clinic / vet identity); private medical records are
+   * archived, not destroyed. 404 when this clinic has nothing for the pet
+   * (unknown pet, another clinic's pet, or already removed) — nothing changes.
+   * The clinic can open the pet again by its public ID and start over.
+   */
+  async removeFromClinic(
+    organizationId: string,
+    animalId: string,
+    actor: { actorUserId: string; context?: AuditContext },
+  ): Promise<{ animalId: string; removed: true; detached: ClinicPetDetachCounts }> {
+    if (!this.db) throw new Error('ClinicPetService.removeFromClinic requires a database handle');
+    const detached = await this.db.transaction(async (tx) => {
+      const counts = await this.pets.detachFromClinic(
+        organizationId,
+        animalId,
+        actor.actorUserId,
+        tx,
+      );
+      if (counts.medicalRecords + counts.vaccinations + counts.reminders === 0) {
+        throw new NotFoundError('This clinic has no records for this pet');
+      }
+      await this.audit.record(
+        {
+          action: AuditAction.CLINIC_PET_REMOVED,
+          entityType: AuditEntityType.ANIMAL,
+          entityId: animalId,
+          actorUserId: actor.actorUserId,
+          metadata: { organizationId, animalId, ...counts },
+          context: actor.context,
+        },
+        tx,
+      );
+      return counts;
+    });
+    this.events?.publish('clinic.pet.removed', { organizationId, animalId });
+    return { animalId, removed: true, detached };
   }
 
   private async toDTO(it: ClinicPetListItem): Promise<ClinicPetDTO> {

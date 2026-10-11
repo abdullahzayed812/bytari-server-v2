@@ -36,8 +36,53 @@ function iso(v: Date | string): string {
   return v instanceof Date ? v.toISOString() : new Date(v).toISOString();
 }
 
+/** Rows detached per table by {@link ClinicPetRepository.detachFromClinic}. */
+export interface ClinicPetDetachCounts {
+  medicalRecords: number;
+  vaccinations: number;
+  reminders: number;
+}
+
 export class ClinicPetRepository {
   constructor(private readonly db: Knex) {}
+
+  /**
+   * "Remove pet from this clinic": detach every row THIS clinic authored for
+   * the pet (see migration `20261104020000_clinic_pet_removal`). The clinic
+   * attribution moves to the server-only `removed_*` columns, so the rows
+   * leave every `organization_id`-scoped clinic read (lists, counts, the pet
+   * file) and owner views no longer name the clinic or the veterinarian. Other
+   * clinics' rows are untouched (the WHERE is this clinic's id). Nothing is
+   * deleted. Locks the rows first so concurrent removals serialise.
+   */
+  async detachFromClinic(
+    organizationId: string,
+    animalId: string,
+    actorUserId: string,
+    trx: Knex.Transaction,
+  ): Promise<ClinicPetDetachCounts> {
+    const run = async (table: (typeof CLINIC_AUTHORED_TABLES)[number]): Promise<number> => {
+      await trx(table)
+        .where({ organization_id: organizationId, animal_id: animalId })
+        .forUpdate()
+        .select('id');
+      return trx(table)
+        .where({ organization_id: organizationId, animal_id: animalId })
+        .update({
+          removed_from_organization_id: organizationId,
+          removed_recorded_by_user_id: trx.raw('recorded_by_user_id'),
+          removed_at: trx.fn.now(),
+          removed_by_user_id: actorUserId,
+          organization_id: null,
+          recorded_by_user_id: null,
+        });
+    };
+    return {
+      medicalRecords: await run('medical_records'),
+      vaccinations: await run('vaccinations'),
+      reminders: await run('animal_reminders'),
+    };
+  }
 
   /**
    * `(animal_id, first_at, last_at)` per pet, from THIS clinic's rows only —

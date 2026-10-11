@@ -243,7 +243,7 @@ export const PERMISSION_DEFINITIONS: Record<PermissionKey, string> = {
   'user.read': 'List and view user accounts',
   'user.create': 'Create user accounts',
   'user.update': 'Update user profile fields',
-  'user.delete': 'Delete user accounts (reserved — Phase 2 uses deactivation instead)',
+  'user.delete': 'Permanently delete a user account (ADMIN only)',
   'user.suspend': 'Suspend a user account',
   'user.activate': 'Re-activate a suspended/deactivated account',
   'user.deactivate': 'Deactivate a user account',

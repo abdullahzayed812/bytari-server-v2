@@ -83,7 +83,12 @@ const schemas: Obj = {
     properties: {
       id: uuid,
       animalId: uuid,
-      organizationId: uuid,
+      organizationId: {
+        type: 'string',
+        format: 'uuid',
+        nullable: true,
+        description: '`null` once the clinic removed the pet from its list (attribution hidden)',
+      },
       recordedByUserId: { type: 'string', format: 'uuid', nullable: true },
       vaccineName: { type: 'string' },
       administeredOn: { type: 'string', format: 'date' },
@@ -219,6 +224,42 @@ const paths: Obj = {
       responses: {
         '200': ok('Pet summary', dataOf({ $ref: '#/components/schemas/ClinicPetLookup' })),
         ...errs(400, 401, 403, 404, 422),
+      },
+    },
+  },
+  '/organizations/{organizationId}/clinic-pets/{animalId}': {
+    delete: {
+      tags: ['Veterinary Care · Clinic Pets'],
+      summary: 'Remove a pet from THIS clinic’s list',
+      description:
+        'Requires `animal.veterinary.access.manage` (clinic owner / supervisor). Detaches — never ' +
+        'deletes — this clinic’s medical records, vaccinations and reminders for the pet: they leave ' +
+        'every clinic view; the owner keeps the vaccinations / reminders with no clinic or ' +
+        'veterinarian identity; private records are archived server-side. Other clinics are ' +
+        'untouched. 404 when the clinic has nothing for the pet (incl. a repeated request). The pet ' +
+        'can be opened again by its public ID.',
+      security: bearer,
+      parameters: [orgIdParam, animalIdParam],
+      responses: {
+        '200': ok(
+          'Removed',
+          dataOf({
+            type: 'object',
+            properties: {
+              animalId: uuid,
+              removed: { type: 'boolean' },
+              detached: {
+                type: 'object',
+                properties: {
+                  medicalRecords: { type: 'integer' },
+                  vaccinations: { type: 'integer' },
+                  reminders: { type: 'integer' },
+                },
+              },
+            },
+          }),
+        ),
+        ...errs(401, 403, 404, 422),
       },
     },
   },

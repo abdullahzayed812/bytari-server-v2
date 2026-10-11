@@ -833,6 +833,31 @@ const paths: Obj = {
         ...errs(401, 403, 404),
       },
     },
+    delete: {
+      tags: ['Admin · Users'],
+      summary: 'Permanently delete a user',
+      description:
+        'Requires `user.delete` (ADMIN). One transaction: sessions, refresh/device tokens, roles, memberships and personal content are removed; pets (+ clinic medical history), store orders, clinic appointments and syndicate announcements are re-attributed to a non-loginable "deleted user" placeholder; personal data in earlier audit entries is redacted; a `USER_DELETED` audit entry is written. 403 for your own account; 409 `USER_DELETE_BLOCKED` (`details[0].rule` = `PROTECTED_ACCOUNT` | `ADMIN_ACCOUNT` | `OWNS_ORGANIZATIONS`) when it cannot safely proceed.',
+      security: bearer,
+      parameters: [
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      ],
+      responses: {
+        '200': ok(
+          'Deleted',
+          dataOf({
+            type: 'object',
+            properties: {
+              id: { type: 'string', format: 'uuid' },
+              deleted: { type: 'boolean' },
+              retained: { type: 'object', additionalProperties: { type: 'integer' } },
+              removed: { type: 'object', additionalProperties: { type: 'integer' } },
+            },
+          }),
+        ),
+        ...errs(401, 403, 404, 409),
+      },
+    },
     patch: {
       tags: ['Admin · Users'],
       summary: 'Update profile fields (firstName / lastName / phone)',
@@ -1112,6 +1137,23 @@ const paths: Obj = {
           dataOf({ type: 'array', items: { $ref: '#/components/schemas/AuditLog' } }),
         ),
         ...errs(401, 403),
+      },
+    },
+  },
+
+  '/admin/audit-logs/{id}': {
+    get: {
+      tags: ['Admin · Audit'],
+      summary: 'One audit entry (details view)',
+      description:
+        'Requires `audit.read`. Metadata is redacted recursively (credential-like keys → `[redacted]`); `organization` is resolved from the entry when it has one.',
+      security: bearer,
+      parameters: [
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      ],
+      responses: {
+        '200': ok('Audit entry', dataOf({ $ref: '#/components/schemas/AuditLog' })),
+        ...errs(401, 403, 404, 422),
       },
     },
   },

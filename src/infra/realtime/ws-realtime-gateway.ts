@@ -329,6 +329,14 @@ export class WsRealtimeGateway implements RealtimeGateway {
     }
   }
 
+  disconnectUser(userId: string): void {
+    for (const [ws, state] of this.connections) {
+      if (state.principal.userId !== userId) continue;
+      this.cleanupConnection(ws);
+      ws.close(4401, 'account deleted');
+    }
+  }
+
   private cleanupConnection(ws: WebSocket): void {
     const state = this.connections.get(ws);
     if (state) {

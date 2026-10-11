@@ -30,6 +30,7 @@ export class SyndicateAnnouncementRepository {
         title: input.title,
         body: input.body,
         image_key: input.imageStorageKey ?? null,
+        link_url: input.linkUrl ?? null,
         created_by_user_id: createdByUserId,
       })
       .returning('*')) as SyndicateAnnouncementRow[];
@@ -52,6 +53,7 @@ export class SyndicateAnnouncementRepository {
     if (patch.title !== undefined) dbPatch.title = patch.title;
     if (patch.body !== undefined) dbPatch.body = patch.body;
     if (patch.imageStorageKey !== undefined) dbPatch.image_key = patch.imageStorageKey;
+    if (patch.linkUrl !== undefined) dbPatch.link_url = patch.linkUrl;
     const [row] = (await trx(T)
       .where({ id })
       .update(dbPatch)

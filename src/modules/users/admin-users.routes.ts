@@ -25,6 +25,7 @@ export function createAdminUsersRouter(c: Container): Router {
     c.organizationService,
     c.supportService,
     c.authorizationService,
+    c.userDeletionService,
   );
   const { authorize } = c.authorization;
   const r = Router();
@@ -76,6 +77,13 @@ export function createAdminUsersRouter(c: Container): Router {
     authorize('user.read'),
     validate({ params: idParamSchema, body: adminMessageUserBodySchema }),
     asyncHandler(ctrl.message),
+  );
+  // Permanent deletion — see `UserDeletionService` for what is retained / removed.
+  r.delete(
+    '/:id',
+    authorize('user.delete'),
+    validate({ params: idParamSchema }),
+    asyncHandler(ctrl.remove),
   );
   r.post(
     '/:id/suspend',

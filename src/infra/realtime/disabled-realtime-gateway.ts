@@ -26,6 +26,10 @@ export class DisabledRealtimeGateway implements RealtimeGateway {
     return Promise.resolve();
   }
 
+  disconnectUser(_userId: string): void {
+    /* no-op */
+  }
+
   emitToUser(_userId: string, _event: RealtimeEvent): void {
     /* no-op */
   }

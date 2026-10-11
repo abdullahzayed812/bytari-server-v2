@@ -3,7 +3,7 @@ import { asyncHandler } from '../../shared/http/async-handler.js';
 import { validate } from '../../shared/http/validate.js';
 import type { Container } from '../../container.js';
 import { AdminAuditController } from './admin-audit.controller.js';
-import { listAuditQuerySchema } from './admin-audit.schemas.js';
+import { auditIdParamsSchema, listAuditQuerySchema } from './admin-audit.schemas.js';
 
 /** Mounts `/admin/audit-logs`. */
 export function createAdminAuditRouter(c: Container): Router {
@@ -16,6 +16,12 @@ export function createAdminAuditRouter(c: Container): Router {
     c.authorization.authorize('audit.read'),
     validate({ query: listAuditQuerySchema }),
     asyncHandler(ctrl.list),
+  );
+  r.get(
+    '/:id',
+    c.authorization.authorize('audit.read'),
+    validate({ params: auditIdParamsSchema }),
+    asyncHandler(ctrl.get),
   );
 
   return r;

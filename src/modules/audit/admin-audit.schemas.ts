@@ -10,3 +10,6 @@ export const listAuditQuerySchema = paginationQuerySchema.extend({
   to: z.coerce.date().optional(),
 });
 export type ListAuditQuery = z.infer<typeof listAuditQuerySchema>;
+
+export const auditIdParamsSchema = z.object({ id: z.string().uuid() });
+export type AuditIdParams = z.infer<typeof auditIdParamsSchema>;

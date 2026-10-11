@@ -91,6 +91,17 @@ export function createClinicalVeterinaryRouter(c: Container): Router {
     lookupLimiter,
     asyncHandler(ctrl.lookupPet),
   );
+  // Deciding which pets the clinic keeps on its list is an owner / supervisor
+  // action (same permission that used to grant / revoke access), not every vet's.
+  r.delete(
+    '/:organizationId/clinic-pets/:animalId',
+    validate({ params: clinicAnimalParamSchema }),
+    withOrganization,
+    withClinic,
+    authorizeOrg('animal.veterinary.access.manage'),
+    activeSubscription,
+    asyncHandler(ctrl.removePet),
+  );
 
   // --- medical records ------------------------------------------
   const recordsBase = '/:organizationId/animals/:animalId/medical-records';

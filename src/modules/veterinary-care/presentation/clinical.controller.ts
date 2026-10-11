@@ -59,6 +59,13 @@ export class ClinicalController {
     sendSuccess(res, await this.pets.lookup(org.id, code, this.actor(req)));
   };
 
+  /** Remove a pet from THIS clinic's list (detach, never delete). */
+  removePet = async (req: Request, res: Response): Promise<void> => {
+    const org = requireOrganization(req);
+    const { animalId } = validatedParams<{ animalId: string }>(req);
+    sendSuccess(res, await this.pets.removeFromClinic(org.id, animalId, this.actor(req)));
+  };
+
   // --- medical records -------------------------------------------
 
   createRecord = async (req: Request, res: Response): Promise<void> => {

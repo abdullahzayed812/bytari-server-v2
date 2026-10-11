@@ -91,6 +91,12 @@ const schemas: Obj = {
       title: { type: 'string' },
       body: { type: 'string' },
       imageUrl: { type: 'string', nullable: true },
+      linkUrl: {
+        type: 'string',
+        format: 'uri',
+        nullable: true,
+        description: 'Optional external http(s) link',
+      },
       publishedAt: { type: 'string', format: 'date-time' },
     },
   },

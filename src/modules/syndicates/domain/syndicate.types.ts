@@ -200,6 +200,8 @@ export interface SyndicateAnnouncement {
   title: string;
   body: string;
   imageStorageKey: string | null;
+  /** Optional external http(s) link shown as a tappable "open link" action. */
+  linkUrl: string | null;
   createdByUserId: string;
   publishedAt: string;
   createdAt: string;
@@ -218,6 +220,7 @@ export interface SyndicateAnnouncementRow {
   title: string;
   body: string;
   image_key: string | null;
+  link_url: string | null;
   created_by_user_id: string;
   published_at: Date;
   created_at: Date;
@@ -232,6 +235,7 @@ export function rowToAnnouncement(row: SyndicateAnnouncementRow): SyndicateAnnou
     title: row.title,
     body: row.body,
     imageStorageKey: row.image_key,
+    linkUrl: row.link_url ?? null,
     createdByUserId: row.created_by_user_id,
     publishedAt: row.published_at.toISOString(),
     createdAt: row.created_at.toISOString(),
@@ -244,6 +248,7 @@ export interface CreateAnnouncementInput {
   title: string;
   body: string;
   imageStorageKey?: string | null;
+  linkUrl?: string | null;
 }
 
 export type UpdateAnnouncementInput = Partial<CreateAnnouncementInput>;

@@ -1,7 +1,13 @@
 import type { Knex } from 'knex';
 import type { Logger } from 'pino';
 import type { AuditRepository } from './audit.repository.js';
-import type { AuditEntryInput, AuditLogRecord, ListAuditFilter } from './audit.types.js';
+import { NotFoundError } from '../../shared/errors/index.js';
+import type {
+  AuditEntryInput,
+  AuditLogDetail,
+  AuditLogRecord,
+  ListAuditFilter,
+} from './audit.types.js';
 
 /** Metadata keys that must never be persisted, regardless of caller. */
 const SENSITIVE_KEYS = new Set([
@@ -22,6 +28,33 @@ const SENSITIVE_KEYS = new Set([
 ]);
 
 const MAX_METADATA_BYTES = 8_192;
+
+/** Key fragments that mark a value as a credential when READING old entries. */
+const SENSITIVE_FRAGMENTS = ['password', 'token', 'secret', 'authorization', 'otp', 'apikey'];
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isSensitiveKey(key: string): boolean {
+  const k = key.toLowerCase().replace(/[^a-z]/g, '');
+  return SENSITIVE_KEYS.has(key.toLowerCase()) || SENSITIVE_FRAGMENTS.some((f) => k.includes(f));
+}
+
+/**
+ * Read-side, recursive redaction. The write path only strips top-level keys,
+ * so an older entry (or a nested `changes` object) could still hold one —
+ * nothing credential-like ever leaves the server.
+ */
+export function redactMetadata(value: unknown, depth = 0): unknown {
+  if (depth > 8) return '[truncated]';
+  if (Array.isArray(value)) return value.map((v) => redactMetadata(v, depth + 1));
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
+      out[key] = isSensitiveKey(key) ? '[redacted]' : redactMetadata(v, depth + 1);
+    }
+    return out;
+  }
+  return value;
+}
 
 function sanitizeMetadata(input: Record<string, unknown> | undefined): Record<string, unknown> {
   if (!input) return {};
@@ -88,7 +121,32 @@ export class AuditService {
     }
   }
 
-  list(filter: ListAuditFilter): Promise<{ items: AuditLogRecord[]; total: number }> {
-    return this.repo.list(filter);
+  async list(filter: ListAuditFilter): Promise<{ items: AuditLogRecord[]; total: number }> {
+    const page = await this.repo.list(filter);
+    return {
+      total: page.total,
+      items: page.items.map((i) => ({
+        ...i,
+        metadata: redactMetadata(i.metadata) as Record<string, unknown>,
+      })),
+    };
+  }
+
+  /** One entry for the admin details view (`audit.read`). 404 when unknown. */
+  async getDetail(id: string): Promise<AuditLogDetail> {
+    const entry = await this.repo.findById(id);
+    if (!entry) throw new NotFoundError('Audit entry not found');
+    const metadata = redactMetadata(entry.metadata) as Record<string, unknown>;
+    const orgId =
+      entry.entityType === 'ORGANIZATION' && entry.entityId
+        ? entry.entityId
+        : typeof metadata.organizationId === 'string'
+          ? metadata.organizationId
+          : null;
+    const organization =
+      orgId && UUID_RE.test(orgId)
+        ? ((await this.repo.findOrganization(orgId)) ?? { id: orgId, name: null, type: null })
+        : null;
+    return { ...entry, metadata, organization };
   }
 }

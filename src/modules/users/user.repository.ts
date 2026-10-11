@@ -1,3 +1,4 @@
+import { DELETED_USER_ID } from './user.types.js';
 import type { Knex } from 'knex';
 import { rowToUser } from './user.mapper.js';
 import type {
@@ -85,6 +86,8 @@ export class UserRepository {
   ): Promise<{ items: User[]; total: number }> {
     const base = this.table(trx);
     const applyFilters = (qb: Knex.QueryBuilder<UserRow>): Knex.QueryBuilder<UserRow> => {
+      // The deleted-accounts placeholder is never a manageable user.
+      qb.whereNot('id', DELETED_USER_ID);
       if (filter.status) qb.where('status', filter.status);
       if (filter.veterinarianStatus) qb.where('veterinarian_status', filter.veterinarianStatus);
       if (filter.search) {

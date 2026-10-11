@@ -155,6 +155,14 @@ export const ErrorCode = {
    */
   AD_CAMPAIGN_NOT_ACTIVATABLE: 'AD_CAMPAIGN_NOT_ACTIVATABLE',
 
+  // --- Admin user management ---
+  /**
+   * `DELETE /admin/users/:id` refused (409). `details[0].rule` is
+   * `PROTECTED_ACCOUNT`, `ADMIN_ACCOUNT` or `OWNS_ORGANIZATIONS`; the message
+   * names the exact reason (e.g. which organizations must be transferred).
+   */
+  USER_DELETE_BLOCKED: 'USER_DELETE_BLOCKED',
+
   // --- Notifications & FCM (Phase 15) ---
   /** Admin broadcast would target more users than the synchronous limit allows. */
   BROADCAST_TOO_LARGE: 'BROADCAST_TOO_LARGE',

@@ -87,6 +87,8 @@ export const createAnnouncementBodySchema = z
     title: z.string().trim().min(3).max(SYNDICATE_TITLE_MAX),
     body: z.string().trim().min(3).max(SYNDICATE_BODY_MAX),
     imageStorageKey: z.string().trim().min(1).max(1024).nullish(),
+    /** Optional external link — http(s) only; `''`/`null` clears it on update. */
+    linkUrl: z.preprocess((v) => (v === '' ? null : v), linkUrlSchema.nullish()),
   })
   .strict();
 export type CreateAnnouncementBody = z.infer<typeof createAnnouncementBodySchema>;

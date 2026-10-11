@@ -12,6 +12,7 @@ import type { OrganizationService } from '../organizations/application/organizat
 import type { VeterinarianService } from '../veterinarians/veterinarian.service.js';
 import { requireAuth } from '../auth/authenticate.middleware.js';
 import type { RbacService } from '../rbac/rbac.service.js';
+import type { UserDeletionService } from './user-deletion.service.js';
 import type { UserService } from './user.service.js';
 import type {
   AdminMessageUserBody,
@@ -33,6 +34,7 @@ export class AdminUsersController {
     private readonly organizations: OrganizationService,
     private readonly support: SupportThreadService,
     private readonly authz: AuthorizationService,
+    private readonly deletion: UserDeletionService,
   ) {}
 
   private actor(req: Request): { actorUserId: string; context: AuditContextResult } {
@@ -65,6 +67,11 @@ export class AdminUsersController {
    * `veterinarian.read`, metadata only otherwise) and the organizations the user
    * is an ACTIVE member of (id/name/type/status/role — no org internals).
    */
+  remove = async (req: Request, res: Response): Promise<void> => {
+    const { id } = validatedParams<{ id: string }>(req);
+    sendSuccess(res, await this.deletion.deleteUser(id, this.actor(req)));
+  };
+
   get = async (req: Request, res: Response): Promise<void> => {
     const { id } = validatedParams<{ id: string }>(req);
     const user = await this.users.getById(id);

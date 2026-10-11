@@ -87,6 +87,12 @@ export function createInfrastructure(deps: InfrastructureDeps): Infrastructure {
     });
   });
 
+  // A permanently deleted account must lose any socket it still has open.
+  const unsubscribeUserDeleted = eventBus.subscribe('user.deleted', (event) => {
+    const userId = (event.payload as { userId?: unknown }).userId;
+    if (typeof userId === 'string') realtime.disconnectUser(userId);
+  });
+
   return {
     realtime,
     realtimeBridge,
@@ -98,6 +104,7 @@ export function createInfrastructure(deps: InfrastructureDeps): Infrastructure {
     },
     async shutdown(): Promise<void> {
       unsubscribeMemberRemoved();
+      unsubscribeUserDeleted();
       realtimeBridge.stop();
       pushBridge.stop();
       await realtime.close();
