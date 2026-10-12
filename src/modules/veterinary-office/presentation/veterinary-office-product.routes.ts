@@ -89,6 +89,20 @@ export function createVeterinaryOfficeProductRouter(c: Container): Router {
     activeSubscription,
     asyncHandler(ctrl.create),
   );
+  // Cover image for the "add product" form, uploaded before the product exists;
+  // its key is then sent as `image` in the create body.
+  r.post(
+    `${base}/images/upload-url`,
+    validate({
+      params: veterinaryOfficeIdParamSchema,
+      body: veterinaryOfficeProductImageUploadUrlBodySchema,
+    }),
+    withOrganization,
+    withVeterinaryOffice,
+    authorizeOrg('product.create'),
+    activeSubscription,
+    asyncHandler(ctrl.requestNewProductImageUploadUrl),
+  );
   r.get(
     `${base}/:productId`,
     validate({ params: veterinaryOfficeProductParamSchema }),
@@ -163,6 +177,34 @@ export function createVeterinaryOfficeProductRouter(c: Container): Router {
     activeSubscription,
     withVeterinaryOfficeProduct,
     asyncHandler(ctrl.addImage),
+  );
+  // Replace = upload first (own presign: not counted against the gallery cap),
+  // then swap atomically; the old object is deleted only after the commit.
+  r.post(
+    `${base}/:productId/images/:imageId/upload-url`,
+    validate({
+      params: veterinaryOfficeProductImageParamSchema,
+      body: veterinaryOfficeProductImageUploadUrlBodySchema,
+    }),
+    withOrganization,
+    withVeterinaryOffice,
+    authorizeOrg('product.update'),
+    activeSubscription,
+    withVeterinaryOfficeProduct,
+    asyncHandler(ctrl.requestReplaceImageUploadUrl),
+  );
+  r.put(
+    `${base}/:productId/images/:imageId`,
+    validate({
+      params: veterinaryOfficeProductImageParamSchema,
+      body: finalizeVeterinaryOfficeProductImageBodySchema,
+    }),
+    withOrganization,
+    withVeterinaryOffice,
+    authorizeOrg('product.update'),
+    activeSubscription,
+    withVeterinaryOfficeProduct,
+    asyncHandler(ctrl.replaceImage),
   );
   r.delete(
     `${base}/:productId/images/:imageId`,

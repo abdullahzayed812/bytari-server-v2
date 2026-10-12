@@ -6,6 +6,7 @@ import { BadRequestError, ConflictError, NotFoundError } from '../../../shared/e
 import { ErrorCode } from '../../../shared/errors/error-codes.js';
 import type { EventBus } from '../../../shared/events/index.js';
 import { resolveStorageUrlOrNull } from '../../../shared/storage/media-url.js';
+import { deleteReplacedObjects } from '../../../shared/storage/replaced-objects.js';
 import { AuditAction, AuditEntityType, type AuditContext } from '../../audit/audit.types.js';
 import type { AuditService } from '../../audit/audit.service.js';
 import type { OrganizationRepository } from '../../organizations/infrastructure/organization.repository.js';
@@ -88,8 +89,12 @@ export class VeterinaryOfficeProductService {
     actor: VeterinaryOfficeActor,
   ): Promise<VeterinaryOfficeProductDTO> {
     VeterinaryOfficeProductPolicy.assertVeterinaryOffice(org);
+    // A cover uploaded before the product existed: validated up front, so a
+    // bad key never leaves a half-created product behind.
+    const image = input.image;
+    if (image) await this.assertAttachableUpload(image.storageKey, image.mimeType);
 
-    const product = await this.db.transaction(async (tx) => {
+    const createInTx = this.db.transaction(async (tx) => {
       const created = await this.products.create(
         {
           organizationId: org.id,
@@ -111,19 +116,42 @@ export class VeterinaryOfficeProductService {
         },
         tx,
       );
+      let result = created;
+      if (image) {
+        await this.products.addImage(created.id, image.storageKey, 0, tx);
+        result = await this.products.update(created.id, { primaryImageKey: image.storageKey }, tx);
+      }
       await this.audit.record(
         {
           action: AuditAction.VETERINARY_OFFICE_PRODUCT_CREATED,
           entityType: AuditEntityType.VETERINARY_OFFICE_PRODUCT,
           entityId: created.id,
           actorUserId: actor.actorUserId,
-          metadata: { organizationId: org.id, productId: created.id },
+          metadata: {
+            organizationId: org.id,
+            productId: created.id,
+            ...(image ? { storageKey: image.storageKey } : {}),
+          },
           context: actor.context,
         },
         tx,
       );
-      return created;
+      return result;
     });
+
+    let product: VeterinaryOfficeProduct;
+    try {
+      product = await createInTx;
+    } catch (err) {
+      // Nothing references the fresh upload after the rollback — drop it.
+      if (image) {
+        await deleteReplacedObjects(this.storage, this.log, [image.storageKey], [], {
+          organizationId: org.id,
+          op: 'create-rollback',
+        });
+      }
+      throw err;
+    }
 
     // → NotificationPolicy notifies the office's followers.
     this.events.publish('veterinary_office.product.created', {
@@ -358,23 +386,48 @@ export class VeterinaryOfficeProductService {
 
   // --- images -------------------------------------------------------
 
+  /**
+   * Presigned upload for an EXISTING product's gallery. `forReplace` skips the
+   * gallery-size cap — a replacement swaps an image, it does not add one.
+   */
   async requestImageUploadUrl(
     organizationId: string,
     productId: string,
     input: VeterinaryOfficeProductImageUploadUrlInput,
+    options: { forReplace?: boolean } = {},
   ): Promise<VeterinaryOfficeProductImageUploadUrlResult> {
     const product = await this.products.findByIdForOrganization(productId, organizationId);
     if (!product) throw new NotFoundError('Product not found');
     this.assertUploadInput(input);
 
-    const existing = await this.products.listImages(productId);
-    if (existing.length >= VETERINARY_OFFICE_MAX_PRODUCT_IMAGES) {
-      throw new ConflictError(
-        `a product may have at most ${VETERINARY_OFFICE_MAX_PRODUCT_IMAGES} images`,
-        { code: ErrorCode.CONFLICT },
-      );
+    if (!options.forReplace) {
+      const existing = await this.products.listImages(productId);
+      if (existing.length >= VETERINARY_OFFICE_MAX_PRODUCT_IMAGES) {
+        throw new ConflictError(
+          `a product may have at most ${VETERINARY_OFFICE_MAX_PRODUCT_IMAGES} images`,
+          { code: ErrorCode.CONFLICT },
+        );
+      }
     }
+    return this.presignProductImage(input);
+  }
 
+  /**
+   * Presigned upload for a product that does not exist yet (the "add product"
+   * form). The object stays unattached until `create` receives its key.
+   */
+  async requestNewProductImageUploadUrl(
+    org: OrgRef,
+    input: VeterinaryOfficeProductImageUploadUrlInput,
+  ): Promise<VeterinaryOfficeProductImageUploadUrlResult> {
+    VeterinaryOfficeProductPolicy.assertVeterinaryOffice(org);
+    this.assertUploadInput(input);
+    return this.presignProductImage(input);
+  }
+
+  private async presignProductImage(
+    input: VeterinaryOfficeProductImageUploadUrlInput,
+  ): Promise<VeterinaryOfficeProductImageUploadUrlResult> {
     const storageKey = buildObjectKey(StoragePrefix.veterinaryOfficeProductImages, input.filename);
     const uploadUrl = await this.storage.getSignedUrl(storageKey, {
       operation: 'put',
@@ -398,7 +451,7 @@ export class VeterinaryOfficeProductService {
   ): Promise<VeterinaryOfficeProductDTO> {
     const product = await this.products.findByIdForOrganization(productId, organizationId);
     if (!product) throw new NotFoundError('Product not found');
-    await this.assertUploadedObject(input.storageKey, input.mimeType);
+    await this.assertAttachableUpload(input.storageKey, input.mimeType);
 
     const updated = await this.db.transaction(async (tx) => {
       const sortOrder = await this.products.nextImageSortOrder(productId, tx);
@@ -421,6 +474,65 @@ export class VeterinaryOfficeProductService {
       return result;
     });
 
+    return this.toDTO(updated);
+  }
+
+  /**
+   * Swap one gallery image for a freshly uploaded object (same row id and
+   * position; the cover follows when it was the cover). The client uploads
+   * FIRST — a failed upload never reaches this call, so the current image is
+   * untouched. The new object is validated before anything changes, the swap
+   * commits atomically, and only then is the old object deleted — best
+   * effort, and only when no product references it any more.
+   */
+  async replaceImage(
+    organizationId: string,
+    productId: string,
+    imageId: string,
+    actor: VeterinaryOfficeActor,
+    input: { storageKey: string; mimeType: string },
+  ): Promise<VeterinaryOfficeProductDTO> {
+    const product = await this.products.findByIdForOrganization(productId, organizationId);
+    if (!product) throw new NotFoundError('Product not found');
+    const image = await this.products.findImage(productId, imageId);
+    if (!image) throw new NotFoundError('Image not found');
+    const previousKey = image.image_key;
+    if (input.storageKey === previousKey) return this.toDTO(product);
+    await this.assertAttachableUpload(input.storageKey, input.mimeType);
+
+    const updated = await this.db.transaction(async (tx) => {
+      await this.products.setImageKey(imageId, input.storageKey, tx);
+      let result = product;
+      if (product.primaryImageKey === previousKey) {
+        result = await this.products.update(productId, { primaryImageKey: input.storageKey }, tx);
+      }
+      await this.audit.record(
+        {
+          action: AuditAction.VETERINARY_OFFICE_PRODUCT_IMAGE_UPDATED,
+          entityType: AuditEntityType.VETERINARY_OFFICE_PRODUCT,
+          entityId: productId,
+          actorUserId: actor.actorUserId,
+          metadata: {
+            organizationId,
+            productId,
+            imageId,
+            storageKey: input.storageKey,
+            op: 'replaced',
+          },
+          context: actor.context,
+        },
+        tx,
+      );
+      return result;
+    });
+
+    if (!(await this.products.isImageKeyReferenced(previousKey))) {
+      await deleteReplacedObjects(this.storage, this.log, [previousKey], [input.storageKey], {
+        organizationId,
+        productId,
+        imageId,
+      });
+    }
     return this.toDTO(updated);
   }
 
@@ -491,6 +603,20 @@ export class VeterinaryOfficeProductService {
     }
   }
 
+  /**
+   * A finished upload may be attached only once: re-using a key another
+   * product (or image row) already points at would let a later replace /
+   * remove delete an object that is still in use.
+   */
+  private async assertAttachableUpload(storageKey: string, mimeType: string): Promise<void> {
+    await this.assertUploadedObject(storageKey, mimeType);
+    if (await this.products.isImageKeyReferenced(storageKey)) {
+      throw new ConflictError('that upload is already attached to a product', {
+        code: ErrorCode.STORAGE_KEY_MISMATCH,
+      });
+    }
+  }
+
   private async assertUploadedObject(storageKey: string, mimeType: string): Promise<void> {
     if (!storageKey.startsWith(`${StoragePrefix.veterinaryOfficeProductImages}/`)) {
       throw new ConflictError('storage key does not belong to product uploads', {
@@ -524,6 +650,7 @@ export class VeterinaryOfficeProductService {
         url:
           (await resolveVeterinaryOfficeProductImageUrlOrNull(this.storage, img.image_key)) ?? '',
         sortOrder: img.sort_order,
+        isPrimary: img.image_key === p.primaryImageKey,
       })),
     );
     return {

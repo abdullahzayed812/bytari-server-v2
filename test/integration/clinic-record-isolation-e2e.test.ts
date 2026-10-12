@@ -19,8 +19,9 @@ import {
  *   Owner owns Pet A → Clinic A opens it by its short ID → adds a vaccination,
  *   a reminder and a private record → owner is notified for the owner-visible
  *   items only → owner sees vaccination + reminder (read-only), never the
- *   record → Clinic A edits / deletes its own → Clinic B sees none of it and
- *   does not list Pet A.
+ *   record → Clinic A edits / deletes its own → Clinic B sees the shared
+ *   vaccination + reminder anonymised (read-only), never the record, and does
+ *   not list Pet A.
  */
 const { app, container } = buildTestApp();
 const API = '/api/v1';
@@ -134,30 +135,56 @@ describe('clinic record isolation — end-to-end scenario', () => {
       await getTestDb()('animal_reminders').where({ id: rem.body.data.id }).first(),
     ).toBeDefined();
 
-    // --- Clinic B: cannot read / change any of Clinic A's data, does not list Pet A ---
+    // --- Clinic B: sees the SHARED vaccination + reminder (anonymised, read-only),
+    // never the private record; does not list Pet A ---
     const b = `${API}/organizations/${clinicB.id}/animals/${petA.id}`;
     const asB = (req: request.Test) => req.set(bearer(ownerB.accessToken));
-    for (const path of ['/medical-records', '/vaccinations', '/reminders', '/medical-history']) {
-      const res = await asB(request(app).get(`${b}${path}`));
-      expect(res.status).toBe(200);
-      expect(res.body.data).toEqual([]);
-    }
+    const anonymous = { organizationId: null, recordedByUserId: null };
+    const bVax = await asB(request(app).get(`${b}/vaccinations`));
+    expect(bVax.body.data).toEqual([
+      expect.objectContaining({ id: vax.body.data.id, vaccineName: 'Rabies', ...anonymous }),
+    ]);
+    const bRem = await asB(request(app).get(`${b}/reminders`));
+    expect(bRem.body.data).toEqual([
+      expect.objectContaining({ id: rem.body.data.id, title: 'Booster', ...anonymous }),
+    ]);
+    expect(
+      (await asB(request(app).get(`${b}/vaccinations/${vax.body.data.id}`))).body.data,
+    ).toMatchObject(anonymous);
+    expect(
+      (await asB(request(app).get(`${b}/reminders/${rem.body.data.id}`))).body.data,
+    ).toMatchObject(anonymous);
+    const bHistory = await asB(request(app).get(`${b}/medical-history`));
+    expect(bHistory.body.data.map((e: { type: string }) => e.type)).toEqual(['VACCINATION']);
+    expect((await asB(request(app).get(`${b}/medical-records`))).body.data).toEqual([]);
+    const bSharedJson = JSON.stringify([bVax.body, bRem.body, bHistory.body]);
+    expect(bSharedJson).not.toContain(clinicA.id);
+    expect(bSharedJson).not.toContain(vetA.id);
+    expect(bSharedJson).not.toMatch(/PRIVATE-/);
+    // Private records stay hidden behind a 404…
     for (const req of [
       request(app).get(`${b}/medical-records/${rec.body.data.id}`),
       request(app).patch(`${b}/medical-records/${rec.body.data.id}`).send({ diagnosis: 'x' }),
       request(app).delete(`${b}/medical-records/${rec.body.data.id}`),
-      request(app).get(`${b}/vaccinations/${vax.body.data.id}`),
-      request(app).patch(`${b}/vaccinations/${vax.body.data.id}`).send({ notes: 'x' }),
-      request(app).delete(`${b}/vaccinations/${vax.body.data.id}`),
-      request(app).get(`${b}/reminders/${rem.body.data.id}`),
-      request(app).patch(`${b}/reminders/${rem.body.data.id}`).send({ title: 'x' }),
-      request(app).delete(`${b}/reminders/${rem.body.data.id}`),
-      // Even pointing Clinic A's record id at Clinic B's URL for another path shape.
-      request(app).post(`${b}/reminders/${rem.body.data.id}/notify`),
-      request(app).post(`${b}/vaccinations/${vax.body.data.id}/notify`),
     ]) {
       expect((await asB(req)).status).toBe(404);
     }
+    // …shared items are visible but only the creating clinic may change them.
+    for (const req of [
+      request(app).patch(`${b}/vaccinations/${vax.body.data.id}`).send({ notes: 'x' }),
+      request(app).delete(`${b}/vaccinations/${vax.body.data.id}`),
+      request(app).patch(`${b}/reminders/${rem.body.data.id}`).send({ title: 'x' }),
+      request(app).delete(`${b}/reminders/${rem.body.data.id}`),
+      request(app).post(`${b}/reminders/${rem.body.data.id}/notify`),
+      request(app).post(`${b}/vaccinations/${vax.body.data.id}/notify`),
+    ]) {
+      const res = await asB(req);
+      expect(res.status).toBe(403);
+      expect(res.body.error.code).toBe('CLINIC_RECORD_NOT_OWNED');
+    }
+    expect(await getTestDb()('vaccinations').where({ id: vax.body.data.id }).first()).toMatchObject(
+      { notes: null },
+    );
     // Not a member of Clinic A at all.
     expect((await asB(request(app).get(`${a}/medical-records`))).status).toBe(403);
     const listB = await asB(request(app).get(`${API}/organizations/${clinicB.id}/clinic-pets`));
@@ -174,6 +201,11 @@ describe('clinic record isolation — end-to-end scenario', () => {
     const profileB = await asB(request(app).get(b));
     expect(profileB.body.data.relationship).toBeNull();
     expect(JSON.stringify(profileB.body)).not.toMatch(/PRIVATE-|Rabies|Booster/);
+    // Its pet-file stats count the shared vaccination, but not A's private record.
+    expect(profileB.body.data.stats).toMatchObject({
+      vaccinationsCount: 1,
+      medicalRecordsCount: 0,
+    });
 
     // --- Clinic A: Recent / All Pets contain Pet A; edits + deletes its own rows ---
     const listA = await request(app)

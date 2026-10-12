@@ -10,6 +10,7 @@ import type { AnimalRepository } from '../../animals/infrastructure/animal.repos
 import type { VaccinationStatus } from '../domain/veterinary-care.constants.js';
 import { VeterinaryCarePolicy } from '../domain/veterinary-care.policy.js';
 import {
+  redactForClinic,
   toOwnerVaccinationDTO,
   toVaccinationDTO,
   type ClinicListAnimalSummary,
@@ -18,6 +19,7 @@ import {
   type CreateVaccinationInput,
   type ListVaccinationsFilter,
   type UpdateVaccinationInput,
+  type Vaccination,
   type VaccinationDTO,
 } from '../domain/veterinary-care.types.js';
 import type { VaccinationRepository } from '../infrastructure/vaccination.repository.js';
@@ -42,10 +44,13 @@ function defaultStatus(nextDueOn: string | null | undefined): VaccinationStatus 
 }
 
 /**
- * Vaccinations. Clinic side: same isolation as {@link MedicalRecordService} —
- * a clinic reads / changes only its own. Owner side: OWNER-VISIBLE, read-only —
- * the current owner reads every clinic's vaccinations for the pet but can
- * never change one (no owner write route exists).
+ * Vaccinations — SHARED across clinics (unlike clinic-private medical
+ * records). Clinic side: every clinic that opens the pet reads all of its
+ * vaccinations, but another clinic's (or a detached) one carries no clinic /
+ * vet identity ({@link redactForClinic}); only the creating clinic may
+ * update, delete or notify about it (403 `CLINIC_RECORD_NOT_OWNED`). The
+ * clinic-wide "التطعيمات" work list stays this clinic's own. Owner side:
+ * OWNER-VISIBLE, read-only — no owner write route exists.
  */
 export class VaccinationService {
   private readonly log: Logger;
@@ -60,6 +65,24 @@ export class VaccinationService {
     logger: Logger,
   ) {
     this.log = logger.child({ component: 'vaccination-service' });
+  }
+
+  /** The animal's vaccination, any clinic's — 404 when it is not this animal's. */
+  private async mustExist(animalId: string, vaccinationId: string): Promise<Vaccination> {
+    const v = await this.vaccinations.findByIdForAnimal(vaccinationId, animalId);
+    if (!v) throw new NotFoundError('Vaccination not found');
+    return v;
+  }
+
+  /** …and was created by THIS clinic (403 otherwise). */
+  private async mustOwnInClinic(
+    organizationId: string,
+    animalId: string,
+    vaccinationId: string,
+  ): Promise<Vaccination> {
+    const v = await this.mustExist(animalId, vaccinationId);
+    VeterinaryCarePolicy.assertClinicOwnsSharedItem(v, organizationId);
+    return v;
   }
 
   async createForClinic(
@@ -115,23 +138,18 @@ export class VaccinationService {
     animalId: string,
     vaccinationId: string,
   ): Promise<VaccinationDTO> {
-    const v = await this.vaccinations.findByIdForAnimal(vaccinationId, animalId);
-    // Another clinic's vaccination is hidden behind the same 404.
-    if (!v || v.organizationId !== organizationId) throw new NotFoundError('Vaccination not found');
-    return toVaccinationDTO(v);
+    const v = await this.mustExist(animalId, vaccinationId);
+    return redactForClinic(toVaccinationDTO(v), organizationId);
   }
 
-  /** This clinic's vaccinations for the animal — never another clinic's. */
+  /** Every clinic's vaccinations for the animal; other clinics' are anonymised. */
   async listForClinic(
     organizationId: string,
     animalId: string,
     filter: ListVaccinationsFilter,
   ): Promise<{ items: VaccinationDTO[]; total: number }> {
-    const { items, total } = await this.vaccinations.listForAnimal(animalId, {
-      ...filter,
-      organizationId,
-    });
-    return { items: items.map(toVaccinationDTO), total };
+    const { items, total } = await this.vaccinations.listForAnimal(animalId, filter);
+    return { items: items.map((v) => redactForClinic(toVaccinationDTO(v), organizationId)), total };
   }
 
   async updateForClinic(
@@ -141,10 +159,7 @@ export class VaccinationService {
     patch: UpdateVaccinationInput,
     actor: VetCareActor,
   ): Promise<VaccinationDTO> {
-    const existing = await this.vaccinations.findByIdForAnimal(vaccinationId, animalId);
-    if (!existing || existing.organizationId !== organizationId) {
-      throw new NotFoundError('Vaccination not found');
-    }
+    const existing = await this.mustOwnInClinic(organizationId, animalId, vaccinationId);
     const animal = await this.animals.findById(animalId);
     if (!animal) throw new InternalError('animal missing for an existing vaccination');
     VeterinaryCarePolicy.assertAnimalActive(animal);
@@ -198,10 +213,7 @@ export class VaccinationService {
     vaccinationId: string,
     actor: VetCareActor,
   ): Promise<void> {
-    const existing = await this.vaccinations.findByIdForAnimal(vaccinationId, animalId);
-    if (!existing || existing.organizationId !== organizationId) {
-      throw new NotFoundError('Vaccination not found');
-    }
+    await this.mustOwnInClinic(organizationId, animalId, vaccinationId);
 
     await this.db.transaction(async (tx) => {
       const deleted = await this.vaccinations.deleteById(vaccinationId, tx);
@@ -257,10 +269,7 @@ export class VaccinationService {
     vaccinationId: string,
     actor: VetCareActor,
   ): Promise<{ notified: boolean }> {
-    const existing = await this.vaccinations.findByIdForAnimal(vaccinationId, animalId);
-    if (!existing || existing.organizationId !== organizationId) {
-      throw new NotFoundError('Vaccination not found');
-    }
+    await this.mustOwnInClinic(organizationId, animalId, vaccinationId);
     const petOwnerUserId = await this.ownerships.currentOwnerUserId(animalId);
     if (!petOwnerUserId) return { notified: false };
     await this.audit.record({

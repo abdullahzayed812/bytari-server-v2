@@ -7,13 +7,14 @@ import { AuditAction, AuditEntityType, type AuditContext } from '../../audit/aud
 import type { AuditService } from '../../audit/audit.service.js';
 import type { AnimalOwnershipRepository } from '../../animals/infrastructure/animal-ownership.repository.js';
 import { VeterinaryCarePolicy } from '../domain/veterinary-care.policy.js';
-import type {
-  AnimalReminderDTO,
-  ClinicListAnimalSummary,
-  ClinicListOwnerSummary,
-  ClinicReminderListStatus,
-  CreateReminderInput,
-  UpdateReminderInput,
+import {
+  redactForClinic,
+  type AnimalReminderDTO,
+  type ClinicListAnimalSummary,
+  type ClinicListOwnerSummary,
+  type ClinicReminderListStatus,
+  type CreateReminderInput,
+  type UpdateReminderInput,
 } from '../domain/veterinary-care.types.js';
 import type { AnimalReminderRepository } from '../infrastructure/animal-reminder.repository.js';
 
@@ -34,11 +35,13 @@ export interface ClinicReminderDTO {
 const TODAY_BATCH_CAP = 500;
 
 /**
- * Animal reminders (legacy `pet_reminders`). Clinic side: same isolation as
- * medical records — a clinic reads / changes only reminders IT created.
- * Owner side: OWNER-VISIBLE, read-only — the current owner reads every
- * clinic's reminders for the pet but cannot edit or delete them (only the
- * creating clinic can).
+ * Animal reminders (legacy `pet_reminders`) — SHARED across clinics, like
+ * vaccinations. Clinic side: every clinic that opens the pet reads all of its
+ * reminders, anonymised unless this clinic created them
+ * ({@link redactForClinic}); only the creating clinic may change, delete or
+ * notify about one (403 `CLINIC_RECORD_NOT_OWNED`). The clinic-wide
+ * "التذكيرات" work list stays this clinic's own. Owner side: OWNER-VISIBLE,
+ * read-only.
  */
 export class AnimalReminderService {
   private readonly log: Logger;
@@ -54,16 +57,21 @@ export class AnimalReminderService {
     this.log = logger.child({ component: 'animal-reminder-service' });
   }
 
+  /** The animal's reminder, any clinic's — 404 when it is not this animal's. */
+  private async mustExist(animalId: string, reminderId: string): Promise<AnimalReminderDTO> {
+    const existing = await this.reminders.findByIdForAnimal(reminderId, animalId);
+    if (!existing) throw new NotFoundError('Reminder not found');
+    return existing;
+  }
+
+  /** …and was created by THIS clinic (403 otherwise). */
   private async mustOwnInClinic(
     organizationId: string,
     animalId: string,
     reminderId: string,
   ): Promise<AnimalReminderDTO> {
-    const existing = await this.reminders.findByIdForAnimal(reminderId, animalId);
-    // Another clinic's reminder is hidden behind the same 404.
-    if (!existing || existing.organizationId !== organizationId) {
-      throw new NotFoundError('Reminder not found');
-    }
+    const existing = await this.mustExist(animalId, reminderId);
+    VeterinaryCarePolicy.assertClinicOwnsSharedItem(existing, organizationId);
     return existing;
   }
 
@@ -110,21 +118,22 @@ export class AnimalReminderService {
     return reminder;
   }
 
-  getForClinic(
+  async getForClinic(
     organizationId: string,
     animalId: string,
     reminderId: string,
   ): Promise<AnimalReminderDTO> {
-    return this.mustOwnInClinic(organizationId, animalId, reminderId);
+    return redactForClinic(await this.mustExist(animalId, reminderId), organizationId);
   }
 
-  /** This clinic's reminders for the animal — never another clinic's. */
-  listForClinic(
+  /** Every clinic's reminders for the animal; other clinics' are anonymised. */
+  async listForClinic(
     organizationId: string,
     animalId: string,
     filter: { page: number; pageSize: number },
   ): Promise<{ items: AnimalReminderDTO[]; total: number }> {
-    return this.reminders.listForAnimal(animalId, { ...filter, organizationId });
+    const { items, total } = await this.reminders.listForAnimal(animalId, filter);
+    return { items: items.map((r) => redactForClinic(r, organizationId)), total };
   }
 
   /** Owner view: every clinic's reminders for the pet (read-only). */

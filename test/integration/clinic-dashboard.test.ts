@@ -199,7 +199,7 @@ describe('clinic-visible animal profile', () => {
     expect(res.body.data).not.toHaveProperty('galleryKeys');
   });
 
-  it('stats are THIS clinic’s only — another clinic opening the same pet sees none of them', async () => {
+  it('record stats are THIS clinic’s only; vaccination stats cover the shared vaccinations', async () => {
     const { admin, vet, outsider, clinic, animal } = await setup();
     await createMedicalRecord(app, vet.accessToken, clinic.id, animal.id, {
       visitDate: '2026-02-01',
@@ -228,11 +228,12 @@ describe('clinic-visible animal profile', () => {
       .set(bearer(outsider.accessToken));
     expect(crossClinic.status).toBe(200);
     expect(crossClinic.body.data.relationship).toBeNull();
+    // Medical records are clinic-private; vaccinations are shared across clinics.
     expect(crossClinic.body.data.stats).toEqual({
       medicalRecordsCount: 0,
-      vaccinationsCount: 0,
+      vaccinationsCount: 1,
       lastVisitDate: null,
-      nextVaccinationDue: null,
+      nextVaccinationDue: '2099-01-01',
     });
     expect(JSON.stringify(crossClinic.body)).not.toContain('Clinic A private diagnosis');
 

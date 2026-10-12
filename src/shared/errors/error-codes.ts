@@ -185,6 +185,10 @@ export const ErrorCode = {
   /** The requested / proposed appointment date-time is not in the future. */
   CLINIC_APPOINTMENT_IN_PAST: 'CLINIC_APPOINTMENT_IN_PAST',
 
+  // --- Clinic records ---
+  /** A shared vaccination / reminder may only be changed by the clinic that created it. */
+  CLINIC_RECORD_NOT_OWNED: 'CLINIC_RECORD_NOT_OWNED',
+
   // --- Veterinary Services marketplace ---
   /** Moderation transition attempted on a listing / request that is not PENDING. */
   VET_SERVICE_NOT_PENDING: 'VET_SERVICE_NOT_PENDING',

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { dateTimeSchema } from '../../../shared/validation/date-only.js';
 import { paginationQuerySchema } from '../../../shared/http/pagination.js';
 import {
   AD_PLACEMENTS,
@@ -21,7 +22,8 @@ export const slideParamsSchema = z.object({
 
 const campaignTitle = z.string().trim().min(1).max(TITLE_MAX);
 const sortOrder = z.number().int();
-const isoDateTime = z.string().datetime({ offset: true });
+/** ISO-8601 instant with offset; month / day / hour may be unpadded (`2026-9-8T14:05Z`). */
+const isoDateTime = dateTimeSchema();
 
 /** `isActive` / slides / image / createdBy are server-controlled. */
 export const createCampaignBodySchema = z

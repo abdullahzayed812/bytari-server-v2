@@ -120,7 +120,7 @@ describe('vaccinations', () => {
     expect(strangerRead.status).toBe(404);
   });
 
-  it('another clinic sees none of this clinic’s vaccinations and cannot change them', async () => {
+  it('another clinic sees this clinic’s vaccinations anonymised but cannot change them', async () => {
     const { admin, vet, clinic, animal } = await setup();
     const v = await createVaccination(app, vet.accessToken, clinic.id, animal.id);
     const ownerB = await registerApprovedVet(app);
@@ -132,17 +132,33 @@ describe('vaccinations', () => {
       .get(vaxPath(clinicB.id, animal.id))
       .set(bearer(ownerB.accessToken));
     expect(list.status).toBe(200);
-    expect(list.body.data).toEqual([]);
+    expect(list.body.data).toEqual([
+      expect.objectContaining({ id: v.id, organizationId: null, recordedByUserId: null }),
+    ]);
+    const one = await request(app)
+      .get(vaxPath(clinicB.id, animal.id, v.id))
+      .set(bearer(ownerB.accessToken));
+    expect(one.status).toBe(200);
+    expect(one.body.data).toMatchObject({ organizationId: null, recordedByUserId: null });
     for (const req of [
-      request(app).get(vaxPath(clinicB.id, animal.id, v.id)),
       request(app)
         .patch(vaxPath(clinicB.id, animal.id, v.id))
         .send({ vaccineName: 'x' }),
       request(app).delete(vaxPath(clinicB.id, animal.id, v.id)),
       request(app).post(`${vaxPath(clinicB.id, animal.id, v.id)}/notify`),
     ]) {
-      expect((await req.set(bearer(ownerB.accessToken))).status).toBe(404);
+      const res = await req.set(bearer(ownerB.accessToken));
+      expect(res.status).toBe(403);
+      expect(res.body.error.code).toBe('CLINIC_RECORD_NOT_OWNED');
     }
+    expect(await getTestDb()('vaccinations').where({ id: v.id }).first()).toBeDefined();
+    // The creating clinic still sees its own identity on the row.
+    const mine = await request(app).get(vaxPath(clinic.id, animal.id)).set(bearer(vet.accessToken));
+    expect(mine.body.data[0]).toMatchObject({
+      organizationId: clinic.id,
+      recordedByUserId: vet.id,
+    });
+    // The clinic-wide work list stays per clinic.
     const clinicWide = await request(app)
       .get(`/api/v1/organizations/${clinicB.id}/clinic-vaccinations`)
       .set(bearer(ownerB.accessToken));

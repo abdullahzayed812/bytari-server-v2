@@ -51,6 +51,8 @@ export interface VeterinaryOfficeProductImageDTO {
   id: string;
   url: string;
   sortOrder: number;
+  /** This image is the product's cover (`primaryImageUrl`). */
+  isPrimary: boolean;
 }
 
 /**
@@ -95,6 +97,11 @@ export interface CreateVeterinaryOfficeProductInput extends VeterinaryOfficeProd
   price?: string | null;
   /** Opening stock. Optional; defaults to 0. Later changes go through the stock op. */
   stockQuantity?: number;
+  /**
+   * Image uploaded BEFORE the product exists (org-level presign) — attached
+   * as the first / primary image in the same transaction as the product.
+   */
+  image?: { storageKey: string; mimeType: string };
 }
 
 export interface UpdateVeterinaryOfficeProductInput extends VeterinaryOfficeProductDetailFieldsInput {

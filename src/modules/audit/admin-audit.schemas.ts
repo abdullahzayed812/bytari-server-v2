@@ -1,13 +1,15 @@
 import { z } from 'zod';
 import { paginationQuerySchema } from '../../shared/http/pagination.js';
+import { dateBoundSchema } from '../../shared/validation/date-only.js';
 
 export const listAuditQuerySchema = paginationQuerySchema.extend({
   action: z.string().max(64).optional(),
   entityType: z.string().max(64).optional(),
   entityId: z.string().uuid().optional(),
   actorUserId: z.string().uuid().optional(),
-  from: z.coerce.date().optional(),
-  to: z.coerce.date().optional(),
+  /** `YYYY-M-D` / `YYYY-MM-DD` (whole Baghdad day) or a full ISO date-time. */
+  from: dateBoundSchema('start').optional(),
+  to: dateBoundSchema('end').optional(),
 });
 export type ListAuditQuery = z.infer<typeof listAuditQuerySchema>;
 

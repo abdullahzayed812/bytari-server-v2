@@ -76,7 +76,8 @@ export interface ClinicDashboardSummary {
  * needs. Like the legacy clinic pet page it carries the CURRENT owner's name +
  * phone (needed to call the owner and to open the clinic ↔ owner chat). The
  * owner's private `notes`, `createdBy` and storage keys are never included,
- * and `stats` / `relationship` describe THIS clinic's own work only.
+ * and `relationship` / medical-record `stats` describe THIS clinic's own work only (vaccination
+ * stats cover the pet's shared vaccinations).
  */
 export interface ClinicAnimalDTO {
   id: string;

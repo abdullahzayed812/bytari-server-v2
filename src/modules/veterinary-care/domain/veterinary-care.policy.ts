@@ -1,4 +1,9 @@
-import { BadRequestError, ConflictError, NotFoundError } from '../../../shared/errors/app-error.js';
+import {
+  BadRequestError,
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+} from '../../../shared/errors/app-error.js';
 import { ErrorCode } from '../../../shared/errors/error-codes.js';
 import { VETERINARY_ORG_TYPES } from './veterinary-care.constants.js';
 
@@ -27,6 +32,24 @@ export const VeterinaryCarePolicy = {
    */
   assertRegisteredPet(animal: { listingOnly: boolean }): void {
     if (animal.listingOnly) throw new NotFoundError('Animal not found');
+  },
+
+  /**
+   * Shared vaccinations / reminders: every clinic may READ them, only the
+   * clinic that created them may change, delete or notify about them. Rows
+   * detached by "remove pet from clinic" (`organizationId` null) belong to
+   * no clinic any more and are read-only for everyone. A row of another
+   * animal is a plain 404 (IDOR guard is the caller's lookup).
+   */
+  assertClinicOwnsSharedItem(
+    item: { organizationId: string | null },
+    organizationId: string,
+  ): void {
+    if (item.organizationId !== organizationId) {
+      throw new ForbiddenError('Only the clinic that created this item can change it', {
+        code: ErrorCode.CLINIC_RECORD_NOT_OWNED,
+      });
+    }
   },
 
   /** Medical writes require the animal to be ACTIVE (mirrors AnimalPolicy). */

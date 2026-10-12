@@ -431,6 +431,25 @@ export class VeterinaryOfficeProductRepository {
     return row ?? null;
   }
 
+  /** Point an existing gallery row at a new object (replace keeps id + position). */
+  async setImageKey(imageId: string, imageKey: string, trx: Knex.Transaction): Promise<void> {
+    await trx(IMAGES).where({ id: imageId }).update({ image_key: imageKey });
+  }
+
+  /**
+   * Is this storage key referenced by ANY product (gallery row or cover)?
+   * Guards both directions of a replace: a new key must be unused, and an old
+   * object is only deleted once nothing points at it any more.
+   */
+  async isImageKeyReferenced(imageKey: string, trx?: Knex.Transaction): Promise<boolean> {
+    const conn = this.conn(trx);
+    const [inGallery, asPrimary] = await Promise.all([
+      conn(IMAGES).where({ image_key: imageKey }).first('id'),
+      conn(TABLE).where({ primary_image_key: imageKey }).first('id'),
+    ]);
+    return Boolean(inGallery || asPrimary);
+  }
+
   async deleteImage(imageId: string, trx: Knex.Transaction): Promise<void> {
     await trx(IMAGES).where({ id: imageId }).delete();
   }

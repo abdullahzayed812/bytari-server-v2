@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { dateTimeSchema } from '../../../shared/validation/date-only.js';
 import { paginationQuerySchema } from '../../../shared/http/pagination.js';
 import {
   CLINIC_APPOINTMENT_NOTE_MAX,
@@ -7,10 +8,8 @@ import {
   CLINIC_APPOINTMENT_VISIT_TYPES,
 } from '../domain/clinic-appointment.constants.js';
 
-const isoDateTime = z
-  .string()
-  .datetime({ offset: true })
-  .describe('ISO-8601 datetime with offset, e.g. 2026-09-08T14:05:00.000Z');
+/** ISO-8601 instant with offset; month / day / hour may be unpadded (`2026-9-8T14:05Z`). */
+const isoDateTime = dateTimeSchema();
 
 export const organizationIdParamSchema = z.object({ organizationId: z.string().uuid() });
 

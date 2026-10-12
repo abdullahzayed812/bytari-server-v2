@@ -298,6 +298,19 @@ export function toVaccinationDTO(v: Vaccination): VaccinationDTO {
 export function toOwnerVaccinationDTO(v: Vaccination): VaccinationDTO {
   return toVaccinationDTO(v);
 }
+/**
+ * Clinic-facing projection of a SHARED item (vaccination / reminder) for the
+ * clinic viewing it. Vaccinations and reminders are visible to every clinic
+ * that opens the pet, but only the creating clinic sees who recorded them:
+ * any other viewer (and every viewer of a row detached by "remove pet from
+ * clinic") gets `organizationId` / `recordedByUserId` = null.
+ */
+export function redactForClinic<
+  T extends { organizationId: string | null; recordedByUserId: string | null },
+>(item: T, viewerOrganizationId: string): T {
+  if (item.organizationId === viewerOrganizationId) return { ...item };
+  return { ...item, organizationId: null, recordedByUserId: null };
+}
 // --- reminders (legacy `pet_reminders`) ------------------------------
 
 export interface AnimalReminder {

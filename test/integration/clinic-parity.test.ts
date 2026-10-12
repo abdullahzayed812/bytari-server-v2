@@ -235,7 +235,7 @@ describe('vaccinations — status, clinic-wide list, notify owner', () => {
 });
 
 describe('reminders (legacy pet_reminders)', () => {
-  it('clinic CRUD + complete + clinic list; owner reads only; other clinics are isolated', async () => {
+  it('clinic CRUD + complete + clinic list; owner reads only; other clinics read anonymised, never write', async () => {
     const { vet, staff, clinic, otherClinic, otherOwner, animal, petOwner } = await setup();
     const today = businessToday();
 
@@ -275,22 +275,26 @@ describe('reminders (legacy pet_reminders)', () => {
     });
     expect(reschedule.body.data.completedAt).toEqual(expect.any(String));
 
-    // Another clinic sees none of this clinic's reminders and cannot touch them.
+    // Another clinic sees this clinic's reminders (shared, anonymised) but cannot touch them.
     await openClinicPet(app, otherOwner.accessToken, otherClinic.id, animal.publicCode);
     const cross = await request(app)
       .get(`${API}/organizations/${otherClinic.id}/animals/${animal.id}/reminders`)
       .set(bearer(otherOwner.accessToken));
     expect(cross.status).toBe(200);
-    expect(cross.body.data).toEqual([]);
+    expect(cross.body.data).toEqual([
+      expect.objectContaining({ id, organizationId: null, recordedByUserId: null }),
+    ]);
     const crossGet = await request(app)
       .get(`${API}/organizations/${otherClinic.id}/animals/${animal.id}/reminders/${id}`)
       .set(bearer(otherOwner.accessToken));
-    expect(crossGet.status).toBe(404);
+    expect(crossGet.status).toBe(200);
+    expect(crossGet.body.data).toMatchObject({ organizationId: null, recordedByUserId: null });
     const crossEdit = await request(app)
       .patch(`${API}/organizations/${otherClinic.id}/animals/${animal.id}/reminders/${id}`)
       .set(bearer(otherOwner.accessToken))
       .send({ title: 'x' });
-    expect(crossEdit.status).toBe(404);
+    expect(crossEdit.status).toBe(403);
+    expect(crossEdit.body.error.code).toBe('CLINIC_RECORD_NOT_OWNED');
 
     // STAFF cannot read reminders (no medical_record.read).
     const asStaff = await request(app)

@@ -1,6 +1,7 @@
 import type { Logger } from 'pino';
 import {
   medicalRecordToTimelineEntry,
+  redactForClinic,
   sortTimelineEntries,
   toMedicalRecordDTO,
   toOwnerVaccinationDTO,
@@ -24,7 +25,8 @@ export interface TimelineFilter {
  * Read-only composed view of an animal's medical history, merged newest-first.
  * No new storage. The two views differ by visibility, not just shape:
  *
- *  - CLINIC: `medical_records` ∪ `vaccinations` authored by THAT clinic only;
+ *  - CLINIC: `medical_records` authored by THAT clinic only ∪ every clinic's
+ *    `vaccinations` (shared; other clinics' anonymised);
  *  - OWNER:  `vaccinations` only (every clinic's) — medical records are
  *    clinic-private and never part of the owner's history.
  *
@@ -47,7 +49,7 @@ export class MedicalHistoryService {
     this.log = logger.child({ component: 'medical-history-service' });
   }
 
-  /** The clinic's OWN records + vaccinations for the animal. */
+  /** The clinic's OWN records + every clinic's (shared) vaccinations for the animal. */
   timelineForClinic(
     organizationId: string,
     animalId: string,
@@ -81,7 +83,7 @@ export class MedicalHistoryService {
         ? this.records.listForAnimal(animalId, { page: 1, pageSize: ceil, organizationId })
         : Promise.resolve({ items: [], total: 0 }),
       wantVaccinations
-        ? this.vaccinations.listForAnimal(animalId, { page: 1, pageSize: ceil, organizationId })
+        ? this.vaccinations.listForAnimal(animalId, { page: 1, pageSize: ceil })
         : Promise.resolve({ items: [], total: 0 }),
     ]);
 
@@ -92,7 +94,11 @@ export class MedicalHistoryService {
         ),
       )),
       ...vax.items.map((v) =>
-        vaccinationToTimelineEntry(ownerView ? toOwnerVaccinationDTO(v) : toVaccinationDTO(v)),
+        vaccinationToTimelineEntry(
+          organizationId
+            ? redactForClinic(toVaccinationDTO(v), organizationId)
+            : toOwnerVaccinationDTO(v),
+        ),
       ),
     ]);
 

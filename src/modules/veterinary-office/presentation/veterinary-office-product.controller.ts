@@ -92,6 +92,38 @@ export class VeterinaryOfficeProductController {
     sendSuccess(res, await this.products.requestImageUploadUrl(org.id, product.id, body));
   };
 
+  /** Presign for the "add product" form — the product does not exist yet. */
+  requestNewProductImageUploadUrl = async (req: Request, res: Response): Promise<void> => {
+    const org = requireOrganization(req);
+    const body = validatedBody<VeterinaryOfficeProductImageUploadUrlBody>(req);
+    sendSuccess(
+      res,
+      await this.products.requestNewProductImageUploadUrl({ id: org.id, type: org.type }, body),
+    );
+  };
+
+  /** Presign for replacing an existing image (not counted against the gallery cap). */
+  requestReplaceImageUploadUrl = async (req: Request, res: Response): Promise<void> => {
+    const org = requireOrganization(req);
+    const product = requireVeterinaryOfficeProduct(req);
+    const body = validatedBody<VeterinaryOfficeProductImageUploadUrlBody>(req);
+    sendSuccess(
+      res,
+      await this.products.requestImageUploadUrl(org.id, product.id, body, { forReplace: true }),
+    );
+  };
+
+  replaceImage = async (req: Request, res: Response): Promise<void> => {
+    const org = requireOrganization(req);
+    const product = requireVeterinaryOfficeProduct(req);
+    const { imageId } = validatedParams<{ imageId: string }>(req);
+    const body = validatedBody<FinalizeVeterinaryOfficeProductImageBody>(req);
+    sendSuccess(
+      res,
+      await this.products.replaceImage(org.id, product.id, imageId, this.actor(req), body),
+    );
+  };
+
   addImage = async (req: Request, res: Response): Promise<void> => {
     const org = requireOrganization(req);
     const product = requireVeterinaryOfficeProduct(req);

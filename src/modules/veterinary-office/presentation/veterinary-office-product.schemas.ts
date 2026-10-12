@@ -30,6 +30,17 @@ const detailFieldsShape = {
   highlights: highlightsSchema.optional(),
 };
 
+// --- images -------------------------------------------------------
+
+/** A finished direct-to-R2 upload being attached (add / replace / at create). */
+export const finalizeVeterinaryOfficeProductImageBodySchema = z.object({
+  storageKey: z.string().trim().min(1).max(1000),
+  mimeType: z.string().trim().min(1).max(100),
+});
+export type FinalizeVeterinaryOfficeProductImageBody = z.infer<
+  typeof finalizeVeterinaryOfficeProductImageBodySchema
+>;
+
 // --- create / update ------------------------------------------
 
 export const createVeterinaryOfficeProductBodySchema = z.object({
@@ -38,6 +49,8 @@ export const createVeterinaryOfficeProductBodySchema = z.object({
   productType: z.enum(VETERINARY_OFFICE_PRODUCT_TYPES),
   price: priceSchema.nullable().optional(),
   stockQuantity: stockSchema.optional(),
+  /** Optional cover image uploaded via the org-level `images/upload-url`. */
+  image: finalizeVeterinaryOfficeProductImageBodySchema.optional(),
   ...detailFieldsShape,
 });
 export type CreateVeterinaryOfficeProductBody = z.infer<
@@ -59,8 +72,6 @@ export type UpdateVeterinaryOfficeProductBody = z.infer<
   typeof updateVeterinaryOfficeProductBodySchema
 >;
 
-// --- images -------------------------------------------------------
-
 export const veterinaryOfficeProductImageUploadUrlBodySchema = z.object({
   filename: z.string().trim().min(1).max(255),
   mimeType: z.string().trim().min(1).max(100),
@@ -68,14 +79,6 @@ export const veterinaryOfficeProductImageUploadUrlBodySchema = z.object({
 });
 export type VeterinaryOfficeProductImageUploadUrlBody = z.infer<
   typeof veterinaryOfficeProductImageUploadUrlBodySchema
->;
-
-export const finalizeVeterinaryOfficeProductImageBodySchema = z.object({
-  storageKey: z.string().trim().min(1).max(1000),
-  mimeType: z.string().trim().min(1).max(100),
-});
-export type FinalizeVeterinaryOfficeProductImageBody = z.infer<
-  typeof finalizeVeterinaryOfficeProductImageBodySchema
 >;
 
 export const veterinaryOfficeProductImageParamSchema = z.object({

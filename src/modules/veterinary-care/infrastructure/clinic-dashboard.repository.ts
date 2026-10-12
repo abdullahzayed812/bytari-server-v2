@@ -190,18 +190,21 @@ export class ClinicDashboardRepository {
     };
   }
 
-  /** Summary of THIS clinic's own records for the animal — never another clinic's. */
+  /**
+   * The animal's summary for this clinic: medical records are THIS clinic's
+   * own (private); vaccinations are every clinic's (shared — same set as the
+   * clinic's vaccination list).
+   */
   async animalStats(organizationId: string, animalId: string): Promise<ClinicAnimalStats> {
-    const scope = { organization_id: organizationId, animal_id: animalId };
     const [records, vaccinations] = await Promise.all([
       this.db('medical_records')
-        .where(scope)
+        .where({ organization_id: organizationId, animal_id: animalId })
         .first<{ count: string; last_visit: string | null }>(
           this.db.raw('count(*) as count'),
           this.db.raw('max(visit_date)::text as last_visit'),
         ),
       this.db('vaccinations')
-        .where(scope)
+        .where({ animal_id: animalId })
         .first<{ count: string; next_due: string | null }>(
           this.db.raw('count(*) as count'),
           this.db.raw('min(next_due_on) FILTER (WHERE next_due_on >= ?::date)::text as next_due', [

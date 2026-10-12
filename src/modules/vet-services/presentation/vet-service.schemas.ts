@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { dateTimeSchema } from '../../../shared/validation/date-only.js';
 import { paginationQuerySchema } from '../../../shared/http/pagination.js';
 import {
   VET_SERVICE_ANIMAL_TYPES,
@@ -19,7 +20,8 @@ import { dateOnlySchema } from '../../../shared/validation/date-only.js';
 const money = z.string().regex(/^\d{1,10}(\.\d{1,2})?$/, 'invalid amount');
 const imageKeys = z.array(z.string().min(1)).max(VET_SERVICE_MAX_IMAGES).optional();
 const isoDate = dateOnlySchema();
-const isoDateTime = z.string().datetime({ offset: true });
+/** ISO-8601 instant with offset; month / day / hour may be unpadded (`2026-9-8T14:05Z`). */
+const isoDateTime = dateTimeSchema();
 
 export const idParamSchema = z.object({ id: z.string().uuid() });
 

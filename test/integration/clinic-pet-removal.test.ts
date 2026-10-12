@@ -113,16 +113,30 @@ describe('Clinic Dashboard — remove a pet from this clinic', () => {
       detached: { medicalRecords: 1, vaccinations: 1, reminders: 1 },
     });
 
-    // 5. Gone from Clinic A's Recent / All Pets (and its counts / pet file).
+    // 5. Gone from Clinic A's Recent / All Pets; its private record is gone from
+    // its pet file. The shared vaccination / reminder stay visible, anonymised and
+    // read-only (detached rows belong to no clinic any more).
     const listA = await asA(request(app).get(`${API}/organizations/${clinicA.id}/clinic-pets`));
     expect(listA.body.data).toEqual([]);
-    for (const path of ['/medical-records', '/vaccinations', '/reminders']) {
-      expect((await asA(request(app).get(`${a}${path}`))).body.data).toEqual([]);
-    }
+    expect((await asA(request(app).get(`${a}/medical-records`))).body.data).toEqual([]);
+    const aShared = (await asA(request(app).get(`${a}/vaccinations`))).body.data as Array<{
+      id: string;
+      organizationId: string | null;
+    }>;
+    expect(aShared.map((v) => v.id).sort()).toEqual([vax.body.data.id, vaxB.body.data.id].sort());
+    expect(aShared.every((v) => v.organizationId === null)).toBe(true);
+    expect((await asA(request(app).get(`${a}/reminders`))).body.data).toEqual([
+      expect.objectContaining({
+        id: rem.body.data.id,
+        organizationId: null,
+        recordedByUserId: null,
+      }),
+    ]);
     await asA(request(app).get(`${a}/medical-records/${rec.body.data.id}`)).expect(404);
     await asA(
       request(app).patch(`${a}/vaccinations/${vax.body.data.id}`).send({ notes: 'x' }),
-    ).expect(404);
+    ).expect(403);
+    await asA(request(app).delete(`${a}/reminders/${rem.body.data.id}`)).expect(403);
 
     // 6. The owner still owns and opens Pet X.
     const petRes = await ownerGet('').expect(200);
@@ -158,12 +172,19 @@ describe('Clinic Dashboard — remove a pet from this clinic', () => {
     // Clinic B (still attributed) remains on the owner's clinics tab.
     expect(surfaceJson).toContain('Clinic Beta');
 
-    // 8. + 12. Other clinics: unchanged — Clinic B keeps exactly its own data and
-    // (per the existing per-clinic isolation rule) still sees none of Clinic A's.
+    // 8. + 12. Other clinics: Clinic B keeps its own data (still attributed) and
+    // keeps seeing Clinic A's shared vaccination — without any creator identity.
     const bVax = (await asB(request(app).get(`${b}/vaccinations`))).body.data as Array<{
       id: string;
+      organizationId: string | null;
+      recordedByUserId: string | null;
     }>;
-    expect(bVax.map((v) => v.id)).toEqual([vaxB.body.data.id]);
+    expect(bVax.find((v) => v.id === vaxB.body.data.id)?.organizationId).toBe(clinicB.id);
+    expect(bVax.find((v) => v.id === vax.body.data.id)).toMatchObject({
+      organizationId: null,
+      recordedByUserId: null,
+    });
+    expect(JSON.stringify(bVax)).not.toContain(vetA.id);
     const listB = await asB(request(app).get(`${API}/organizations/${clinicB.id}/clinic-pets`));
     expect(listB.body.data.map((p: { animalId: string }) => p.animalId)).toEqual([pet.id]);
     expect(JSON.stringify((await asB(request(app).get(b))).body)).not.toMatch(/PRIVATE-/);
@@ -198,8 +219,12 @@ describe('Clinic Dashboard — remove a pet from this clinic', () => {
     // Only the new row is Clinic A's again — the archived ones stay detached.
     const aVax = (await asA(request(app).get(`${a}/vaccinations`))).body.data as Array<{
       id: string;
+      organizationId: string | null;
     }>;
-    expect(aVax.map((v) => v.id)).toEqual([vax2.body.data.id]);
+    expect(aVax.filter((v) => v.organizationId === clinicA.id).map((v) => v.id)).toEqual([
+      vax2.body.data.id,
+    ]);
+    expect(aVax).toHaveLength(3);
     expect(await getTestDb()('animals').where({ name: 'Pet X' })).toHaveLength(1);
   });
 
