@@ -150,7 +150,7 @@ describe('medical history timeline — clinic-facing', () => {
     expect(res.status).toBe(404);
   });
 
-  it('each clinic’s timeline holds ONLY its own entries', async () => {
+  it('records stay clinic-private; vaccinations are shared (other clinics’ anonymised)', async () => {
     const { admin, vet, clinic, animal } = await setup();
     await createMedicalRecord(app, vet.accessToken, clinic.id, animal.id, {
       visitDate: '2026-01-05',
@@ -175,14 +175,19 @@ describe('medical history timeline — clinic-facing', () => {
     expect(asB.body.meta.total).toBe(1);
     expect((asB.body.data as Array<{ type: string }>).map((e) => e.type)).toEqual(['VACCINATION']);
     expect(JSON.stringify(asB.body)).not.toContain('A-diag');
+    expect(asB.body.data[0]).toMatchObject({ organizationId: clinicB.id });
 
+    // A sees its own record + B's vaccination, with B's identity redacted.
     const asA = await request(app)
       .get(clinicHistory(clinic.id, animal.id))
       .set(bearer(vet.accessToken));
-    expect(asA.body.meta.total).toBe(1);
+    expect(asA.body.meta.total).toBe(2);
     expect((asA.body.data as Array<{ type: string }>).map((e) => e.type)).toEqual([
+      'VACCINATION',
       'MEDICAL_RECORD',
     ]);
+    expect(asA.body.data[0]).toMatchObject({ organizationId: null, recordedByUserId: null });
+    expect(JSON.stringify(asA.body)).not.toContain(clinicB.id);
   });
 
   it('lets an ADMIN read a clinic’s timeline (as that clinic)', async () => {
