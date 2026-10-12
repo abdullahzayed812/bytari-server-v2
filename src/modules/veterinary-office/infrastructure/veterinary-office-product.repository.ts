@@ -243,6 +243,8 @@ export class VeterinaryOfficeProductRepository {
     pageSize: number;
     search?: string;
     productType?: string;
+    brand?: string;
+    country?: string;
     sort?: 'name' | 'price' | 'createdAt';
     order?: 'asc' | 'desc';
   }): Promise<{ items: OfficeProductSearchRow[]; total: number }> {
@@ -261,6 +263,10 @@ export class VeterinaryOfficeProductRepository {
         .where('p.status', 'ACTIVE')
         .where('p.is_hidden', false);
       if (filter.productType) qb.andWhere('p.product_type', filter.productType);
+      if (filter.brand) qb.andWhereRaw('lower(p.brand) = ?', [filter.brand.toLowerCase()]);
+      if (filter.country) {
+        qb.andWhereRaw('lower(p.country_of_origin) = ?', [filter.country.toLowerCase()]);
+      }
       for (const term of searchTerms(filter.search)) {
         const like = `%${escapeLike(term)}%`;
         qb.andWhere((w) => {
@@ -350,7 +356,7 @@ export class VeterinaryOfficeProductRepository {
   /**
    * Distinct brands / countries of origin across every publicly browsable
    * office's ACTIVE, visible products (same visibility as
-   * {@link searchAcrossOffices}) — the offices list's product filter chips.
+   * {@link searchAcrossOffices}) — the cross-office search's filter chips.
    * Bounded to 200 values each.
    */
   async facetsAcrossOffices(): Promise<{ brands: string[]; countries: string[] }> {

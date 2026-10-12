@@ -11,15 +11,15 @@ import {
 } from '../helpers/factories.js';
 
 const { app } = buildTestApp();
-const DISCOVER = '/api/v1/organizations/discover';
+const SEARCH = '/api/v1/office-products/search';
 const FACETS = '/api/v1/office-products/facets';
 
 beforeAll(() => ensureSchema());
 beforeEach(() => resetDb());
 afterAll(() => closeTestDb());
 
-describe('Veterinary Offices list — filter by product brand / country of origin', () => {
-  it('lists only offices selling a matching public product, with cross-office facets', async () => {
+describe('cross-office product search — filter by brand / country of origin', () => {
+  it('returns only matching public products, with cross-office facets', async () => {
     const admin = await registerAdmin(app);
     const ownerA = await registerApprovedVet(app);
     const ownerB = await registerApprovedVet(app);
@@ -65,19 +65,33 @@ describe('Veterinary Offices list — filter by product brand / country of origi
       .where({ organization_id: expired.id })
       .update({ subscription_end_date: '2020-01-01' });
 
-    const ids = async (query: Record<string, string>) => {
+    const names = async (query: Record<string, string>) => {
       const res = await request(app)
-        .get(DISCOVER)
-        .query({ type: 'VETERINARY_OFFICE', ...query })
+        .get(SEARCH)
+        .query(query)
         .set(bearer(shopper.accessToken))
         .expect(200);
-      return (res.body.data as Array<{ id: string }>).map((o) => o.id).sort();
+      return (res.body.data as Array<{ product: { name: string } }>)
+        .map((h) => h.product.name)
+        .sort();
     };
 
-    expect(await ids({ productBrand: 'BAYER' })).toEqual([officeA.id]);
-    expect(await ids({ productCountry: 'أمريكا' })).toEqual([officeB.id]);
-    expect(await ids({ productBrand: 'Bayer', productCountry: 'أمريكا' })).toEqual([]);
-    expect(await ids({})).toEqual([officeA.id, officeB.id].sort());
+    // case-insensitive; hidden products and expired offices never match
+    expect(await names({ brand: 'BAYER' })).toEqual(['P1']);
+    expect(await names({ country: 'أمريكا' })).toEqual(['P2']);
+    expect(await names({ brand: 'Bayer', country: 'أمريكا' })).toEqual([]);
+    expect(await names({ brand: 'zoetis', search: 'P2' })).toEqual(['P2']);
+    expect(await names({})).toEqual(['P1', 'P2']);
+
+    // the offices list no longer filters by product brand / country (param ignored)
+    const offices = await request(app)
+      .get('/api/v1/organizations/discover')
+      .query({ type: 'VETERINARY_OFFICE', productBrand: 'Zoetis' })
+      .set(bearer(shopper.accessToken))
+      .expect(200);
+    expect((offices.body.data as Array<{ id: string }>).map((o) => o.id).sort()).toEqual(
+      [officeA.id, officeB.id].sort(),
+    );
 
     const facets = await request(app).get(FACETS).set(bearer(shopper.accessToken)).expect(200);
     // hidden products and expired offices contribute nothing

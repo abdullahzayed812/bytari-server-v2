@@ -115,13 +115,6 @@ export const discoverOrganizationsQuerySchema = paginationQuerySchema
     minRating: z.coerce.number().int().min(1).max(5).optional(),
     /** Case-insensitive match against one of the profile's listed services. */
     service: z.string().trim().min(1).max(100).optional(),
-    /**
-     * VETERINARY_OFFICE only: offices selling at least one public product of
-     * this brand / country of origin (case-insensitive exact match). Ignored
-     * for every other type.
-     */
-    productBrand: z.string().trim().min(1).max(100).optional(),
-    productCountry: z.string().trim().min(1).max(100).optional(),
   })
   .refine((v) => (v.lat === undefined) === (v.lng === undefined), {
     message: 'lat and lng must be provided together',

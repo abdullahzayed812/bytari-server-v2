@@ -29,7 +29,7 @@ const SUBJECT_ORG_TYPE: Record<Exclude<SubscriptionSubject, 'POULTRY_TRADER'>, s
 
 const SUBJECT_LABEL_AR: Record<SubscriptionSubject, string> = {
   CLINIC: 'عيادة بيطرية',
-  VETERINARY_OFFICE: 'مكتب بيطري',
+  VETERINARY_OFFICE: 'مكتب أو شركة بيطرية',
   POULTRY_FARM: 'حقل دواجن',
   SHEEP_FARM: 'حقل أغنام',
   CATTLE_FARM: 'حقل أبقار',

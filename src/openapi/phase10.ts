@@ -445,6 +445,18 @@ const paths: Obj = {
         { name: 'search', in: 'query', schema: { type: 'string', maxLength: 200 } },
         { name: 'type', in: 'query', schema: { type: 'string' } },
         {
+          name: 'brand',
+          in: 'query',
+          description: 'Case-insensitive exact match on the product brand.',
+          schema: { type: 'string', maxLength: 120 },
+        },
+        {
+          name: 'country',
+          in: 'query',
+          description: 'Case-insensitive exact match on the product country of origin.',
+          schema: { type: 'string', maxLength: 80 },
+        },
+        {
           name: 'sort',
           in: 'query',
           schema: { type: 'string', enum: ['name', 'price', 'createdAt'] },
@@ -497,8 +509,8 @@ const paths: Obj = {
       summary: 'Brands / countries of origin across every Veterinary Office',
       description:
         'Distinct values among public products (same visibility as /office-products/search) — ' +
-        'the Veterinary Offices list filter chips (`productBrand` / `productCountry` on ' +
-        '/organizations/discover).',
+        'the filter chips of the cross-office product search (`brand` / `country` on ' +
+        '/office-products/search).',
       security: [{ bearerAuth: [] }],
       responses: {
         '200': {

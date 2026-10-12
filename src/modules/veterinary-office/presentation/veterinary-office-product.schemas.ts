@@ -154,6 +154,9 @@ export const publicVeterinaryOfficeProductParamSchema = z.object({
 export const searchOfficeProductsQuerySchema = paginationQuerySchema.extend({
   search: z.string().trim().min(1).max(200).optional(),
   type: z.enum(VETERINARY_OFFICE_PRODUCT_TYPES).optional(),
+  /** Case-insensitive exact match on the product's brand / country of origin. */
+  brand: z.string().trim().min(1).max(120).optional(),
+  country: z.string().trim().min(1).max(80).optional(),
   sort: z.enum(['name', 'price', 'createdAt']).optional(),
   order: z.enum(['asc', 'desc']).optional(),
 });

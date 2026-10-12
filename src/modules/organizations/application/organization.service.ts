@@ -558,8 +558,6 @@ export class OrganizationService {
     country?: string;
     minRating?: number;
     service?: string;
-    productBrand?: string;
-    productCountry?: string;
     topRated?: boolean;
   }): Promise<{ items: PublicOrganizationDTO[]; total: number }> {
     if (filter.type && OrganizationPolicy.hasProfileFields(filter.type)) {
@@ -570,8 +568,6 @@ export class OrganizationService {
         country: filter.country,
         minRating: filter.minRating,
         service: filter.service,
-        productBrand: filter.productBrand,
-        productCountry: filter.productCountry,
         topRated: filter.topRated,
         page: filter.page,
         pageSize: filter.pageSize,

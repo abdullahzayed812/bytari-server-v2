@@ -283,7 +283,7 @@ export const NOTIFICATION_COPY: Record<NotificationType, { title: string; body: 
   },
   VETERINARY_OFFICE_PRODUCT_ADDED: {
     title: 'منتج جديد',
-    body: 'أضاف مكتب بيطري تتابعه منتجًا جديدًا.',
+    body: 'أضاف مكتب أو شركة بيطرية تتابعها منتجًا جديدًا.',
   },
 };
 

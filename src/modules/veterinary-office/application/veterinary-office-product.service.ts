@@ -205,6 +205,8 @@ export class VeterinaryOfficeProductService {
     pageSize: number;
     search?: string;
     productType?: VeterinaryOfficeProductType;
+    brand?: string;
+    country?: string;
     sort?: 'name' | 'price' | 'createdAt';
     order?: 'asc' | 'desc';
   }): Promise<{ items: OfficeProductSearchResultDTO[]; total: number }> {
@@ -242,7 +244,7 @@ export class VeterinaryOfficeProductService {
     return this.products.facetsForOrganization(organizationId);
   }
 
-  /** Brand / country-of-origin facets across every public office — the offices list filter. */
+  /** Brand / country-of-origin facets across every public office — the cross-office search filter. */
   facetsAcrossOffices(): Promise<{ brands: string[]; countries: string[] }> {
     return this.products.facetsAcrossOffices();
   }

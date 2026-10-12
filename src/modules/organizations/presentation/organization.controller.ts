@@ -95,8 +95,6 @@ export class OrganizationController {
       country: q.country,
       minRating: q.minRating,
       service: q.service,
-      productBrand: q.productBrand,
-      productCountry: q.productCountry,
       topRated: q.sort === 'top_rated',
     });
     const ratings = await this.engagement.getRatingsForOrganizations(items.map((i) => i.id));
