@@ -273,6 +273,25 @@ export interface WeeklySummary {
 // Farm expenses
 // =====================================================================
 
+/**
+ * Where an expense line comes from:
+ * - `MANUAL` — a `farm_expenses` row added in "المصاريف" (editable there);
+ * - `DAILY_RECORD` — the `expense_amount` of a poultry / sheep / cattle daily
+ *   record, surfaced read-only (it is edited through its daily record). It is
+ *   read straight from the daily record, never copied, so it can't be counted
+ *   twice.
+ */
+export type FarmExpenseSource = 'MANUAL' | 'DAILY_RECORD';
+export type FarmBatchKind = 'POULTRY' | 'SHEEP' | 'CATTLE';
+
+export interface FarmExpenseDailyRecordRef {
+  recordId: string;
+  batchKind: FarmBatchKind;
+  batchId: string;
+  batchName: string;
+  batchNumber: number | null;
+}
+
 export interface FarmExpense {
   id: string;
   organizationId: string;
@@ -284,6 +303,9 @@ export interface FarmExpense {
   createdByUserId: string | null;
   createdAt: string;
   updatedAt: string;
+  source: FarmExpenseSource;
+  /** Set only for `source = DAILY_RECORD`. */
+  dailyRecord: FarmExpenseDailyRecordRef | null;
 }
 
 export interface FarmExpenseRow {
@@ -297,9 +319,16 @@ export interface FarmExpenseRow {
   created_by_user_id: string | null;
   created_at: Date;
   updated_at: Date;
+  /** Present on the merged (manual + daily-record) list query only. */
+  source?: string;
+  batch_kind?: string | null;
+  batch_id?: string | null;
+  batch_name?: string | null;
+  batch_number?: number | string | null;
 }
 
 export function rowToFarmExpense(r: FarmExpenseRow): FarmExpense {
+  const fromDailyRecord = r.source === 'DAILY_RECORD';
   return {
     id: r.id,
     organizationId: r.organization_id,
@@ -311,6 +340,17 @@ export function rowToFarmExpense(r: FarmExpenseRow): FarmExpense {
     createdByUserId: r.created_by_user_id,
     createdAt: iso(r.created_at),
     updatedAt: iso(r.updated_at),
+    source: fromDailyRecord ? 'DAILY_RECORD' : 'MANUAL',
+    dailyRecord:
+      fromDailyRecord && r.batch_kind && r.batch_id
+        ? {
+            recordId: r.id,
+            batchKind: r.batch_kind as FarmBatchKind,
+            batchId: r.batch_id,
+            batchName: r.batch_name ?? '',
+            batchNumber: r.batch_number == null ? null : Number(r.batch_number),
+          }
+        : null,
   };
 }
 

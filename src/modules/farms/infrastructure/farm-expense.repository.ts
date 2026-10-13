@@ -10,6 +10,28 @@ import {
 
 const TABLE = 'farm_expenses';
 
+/** Daily-record tables whose `expense_amount` also belongs in "المصاريف". */
+const DAILY_EXPENSE_SOURCES = [
+  {
+    kind: 'POULTRY',
+    recordTable: 'poultry_daily_records',
+    batchTable: 'poultry_flocks',
+    batchColumn: 'poultry_flock_id',
+  },
+  {
+    kind: 'SHEEP',
+    recordTable: 'sheep_daily_records',
+    batchTable: 'sheep_batches',
+    batchColumn: 'sheep_batch_id',
+  },
+  {
+    kind: 'CATTLE',
+    recordTable: 'cattle_daily_records',
+    batchTable: 'cattle_batches',
+    batchColumn: 'cattle_batch_id',
+  },
+] as const;
+
 export class FarmExpenseRepository {
   constructor(private readonly db: Knex) {}
 
@@ -71,37 +93,123 @@ export class FarmExpenseRepository {
     return trx(TABLE).where({ id }).del();
   }
 
+  /**
+   * "المصاريف" list: manual `farm_expenses` rows merged with every daily record
+   * (poultry / sheep / cattle) that carries an `expense_amount`, newest first.
+   * Daily-record lines are read in place — never copied into `farm_expenses` —
+   * so each amount exists exactly once. A category filter shows manual rows
+   * only (daily records have no category); a flock filter keeps that flock's
+   * manual rows + its own daily records.
+   */
   async listForOrganization(
     organizationId: string,
     filter: ListFarmExpensesFilter,
   ): Promise<{ items: FarmExpense[]; total: number }> {
-    const base = (): Knex.QueryBuilder => {
-      const qb = this.db<FarmExpenseRow>(TABLE).where('organization_id', organizationId);
-      if (filter.category) qb.andWhere('category', filter.category);
-      if (filter.poultryFlockId) qb.andWhere('poultry_flock_id', filter.poultryFlockId);
-      if (filter.from) qb.andWhere('spent_on', '>=', filter.from);
-      if (filter.to) qb.andWhere('spent_on', '<=', filter.to);
-      return qb;
+    const merged = (): Knex.QueryBuilder => {
+      const manual = this.db<FarmExpenseRow>(`${TABLE} as e`)
+        .where('e.organization_id', organizationId)
+        .select(
+          'e.id',
+          'e.organization_id',
+          'e.poultry_flock_id',
+          'e.category',
+          'e.amount',
+          'e.description',
+          'e.spent_on',
+          'e.created_by_user_id',
+          'e.created_at',
+          'e.updated_at',
+          this.db.raw(`'MANUAL'::text AS source`),
+          this.db.raw('NULL::text AS batch_kind'),
+          this.db.raw('NULL::uuid AS batch_id'),
+          this.db.raw('NULL::text AS batch_name'),
+          this.db.raw('NULL::int AS batch_number'),
+        );
+      if (filter.category) manual.andWhere('e.category', filter.category);
+      if (filter.poultryFlockId) manual.andWhere('e.poultry_flock_id', filter.poultryFlockId);
+      if (filter.from) manual.andWhere('e.spent_on', '>=', filter.from);
+      if (filter.to) manual.andWhere('e.spent_on', '<=', filter.to);
+
+      const daily = filter.category
+        ? []
+        : DAILY_EXPENSE_SOURCES.filter(
+            (src) => !filter.poultryFlockId || src.kind === 'POULTRY',
+          ).map((src) => {
+            const qb = this.db(`${src.recordTable} as d`)
+              .join(`${src.batchTable} as b`, 'b.id', `d.${src.batchColumn}`)
+              .where('d.organization_id', organizationId)
+              .andWhere('d.expense_amount', '>', 0)
+              .select(
+                'd.id',
+                'd.organization_id',
+                this.db.raw(src.kind === 'POULTRY' ? 'd.poultry_flock_id' : 'NULL::uuid'),
+                this.db.raw(`'OTHER'::text`),
+                'd.expense_amount',
+                this.db.raw('NULL::text'),
+                'd.record_date',
+                'd.created_by_user_id',
+                'd.created_at',
+                'd.updated_at',
+                this.db.raw(`'DAILY_RECORD'::text`),
+                this.db.raw('?::text', [src.kind]),
+                'b.id',
+                'b.name',
+                'b.batch_number',
+              );
+            if (filter.poultryFlockId) qb.andWhere('d.poultry_flock_id', filter.poultryFlockId);
+            if (filter.from) qb.andWhere('d.record_date', '>=', filter.from);
+            if (filter.to) qb.andWhere('d.record_date', '<=', filter.to);
+            return qb;
+          });
+      return daily.length ? manual.unionAll(daily, true) : manual;
     };
-    const countRow = await base().count<{ count: string }>({ count: '*' }).first();
+
+    const countRow = (await this.db
+      .from(merged().as('x'))
+      .count<{ count: string }>({ count: '*' })
+      .first()) as { count: string } | undefined;
     const total = Number(countRow?.count ?? 0);
-    const rows: FarmExpenseRow[] = await base()
+    const rows: FarmExpenseRow[] = await this.db
+      .from(merged().as('x'))
+      .select('*')
       .orderBy([
         { column: 'spent_on', order: 'desc' },
         { column: 'created_at', order: 'desc' },
+        { column: 'id', order: 'desc' },
       ])
       .limit(filter.pageSize)
       .offset((filter.page - 1) * filter.pageSize);
     return { items: rows.map(rowToFarmExpense), total };
   }
 
-  /** Sum of `amount` for the organization within `[from, to]` (inclusive dates). */
+  /**
+   * Total spent by the farm within `[from, to]` (inclusive dates): manual
+   * expenses by `spent_on` + daily-record expenses by `record_date` — the same
+   * lines the list shows, each counted once.
+   */
   async sumInRange(organizationId: string, from: string, to: string): Promise<number> {
-    const row = (await this.db(TABLE)
+    const sums = await Promise.all([
+      this.sumColumn(TABLE, 'amount', 'spent_on', organizationId, from, to),
+      ...DAILY_EXPENSE_SOURCES.map((src) =>
+        this.sumColumn(src.recordTable, 'expense_amount', 'record_date', organizationId, from, to),
+      ),
+    ]);
+    return sums.reduce((acc, n) => acc + n, 0);
+  }
+
+  private async sumColumn(
+    table: string,
+    column: string,
+    dateColumn: string,
+    organizationId: string,
+    from: string,
+    to: string,
+  ): Promise<number> {
+    const row = (await this.db(table)
       .where('organization_id', organizationId)
-      .andWhere('spent_on', '>=', from)
-      .andWhere('spent_on', '<=', to)
-      .sum<{ total: string | null }>({ total: 'amount' })
+      .andWhere(dateColumn, '>=', from)
+      .andWhere(dateColumn, '<=', to)
+      .sum<{ total: string | null }>({ total: column })
       .first()) as { total: string | null } | undefined;
     return Number(row?.total ?? 0);
   }

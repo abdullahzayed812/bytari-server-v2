@@ -96,6 +96,10 @@ import {
 } from '../modules/content/index.js';
 import { createPublicAdRouter, createAdminAdRouter } from '../modules/advertisements/index.js';
 import {
+  createPublicHomeSectionRouter,
+  createAdminHomeSectionRouter,
+} from '../modules/home-sections/index.js';
+import {
   createNotificationRouter,
   createAdminNotificationRouter,
 } from '../modules/notifications/index.js';
@@ -311,6 +315,7 @@ export function createApiRouter(c: Container): Router {
   // Public feed `GET /ads?placement=…` for any authenticated user; admin /
   // supervisor management under `/admin/ads*`.
   router.use('/ads', createPublicAdRouter(c));
+  router.use('/home-sections', createPublicHomeSectionRouter(c));
 
   // --- Phase 15: notifications & FCM -------------------------
   // Personal notification inbox + device-token management (auth + ownership
@@ -339,6 +344,7 @@ export function createApiRouter(c: Container): Router {
   router.use('/admin/tips', createAdminTipRouter(c));
   router.use('/admin/news', createAdminNewsRouter(c));
   router.use('/admin/ads', createAdminAdRouter(c));
+  router.use('/admin/home-sections', createAdminHomeSectionRouter(c));
   router.use('/admin/pet-owner-store', createAdminPetOwnerStoreRouter(c));
   router.use('/admin/veterinarian-store', createAdminVeterinarianStoreRouter(c));
   router.use('/admin/notifications', createAdminNotificationRouter(c));

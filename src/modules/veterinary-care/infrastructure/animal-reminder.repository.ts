@@ -2,6 +2,7 @@ import { businessToday } from '../../../shared/time/business-date.js';
 import type { Knex } from 'knex';
 import type { ReminderType } from '../domain/veterinary-care.constants.js';
 import {
+  newestFirstOrder,
   rowToAnimalReminder,
   type AnimalReminder,
   type AnimalReminderRow,
@@ -104,10 +105,14 @@ export class AnimalReminderRepository {
     return trx(TABLE).where({ id }).del();
   }
 
-  /** An animal's reminders, soonest first — one clinic's when `organizationId` is set. */
+  /**
+   * An animal's reminders — one clinic's when `organizationId` is set. Pending
+   * soonest first (owner view), or newest-created first for the clinic
+   * dashboard (`newestFirst`).
+   */
   async listForAnimal(
     animalId: string,
-    filter: { page: number; pageSize: number; organizationId?: string },
+    filter: { page: number; pageSize: number; organizationId?: string; newestFirst?: boolean },
   ): Promise<{ items: AnimalReminder[]; total: number }> {
     const base = (): Knex.QueryBuilder => {
       const qb = this.db<AnimalReminderRow>(TABLE).where('animal_id', animalId);
@@ -116,11 +121,15 @@ export class AnimalReminderRepository {
     };
     const countRow = await base().count<{ count: string }>({ count: '*' }).first();
     const rows: AnimalReminderRow[] = await base()
-      .orderBy([
-        { column: 'is_completed', order: 'asc' },
-        { column: 'reminder_date', order: 'asc' },
-        { column: 'created_at', order: 'desc' },
-      ])
+      .orderBy(
+        filter.newestFirst
+          ? newestFirstOrder()
+          : [
+              { column: 'is_completed', order: 'asc' },
+              { column: 'reminder_date', order: 'asc' },
+              { column: 'created_at', order: 'desc' },
+            ],
+      )
       .limit(filter.pageSize)
       .offset((filter.page - 1) * filter.pageSize);
     return { items: rows.map(rowToAnimalReminder), total: Number(countRow?.count ?? 0) };
@@ -158,11 +167,7 @@ export class AnimalReminderRepository {
     const countRow = await base().count<{ count: string }>({ count: '*' }).first();
     const rows: Array<AnimalReminderRow & ClinicListJoinColumns> = await base()
       .select('r.*', ...CLINIC_LIST_JOIN_COLUMNS)
-      .orderBy([
-        { column: 'r.is_completed', order: 'asc' },
-        { column: 'r.reminder_date', order: 'asc' },
-        { column: 'r.created_at', order: 'desc' },
-      ])
+      .orderBy(newestFirstOrder('r'))
       .limit(filter.pageSize)
       .offset((filter.page - 1) * filter.pageSize);
     return {

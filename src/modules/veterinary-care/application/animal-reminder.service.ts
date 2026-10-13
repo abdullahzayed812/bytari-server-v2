@@ -132,7 +132,10 @@ export class AnimalReminderService {
     animalId: string,
     filter: { page: number; pageSize: number },
   ): Promise<{ items: AnimalReminderDTO[]; total: number }> {
-    const { items, total } = await this.reminders.listForAnimal(animalId, filter);
+    const { items, total } = await this.reminders.listForAnimal(animalId, {
+      ...filter,
+      newestFirst: true,
+    });
     return { items: items.map((r) => redactForClinic(r, organizationId)), total };
   }
 

@@ -19,6 +19,8 @@ export const StoragePrefix = {
   medicalAttachments: 'medical-records',
   veterinarianDocuments: 'veterinarians/documents',
   advertisements: 'advertisements',
+  /** Admin-managed images of the home-page section cards. Public. */
+  homeSectionImages: 'home-sections',
   consultationAttachments: 'consultations/attachments',
   inquiryAttachments: 'inquiries/attachments',
   /** "تواصل معنا" (admin ↔ user) message photos — private, served via signed URLs only. */

@@ -74,7 +74,11 @@ const schemas: Obj = {
       name: { type: 'string', minLength: 1, maxLength: 160 },
       location: { type: 'string', minLength: 1, maxLength: 200, description: 'Short display area' },
       governorate: { type: 'string', minLength: 1, maxLength: 120 },
-      poultryProductionType: { type: 'string', enum: poultryProductionTypeEnum, description: 'Production type' },
+      poultryProductionType: {
+        type: 'string',
+        enum: poultryProductionTypeEnum,
+        description: 'Production type',
+      },
       description: { type: 'string', maxLength: 2000, nullable: true },
       address: { type: 'string', maxLength: 500, nullable: true },
       capacity: { type: 'integer', minimum: 0, nullable: true },
@@ -103,6 +107,18 @@ const schemas: Obj = {
       name: { type: 'string' },
       birdType: { type: 'string', enum: birdTypeEnum },
       birdCount: { type: 'integer', minimum: 0 },
+      initialBirdCount: { type: 'integer', minimum: 0, nullable: true },
+      totalMortality: {
+        type: 'integer',
+        minimum: 0,
+        description: 'Deaths recorded in the batch daily records (server-computed).',
+      },
+      currentBirdCount: {
+        type: 'integer',
+        minimum: 0,
+        description:
+          'Birds still in the batch: (initialBirdCount ?? birdCount) − totalMortality, floored at 0.',
+      },
       arrivalDate: { type: 'string', format: 'date' },
       status: { type: 'string', enum: flockStatusEnum },
       notes: { type: 'string', nullable: true },

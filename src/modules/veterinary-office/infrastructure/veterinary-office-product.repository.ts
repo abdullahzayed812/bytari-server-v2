@@ -57,6 +57,7 @@ export interface CreateVeterinaryOfficeProductData extends VeterinaryOfficeProdu
   description: string | null;
   productType: string;
   price: string | null;
+  currency: string;
   stockQuantity: number;
   createdByUserId: string;
 }
@@ -66,6 +67,7 @@ export interface UpdateVeterinaryOfficeProductData extends VeterinaryOfficeProdu
   description?: string | null;
   productType?: string;
   price?: string | null;
+  currency?: string;
   status?: string;
   isHidden?: boolean;
   primaryImageKey?: string | null;
@@ -108,6 +110,7 @@ export class VeterinaryOfficeProductRepository {
         description: data.description,
         product_type: data.productType,
         price: data.price,
+        currency: data.currency,
         stock_quantity: data.stockQuantity,
         subtype: data.subtype ?? null,
         weight: data.weight ?? null,
@@ -135,6 +138,7 @@ export class VeterinaryOfficeProductRepository {
     if (patch.description !== undefined) dbPatch.description = patch.description;
     if (patch.productType !== undefined) dbPatch.product_type = patch.productType;
     if (patch.price !== undefined) dbPatch.price = patch.price;
+    if (patch.currency !== undefined) dbPatch.currency = patch.currency;
     if (patch.status !== undefined) dbPatch.status = patch.status;
     if (patch.isHidden !== undefined) dbPatch.is_hidden = patch.isHidden;
     if (patch.subtype !== undefined) dbPatch.subtype = patch.subtype;

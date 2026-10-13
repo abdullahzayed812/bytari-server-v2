@@ -4,6 +4,7 @@ import type {
   MedicalRecordType,
 } from '../domain/veterinary-care.constants.js';
 import {
+  newestFirstOrder,
   rowToMedicalRecord,
   type ListMedicalRecordsFilter,
   type MedicalRecord,
@@ -124,7 +125,7 @@ export class MedicalRecordRepository {
     return trx(TABLE).where({ id }).del();
   }
 
-  /** Records for an animal, newest visit first. Optionally scoped to one clinic. */
+  /** Records for an animal, newest-created first. Optionally scoped to one clinic. */
   async listForAnimal(
     animalId: string,
     filter: ListMedicalRecordsFilter,
@@ -140,10 +141,7 @@ export class MedicalRecordRepository {
     const total = Number(countRow?.count ?? 0);
 
     const rows: MedicalRecordRow[] = await base()
-      .orderBy([
-        { column: 'visit_date', order: 'desc' },
-        { column: 'created_at', order: 'desc' },
-      ])
+      .orderBy(newestFirstOrder())
       .limit(filter.pageSize)
       .offset((filter.page - 1) * filter.pageSize);
 

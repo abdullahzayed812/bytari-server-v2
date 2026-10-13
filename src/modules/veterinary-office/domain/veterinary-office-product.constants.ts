@@ -27,6 +27,14 @@ export const VETERINARY_OFFICE_PRODUCT_TYPES = [
 ] as const;
 export type VeterinaryOfficeProductType = (typeof VETERINARY_OFFICE_PRODUCT_TYPES)[number];
 
+/**
+ * Price currency the seller picks per product: Iraqi Dinar or US Dollar.
+ * `IQD` is the default — every pre-existing price was entered in dinars.
+ */
+export const VETERINARY_OFFICE_PRODUCT_CURRENCIES = ['IQD', 'USD'] as const;
+export type VeterinaryOfficeProductCurrency = (typeof VETERINARY_OFFICE_PRODUCT_CURRENCIES)[number];
+export const VETERINARY_OFFICE_DEFAULT_CURRENCY: VeterinaryOfficeProductCurrency = 'IQD';
+
 /** Product image limits — same shape as the organization gallery / Pet Owners Store seams. */
 export const VETERINARY_OFFICE_MAX_PRODUCT_IMAGES = 6;
 export const VETERINARY_OFFICE_MAX_PRODUCT_IMAGE_BYTES = 10 * 1024 * 1024;

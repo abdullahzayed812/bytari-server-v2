@@ -2,6 +2,7 @@ import { businessToday } from '../../../shared/time/business-date.js';
 import type { Knex } from 'knex';
 import type { VaccinationStatus } from '../domain/veterinary-care.constants.js';
 import {
+  newestFirstOrder,
   rowToVaccination,
   type ClinicListAnimalSummary,
   type ClinicListOwnerSummary,
@@ -124,10 +125,14 @@ export class VaccinationRepository {
     const total = Number(countRow?.count ?? 0);
 
     const rows: VaccinationRow[] = await base()
-      .orderBy([
-        { column: 'administered_on', order: 'desc' },
-        { column: 'created_at', order: 'desc' },
-      ])
+      .orderBy(
+        filter.newestFirst
+          ? newestFirstOrder()
+          : [
+              { column: 'administered_on', order: 'desc' },
+              { column: 'created_at', order: 'desc' },
+            ],
+      )
       .limit(filter.pageSize)
       .offset((filter.page - 1) * filter.pageSize);
 
@@ -169,7 +174,7 @@ export class VaccinationRepository {
 
     const rows: Array<VaccinationRow & ClinicListJoinColumns> = await base()
       .select('v.*', ...CLINIC_LIST_JOIN_COLUMNS)
-      .orderByRaw('v.next_due_on ASC NULLS LAST, v.administered_on DESC, v.created_at DESC')
+      .orderBy(newestFirstOrder('v'))
       .limit(filter.pageSize)
       .offset((filter.page - 1) * filter.pageSize);
 

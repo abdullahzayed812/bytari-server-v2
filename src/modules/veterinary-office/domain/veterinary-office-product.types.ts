@@ -1,4 +1,5 @@
 import type {
+  VeterinaryOfficeProductCurrency,
   VeterinaryOfficeProductStatus,
   VeterinaryOfficeProductType,
 } from './veterinary-office-product.constants.js';
@@ -30,6 +31,8 @@ export interface VeterinaryOfficeProduct extends VeterinaryOfficeProductDetailFi
   productType: VeterinaryOfficeProductType;
   /** Decimal string (PostgreSQL numeric) or null. Never a JS float. */
   price: string | null;
+  /** Currency of `price` — `IQD` (legacy default) or `USD`. */
+  currency: VeterinaryOfficeProductCurrency;
   stockQuantity: number;
   status: VeterinaryOfficeProductStatus;
   /**
@@ -66,6 +69,7 @@ export interface VeterinaryOfficeProductDTO extends VeterinaryOfficeProductDetai
   description: string | null;
   productType: VeterinaryOfficeProductType;
   price: string | null;
+  currency: VeterinaryOfficeProductCurrency;
   stockQuantity: number;
   status: VeterinaryOfficeProductStatus;
   isHidden: boolean;
@@ -95,6 +99,8 @@ export interface CreateVeterinaryOfficeProductInput extends VeterinaryOfficeProd
   description?: string | null;
   productType: VeterinaryOfficeProductType;
   price?: string | null;
+  /** Defaults to `IQD`. */
+  currency?: VeterinaryOfficeProductCurrency;
   /** Opening stock. Optional; defaults to 0. Later changes go through the stock op. */
   stockQuantity?: number;
   /**
@@ -109,6 +115,7 @@ export interface UpdateVeterinaryOfficeProductInput extends VeterinaryOfficeProd
   description?: string | null;
   productType?: VeterinaryOfficeProductType;
   price?: string | null;
+  currency?: VeterinaryOfficeProductCurrency;
   status?: VeterinaryOfficeProductStatus;
   isHidden?: boolean;
 }
@@ -139,6 +146,7 @@ export interface VeterinaryOfficeProductRow {
   description: string | null;
   product_type: string;
   price: string | null;
+  currency: string | null;
   stock_quantity: number | string;
   status: string;
   is_hidden: boolean;
@@ -175,6 +183,7 @@ export function rowToVeterinaryOfficeProduct(
     description: row.description,
     productType: row.product_type as VeterinaryOfficeProductType,
     price: row.price,
+    currency: row.currency === 'USD' ? 'USD' : 'IQD',
     stockQuantity: Number(row.stock_quantity),
     status: row.status as VeterinaryOfficeProductStatus,
     isHidden: row.is_hidden,

@@ -118,8 +118,17 @@ export class PoultryFlockService {
     const onlyStatusChange = Object.keys(patch).length === 1 && patch.status !== undefined;
     if (!onlyStatusChange) PoultryFlockPolicy.assertFlockMutable(existing);
 
-    const updated = await this.db.transaction(async (tx) => {
-      const flock = await this.flocks.update(flockId, patch, tx);
+    // Correcting the entered bird count also corrects the batch's starting
+    // count (the base for the remaining-birds figure) — unless the starting
+    // count was deliberately set apart from it or is sent explicitly.
+    const syncInitial =
+      patch.birdCount !== undefined &&
+      patch.initialBirdCount === undefined &&
+      (existing.initialBirdCount === null || existing.initialBirdCount === existing.birdCount);
+    const dbPatch = syncInitial ? { ...patch, initialBirdCount: patch.birdCount } : patch;
+
+    await this.db.transaction(async (tx) => {
+      await this.flocks.update(flockId, dbPatch, tx);
       await this.audit.record(
         {
           action: AuditAction.POULTRY_FLOCK_UPDATED,
@@ -135,13 +144,15 @@ export class PoultryFlockService {
         },
         tx,
       );
-      return flock;
     });
 
     this.events.publish('poultry.flock.updated', {
       poultryFlockId: flockId,
       organizationId,
     });
+    // Re-read so the DTO carries the mortality-derived `currentBirdCount`.
+    const updated = await this.flocks.findByIdForOrganization(flockId, organizationId);
+    if (!updated) throw new NotFoundError('Poultry flock not found');
     return toPoultryFlockDTO(updated);
   }
 

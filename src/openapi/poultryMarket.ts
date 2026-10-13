@@ -85,7 +85,10 @@ const schemas: Obj = {
     properties: {
       id: uuid,
       traderUserId: uuid,
-      birdType: { type: 'string', enum: ['BALADI', 'LAYER', 'BROILER', 'ROOSTER', 'TURKEY', 'OTHER'] },
+      birdType: {
+        type: 'string',
+        enum: ['BALADI', 'LAYER', 'BROILER', 'ROOSTER', 'TURKEY', 'OTHER'],
+      },
       breed: { type: 'string', nullable: true },
       quantity: { type: 'integer' },
       pricingMethod: { type: 'string', enum: ['PER_KG', 'PER_BIRD'] },
@@ -143,7 +146,10 @@ const schemas: Obj = {
     type: 'object',
     properties: {
       totalFarms: { type: 'integer' },
-      totalBirds: { type: 'integer' },
+      totalBirds: {
+        type: 'integer',
+        description: 'Birds remaining in ACTIVE batches (starting count − recorded mortality).',
+      },
       byGovernorate: {
         type: 'array',
         items: {
@@ -184,10 +190,7 @@ const paths: Obj = {
       tags: ['Poultry Markets'],
       summary: 'List trader applications — trader.admin.read',
       security: bearer,
-      parameters: [
-        ...pageParams,
-        { name: 'status', in: 'query', schema: { type: 'string' } },
-      ],
+      parameters: [...pageParams, { name: 'status', in: 'query', schema: { type: 'string' } }],
       responses: {
         200: ok('OK', listOf('#/components/schemas/TraderProfile')),
         ...errs(401, 403),
@@ -267,7 +270,7 @@ const paths: Obj = {
   '/poultry-offers/mine': {
     get: {
       tags: ['Poultry Markets'],
-      summary: "My poultry offers — requires an approved trader",
+      summary: 'My poultry offers — requires an approved trader',
       security: bearer,
       parameters: pageParams,
       responses: { 200: ok('OK', listOf('#/components/schemas/PoultryOffer')), ...errs(401, 403) },
@@ -383,7 +386,10 @@ const paths: Obj = {
       security: bearer,
       parameters: [dateParam],
       responses: {
-        200: ok('OK', dataOf({ type: 'array', items: { $ref: '#/components/schemas/PoultryRateEntry' } })),
+        200: ok(
+          'OK',
+          dataOf({ type: 'array', items: { $ref: '#/components/schemas/PoultryRateEntry' } }),
+        ),
         ...errs(401, 422),
       },
     },
@@ -401,7 +407,10 @@ const paths: Obj = {
       security: bearer,
       parameters: [dateParam],
       responses: {
-        200: ok('OK', dataOf({ type: 'array', items: { $ref: '#/components/schemas/EggRateEntry' } })),
+        200: ok(
+          'OK',
+          dataOf({ type: 'array', items: { $ref: '#/components/schemas/EggRateEntry' } }),
+        ),
         ...errs(401, 422),
       },
     },

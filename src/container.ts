@@ -216,6 +216,8 @@ import { NewsService } from './modules/content/application/news.service.js';
 import { AdCampaignRepository } from './modules/advertisements/infrastructure/ad-campaign.repository.js';
 import { AdSlideRepository } from './modules/advertisements/infrastructure/ad-slide.repository.js';
 import { AdvertisementService } from './modules/advertisements/application/advertisement.service.js';
+import { HomeSectionImageRepository } from './modules/home-sections/infrastructure/home-section-image.repository.js';
+import { HomeSectionImageService } from './modules/home-sections/application/home-section-image.service.js';
 import {
   createPushProvider,
   PushNotificationService,
@@ -463,6 +465,8 @@ export interface Container {
   adCampaignRepository: AdCampaignRepository;
   adSlideRepository: AdSlideRepository;
   advertisementService: AdvertisementService;
+  homeSectionImageRepository: HomeSectionImageRepository;
+  homeSectionImageService: HomeSectionImageService;
 
   supervisorRepository: SupervisorRepository;
   pushProvider: PushNotificationProvider;
@@ -1512,6 +1516,16 @@ export function createContainer(deps: ContainerDeps): Container {
     logger,
   );
 
+  // --- home-page section images (admin-managed, fall back to built-in icons) ---
+  const homeSectionImageRepository = new HomeSectionImageRepository(db);
+  const homeSectionImageService = new HomeSectionImageService(
+    db,
+    homeSectionImageRepository,
+    objectStorage,
+    auditService,
+    logger,
+  );
+
   // --- notifications & FCM (Phase 15) -----------------------
   // Reuses the Phase-1 push infrastructure (provider abstraction + Firebase
   // adapter + PushNotificationService). Domain modules stay Firebase-unaware:
@@ -1808,6 +1822,8 @@ export function createContainer(deps: ContainerDeps): Container {
     adCampaignRepository,
     adSlideRepository,
     advertisementService,
+    homeSectionImageRepository,
+    homeSectionImageService,
     supervisorRepository,
     pushProvider,
     pushNotificationService,

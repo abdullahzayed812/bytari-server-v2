@@ -203,10 +203,29 @@ const schemas: Obj = {
       createdByUserId: { ...uuid, nullable: true },
       createdAt: { type: 'string', format: 'date-time' },
       updatedAt: { type: 'string', format: 'date-time' },
+      source: {
+        type: 'string',
+        enum: ['MANUAL', 'DAILY_RECORD'],
+        description:
+          'DAILY_RECORD = the expense amount of a poultry/sheep/cattle daily record, listed ' +
+          'read-only (edit it through the daily record). Never stored twice.',
+      },
+      dailyRecord: {
+        type: 'object',
+        nullable: true,
+        properties: {
+          recordId: uuid,
+          batchKind: { type: 'string', enum: ['POULTRY', 'SHEEP', 'CATTLE'] },
+          batchId: uuid,
+          batchName: { type: 'string' },
+          batchNumber: { type: 'integer', nullable: true },
+        },
+      },
     },
   },
   FarmExpenseSummary: {
     type: 'object',
+    description: 'Totals include manual expenses and daily-record expenses.',
     properties: {
       totalThisWeek: { type: 'number' },
       totalThisMonth: { type: 'number' },
@@ -447,6 +466,9 @@ const paths: Obj = {
     get: {
       tags: T,
       summary: 'List expenses — farm.expense.read',
+      description:
+        'Manual expenses merged with daily-record expenses (poultry/sheep/cattle), newest first. ' +
+        'A `category` filter returns manual expenses only.',
       security: bearer,
       parameters: [
         ...pageParams,
@@ -613,7 +635,11 @@ const paths: Obj = {
       security: bearer,
       parameters: [
         ...pageParams,
-        { name: 'status', in: 'query', schema: { type: 'string', enum: ['PENDING', 'APPROVED', 'REJECTED'] } },
+        {
+          name: 'status',
+          in: 'query',
+          schema: { type: 'string', enum: ['PENDING', 'APPROVED', 'REJECTED'] },
+        },
       ],
       responses: {
         200: ok('Renewal requests', listOf('#/components/schemas/FarmSubscriptionRenewalRequest')),
@@ -643,7 +669,8 @@ const paths: Obj = {
     parameters: [orgIdParam, { name: 'requestId', in: 'path', required: true, schema: uuid }],
     post: {
       tags: T,
-      summary: 'Approve a renewal request and set the new subscription period — farm.subscription.manage',
+      summary:
+        'Approve a renewal request and set the new subscription period — farm.subscription.manage',
       security: bearer,
       requestBody: {
         required: true,
@@ -652,7 +679,10 @@ const paths: Obj = {
         },
       },
       responses: {
-        200: ok('Approved', dataOf({ $ref: '#/components/schemas/FarmSubscriptionRenewalRequest' })),
+        200: ok(
+          'Approved',
+          dataOf({ $ref: '#/components/schemas/FarmSubscriptionRenewalRequest' }),
+        ),
         ...errs(400, 401, 403, 404, 409, 422),
       },
     },
@@ -670,7 +700,10 @@ const paths: Obj = {
         },
       },
       responses: {
-        200: ok('Rejected', dataOf({ $ref: '#/components/schemas/FarmSubscriptionRenewalRequest' })),
+        200: ok(
+          'Rejected',
+          dataOf({ $ref: '#/components/schemas/FarmSubscriptionRenewalRequest' }),
+        ),
         ...errs(400, 401, 403, 404, 409, 422),
       },
     },

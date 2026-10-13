@@ -8,6 +8,10 @@ import {
 
 const TABLE = 'poultry_flocks';
 
+/** Recorded deaths for the current `poultry_flocks` row (from the daily records). */
+const TOTAL_MORTALITY_SQL = `(SELECT COALESCE(SUM(d.mortality_count), 0)::int
+   FROM poultry_daily_records d WHERE d.poultry_flock_id = ${TABLE}.id) AS total_mortality`;
+
 export interface CreatePoultryFlockData {
   organizationId: string;
   name: string;
@@ -43,8 +47,18 @@ export class PoultryFlockRepository {
     return trx ?? this.db;
   }
 
+  /**
+   * Flock columns + the batch's recorded mortality, so every read carries the
+   * remaining bird count (`currentBirdCount`) without a second query.
+   */
+  private selectWithMortality(trx?: Knex.Transaction): Knex.QueryBuilder {
+    const conn = this.conn(trx);
+    return conn<PoultryFlockRow>(TABLE).select(`${TABLE}.*`, conn.raw(TOTAL_MORTALITY_SQL));
+  }
+
   async findById(id: string, trx?: Knex.Transaction): Promise<PoultryFlock | null> {
-    const row = await this.conn(trx)<PoultryFlockRow>(TABLE).where({ id }).first();
+    const row = (await this.selectWithMortality(trx).where(`${TABLE}.id`, id).first()) as
+      PoultryFlockRow | undefined;
     return row ? rowToPoultryFlock(row) : null;
   }
 
@@ -54,9 +68,9 @@ export class PoultryFlockRepository {
     organizationId: string,
     trx?: Knex.Transaction,
   ): Promise<PoultryFlock | null> {
-    const row = await this.conn(trx)<PoultryFlockRow>(TABLE)
-      .where({ id, organization_id: organizationId })
-      .first();
+    const row = (await this.selectWithMortality(trx)
+      .where({ [`${TABLE}.id`]: id, [`${TABLE}.organization_id`]: organizationId })
+      .first()) as PoultryFlockRow | undefined;
     return row ? rowToPoultryFlock(row) : null;
   }
 
@@ -141,6 +155,7 @@ export class PoultryFlockRepository {
     const total = Number(countRow?.count ?? 0);
 
     const rows: PoultryFlockRow[] = await base()
+      .select(`${TABLE}.*`, this.conn(trx).raw(TOTAL_MORTALITY_SQL))
       .orderBy('created_at', 'desc')
       .limit(filter.pageSize)
       .offset((filter.page - 1) * filter.pageSize);

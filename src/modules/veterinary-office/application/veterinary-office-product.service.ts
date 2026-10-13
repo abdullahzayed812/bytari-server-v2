@@ -12,6 +12,7 @@ import type { AuditService } from '../../audit/audit.service.js';
 import type { OrganizationRepository } from '../../organizations/infrastructure/organization.repository.js';
 import {
   VETERINARY_OFFICE_ALLOWED_PRODUCT_IMAGE_MIME,
+  VETERINARY_OFFICE_DEFAULT_CURRENCY,
   VETERINARY_OFFICE_MAX_PRODUCT_IMAGES,
   VETERINARY_OFFICE_MAX_PRODUCT_IMAGE_BYTES,
   VETERINARY_OFFICE_PRODUCT_IMAGE_UPLOAD_URL_TTL_SECONDS,
@@ -102,6 +103,7 @@ export class VeterinaryOfficeProductService {
           description: input.description ?? null,
           productType: input.productType,
           price: input.price ?? null,
+          currency: input.currency ?? VETERINARY_OFFICE_DEFAULT_CURRENCY,
           stockQuantity: input.stockQuantity ?? 0,
           subtype: input.subtype ?? null,
           weight: input.weight ?? null,
@@ -662,6 +664,7 @@ export class VeterinaryOfficeProductService {
       description: p.description,
       productType: p.productType,
       price: p.price,
+      currency: p.currency,
       stockQuantity: p.stockQuantity,
       status: p.status,
       isHidden: p.isHidden,

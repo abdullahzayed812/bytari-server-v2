@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { paginationQuerySchema } from '../../../shared/http/pagination.js';
 import {
+  VETERINARY_OFFICE_PRODUCT_CURRENCIES,
   VETERINARY_OFFICE_PRODUCT_STATUSES,
   VETERINARY_OFFICE_PRODUCT_TYPES,
 } from '../domain/veterinary-office-product.constants.js';
@@ -12,6 +13,8 @@ const priceSchema = z
   .string()
   .trim()
   .regex(/^\d{1,8}(\.\d{1,2})?$/, 'Expected a non-negative amount like "12.50"');
+/** "دينار" (`IQD`) or "دولار" (`USD`). */
+const currencySchema = z.enum(VETERINARY_OFFICE_PRODUCT_CURRENCIES);
 const stockSchema = z.coerce.number().int().min(0).max(100_000_000);
 
 /** Short free-text detail fields shown on the product-details screen. */
@@ -48,6 +51,7 @@ export const createVeterinaryOfficeProductBodySchema = z.object({
   description: descriptionSchema.nullable().optional(),
   productType: z.enum(VETERINARY_OFFICE_PRODUCT_TYPES),
   price: priceSchema.nullable().optional(),
+  currency: currencySchema.optional(),
   stockQuantity: stockSchema.optional(),
   /** Optional cover image uploaded via the org-level `images/upload-url`. */
   image: finalizeVeterinaryOfficeProductImageBodySchema.optional(),
@@ -63,6 +67,7 @@ export const updateVeterinaryOfficeProductBodySchema = z
     description: descriptionSchema.nullable().optional(),
     productType: z.enum(VETERINARY_OFFICE_PRODUCT_TYPES).optional(),
     price: priceSchema.nullable().optional(),
+    currency: currencySchema.optional(),
     status: z.enum(VETERINARY_OFFICE_PRODUCT_STATUSES).optional(),
     isHidden: z.boolean().optional(),
     ...detailFieldsShape,

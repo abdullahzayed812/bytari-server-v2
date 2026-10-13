@@ -7,7 +7,7 @@ import { ErrorCode } from '../../../shared/errors/error-codes.js';
 import type { EventBus } from '../../../shared/events/index.js';
 import type { AuditContext } from '../../audit/audit.types.js';
 import type { AuditService } from '../../audit/audit.service.js';
-import type { PoultryFlock } from '../domain/poultry-flock.types.js';
+import { remainingBirdCount, type PoultryFlock } from '../domain/poultry-flock.types.js';
 import { PoultryFlockPolicy } from '../domain/poultry-flock.policy.js';
 import { PoultryOpsAuditAction, PoultryOpsAuditEntity } from '../domain/poultry-ops.constants.js';
 import type {
@@ -231,7 +231,11 @@ export class PoultryDailyRecordService {
     ]);
 
     const initial = flock.initialBirdCount ?? flock.birdCount;
-    const currentBirdCount = Math.max(0, initial - agg.totalMortality);
+    const currentBirdCount = remainingBirdCount(
+      flock.initialBirdCount,
+      flock.birdCount,
+      agg.totalMortality,
+    );
     const arrival = new Date(`${flock.arrivalDate}T00:00:00Z`);
     const ageDays = Math.max(
       0,

@@ -115,6 +115,10 @@ export const PERMISSION_KEYS = [
   // an ADVERTISEMENT system-supervisor; governs every placement. Granted to NO
   // base role.
   'advertisement.manage',
+  // Home-page section images (the bottom section cards of the Pet Owner /
+  // Veterinarian home pages). Public reads are NOT permission-gated. Granted to
+  // NO base role — ADMIN (override) only.
+  'home_section.manage',
   // Poultry Markets — trader registration review. Held by ADMIN (override) or
   // MODERATOR (read-only oversight, mirrors 'veterinarian.read'). Approve /
   // reject / suspend are granted to NO base role.
@@ -307,6 +311,7 @@ export const PERMISSION_DEFINITIONS: Record<PermissionKey, string> = {
   'notification.admin.send': 'Send an administrative notification to a user / role / all users',
   'advertisement.manage':
     'Create, update, activate/deactivate and delete advertisement campaigns and slides across all placements',
+  'home_section.manage': 'Upload, replace and remove the images of the home-page sections',
   'trader.admin.read': 'View trader registration profiles/applications',
   'trader.admin.approve': 'Approve a pending trader registration',
   'trader.admin.reject': 'Reject a pending trader registration',

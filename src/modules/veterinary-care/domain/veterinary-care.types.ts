@@ -191,6 +191,22 @@ export interface ListVaccinationsFilter {
   organizationId?: string;
   /** ISO date — only vaccinations whose `nextDueOn` is on/after this date. */
   dueFrom?: string;
+  /** Clinic dashboard order: newest-created first (see {@link newestFirstOrder}). */
+  newestFirst?: boolean;
+}
+
+/**
+ * Clinic dashboard card order — newest record first, by its server-set
+ * creation time (`created_at` is NOT NULL, defaulted to now()), never by a
+ * user-entered visit / due date. `id` breaks ties so pages never overlap or
+ * skip rows when two records share a timestamp.
+ */
+export function newestFirstOrder(alias?: string): Array<{ column: string; order: 'desc' }> {
+  const col = (c: string): string => (alias ? `${alias}.${c}` : c);
+  return [
+    { column: col('created_at'), order: 'desc' },
+    { column: col('id'), order: 'desc' },
+  ];
 }
 
 /** Clinic-wide vaccination list ("التطعيمات"): `OVERDUE` = SCHEDULED with `nextDueOn` < today. */

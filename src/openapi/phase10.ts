@@ -86,6 +86,13 @@ const KINDS: Kind[] = [
   },
 ];
 
+/** `currency` exists on Veterinary Office (office / company) products only. */
+function officeCurrency(k: Kind, description: string): Obj {
+  return k.name === 'VeterinaryOffice'
+    ? { currency: { type: 'string', enum: ['IQD', 'USD'], description } }
+    : {};
+}
+
 function buildSchemas(k: Kind): Obj {
   return {
     [`${k.name}ProductImage`]: {
@@ -109,6 +116,7 @@ function buildSchemas(k: Kind): Obj {
           nullable: true,
           description: 'Decimal string (numeric(12,2)); never a float. e.g. "12.50"',
         },
+        ...officeCurrency(k, 'Currency of `price` (legacy products: IQD).'),
         stockQuantity: { type: 'integer', minimum: 0 },
         status: { type: 'string', enum: statusEnum },
         subtype: detailFieldSchema,
@@ -136,6 +144,7 @@ function buildSchemas(k: Kind): Obj {
         description: { type: 'string', minLength: 1, maxLength: 4000, nullable: true },
         productType: { type: 'string', enum: typeEnum },
         price: { type: 'string', pattern: '^\\d{1,8}(\\.\\d{1,2})?$', nullable: true },
+        ...officeCurrency(k, 'Price currency; defaults to IQD.'),
         stockQuantity: { type: 'integer', minimum: 0 },
         subtype: detailFieldSchema,
         weight: detailFieldSchema,
@@ -155,6 +164,7 @@ function buildSchemas(k: Kind): Obj {
         description: { type: 'string', nullable: true },
         productType: { type: 'string', enum: typeEnum },
         price: { type: 'string', pattern: '^\\d{1,8}(\\.\\d{1,2})?$', nullable: true },
+        ...officeCurrency(k, 'Price currency.'),
         status: { type: 'string', enum: statusEnum },
         subtype: detailFieldSchema,
         weight: detailFieldSchema,

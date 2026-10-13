@@ -148,7 +148,10 @@ export class VaccinationService {
     animalId: string,
     filter: ListVaccinationsFilter,
   ): Promise<{ items: VaccinationDTO[]; total: number }> {
-    const { items, total } = await this.vaccinations.listForAnimal(animalId, filter);
+    const { items, total } = await this.vaccinations.listForAnimal(animalId, {
+      ...filter,
+      newestFirst: true,
+    });
     return { items: items.map((v) => redactForClinic(toVaccinationDTO(v), organizationId)), total };
   }
 
