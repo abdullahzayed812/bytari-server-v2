@@ -2,6 +2,7 @@ import type { DomainEvent } from '../../../shared/events/index.js';
 import type { ConversationRepository } from '../../chat/infrastructure/conversation.repository.js';
 import type { ThreadRepository } from '../../consultations/infrastructure/thread.repository.js';
 import type { MembershipRepository } from '../../organizations/infrastructure/membership.repository.js';
+import type { OrganizationRbacRepository } from '../../organizations/infrastructure/organization-rbac.repository.js';
 import type { OrganizationFollowRepository } from '../../organizations/infrastructure/organization-follow.repository.js';
 import type { OrganizationRepository } from '../../organizations/infrastructure/organization.repository.js';
 import type { SupervisorRepository } from '../../supervisors/supervisor.repository.js';
@@ -17,6 +18,11 @@ export interface NotificationPolicyDeps {
   inquiries: ThreadRepository;
   support: ThreadRepository;
   memberships: MembershipRepository;
+  /** Org role / supervisor permission keys — recipients must be able to open what they're told about. */
+  orgRbac: Pick<
+    OrganizationRbacRepository,
+    'findRoleByKey' | 'getPermissionKeysForRole' | 'getSupervisorPermissionKeys'
+  >;
   organizations: OrganizationRepository;
   supervisors: SupervisorRepository;
   organizationFollows: OrganizationFollowRepository;
@@ -193,6 +199,18 @@ export class NotificationPolicy {
           'VACCINATION_DUE',
           event.name,
           p,
+          'VACCINATION',
+          'vaccinationId',
+          true,
+        );
+      // Automatic sweep (`VaccinationDueNotifier`): one per vaccination per
+      // due date — `sentAt` carries the due date, so the key is
+      // `vaccination.due:<id>:<nextDueOn>` and a moved date re-arms it.
+      case 'vaccination.due':
+        return this.petCareToOwner(
+          'VACCINATION_DUE',
+          event.name,
+          { ...p, sentAt: str(p.nextDueOn) },
           'VACCINATION',
           'vaccinationId',
           true,
@@ -1378,28 +1396,59 @@ export class NotificationPolicy {
     ];
   }
 
-  /** New farm appointment → the farm's owner + ACTIVE members, minus the creator. */
+  /**
+   * New farm appointment → the farm's owner + every ACTIVE member who can
+   * actually open it (`farm.appointment.read`: the farm VETERINARIAN and
+   * STAFF roles by default, a SUPERVISOR only when granted), minus the
+   * creator. Same rule as `canInOrganization` (OWNER override; role keys ∪
+   * supervisor grants) — a supervisor without the grant is not notified
+   * about something the API would refuse to show them.
+   */
   private async farmAppointmentCreated(eventName: string, p: P): Promise<NotificationSpec[]> {
     const organizationId = str(p.organizationId);
     const appointmentId = str(p.appointmentId);
     const creator = str(p.createdByUserId);
     if (!organizationId || !appointmentId) return [];
-    const [org, { items }] = await Promise.all([
+    const [org, { items }, farmSpecies] = await Promise.all([
       this.deps.organizations.findById(organizationId),
       this.deps.memberships.listForOrg(organizationId, {
         page: 1,
         pageSize: RECIPIENT_FANOUT_CAP,
         status: 'ACTIVE',
       }),
+      // Lets the app open the right (poultry / sheep / cattle) appointments screen.
+      this.deps.recipients.farmSpecies(organizationId).catch(() => null),
     ]);
-    const recipients = new Set(items.map((m) => m.userId));
+    const recipients = new Set<string>();
     if (org) recipients.add(org.ownerUserId);
+    const rolePerms = new Map<string, Promise<string[]>>();
+    const permsForRole = (roleKey: string): Promise<string[]> => {
+      let cached = rolePerms.get(roleKey);
+      if (!cached) {
+        cached = this.deps.orgRbac
+          .findRoleByKey(roleKey)
+          .then((role) => (role ? this.deps.orgRbac.getPermissionKeysForRole(role.id) : []));
+        rolePerms.set(roleKey, cached);
+      }
+      return cached;
+    };
+    for (const m of items) {
+      if (m.roleKey === 'OWNER') {
+        recipients.add(m.userId);
+        continue;
+      }
+      const perms = new Set(await permsForRole(m.roleKey));
+      if (m.roleKey === 'SUPERVISOR') {
+        for (const k of await this.deps.orgRbac.getSupervisorPermissionKeys(m.id)) perms.add(k);
+      }
+      if (perms.has('farm.appointment.read')) recipients.add(m.userId);
+    }
     recipients.delete(creator);
     return [...recipients].map((uid) =>
       this.spec(
         'FARM_APPOINTMENT_CREATED',
         uid,
-        { organizationId, appointmentId },
+        { organizationId, appointmentId, ...(farmSpecies ? { farmSpecies } : {}) },
         {
           actorUserId: creator || null,
           entityType: 'FARM_APPOINTMENT',

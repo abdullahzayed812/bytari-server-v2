@@ -235,6 +235,7 @@ import { VeterinarianApprovalEmailHandler } from './modules/veterinarians/veteri
 import { NotificationEventHandler } from './modules/notifications/application/notification-event-handler.js';
 import { NotificationRecipientRepository } from './modules/notifications/infrastructure/recipient.repository.js';
 import { SubscriptionExpiryNotifier } from './modules/notifications/application/subscription-expiry-notifier.js';
+import { VaccinationDueNotifier } from './modules/notifications/application/vaccination-due-notifier.js';
 import { AdminDashboardService } from './modules/admin-dashboard/application/admin-dashboard.service.js';
 import { AdminDashboardSeenRepository } from './modules/admin-dashboard/infrastructure/admin-dashboard-seen.repository.js';
 
@@ -485,6 +486,7 @@ export interface Container {
   notificationEventHandler: NotificationEventHandler;
   veterinarianApprovalEmailHandler: VeterinarianApprovalEmailHandler;
   subscriptionExpiryNotifier: SubscriptionExpiryNotifier;
+  vaccinationDueNotifier: VaccinationDueNotifier;
 
   adminDashboardService: AdminDashboardService;
 
@@ -1576,12 +1578,19 @@ export function createContainer(deps: ContainerDeps): Container {
     inquiries: inquiryRepository,
     support: supportRepository,
     memberships: membershipRepository,
+    orgRbac: organizationRbacRepository,
     organizations: organizationRepository,
     supervisors: supervisorRepository,
     organizationFollows: organizationFollowRepository,
     recipients: notificationRecipientRepository,
     syndicateRegistrations: syndicateRegistrationRepository,
   });
+  const vaccinationDueNotifier = new VaccinationDueNotifier(
+    notificationRecipientRepository,
+    notificationPolicy,
+    notificationService,
+    logger,
+  );
   const notificationEventHandler = new NotificationEventHandler(
     eventBus,
     notificationPolicy,
@@ -1850,6 +1859,7 @@ export function createContainer(deps: ContainerDeps): Container {
     notificationEventHandler,
     veterinarianApprovalEmailHandler,
     subscriptionExpiryNotifier,
+    vaccinationDueNotifier,
     adminDashboardService,
     authenticate,
     authenticatePendingOk,

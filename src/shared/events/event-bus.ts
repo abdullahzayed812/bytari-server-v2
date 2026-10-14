@@ -9,8 +9,10 @@
  * Semantics:
  *  - `publish` is fire-and-forget and never throws to the caller.
  *  - handler errors are caught and logged, never propagated.
- *  - delivery is asynchronous (next microtask) so publishing inside a DB
- *    transaction does not run handlers before the transaction commits.
+ *  - delivery is asynchronous (next microtask). That does NOT wait for a DB
+ *    commit — a microtask runs before an awaited COMMIT completes — so
+ *    publishers MUST call `publish` after `db.transaction(...)` resolves,
+ *    never inside the callback (every current publisher does).
  *
  * A cross-process implementation (Redis / NATS) can replace this behind the
  * same interface when the deployment scales beyond one node.

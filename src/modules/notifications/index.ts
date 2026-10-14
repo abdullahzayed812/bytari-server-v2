@@ -10,6 +10,10 @@ export {
 export { NotificationService } from './application/notification.service.js';
 export { NotificationEventHandler } from './application/notification-event-handler.js';
 export { SubscriptionExpiryNotifier } from './application/subscription-expiry-notifier.js';
+export {
+  VaccinationDueNotifier,
+  VACCINATION_DUE_REMINDER_DAYS,
+} from './application/vaccination-due-notifier.js';
 export { NotificationRecipientRepository } from './infrastructure/recipient.repository.js';
 export {
   createNotificationRouter,
