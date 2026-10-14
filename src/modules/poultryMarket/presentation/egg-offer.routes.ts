@@ -3,7 +3,7 @@ import { asyncHandler } from '../../../shared/http/async-handler.js';
 import { validate } from '../../../shared/http/validate.js';
 import type { Container } from '../../../container.js';
 import { EggOfferController } from './egg-offer.controller.js';
-import { createMarketMiddleware, createTraderSubscriptionGuard } from './market.middleware.js';
+import { createMarketAccessGuards, createMarketMiddleware } from './market.middleware.js';
 import {
   createEggOfferBodySchema,
   eggOfferParamSchema,
@@ -14,8 +14,9 @@ import {
 } from './egg-offer.schemas.js';
 
 /**
- * `self`  → `/egg-offers/*`        (any authenticated user browses; an
- *           APPROVED trader creates/manages their own)
+ * `self`  → `/egg-offers/*`        (Markets & Exchanges access browses — see
+ *           `MarketAccessService`; an eligible merchant OR poultry farm
+ *           creates/manages their own)
  * `admin` → `/admin/egg-offers/*`  (moderation: view all / delete any)
  */
 export function createEggOfferRouters(c: Container): { self: Router; admin: Router } {
@@ -24,44 +25,44 @@ export function createEggOfferRouters(c: Container): { self: Router; admin: Rout
     c.authorizationService,
     c.traderRepository,
   );
-  const { authorize, requireApprovedTrader } = c.authorization;
+  const { authorize } = c.authorization;
   const { withEggOffer, requireEggOwnerOrPermission } = createMarketMiddleware({
     poultryOffers: c.poultryOfferRepository,
     eggOffers: c.eggOfferRepository,
     authz: c.authorizationService,
   });
 
-  const activeTrader = createTraderSubscriptionGuard({
-    traders: c.traderRepository,
-    authz: c.authorizationService,
-  });
+  const { requireMarkets, requireSell } = createMarketAccessGuards(c.marketAccessService);
 
   const self = Router();
   self.use(c.authenticate);
   self.post(
     '/upload-url',
-    requireApprovedTrader(),
-    activeTrader,
+    requireSell,
     validate({ body: eggOfferUploadUrlBodySchema }),
     asyncHandler(ctrl.requestUploadUrl),
   );
   self.get(
     '/mine',
-    requireApprovedTrader(),
-    activeTrader,
+    requireSell,
     validate({ query: listEggOffersQuerySchema }),
     asyncHandler(ctrl.listMine),
   );
-  self.get('/', validate({ query: listEggOffersQuerySchema }), asyncHandler(ctrl.list));
+  self.get(
+    '/',
+    requireMarkets,
+    validate({ query: listEggOffersQuerySchema }),
+    asyncHandler(ctrl.list),
+  );
   self.post(
     '/',
-    requireApprovedTrader(),
-    activeTrader,
+    requireSell,
     validate({ body: createEggOfferBodySchema }),
     asyncHandler(ctrl.create),
   );
   self.get(
     '/:offerId',
+    requireMarkets,
     validate({ params: eggOfferParamSchema }),
     withEggOffer,
     asyncHandler(ctrl.getOne),

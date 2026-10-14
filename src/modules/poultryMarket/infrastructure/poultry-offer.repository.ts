@@ -1,4 +1,5 @@
 import type { Knex } from 'knex';
+import { whereVisibleMarketSeller } from './market-access.repository.js';
 import {
   rowToPoultryOffer,
   type CreatePoultryOfferInput,
@@ -66,15 +67,10 @@ export class PoultryOfferRepository {
       // Public browse: live AND approved by a moderator.
       const qb = this.conn(trx)<PoultryOfferRow>(TABLE)
         .where('status', filter.status ?? 'ACTIVE')
-        .andWhere('moderation_status', 'APPROVED')
-        // A trader whose activation period has ended is off the market until renewed.
-        .whereNotIn(
-          'trader_user_id',
-          this.conn(trx)('trader_profiles')
-            .whereNotNull('subscription_end_date')
-            .andWhereRaw('subscription_end_date < CURRENT_DATE')
-            .select('user_id'),
-        );
+        .andWhere('moderation_status', 'APPROVED');
+      // Only sellers with a currently eligible account stay on the market
+      // (an expired trader / farm is off it until renewed).
+      whereVisibleMarketSeller(qb, this.conn(trx));
       if (filter.birdType) qb.andWhere('bird_type', filter.birdType);
       if (filter.governorate) qb.andWhere('governorate', filter.governorate);
       return qb;

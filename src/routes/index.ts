@@ -62,6 +62,7 @@ import {
   createEggOfferRouters,
   createExchangeRateRouter,
   createPoultryMarketStatisticsRouter,
+  createMarketAccessRouter,
 } from '../modules/poultryMarket/index.js';
 import {
   createChatRouter,
@@ -241,6 +242,7 @@ export function createApiRouter(c: Container): Router {
   router.use('/egg-offers', eggOffers.self);
   router.use('/poultry-market/exchange-rates', createExchangeRateRouter(c));
   router.use('/poultry-market/statistics', createPoultryMarketStatisticsRouter(c));
+  router.use('/poultry-market/access', createMarketAccessRouter(c));
 
   // --- Phase 12: chat & real-time messaging -------------------
   // `POST /organizations/:organizationId/conversations` starts a conversation;

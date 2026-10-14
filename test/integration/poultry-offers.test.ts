@@ -42,17 +42,17 @@ async function createOffer(
 }
 
 describe('poultry market offers', () => {
-  it('create requires an approved trader (403 TRADER_APPROVAL_REQUIRED)', async () => {
+  it('create requires an eligible merchant or poultry farm (403 MARKET_ACCOUNT_REQUIRED)', async () => {
     const u = await registerUser(app);
     const res = await createOffer(u.accessToken);
     expect(res.status).toBe(403);
-    expect(res.body.error.code).toBe('TRADER_APPROVAL_REQUIRED');
+    expect(res.body.error.code).toBe('MARKET_ACCOUNT_REQUIRED');
   });
 
   it('a new ad is PENDING (not public) until a moderator approves it; rejection keeps it hidden', async () => {
     const trader = await registerApprovedTrader(app);
     const admin = await registerAdmin(app);
-    const stranger = await registerUser(app);
+    const stranger = await registerApprovedTrader(app);
     const res = await createOffer(trader.accessToken, { breed: 'محلية', ageWeeks: 5 });
     expect(res.status).toBe(201);
     expect(res.body.data.status).toBe('ACTIVE');
@@ -183,7 +183,7 @@ describe('poultry market offers', () => {
     expect(removed.status).toBe(200);
 
     const created2 = await createOffer(trader.accessToken);
-    const stranger = await registerUser(app);
+    const stranger = await registerApprovedTrader(app);
     const denied = await request(app)
       .delete(`/api/v1/poultry-offers/${created2.body.data.id}`)
       .set(bearer(stranger.accessToken));

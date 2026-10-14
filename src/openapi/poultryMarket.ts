@@ -248,7 +248,8 @@ const paths: Obj = {
   '/poultry-offers': {
     get: {
       tags: ['Poultry Markets'],
-      summary: 'Browse active poultry offers (any authenticated user)',
+      summary:
+        'Browse active poultry offers (Markets & Exchanges access — 403 MARKET_ACCOUNT_REQUIRED / TRADER_SUBSCRIPTION_EXPIRED / FARM_SUBSCRIPTION_NOT_ACTIVE)',
       security: bearer,
       parameters: [
         ...pageParams,
@@ -315,7 +316,7 @@ const paths: Obj = {
   '/egg-offers': {
     get: {
       tags: ['Poultry Markets'],
-      summary: 'Browse active egg offers (any authenticated user)',
+      summary: 'Browse active egg offers (Markets & Exchanges access)',
       security: bearer,
       parameters: [
         ...pageParams,
@@ -382,7 +383,7 @@ const paths: Obj = {
   '/poultry-market/exchange-rates/poultry': {
     get: {
       tags: ['Poultry Markets'],
-      summary: 'Poultry bourse for a date (any authenticated user)',
+      summary: 'Poultry bourse for a date (Markets & Exchanges access)',
       security: bearer,
       parameters: [dateParam],
       responses: {
@@ -403,7 +404,7 @@ const paths: Obj = {
   '/poultry-market/exchange-rates/egg': {
     get: {
       tags: ['Poultry Markets'],
-      summary: 'Egg bourse for a date (any authenticated user)',
+      summary: 'Egg bourse for a date (Markets & Exchanges access)',
       security: bearer,
       parameters: [dateParam],
       responses: {
@@ -424,11 +425,86 @@ const paths: Obj = {
   '/poultry-market/statistics': {
     get: {
       tags: ['Poultry Markets'],
-      summary: 'Governorate farm/bird distribution — admin or approved trader only',
+      summary: 'Governorate farm/bird distribution (Markets & Exchanges access)',
       security: bearer,
       responses: {
         200: ok('OK', dataOf({ $ref: '#/components/schemas/MarketStatisticsSummary' })),
         ...errs(401, 403),
+      },
+    },
+  },
+  '/poultry-market/access': {
+    get: {
+      tags: ['Poultry Markets'],
+      summary:
+        "The caller's Markets & Exchanges access — merchant account and each owned poultry farm evaluated independently, plus the sections they unlock",
+      security: bearer,
+      responses: {
+        200: ok(
+          'OK',
+          dataOf({
+            type: 'object',
+            properties: {
+              hasAccess: { type: 'boolean' },
+              staff: { type: 'boolean' },
+              merchant: {
+                type: 'object',
+                properties: {
+                  status: { type: 'string' },
+                  eligible: { type: 'boolean' },
+                  reason: {
+                    type: 'string',
+                    enum: [
+                      'ELIGIBLE',
+                      'NOT_REGISTERED',
+                      'PENDING_APPROVAL',
+                      'REJECTED',
+                      'SUSPENDED',
+                      'SUBSCRIPTION_EXPIRED',
+                      'SUBSCRIPTION_NOT_STARTED',
+                    ],
+                  },
+                  subscriptionStatus: { type: 'string', nullable: true },
+                  subscriptionEndDate: { type: 'string', nullable: true },
+                  renewalRequestedAt: { type: 'string', nullable: true },
+                },
+              },
+              farms: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    organizationId: { type: 'string', format: 'uuid' },
+                    name: { type: 'string' },
+                    status: { type: 'string' },
+                    eligible: { type: 'boolean' },
+                    reason: {
+                      type: 'string',
+                      enum: [
+                        'ELIGIBLE',
+                        'PENDING_APPROVAL',
+                        'NOT_ACTIVE',
+                        'SUBSCRIPTION_EXPIRED',
+                        'SUBSCRIPTION_NOT_STARTED',
+                      ],
+                    },
+                    subscriptionStatus: { type: 'string' },
+                    subscriptionEndDate: { type: 'string', nullable: true },
+                  },
+                },
+              },
+              sections: {
+                type: 'object',
+                properties: {
+                  markets: { type: 'boolean' },
+                  sell: { type: 'boolean' },
+                  poultryFarm: { type: 'boolean' },
+                },
+              },
+            },
+          }),
+        ),
+        ...errs(401),
       },
     },
   },

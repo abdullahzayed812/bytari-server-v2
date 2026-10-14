@@ -3,7 +3,7 @@ import { asyncHandler } from '../../../shared/http/async-handler.js';
 import { validate } from '../../../shared/http/validate.js';
 import type { Container } from '../../../container.js';
 import { PoultryOfferController } from './poultry-offer.controller.js';
-import { createMarketMiddleware, createTraderSubscriptionGuard } from './market.middleware.js';
+import { createMarketAccessGuards, createMarketMiddleware } from './market.middleware.js';
 import {
   createPoultryOfferBodySchema,
   listAdminPoultryOffersQuerySchema,
@@ -14,8 +14,9 @@ import {
 } from './poultry-offer.schemas.js';
 
 /**
- * `self`  → `/poultry-offers/*`        (any authenticated user browses; an
- *           APPROVED trader creates/manages their own)
+ * `self`  → `/poultry-offers/*`        (Markets & Exchanges access browses — see
+ *           `MarketAccessService`; an eligible merchant OR poultry farm
+ *           creates/manages their own)
  * `admin` → `/admin/poultry-offers/*`  (moderation: view all / delete any)
  *
  * `/mine` is registered BEFORE `/:offerId` — same ordering rule as the
@@ -28,44 +29,44 @@ export function createPoultryOfferRouters(c: Container): { self: Router; admin: 
     c.authorizationService,
     c.traderRepository,
   );
-  const { authorize, requireApprovedTrader } = c.authorization;
+  const { authorize } = c.authorization;
   const { withPoultryOffer, requireOwnerOrPermission } = createMarketMiddleware({
     poultryOffers: c.poultryOfferRepository,
     eggOffers: c.eggOfferRepository,
     authz: c.authorizationService,
   });
 
-  const activeTrader = createTraderSubscriptionGuard({
-    traders: c.traderRepository,
-    authz: c.authorizationService,
-  });
+  const { requireMarkets, requireSell } = createMarketAccessGuards(c.marketAccessService);
 
   const self = Router();
   self.use(c.authenticate);
   self.post(
     '/upload-url',
-    requireApprovedTrader(),
-    activeTrader,
+    requireSell,
     validate({ body: poultryOfferUploadUrlBodySchema }),
     asyncHandler(ctrl.requestUploadUrl),
   );
   self.get(
     '/mine',
-    requireApprovedTrader(),
-    activeTrader,
+    requireSell,
     validate({ query: listPoultryOffersQuerySchema }),
     asyncHandler(ctrl.listMine),
   );
-  self.get('/', validate({ query: listPoultryOffersQuerySchema }), asyncHandler(ctrl.list));
+  self.get(
+    '/',
+    requireMarkets,
+    validate({ query: listPoultryOffersQuerySchema }),
+    asyncHandler(ctrl.list),
+  );
   self.post(
     '/',
-    requireApprovedTrader(),
-    activeTrader,
+    requireSell,
     validate({ body: createPoultryOfferBodySchema }),
     asyncHandler(ctrl.create),
   );
   self.get(
     '/:offerId',
+    requireMarkets,
     validate({ params: poultryOfferParamSchema }),
     withPoultryOffer,
     asyncHandler(ctrl.getOne),

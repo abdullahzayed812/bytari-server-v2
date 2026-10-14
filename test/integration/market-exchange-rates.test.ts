@@ -6,6 +6,7 @@ import {
   assignSystemSupervisor,
   bearer,
   registerAdmin,
+  registerApprovedTrader,
   registerUser,
 } from '../helpers/factories.js';
 
@@ -16,9 +17,9 @@ beforeEach(() => resetDb());
 afterAll(() => closeTestDb());
 
 describe('poultry exchange-rate board', () => {
-  it('admin saves a day of rates; any authenticated user can read them back', async () => {
+  it('admin saves a day of rates; a market account can read them back', async () => {
     const admin = await registerAdmin(app);
-    const viewer = await registerUser(app);
+    const viewer = await registerApprovedTrader(app);
 
     const save = await request(app)
       .post('/api/v1/poultry-market/exchange-rates/poultry')

@@ -40,6 +40,8 @@ export const AD_PLACEMENTS = [
   'POULTRY_MARKET',
   'EGG_MARKET',
   'EXCHANGE_RATES',
+  // "تسجيل التجار" — shown on the main Markets & Exchanges page (market hub),
+  // above the poultry-farm card. Key kept so existing campaigns carry over.
   'TRADER_REGISTRATION',
   // Sheep Farms & Cattle Farms — the combined landing screen's ad slot.
   'SHEEP_FARMS',

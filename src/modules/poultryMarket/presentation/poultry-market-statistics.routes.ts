@@ -1,19 +1,17 @@
 import { Router } from 'express';
 import { asyncHandler } from '../../../shared/http/async-handler.js';
 import type { Container } from '../../../container.js';
+import { createMarketAccessGuards } from './market.middleware.js';
 import { PoultryMarketStatisticsController } from './poultry-market-statistics.controller.js';
 
-/** Mounted at `/market/statistics` — admin or approved-trader only (checked in the controller). */
+/** Mounted at `/poultry-market/statistics` — Markets & Exchanges access (merchant / poultry farm / staff). */
 export function createPoultryMarketStatisticsRouter(c: Container): Router {
-  const ctrl = new PoultryMarketStatisticsController(
-    c.poultryMarketStatisticsService,
-    c.authorizationService,
-    c.traderRepository,
-  );
+  const ctrl = new PoultryMarketStatisticsController(c.poultryMarketStatisticsService);
+  const { requireMarkets } = createMarketAccessGuards(c.marketAccessService);
 
   const r = Router();
   r.use(c.authenticate);
-  r.get('/', asyncHandler(ctrl.getSummary));
+  r.get('/', requireMarkets, asyncHandler(ctrl.getSummary));
 
   return r;
 }

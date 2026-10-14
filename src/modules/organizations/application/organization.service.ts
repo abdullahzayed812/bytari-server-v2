@@ -496,6 +496,8 @@ export class OrganizationService {
       CLINIC: 'clinic_details',
       VETERINARY_OFFICE: 'veterinary_office_details',
       VETERINARY_STORE: 'veterinary_store_details',
+      // The admin "غرف الدردشة" tab shows each room's image.
+      CHAT_ROOM: 'chat_room_details',
     };
     const byType = new Map<OrganizationType, string[]>();
     for (const item of items) {

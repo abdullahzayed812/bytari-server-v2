@@ -28,7 +28,7 @@ const IMAGE_URL_TTL_SECONDS = 3600;
 
 /**
  * Poultry (live bird) market offer CRUD. Auto-published (`ACTIVE`) on create
- * for an approved trader — the route guard (`requireApprovedTrader()`) is the
+ * for an eligible market seller — the route guard (`requireSell`) is the
  * sole enforcement point, mirroring how `ProductController` relies on
  * `authorizeOrg` rather than re-deriving the same check in the service.
  */

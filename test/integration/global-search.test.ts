@@ -7,6 +7,7 @@ import {
   createActiveOrganization,
   createFarm,
   createPetStoreProduct,
+  createVeterinaryOfficeProduct,
   createVetStoreProduct,
   registerAdmin,
   registerApprovedVet,
@@ -161,5 +162,38 @@ describe('GET /search — Home header global search', () => {
       .query({ q: 'الواجهة', interface: 'ADMIN' })
       .set(bearer(vet.accessToken));
     expect(badInterface.status).toBe(422);
+  });
+
+  it('the Veterinarian interface finds Veterinary Office products, each naming the office selling it', async () => {
+    const admin = await registerAdmin(app);
+    const vet = await registerApprovedVet(app);
+    const officeOwner = await registerApprovedVet(app);
+    const owner = await registerUser(app);
+    const office = await createActiveOrganization(app, officeOwner.accessToken, admin.accessToken, {
+      type: 'VETERINARY_OFFICE',
+      name: 'مكتب الرافدين',
+    });
+    const product = await createVeterinaryOfficeProduct(app, officeOwner.accessToken, office.id, {
+      name: 'مضاد كوكسيديا',
+    });
+
+    const asVet = await request(app)
+      .get('/api/v1/search')
+      .query({ q: 'كوكسيديا', interface: 'VETERINARIAN' })
+      .set(bearer(vet.accessToken));
+    expect(asVet.status).toBe(200);
+    const group = groupOf(asVet, 'OFFICE_PRODUCT') as
+      | (Group & { items: { id: string; subtitle: string; meta: Record<string, string> }[] })
+      | undefined;
+    expect(group?.items.map((i) => i.id)).toEqual([product.id]);
+    expect(group?.items[0]?.subtitle).toBe('مكتب الرافدين');
+    expect(group?.items[0]?.meta).toEqual({ officeId: office.id, officeName: 'مكتب الرافدين' });
+
+    // Scoped to the Veterinarian interface — the Pet Owner one never asks for it.
+    const asOwner = await request(app)
+      .get('/api/v1/search')
+      .query({ q: 'كوكسيديا', types: 'OFFICE_PRODUCT' })
+      .set(bearer(owner.accessToken));
+    expect(asOwner.status).toBe(422);
   });
 });

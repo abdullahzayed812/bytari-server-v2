@@ -11,6 +11,7 @@ import type { VeterinarianStoreCatalogService } from '../veterinarian-store/appl
 import type { VetCourseService } from '../vet-courses/application/vet-course.service.js';
 import type { VetJobOfferService } from '../vet-jobs/application/vet-job-offer.service.js';
 import type { VetServiceListingService } from '../vet-services/application/vet-service-listing.service.js';
+import type { VeterinaryOfficeProductService } from '../veterinary-office/application/veterinary-office-product.service.js';
 
 /** Everything the Home header search can find. */
 export const SEARCH_TYPES = [
@@ -20,6 +21,9 @@ export const SEARCH_TYPES = [
   'VET_STORE_PRODUCT',
   'CLINIC',
   'VETERINARY_OFFICE',
+  // A product of a Veterinary Office — the same cross-office search as
+  // `GET /office-products/search`; each hit names the office selling it.
+  'OFFICE_PRODUCT',
   'FARM',
   'SERVICE',
   'COURSE',
@@ -46,6 +50,7 @@ export const INTERFACE_SEARCH_TYPES: Record<SearchInterface, readonly SearchType
     'MAGAZINE',
     'VET_STORE_PRODUCT',
     'VETERINARY_OFFICE',
+    'OFFICE_PRODUCT',
     'SERVICE',
     'COURSE',
     'JOB',
@@ -58,7 +63,7 @@ export interface SearchHit {
   title: string;
   subtitle: string | null;
   imageUrl: string | null;
-  /** Type-specific routing hints (FARM → `farmSpecies`). */
+  /** Type-specific routing hints (FARM → `farmSpecies`, OFFICE_PRODUCT → `officeId`/`officeName`). */
   meta?: Record<string, string>;
 }
 
@@ -80,6 +85,7 @@ export interface SearchDeps {
   courses: VetCourseService;
   jobs: VetJobOfferService;
   services: VetServiceListingService;
+  officeProducts: VeterinaryOfficeProductService;
 }
 
 type Finder = (
@@ -150,6 +156,20 @@ export class SearchService {
       MAGAZINE: content('MAGAZINE'),
       CLINIC: directory('CLINIC'),
       VETERINARY_OFFICE: directory('VETERINARY_OFFICE'),
+      OFFICE_PRODUCT: async (q, limit) => {
+        const r = await deps.officeProducts.searchAcrossOffices({ ...page(limit), search: q });
+        return {
+          total: r.total,
+          items: r.items.map(({ product, office }) => ({
+            type: 'OFFICE_PRODUCT' as const,
+            id: product.id,
+            title: product.name,
+            subtitle: office.name,
+            imageUrl: product.primaryImageUrl ?? office.logoUrl,
+            meta: { officeId: office.id, officeName: office.name },
+          })),
+        };
+      },
       PET_STORE_PRODUCT: async (q, limit) => {
         const r = await deps.petStore.listProducts({ ...page(limit), search: q });
         return {

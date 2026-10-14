@@ -134,6 +134,8 @@ import { PoultryOfferService } from './modules/poultryMarket/application/poultry
 import { EggOfferService } from './modules/poultryMarket/application/egg-offer.service.js';
 import { ExchangeRateService } from './modules/poultryMarket/application/exchange-rate.service.js';
 import { PoultryMarketStatisticsService } from './modules/poultryMarket/application/poultry-market-statistics.service.js';
+import { MarketAccessRepository } from './modules/poultryMarket/infrastructure/market-access.repository.js';
+import { MarketAccessService } from './modules/poultryMarket/application/market-access.service.js';
 import { ConversationRepository } from './modules/chat/infrastructure/conversation.repository.js';
 import { MessageRepository } from './modules/chat/infrastructure/message.repository.js';
 import { ChatAttachmentMedia } from './modules/chat/application/chat-attachment-media.js';
@@ -398,6 +400,8 @@ export interface Container {
   exchangeRateService: ExchangeRateService;
   poultryMarketStatisticsRepository: PoultryMarketStatisticsRepository;
   poultryMarketStatisticsService: PoultryMarketStatisticsService;
+  marketAccessRepository: MarketAccessRepository;
+  marketAccessService: MarketAccessService;
 
   conversationRepository: ConversationRepository;
   messageRepository: MessageRepository;
@@ -1177,6 +1181,12 @@ export function createContainer(deps: ContainerDeps): Container {
     poultryMarketStatisticsRepository,
     logger,
   );
+  const marketAccessRepository = new MarketAccessRepository(db);
+  const marketAccessService = new MarketAccessService(
+    traderRepository,
+    marketAccessRepository,
+    authorizationService,
+  );
 
   // --- chat & real-time messaging (Phase 12) -----------------
   const conversationRepository = new ConversationRepository(db);
@@ -1640,6 +1650,7 @@ export function createContainer(deps: ContainerDeps): Container {
       courses: vetCourseService,
       jobs: vetJobOfferService,
       services: vetServiceListingService,
+      officeProducts: veterinaryOfficeProductService,
     },
     logger,
   );
@@ -1759,6 +1770,8 @@ export function createContainer(deps: ContainerDeps): Container {
     exchangeRateService,
     poultryMarketStatisticsRepository,
     poultryMarketStatisticsService,
+    marketAccessRepository,
+    marketAccessService,
     conversationRepository,
     messageRepository,
     chatService,

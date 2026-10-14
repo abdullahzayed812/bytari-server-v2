@@ -178,6 +178,8 @@ export const ErrorCode = {
   TRADER_APPROVAL_REQUIRED: 'TRADER_APPROVAL_REQUIRED',
   /** The trader's activation period has ended — market access is blocked until renewed. */
   TRADER_SUBSCRIPTION_EXPIRED: 'TRADER_SUBSCRIPTION_EXPIRED',
+  /** Markets & Exchanges need an eligible merchant account or poultry farm — the caller has neither. */
+  MARKET_ACCOUNT_REQUIRED: 'MARKET_ACCOUNT_REQUIRED',
 
   // --- Clinic appointments (Pet Owner ↔ Clinic booking) ---
   /** A lifecycle action was attempted from a status that does not allow it. */

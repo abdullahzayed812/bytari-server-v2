@@ -55,7 +55,7 @@ describe('poultry trader activation period', () => {
 
   it('an expired trader is blocked from trader-only market access and their ads leave the public market', async () => {
     const trader = await registerApprovedTrader(app);
-    const viewer = await registerUser(app);
+    const viewer = await registerApprovedTrader(app);
     const admin = await registerAdmin(app);
     const created = await request(app)
       .post('/api/v1/poultry-offers')

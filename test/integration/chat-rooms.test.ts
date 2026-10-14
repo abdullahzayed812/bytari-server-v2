@@ -2,9 +2,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { buildTestApp } from '../helpers/app.js';
 import { closeTestDb, ensureSchema, resetDb } from '../helpers/db.js';
-import { bearer, registerAdmin, registerUser } from '../helpers/factories.js';
+import { bearer, fixtureBytes, registerAdmin, registerUser } from '../helpers/factories.js';
 
-const { app } = buildTestApp();
+const { app, container } = buildTestApp();
 
 beforeAll(() => ensureSchema());
 beforeEach(() => resetDb());
@@ -256,5 +256,85 @@ describe('Global Chat rooms — moderation (chat_room.rules.manage / chat_room.m
       .delete(`/api/v1/chat-rooms/${room.id}/messages/${messageId}`)
       .set(bearer(member.accessToken));
     expect(forbiddenDelete.status).toBe(403);
+  });
+});
+
+describe('Global Chat rooms — admin-managed room image', () => {
+  async function uploadImage(token: string, roomId: string) {
+    const upload = await request(app)
+      .post(`/api/v1/organizations/${roomId}/logo/upload-url`)
+      .set(bearer(token))
+      .send({ filename: 'room.jpg', mimeType: 'image/jpeg', size: 1024 });
+    if (upload.status !== 201) return upload;
+    const storageKey = upload.body.data.storageKey as string;
+    await container.objectStorage.put(storageKey, fixtureBytes('image/jpeg', 1024), {
+      contentType: 'image/jpeg',
+    });
+    return request(app)
+      .post(`/api/v1/organizations/${roomId}/logo`)
+      .set(bearer(token))
+      .send({ storageKey, mimeType: 'image/jpeg' });
+  }
+
+  it('an admin sets, replaces and removes a room image; every room shows its own (or the icon fallback)', async () => {
+    const admin = await registerAdmin(app);
+    const withImage = await createRoom(admin.accessToken, { name: 'الدواجن' });
+    const plain = await createRoom(admin.accessToken, { name: 'الأبقار' });
+    const member = await registerUser(app);
+
+    const set = await uploadImage(admin.accessToken, withImage.id);
+    expect(set.status).toBe(200);
+    const firstUrl = set.body.data.details.logoUrl as string;
+    expect(firstUrl).toBeTruthy();
+
+    const list = await request(app).get('/api/v1/chat-rooms').set(bearer(member.accessToken));
+    const byId = new Map(
+      (list.body.data as { id: string; logoUrl: string | null }[]).map((r) => [r.id, r.logoUrl]),
+    );
+    expect(byId.get(withImage.id)).toBeTruthy();
+    expect(byId.get(plain.id)).toBeNull();
+    const detail = await request(app)
+      .get(`/api/v1/chat-rooms/${withImage.id}`)
+      .set(bearer(member.accessToken));
+    expect(detail.body.data.logoUrl).toBeTruthy();
+
+    const replaced = await uploadImage(admin.accessToken, withImage.id);
+    expect(replaced.status).toBe(200);
+    expect(replaced.body.data.details.logoUrl).toBeTruthy();
+    expect(replaced.body.data.details.logoUrl).not.toBe(firstUrl);
+
+    const removed = await request(app)
+      .delete(`/api/v1/organizations/${withImage.id}/logo`)
+      .set(bearer(admin.accessToken));
+    expect(removed.status).toBe(200);
+    const after = await request(app)
+      .get(`/api/v1/chat-rooms/${withImage.id}`)
+      .set(bearer(member.accessToken));
+    expect(after.body.data.logoUrl).toBeNull();
+  });
+
+  it('a room member (non-admin) cannot change the room image', async () => {
+    const admin = await registerAdmin(app);
+    const room = await createRoom(admin.accessToken);
+    const member = await registerUser(app);
+    await request(app).post(`/api/v1/chat-rooms/${room.id}/join`).set(bearer(member.accessToken));
+
+    const res = await uploadImage(member.accessToken, room.id);
+    expect(res.status).toBe(403);
+    const del = await request(app)
+      .delete(`/api/v1/organizations/${room.id}/logo`)
+      .set(bearer(member.accessToken));
+    expect(del.status).toBe(403);
+  });
+
+  it('rejects a non-image upload', async () => {
+    const admin = await registerAdmin(app);
+    const room = await createRoom(admin.accessToken);
+    const res = await request(app)
+      .post(`/api/v1/organizations/${room.id}/logo/upload-url`)
+      .set(bearer(admin.accessToken))
+      .send({ filename: 'room.pdf', mimeType: 'application/pdf', size: 1024 });
+    expect(res.status).toBeGreaterThanOrEqual(400);
+    expect(res.status).toBeLessThan(500);
   });
 });
