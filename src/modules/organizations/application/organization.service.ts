@@ -471,7 +471,12 @@ export class OrganizationService {
   async listForAdmin(
     filter: ListOrganizationsFilter,
   ): Promise<{ items: Array<Organization & { logoUrl?: string | null }>; total: number }> {
-    const { items, total } = await this.organizations.list(filter);
+    // Admin "حذف" (soft delete → DEACTIVATED) leaves the default list, like
+    // the farms list; `status=DEACTIVATED` (the "المحذوفة" tab) still finds it.
+    const { items, total } = await this.organizations.list({
+      ...filter,
+      excludeDeactivated: true,
+    });
     return { items: await this.attachLogoUrls(items), total };
   }
 
@@ -1207,7 +1212,12 @@ export class OrganizationService {
     const memberships = await this.memberships.listActiveOrganizationsForUser(userId);
     if (memberships.length === 0) return [];
     const roleByOrg = new Map(memberships.map((m) => [m.organizationId, m.roleKey]));
-    const orgs = await this.organizations.findManyByIds([...roleByOrg.keys()]);
+    // An admin-deleted (DEACTIVATED) organization is gone for its owner and
+    // members too — every org-scoped route already refuses it (`authorizeOrg`),
+    // so listing it would only lead to a dead card.
+    const orgs = (await this.organizations.findManyByIds([...roleByOrg.keys()])).filter(
+      (o) => o.status !== 'DEACTIVATED',
+    );
 
     const farmIds = orgs.filter((o) => o.type === 'FARM').map((o) => o.id);
     const speciesByOrg = new Map<string, string | null>();

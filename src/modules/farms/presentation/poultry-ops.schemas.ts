@@ -204,6 +204,7 @@ export const createAppointmentBodySchema = z.object({
   category: z.enum(FARM_APPOINTMENT_CATEGORIES).optional(),
   scheduledFor: isoDate,
   poultryFlockId: uuid.nullable().optional(),
+  assignedVeterinarianUserId: uuid.nullable().optional(),
 });
 export type CreateAppointmentBody = z.infer<typeof createAppointmentBodySchema>;
 
@@ -215,6 +216,7 @@ export const updateAppointmentBodySchema = z
     scheduledFor: isoDate.optional(),
     status: z.enum(FARM_APPOINTMENT_STATUSES).optional(),
     poultryFlockId: uuid.nullable().optional(),
+    assignedVeterinarianUserId: uuid.nullable().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: 'At least one field is required' });
 export type UpdateAppointmentBody = z.infer<typeof updateAppointmentBodySchema>;

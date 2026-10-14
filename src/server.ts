@@ -60,6 +60,7 @@ function bootstrap(): void {
   container.subscriptionExpiryNotifier.start();
   // Time-driven "vaccination due" reminders to pet owners (idempotent).
   container.vaccinationDueNotifier.start();
+  container.farmAppointmentDueNotifier.start();
   container.veterinarianApprovalEmailHandler.startRetrySweep();
 
   server.listen(config.port, () => {
@@ -88,6 +89,7 @@ function bootstrap(): void {
     logger.info({ signal }, 'Shutting down gracefully');
     container.subscriptionExpiryNotifier.stop();
     container.vaccinationDueNotifier.stop();
+    container.farmAppointmentDueNotifier.stop();
     container.veterinarianApprovalEmailHandler.stop();
 
     server.close((closeErr) => {

@@ -37,6 +37,7 @@ import { OrganizationFollowRepository } from './modules/organizations/infrastruc
 import { OrganizationLikeRepository } from './modules/organizations/infrastructure/organization-like.repository.js';
 import { OrganizationReviewRepository } from './modules/organizations/infrastructure/organization-review.repository.js';
 import { OrganizationService } from './modules/organizations/application/organization.service.js';
+import { OrganizationPurgeService } from './modules/organizations/application/organization-purge.service.js';
 import { MembershipService } from './modules/organizations/application/membership.service.js';
 import { OrganizationSupervisorService } from './modules/organizations/application/organization-supervisor.service.js';
 import { OrganizationEngagementService } from './modules/organizations/application/organization-engagement.service.js';
@@ -236,6 +237,7 @@ import { NotificationEventHandler } from './modules/notifications/application/no
 import { NotificationRecipientRepository } from './modules/notifications/infrastructure/recipient.repository.js';
 import { SubscriptionExpiryNotifier } from './modules/notifications/application/subscription-expiry-notifier.js';
 import { VaccinationDueNotifier } from './modules/notifications/application/vaccination-due-notifier.js';
+import { FarmAppointmentDueNotifier } from './modules/notifications/application/farm-appointment-due-notifier.js';
 import { AdminDashboardService } from './modules/admin-dashboard/application/admin-dashboard.service.js';
 import { AdminDashboardSeenRepository } from './modules/admin-dashboard/infrastructure/admin-dashboard-seen.repository.js';
 
@@ -300,6 +302,7 @@ export interface Container {
   organizationFollowRepository: OrganizationFollowRepository;
   organizationReviewRepository: OrganizationReviewRepository;
   organizationService: OrganizationService;
+  organizationPurgeService: OrganizationPurgeService;
   membershipService: MembershipService;
   organizationSupervisorService: OrganizationSupervisorService;
   organizationEngagementService: OrganizationEngagementService;
@@ -487,6 +490,7 @@ export interface Container {
   veterinarianApprovalEmailHandler: VeterinarianApprovalEmailHandler;
   subscriptionExpiryNotifier: SubscriptionExpiryNotifier;
   vaccinationDueNotifier: VaccinationDueNotifier;
+  farmAppointmentDueNotifier: FarmAppointmentDueNotifier;
 
   adminDashboardService: AdminDashboardService;
 
@@ -594,6 +598,13 @@ export function createContainer(deps: ContainerDeps): Container {
   );
 
   const userDeletionService = new UserDeletionService(
+    db,
+    objectStorage,
+    auditService,
+    eventBus,
+    logger,
+  );
+  const organizationPurgeService = new OrganizationPurgeService(
     db,
     objectStorage,
     auditService,
@@ -948,6 +959,7 @@ export function createContainer(deps: ContainerDeps): Container {
     farmAppointmentRepository,
     auditService,
     eventBus,
+    membershipRepository,
     logger,
   );
   const poultryCaseService = new PoultryCaseService(
@@ -1591,6 +1603,12 @@ export function createContainer(deps: ContainerDeps): Container {
     notificationService,
     logger,
   );
+  const farmAppointmentDueNotifier = new FarmAppointmentDueNotifier(
+    farmAppointmentRepository,
+    notificationPolicy,
+    notificationService,
+    logger,
+  );
   const notificationEventHandler = new NotificationEventHandler(
     eventBus,
     notificationPolicy,
@@ -1687,6 +1705,7 @@ export function createContainer(deps: ContainerDeps): Container {
     organizationFollowRepository,
     organizationReviewRepository,
     organizationService,
+    organizationPurgeService,
     membershipService,
     organizationSupervisorService,
     organizationEngagementService,
@@ -1860,6 +1879,7 @@ export function createContainer(deps: ContainerDeps): Container {
     veterinarianApprovalEmailHandler,
     subscriptionExpiryNotifier,
     vaccinationDueNotifier,
+    farmAppointmentDueNotifier,
     adminDashboardService,
     authenticate,
     authenticatePendingOk,

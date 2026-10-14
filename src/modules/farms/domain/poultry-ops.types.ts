@@ -478,6 +478,8 @@ export interface FarmAppointment {
   category: FarmAppointmentCategory;
   scheduledFor: string;
   status: FarmAppointmentStatus;
+  /** ACTIVE VETERINARIAN member of the farm responsible for the visit, if any. */
+  assignedVeterinarianUserId: string | null;
   createdByUserId: string | null;
   createdAt: string;
   updatedAt: string;
@@ -492,6 +494,7 @@ export interface FarmAppointmentRow {
   category: string;
   scheduled_for: string | Date;
   status: string;
+  assigned_veterinarian_user_id: string | null;
   created_by_user_id: string | null;
   created_at: Date;
   updated_at: Date;
@@ -507,6 +510,7 @@ export function rowToAppointment(r: FarmAppointmentRow): FarmAppointment {
     category: r.category as FarmAppointmentCategory,
     scheduledFor: dateOnly(r.scheduled_for) as string,
     status: r.status as FarmAppointmentStatus,
+    assignedVeterinarianUserId: r.assigned_veterinarian_user_id ?? null,
     createdByUserId: r.created_by_user_id,
     createdAt: iso(r.created_at),
     updatedAt: iso(r.updated_at),
@@ -519,6 +523,7 @@ export interface CreateAppointmentInput {
   category?: FarmAppointmentCategory;
   scheduledFor: string;
   poultryFlockId?: string | null;
+  assignedVeterinarianUserId?: string | null;
 }
 
 export type UpdateAppointmentInput = Partial<CreateAppointmentInput> & {

@@ -7,9 +7,10 @@ import { auditContextFromRequest, type AuditContextResult } from '../../audit/au
 import { requireAuth } from '../../auth/authenticate.middleware.js';
 import { requireOrganization } from '../../organizations/presentation/organization.middleware.js';
 import { applyFinancialVisibility, canSeeFarmFinancials } from './farm-financials.js';
-import type { UserNameDirectory } from '../../users/user-name-directory.js';
+import type { CreatorSummary, UserNameDirectory } from '../../users/user-name-directory.js';
 import type { AuthorizationService } from '../../authorization/authorization.service.js';
 import type { FarmAppointmentService } from '../application/farm-appointment.service.js';
+import type { FarmAppointment } from '../domain/poultry-ops.types.js';
 import type { FarmExpenseService } from '../application/farm-expense.service.js';
 import type { FarmProfileService } from '../application/farm-profile.service.js';
 import type { FarmSubscriptionService } from '../application/farm-subscription.service.js';
@@ -313,6 +314,23 @@ export class PoultryOpsController {
 
   // --- appointments -------------------------------------
 
+  /** Adds `assignedVeterinarian` ({ id, firstName, lastName } | null) to appointment DTO(s). */
+  private async withAssignee<T extends FarmAppointment | FarmAppointment[]>(value: T): Promise<T> {
+    const items: FarmAppointment[] = Array.isArray(value) ? value : [value];
+    const names = await this.creators.namesFor(
+      items.map((a) => a.assignedVeterinarianUserId).filter((id): id is string => Boolean(id)),
+    );
+    const enrich = (
+      a: FarmAppointment,
+    ): FarmAppointment & { assignedVeterinarian: CreatorSummary | null } => ({
+      ...a,
+      assignedVeterinarian: a.assignedVeterinarianUserId
+        ? (names.get(a.assignedVeterinarianUserId) ?? null)
+        : null,
+    });
+    return (Array.isArray(value) ? value.map(enrich) : enrich(value)) as unknown as T;
+  }
+
   listAppointments = async (req: Request, res: Response): Promise<void> => {
     const q = validatedQuery<ListAppointmentsQuery>(req);
     const { items, total } = await this.appointments.list(this.orgId(req), {
@@ -324,17 +342,24 @@ export class PoultryOpsController {
     });
     sendSuccess(
       res,
-      await this.creators.attach(items),
+      await this.withAssignee(await this.creators.attach(items)),
       StatusCodes.OK,
       pageMeta(q.page, q.pageSize, total),
     );
+  };
+
+  /** `GET …/farm/appointments/assignable-veterinarians` — the "الطبيب المسؤول" picker. */
+  listAssignableVeterinarians = async (req: Request, res: Response): Promise<void> => {
+    sendSuccess(res, await this.appointments.listAssignableVeterinarians(this.orgId(req)));
   };
 
   getAppointment = async (req: Request, res: Response): Promise<void> => {
     const { appointmentId } = validatedParams<{ appointmentId: string }>(req);
     sendSuccess(
       res,
-      await this.creators.attach(await this.appointments.get(this.orgId(req), appointmentId)),
+      await this.withAssignee(
+        await this.creators.attach(await this.appointments.get(this.orgId(req), appointmentId)),
+      ),
     );
   };
 
@@ -342,8 +367,10 @@ export class PoultryOpsController {
     const body = validatedBody<CreateAppointmentBody>(req);
     sendSuccess(
       res,
-      await this.creators.attach(
-        await this.appointments.create(this.orgId(req), body, this.actor(req)),
+      await this.withAssignee(
+        await this.creators.attach(
+          await this.appointments.create(this.orgId(req), body, this.actor(req)),
+        ),
       ),
       StatusCodes.CREATED,
     );
@@ -354,8 +381,10 @@ export class PoultryOpsController {
     const body = validatedBody<UpdateAppointmentBody>(req);
     sendSuccess(
       res,
-      await this.creators.attach(
-        await this.appointments.update(this.orgId(req), appointmentId, body, this.actor(req)),
+      await this.withAssignee(
+        await this.creators.attach(
+          await this.appointments.update(this.orgId(req), appointmentId, body, this.actor(req)),
+        ),
       ),
     );
   };

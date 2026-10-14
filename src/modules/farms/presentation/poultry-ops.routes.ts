@@ -298,6 +298,14 @@ export function createPoultryOpsRouter(c: Container): Router {
     authorizeOrg('farm.appointment.create'),
     asyncHandler(ctrl.createAppointment),
   );
+  // BEFORE `/:appointmentId` so the segment is never parsed as an id.
+  r.get(
+    `${apptBase}/assignable-veterinarians`,
+    validate({ params: organizationParamSchema }),
+    ...orgOp,
+    authorizeOrg('farm.appointment.read'),
+    asyncHandler(ctrl.listAssignableVeterinarians),
+  );
   r.get(
     `${apptBase}/:appointmentId`,
     validate({ params: appointmentIdParamSchema }),

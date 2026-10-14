@@ -14,6 +14,10 @@ export {
   VaccinationDueNotifier,
   VACCINATION_DUE_REMINDER_DAYS,
 } from './application/vaccination-due-notifier.js';
+export {
+  FarmAppointmentDueNotifier,
+  FARM_APPOINTMENT_REMINDER_HOUR,
+} from './application/farm-appointment-due-notifier.js';
 export { NotificationRecipientRepository } from './infrastructure/recipient.repository.js';
 export {
   createNotificationRouter,

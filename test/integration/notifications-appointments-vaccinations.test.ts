@@ -159,6 +159,150 @@ describe('farm appointment → notifications', () => {
   });
 });
 
+describe('farm appointment — assigned veterinarian + scheduled-day reminder', () => {
+  async function setup() {
+    const admin = await registerAdmin(app);
+    const owner = await registerUser(app);
+    const farm = await createFarm(app, owner.accessToken, admin.accessToken);
+    const vet = await registerApprovedVet(app);
+    const vet2 = await registerApprovedVet(app);
+    const employee = await registerUser(app);
+    const outsider = await registerApprovedVet(app);
+    for (const [u, role] of [
+      [vet, 'VETERINARIAN'],
+      [vet2, 'VETERINARIAN'],
+      [employee, 'STAFF'],
+    ] as const) {
+      await addOrganizationMember(app, owner.accessToken, farm.id, { userId: u.id, role });
+    }
+    await registerDevice(app, vet.accessToken, {
+      token: 'vet-due-token-dddddddddd',
+      platform: 'android',
+    });
+    return { admin, owner, farm, vet, vet2, employee, outsider };
+  }
+  const create = (token: string, farmId: string, body: Record<string, unknown>) =>
+    request(app)
+      .post(`/api/v1/organizations/${farmId}/farm/appointments`)
+      .set(bearer(token))
+      .send({ title: 'تحصين', category: 'VACCINATION', ...body });
+  const sweep = (now: Date) => container.farmAppointmentDueNotifier.runOnce(now);
+  const dueRows = (userId: string) =>
+    getTestDb()('notifications').where({ recipient_user_id: userId, type: 'FARM_APPOINTMENT_DUE' });
+
+  it('assigns an active farm veterinarian: they get FARM_APPOINTMENT_ASSIGNED, others CREATED; outsiders / staff are refused', async () => {
+    const { owner, farm, vet, vet2, employee, outsider } = await setup();
+
+    for (const bad of [outsider.id, employee.id]) {
+      const res = await create(owner.accessToken, farm.id, {
+        scheduledFor: '2027-03-10',
+        assignedVeterinarianUserId: bad,
+      });
+      expect(res.status).toBe(422);
+    }
+
+    const res = await create(owner.accessToken, farm.id, {
+      scheduledFor: '2027-03-10',
+      assignedVeterinarianUserId: vet.id,
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.data.assignedVeterinarianUserId).toBe(vet.id);
+    expect(res.body.data.assignedVeterinarian).toMatchObject({ id: vet.id });
+    const id = res.body.data.id as string;
+
+    expect(await rowsFor(vet.id, 'FARM_APPOINTMENT_ASSIGNED')).toHaveLength(1);
+    expect(await rowsFor(employee.id, 'FARM_APPOINTMENT_CREATED')).toHaveLength(1);
+    expect(await rowsFor(vet2.id, 'FARM_APPOINTMENT_CREATED')).toHaveLength(1);
+    await tick(200);
+    expect(await rowsFor(vet.id, 'FARM_APPOINTMENT_CREATED', 1, 0)).toHaveLength(0);
+
+    // Re-assigning on edit tells the new veterinarian.
+    const patched = await request(app)
+      .patch(`/api/v1/organizations/${farm.id}/farm/appointments/${id}`)
+      .set(bearer(owner.accessToken))
+      .send({ assignedVeterinarianUserId: vet2.id });
+    expect(patched.status).toBe(200);
+    expect(patched.body.data.assignedVeterinarian).toMatchObject({ id: vet2.id });
+    expect(await rowsFor(vet2.id, 'FARM_APPOINTMENT_ASSIGNED')).toHaveLength(1);
+
+    const list = await request(app)
+      .get(`/api/v1/organizations/${farm.id}/farm/appointments`)
+      .set(bearer(employee.accessToken));
+    expect(list.body.data[0].assignedVeterinarian).toMatchObject({ id: vet2.id });
+  });
+
+  it('on the scheduled day (Iraq time, from 08:00) reminds owner, assigned vet, employees and the creator — exactly once', async () => {
+    const { owner, farm, vet, vet2, employee } = await setup();
+    const res = await create(employee.accessToken, farm.id, {
+      scheduledFor: '2027-03-10',
+      assignedVeterinarianUserId: vet.id,
+    });
+    expect(res.status).toBe(201);
+    const id = res.body.data.id as string;
+    // Not this farm's day / not yet: other dates, and before 08:00 local.
+    await create(owner.accessToken, farm.id, { scheduledFor: '2027-03-11' });
+    const done = await create(owner.accessToken, farm.id, { scheduledFor: '2027-03-10' });
+    await request(app)
+      .patch(`/api/v1/organizations/${farm.id}/farm/appointments/${done.body.data.id}`)
+      .set(bearer(owner.accessToken))
+      .send({ status: 'DONE' })
+      .expect(200);
+
+    // 23:00 on 9 March in Baghdad (20:00Z) — UTC and local are the same day, not the day.
+    expect((await sweep(new Date('2027-03-09T20:00:00Z'))).due).toBe(0);
+    // 00:30 on 10 March in Baghdad (21:30Z on the 9th) — the day, but before 08:00.
+    expect((await sweep(new Date('2027-03-09T21:30:00Z'))).due).toBe(0);
+    expect(await dueRows(owner.id)).toHaveLength(0);
+
+    // 08:30 local — exactly the one UPCOMING appointment of the day.
+    const first = await sweep(new Date('2027-03-10T05:30:00Z'));
+    expect(first.due).toBe(1);
+    for (const u of [owner, vet, vet2, employee]) {
+      const rows = await dueRows(u.id);
+      expect(rows).toHaveLength(1);
+      expect(rows[0].source_event_key).toBe(`farm.appointment.due:${id}:2027-03-10`);
+      expect(rows[0].body).toContain('تحصين');
+    }
+    await tick(200);
+    const pushesToVet = () =>
+      push.sent.filter(
+        (s) =>
+          s.tokens.includes('vet-due-token-dddddddddd') && s.data?.type === 'FARM_APPOINTMENT_DUE',
+      ).length;
+    expect(pushesToVet()).toBe(1);
+
+    // Every later sweep that day is a no-op: no new rows, no second push.
+    await sweep(new Date('2027-03-10T12:00:00Z'));
+    await tick(200);
+    for (const u of [owner, vet, vet2, employee]) expect(await dueRows(u.id)).toHaveLength(1);
+    expect(pushesToVet()).toBe(1);
+
+    // Rescheduling re-arms the reminder for the new day.
+    await request(app)
+      .patch(`/api/v1/organizations/${farm.id}/farm/appointments/${id}`)
+      .set(bearer(owner.accessToken))
+      .send({ scheduledFor: '2027-03-12' })
+      .expect(200);
+    await sweep(new Date('2027-03-12T06:00:00Z'));
+    expect(await dueRows(owner.id)).toHaveLength(2);
+  });
+
+  it('a deleted (DEACTIVATED) farm never reminds anyone', async () => {
+    const { admin, owner, farm, vet } = await setup();
+    await create(owner.accessToken, farm.id, {
+      scheduledFor: '2027-03-10',
+      assignedVeterinarianUserId: vet.id,
+    });
+    await request(app)
+      .delete(`/api/v1/admin/organizations/${farm.id}`)
+      .set(bearer(admin.accessToken))
+      .expect(200);
+    expect((await sweep(new Date('2027-03-10T06:00:00Z'))).due).toBe(0);
+    expect(await dueRows(owner.id)).toHaveLength(0);
+    expect(await dueRows(vet.id)).toHaveLength(0);
+  });
+});
+
 describe('vaccination due → automatic pet owner reminder (VaccinationDueNotifier)', () => {
   async function setup() {
     const admin = await registerAdmin(app);

@@ -50,6 +50,8 @@ export interface ListOrganizationsFilter {
   status?: OrganizationStatus;
   ownerUserId?: string;
   search?: string;
+  /** Hide admin-deleted (DEACTIVATED) rows unless `status` asks for them explicitly. */
+  excludeDeactivated?: boolean;
 }
 
 /** Patch for a `*_details` profile row — `logoKey` maps to the `logo_key` column. */
@@ -472,6 +474,7 @@ export class OrganizationRepository {
     const apply = (qb: Knex.QueryBuilder): Knex.QueryBuilder => {
       if (filter.type) qb.where('type', filter.type);
       if (filter.status) qb.where('status', filter.status);
+      else if (filter.excludeDeactivated) qb.whereNot('status', 'DEACTIVATED');
       if (filter.ownerUserId) qb.where('owner_user_id', filter.ownerUserId);
       if (filter.search) {
         qb.whereRaw('lower(name) like ?', [`%${filter.search.toLowerCase()}%`]);

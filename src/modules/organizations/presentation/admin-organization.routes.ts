@@ -40,6 +40,7 @@ export function createAdminOrganizationRouter(c: Container): Router {
     c.farmSubscriptionService,
     c.userService,
     c.farmProfileService,
+    c.organizationPurgeService,
   );
   /**
    * `authorize()` for the organization-admin keys, TYPE-SCOPED for system
@@ -164,6 +165,14 @@ export function createAdminOrganizationRouter(c: Container): Router {
     orgAdmin('organization.admin.status'),
     validate({ params: idParamSchema, body: statusChangeBodySchema }),
     asyncHandler(ctrl.remove),
+  );
+  // Permanent deletion of an already soft-deleted clinic / office / farm —
+  // ADMIN-only (no supervisor domain holds `organization.admin.delete`).
+  r.delete(
+    '/:id/permanent',
+    orgAdmin('organization.admin.delete'),
+    validate({ params: idParamSchema }),
+    asyncHandler(ctrl.purge),
   );
   r.delete(
     '/:id/members/:memberId',

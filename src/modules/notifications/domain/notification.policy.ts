@@ -506,6 +506,10 @@ export class NotificationPolicy {
         return this.farmMemberJoined(event.name, p);
       case 'farm.appointment.created':
         return this.farmAppointmentCreated(event.name, p);
+      case 'farm.appointment.assigned':
+        return this.farmAppointmentAssigned(event.name, p);
+      case 'farm.appointment.due':
+        return this.farmAppointmentDue(event.name, p);
 
       // --- poultry market traders -----------------------------------
       case 'trader.application.submitted':
@@ -1404,20 +1408,19 @@ export class NotificationPolicy {
    * supervisor grants) — a supervisor without the grant is not notified
    * about something the API would refuse to show them.
    */
-  private async farmAppointmentCreated(eventName: string, p: P): Promise<NotificationSpec[]> {
-    const organizationId = str(p.organizationId);
-    const appointmentId = str(p.appointmentId);
-    const creator = str(p.createdByUserId);
-    if (!organizationId || !appointmentId) return [];
-    const [org, { items }, farmSpecies] = await Promise.all([
+  /**
+   * Who hears about a farm appointment: the owner + every ACTIVE member whose
+   * role permissions (∪ supervisor grants) include `farm.appointment.read` —
+   * never a supervisor who cannot open the appointments screen.
+   */
+  private async farmAppointmentAudience(organizationId: string): Promise<Set<string>> {
+    const [org, { items }] = await Promise.all([
       this.deps.organizations.findById(organizationId),
       this.deps.memberships.listForOrg(organizationId, {
         page: 1,
         pageSize: RECIPIENT_FANOUT_CAP,
         status: 'ACTIVE',
       }),
-      // Lets the app open the right (poultry / sheep / cattle) appointments screen.
-      this.deps.recipients.farmSpecies(organizationId).catch(() => null),
     ]);
     const recipients = new Set<string>();
     if (org) recipients.add(org.ownerUserId);
@@ -1443,20 +1446,124 @@ export class NotificationPolicy {
       }
       if (perms.has('farm.appointment.read')) recipients.add(m.userId);
     }
+    return recipients;
+  }
+
+  /** The assignee only counts while still an ACTIVE member of the farm. */
+  private async activeAssignee(organizationId: string, userId: string): Promise<string | null> {
+    if (!userId) return null;
+    const { items } = await this.deps.memberships.listForOrg(organizationId, {
+      page: 1,
+      pageSize: RECIPIENT_FANOUT_CAP,
+      status: 'ACTIVE',
+    });
+    return items.some((m) => m.userId === userId) ? userId : null;
+  }
+
+  private farmAppointmentData(
+    organizationId: string,
+    appointmentId: string,
+    farmSpecies: string | null,
+  ): Record<string, string> {
+    // `farmSpecies` lets the app open the right (poultry / sheep / cattle) screen.
+    return { organizationId, appointmentId, ...(farmSpecies ? { farmSpecies } : {}) };
+  }
+
+  /**
+   * New appointment: the audience gets FARM_APPOINTMENT_CREATED, the assigned
+   * veterinarian gets FARM_APPOINTMENT_ASSIGNED instead; the creator neither.
+   */
+  private async farmAppointmentCreated(eventName: string, p: P): Promise<NotificationSpec[]> {
+    const organizationId = str(p.organizationId);
+    const appointmentId = str(p.appointmentId);
+    const creator = str(p.createdByUserId);
+    if (!organizationId || !appointmentId) return [];
+    const [recipients, assignee, farmSpecies] = await Promise.all([
+      this.farmAppointmentAudience(organizationId),
+      this.activeAssignee(organizationId, str(p.assignedVeterinarianUserId)),
+      this.deps.recipients.farmSpecies(organizationId).catch(() => null),
+    ]);
+    const data = this.farmAppointmentData(organizationId, appointmentId, farmSpecies);
+    const extra = {
+      actorUserId: creator || null,
+      entityType: 'FARM_APPOINTMENT',
+      entityId: appointmentId,
+    };
+    if (assignee) recipients.delete(assignee);
     recipients.delete(creator);
-    return [...recipients].map((uid) =>
+    const specs = [...recipients].map((uid) =>
+      this.spec('FARM_APPOINTMENT_CREATED', uid, data, {
+        ...extra,
+        sourceEventKey: `${eventName}:${appointmentId}`,
+      }),
+    );
+    if (assignee && assignee !== creator) {
+      specs.push(
+        this.spec('FARM_APPOINTMENT_ASSIGNED', assignee, data, {
+          ...extra,
+          sourceEventKey: `farm.appointment.assigned:${appointmentId}:${assignee}`,
+        }),
+      );
+    }
+    return specs;
+  }
+
+  /** (Re)assignment on edit → the newly assigned veterinarian, unless they did it. */
+  private async farmAppointmentAssigned(eventName: string, p: P): Promise<NotificationSpec[]> {
+    const organizationId = str(p.organizationId);
+    const appointmentId = str(p.appointmentId);
+    const actor = str(p.actorUserId);
+    if (!organizationId || !appointmentId) return [];
+    const assignee = await this.activeAssignee(organizationId, str(p.assignedVeterinarianUserId));
+    if (!assignee || assignee === actor) return [];
+    const farmSpecies = await this.deps.recipients.farmSpecies(organizationId).catch(() => null);
+    return [
       this.spec(
-        'FARM_APPOINTMENT_CREATED',
-        uid,
-        { organizationId, appointmentId, ...(farmSpecies ? { farmSpecies } : {}) },
+        'FARM_APPOINTMENT_ASSIGNED',
+        assignee,
+        this.farmAppointmentData(organizationId, appointmentId, farmSpecies),
         {
-          actorUserId: creator || null,
+          actorUserId: actor || null,
           entityType: 'FARM_APPOINTMENT',
           entityId: appointmentId,
-          sourceEventKey: `${eventName}:${appointmentId}`,
+          sourceEventKey: `${eventName}:${appointmentId}:${assignee}`,
         },
       ),
-    );
+    ];
+  }
+
+  /**
+   * Scheduled-day reminder (`FarmAppointmentDueNotifier`): the whole audience
+   * plus the assigned veterinarian — the creator included, it is a reminder.
+   * Keyed per scheduled date, so a rescheduled appointment reminds again.
+   */
+  private async farmAppointmentDue(eventName: string, p: P): Promise<NotificationSpec[]> {
+    const organizationId = str(p.organizationId);
+    const appointmentId = str(p.appointmentId);
+    const scheduledFor = str(p.scheduledFor);
+    if (!organizationId || !appointmentId || !scheduledFor) return [];
+    const [recipients, assignee, farmSpecies, org] = await Promise.all([
+      this.farmAppointmentAudience(organizationId),
+      this.activeAssignee(organizationId, str(p.assignedVeterinarianUserId)),
+      this.deps.recipients.farmSpecies(organizationId).catch(() => null),
+      this.deps.organizations.findById(organizationId),
+    ]);
+    if (assignee) recipients.add(assignee);
+    const title = str(p.title);
+    const body = org && title ? `${org.name}: ${title}` : null;
+    return [...recipients].map((uid) => {
+      const spec = this.spec(
+        'FARM_APPOINTMENT_DUE',
+        uid,
+        this.farmAppointmentData(organizationId, appointmentId, farmSpecies),
+        {
+          entityType: 'FARM_APPOINTMENT',
+          entityId: appointmentId,
+          sourceEventKey: `${eventName}:${appointmentId}:${scheduledFor}`,
+        },
+      );
+      return body ? { ...spec, body } : spec;
+    });
   }
 
   private userStatusChanged(event: DomainEvent, p: P): NotificationSpec[] {

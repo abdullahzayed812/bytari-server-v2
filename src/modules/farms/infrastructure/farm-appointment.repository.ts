@@ -42,6 +42,7 @@ export class FarmAppointmentRepository {
         category: data.category ?? 'OTHER',
         scheduled_for: data.scheduledFor,
         status: 'UPCOMING',
+        assigned_veterinarian_user_id: data.assignedVeterinarianUserId ?? null,
         created_by_user_id: data.createdByUserId,
       })
       .returning('*')) as FarmAppointmentRow[];
@@ -61,6 +62,9 @@ export class FarmAppointmentRepository {
     if (patch.scheduledFor !== undefined) dbPatch.scheduled_for = patch.scheduledFor;
     if (patch.status !== undefined) dbPatch.status = patch.status;
     if (patch.poultryFlockId !== undefined) dbPatch.poultry_flock_id = patch.poultryFlockId;
+    if (patch.assignedVeterinarianUserId !== undefined) {
+      dbPatch.assigned_veterinarian_user_id = patch.assignedVeterinarianUserId;
+    }
     const [row] = (await trx(TABLE)
       .where({ id })
       .update(dbPatch)
@@ -94,5 +98,27 @@ export class FarmAppointmentRepository {
       .limit(filter.pageSize)
       .offset((filter.page - 1) * filter.pageSize);
     return { items: rows.map(rowToAppointment), total };
+  }
+
+  /**
+   * UPCOMING appointments scheduled for `date` on ACTIVE farms, keyset-paged
+   * by id — the "due today" sweep walks every page, so none is starved.
+   */
+  async listUpcomingOn(
+    date: string,
+    afterId: string | null,
+    limit: number,
+  ): Promise<FarmAppointment[]> {
+    const qb = this.db<FarmAppointmentRow>(`${TABLE} as a`)
+      .join('organizations as o', 'o.id', 'a.organization_id')
+      .where('a.status', 'UPCOMING')
+      .where('a.scheduled_for', date)
+      .where('o.status', 'ACTIVE')
+      .select('a.*')
+      .orderBy('a.id', 'asc')
+      .limit(limit);
+    if (afterId) qb.where('a.id', '>', afterId);
+    const rows = (await qb) as FarmAppointmentRow[];
+    return rows.map(rowToAppointment);
   }
 }

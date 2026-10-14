@@ -79,6 +79,11 @@ export const NOTIFICATION_COPY: Record<NotificationType, { title: string; body: 
   // farms
   FARM_MEMBER_JOINED: { title: 'عضو جديد في الحقل', body: 'انضم عضو جديد إلى حقلك.' },
   FARM_APPOINTMENT_CREATED: { title: 'موعد جديد', body: 'تمت إضافة موعد جديد في الحقل.' },
+  FARM_APPOINTMENT_ASSIGNED: {
+    title: 'تم تعيينك لموعد',
+    body: 'تم تعيينك طبيباً بيطرياً مسؤولاً عن موعد في الحقل.',
+  },
+  FARM_APPOINTMENT_DUE: { title: 'موعد اليوم في الحقل', body: 'لديك موعد مجدول اليوم في الحقل.' },
   // traders
   TRADER_APPLICATION_SUBMITTED: {
     title: 'طلب تسجيل تاجر جديد',

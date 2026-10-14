@@ -689,6 +689,19 @@ const paths: Obj = {
       },
     },
   },
+  '/admin/organizations/{id}/permanent': {
+    delete: {
+      tags: ['Admin · Organizations'],
+      summary:
+        'Permanently delete an already-deleted (DEACTIVATED) clinic / office / farm (`organization.admin.delete`, ADMIN only); 409 `ORGANIZATION_PURGE_BLOCKED` when it holds pet owners’ records',
+      security: bearer,
+      parameters: [idParam],
+      responses: {
+        '200': ok('Deleted', dataOf({ type: 'object' })),
+        ...errs(401, 403, 404, 409),
+      },
+    },
+  },
   '/admin/organizations/{id}/members/{memberId}': {
     delete: {
       tags: ['Admin · Organizations'],

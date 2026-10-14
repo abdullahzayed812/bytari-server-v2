@@ -33,6 +33,7 @@ export const PERMISSION_KEYS = [
   'organization.admin.read',
   'organization.admin.approve',
   'organization.admin.status',
+  'organization.admin.delete',
   'organization.admin.manage',
   // Poultry Farms module — farm subscription administration (spec §4/§6):
   // setting a farm's subscription period directly, and approving/rejecting
@@ -265,6 +266,8 @@ export const PERMISSION_DEFINITIONS: Record<PermissionKey, string> = {
   'organization.admin.read': 'List and view any organization (system-wide)',
   'organization.admin.approve': 'Approve or reject pending organizations',
   'organization.admin.status': 'Suspend, activate or deactivate organizations',
+  'organization.admin.delete':
+    'Permanently delete an already-deleted clinic / office / farm (ADMIN only)',
   'organization.admin.manage': 'Remove members / supervisors from any organization',
   'organization.admin.subscription':
     'Set a farm’s subscription period and approve/reject subscription renewal requests',

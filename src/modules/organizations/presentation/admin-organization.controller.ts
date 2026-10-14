@@ -15,6 +15,7 @@ import type {
 } from '../../farms/presentation/farm-subscription.schemas.js';
 import type { FarmSubscriptionRenewalRepository } from '../../farms/infrastructure/farm-subscription-renewal.repository.js';
 import type { OrganizationService } from '../application/organization.service.js';
+import type { OrganizationPurgeService } from '../application/organization-purge.service.js';
 import type { MembershipService } from '../application/membership.service.js';
 import type { OrganizationSupervisorService } from '../application/organization-supervisor.service.js';
 import type { OrganizationRepository } from '../infrastructure/organization.repository.js';
@@ -36,6 +37,7 @@ export class AdminOrganizationController {
     private readonly farmSubscription: FarmSubscriptionService,
     private readonly users: UserService,
     private readonly farmProfiles: FarmProfileService,
+    private readonly purgeService: OrganizationPurgeService,
   ) {}
 
   private actor(req: Request): { actorUserId: string; context: AuditContextResult } {
@@ -122,6 +124,12 @@ export class AdminOrganizationController {
     const { id } = validatedParams<{ id: string }>(req);
     const body = validatedBody<StatusChangeBody>(req);
     sendSuccess(res, await this.organizations.adminDelete(id, this.actor(req), body.reason));
+  };
+
+  /** DELETE /admin/organizations/:id/permanent — see `OrganizationPurgeService.purge`. */
+  purge = async (req: Request, res: Response): Promise<void> => {
+    const { id } = validatedParams<{ id: string }>(req);
+    sendSuccess(res, await this.purgeService.purge(id, this.actor(req)));
   };
 
   private async changeStatus(

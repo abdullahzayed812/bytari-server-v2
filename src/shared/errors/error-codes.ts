@@ -162,6 +162,11 @@ export const ErrorCode = {
    * names the exact reason (e.g. which organizations must be transferred).
    */
   USER_DELETE_BLOCKED: 'USER_DELETE_BLOCKED',
+  /**
+   * `DELETE /admin/organizations/:id/permanent` refused (409). `details[0].rule`
+   * is `TYPE_NOT_PURGEABLE`, `NOT_DELETED` or `HOLDS_PET_OWNER_RECORDS`.
+   */
+  ORGANIZATION_PURGE_BLOCKED: 'ORGANIZATION_PURGE_BLOCKED',
 
   // --- Notifications & FCM (Phase 15) ---
   /** Admin broadcast would target more users than the synchronous limit allows. */

@@ -17,3 +17,14 @@ export function businessToday(now: Date = new Date()): string {
     day: '2-digit',
   }).format(now);
 }
+
+/** Hour of day (0–23) of `now` in {@link BUSINESS_TIME_ZONE}. */
+export function businessHour(now: Date = new Date()): number {
+  return Number(
+    new Intl.DateTimeFormat('en-GB', {
+      timeZone: BUSINESS_TIME_ZONE,
+      hour: '2-digit',
+      hourCycle: 'h23',
+    }).format(now),
+  );
+}
