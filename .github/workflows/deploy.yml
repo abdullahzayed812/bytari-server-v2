@@ -79,6 +79,17 @@ jobs:
           printf '%s\n' "${{ secrets.VPS_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
           printf 'Host vps\n  HostName %s\n  User %s\n  IdentityFile ~/.ssh/id_deploy\n  IdentitiesOnly yes\n' \
             "${{ secrets.VPS_HOST }}" "${{ secrets.VPS_USER }}" > ~/.ssh/config
+          printf '  ConnectTimeout 20\n  ServerAliveInterval 30\n  ServerAliveCountMax 6\n' >> ~/.ssh/config
+      - name: Wait for SSH
+        # Transient runner→VPS timeouts happen; retry a no-op connection only,
+        # never the deploy itself (a dropped deploy must not be re-run blindly).
+        run: |
+          for i in 1 2 3 4 5 6; do
+            ssh vps true && exit 0
+            echo "SSH attempt $i failed; retrying in 15s" >&2
+            sleep 15
+          done
+          exit 1
       - name: Sync deployment files
         # Code-owned files only. Never touches .env, backups/ or deploy/state/.
         run: |
