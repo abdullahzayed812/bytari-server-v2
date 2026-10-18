@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { buildTestApp } from '../helpers/app.js';
-import { closeTestDb, ensureSchema, resetDb } from '../helpers/db.js';
+import { closeTestDb, ensureSchema, getTestDb, resetDb } from '../helpers/db.js';
 import {
   addOrganizationMember,
   approveTraderAsAdmin,
@@ -132,5 +132,48 @@ describe('Subscriptions — free-trial info + "send subscription information"', 
       .set(bearer(nobody.accessToken))
       .send({ subject: 'POULTRY_TRADER' });
     expect(denied.status).toBe(403);
+  });
+
+  it('an EXPIRED clinic owner can still contact the administration ("التواصل مع الإدارة"); the clinic stays locked', async () => {
+    const admin = await registerAdmin(app);
+    const owner = await registerApprovedVet(app);
+    const clinic = await createActiveOrganization(app, owner.accessToken, admin.accessToken, {
+      type: 'CLINIC',
+      name: 'عيادة الشفاء',
+    });
+    const staff = await registerApprovedVet(app);
+    await addOrganizationMember(app, owner.accessToken, clinic.id, {
+      userId: staff.id,
+      role: 'VETERINARIAN',
+    });
+    await getTestDb()('clinic_details')
+      .where({ organization_id: clinic.id })
+      .update({ subscription_start_date: '2025-01-01', subscription_end_date: '2025-06-30' });
+
+    const sent = await request(app)
+      .post(api('/info-requests'))
+      .set(bearer(owner.accessToken))
+      .send({ subject: 'CLINIC', organizationId: clinic.id });
+    expect(sent.status).toBe(201);
+    const msgs = await request(app)
+      .get(`/api/v1/support-messages/${sent.body.data.threadId}/messages`)
+      .set(bearer(owner.accessToken));
+    const body = (msgs.body.data as { body: string }[]).map((m) => m.body).join('\n');
+    expect(body).toContain('عيادة الشفاء');
+    expect(body).toContain('منتهٍ');
+
+    // a plain staff member cannot open subscription conversations for the clinic
+    const byStaff = await request(app)
+      .post(api('/info-requests'))
+      .set(bearer(staff.accessToken))
+      .send({ subject: 'CLINIC', organizationId: clinic.id });
+    expect(byStaff.status).toBe(404);
+
+    // contacting the administration grants no access — the dashboard stays locked
+    const dash = await request(app)
+      .get(`/api/v1/organizations/${clinic.id}/clinic-dashboard/summary`)
+      .set(bearer(owner.accessToken));
+    expect(dash.status).toBe(403);
+    expect(dash.body.error.code).toBe('ORGANIZATION_SUBSCRIPTION_EXPIRED');
   });
 });

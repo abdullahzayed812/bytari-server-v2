@@ -254,6 +254,17 @@ export class ConversationRepository {
     return row ? rowToParticipant(row) : null;
   }
 
+  /** Admin oversight — every participant row (including those who left), oldest first. */
+  async listParticipantsForAdmin(
+    conversationId: string,
+    trx?: Knex.Transaction,
+  ): Promise<Participant[]> {
+    const rows = await this.conn(trx)<ParticipantRow>(T_PART)
+      .where({ conversation_id: conversationId })
+      .orderBy('joined_at', 'asc');
+    return rows.map(rowToParticipant);
+  }
+
   async touchLastMessageAt(conversationId: string, at: Date, trx: Knex.Transaction): Promise<void> {
     await trx(T_CONV)
       .where({ id: conversationId })

@@ -27,6 +27,7 @@ import {
   type ListConversationsFilter,
   type Message,
   type MessageAttachmentDTO,
+  type AdminConversationDTO,
   type MessageDTO,
 } from '../domain/chat.types.js';
 import type { ConversationRepository } from '../infrastructure/conversation.repository.js';
@@ -1166,6 +1167,71 @@ export class ChatService {
     const conversation = await this.load(conversationId);
     const side = await this.assertAccess(userId, conversation);
     return this.decorate(userId, conversation, side);
+  }
+
+  // --- admin oversight (read-only) -------------------------------------
+  //
+  // `chat.read` is enforced on the `/admin/chat/*` routes. These never call
+  // `assertAccess` (the admin is usually NOT a participant), never touch read
+  // state / participant rows, and are not reachable through the user routes —
+  // so no participant's permissions change and no ordinary user gains access.
+
+  async adminGetConversation(conversationId: string): Promise<AdminConversationDTO> {
+    const c = await this.load(conversationId);
+    const [participants, org] = await Promise.all([
+      this.conversations.listParticipantsForAdmin(c.id),
+      c.organizationId ? this.organizations.findById(c.organizationId) : Promise.resolve(null),
+    ]);
+    return {
+      id: c.id,
+      type: c.type,
+      status: c.status,
+      organizationId: c.organizationId,
+      organizationName: org?.name ?? null,
+      petOwnerUserId: c.petOwnerUserId,
+      memberUserId: c.memberUserId,
+      veterinarianUserId: c.veterinarianUserId,
+      subjectType: c.subjectType,
+      subjectId: c.subjectId,
+      createdByUserId: c.createdByUserId,
+      lastMessageAt: c.lastMessageAt,
+      createdAt: c.createdAt,
+      participants: participants.map((p) => ({
+        userId: p.userId,
+        role: p.role,
+        joinedAt: p.joinedAt,
+        leftAt: p.leftAt,
+      })),
+    };
+  }
+
+  /**
+   * Messages in chronological order (oldest first), paginated. Opening a
+   * conversation (page 1) is audited — who looked at which conversation, when.
+   */
+  async adminListMessages(
+    actor: ChatActor,
+    conversationId: string,
+    page: number,
+    pageSize: number,
+  ): Promise<{ items: MessageDTO[]; total: number }> {
+    const conversation = await this.load(conversationId);
+    const { items, total } = await this.messages.listForConversation(conversation.id, {
+      page,
+      pageSize,
+      order: 'asc',
+    });
+    if (page === 1) {
+      await this.audit.record({
+        action: AuditAction.CHAT_CONVERSATION_VIEWED_BY_ADMIN,
+        entityType: AuditEntityType.CONVERSATION,
+        entityId: conversation.id,
+        actorUserId: actor.actorUserId,
+        metadata: { conversationId: conversation.id, conversationType: conversation.type },
+        context: actor.context,
+      });
+    }
+    return { items: await Promise.all(items.map((m) => this.messageDto(m))), total };
   }
 
   async listMessages(

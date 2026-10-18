@@ -41,6 +41,10 @@ describe('admin animals — oversight list + soft-delete', () => {
     const rowA = rows.find((r) => r.id === animA.id)!;
     expect(rowA.currentOwnerUserId).toBe(a.id);
     expect(rowA.ownerName).toBe('Aya Owner');
+    // the owner's account contact is shown to oversight — never credentials
+    const fullA = (asAdmin.body.data as Record<string, unknown>[]).find((r) => r.id === animA.id)!;
+    expect(fullA.owner).toMatchObject({ id: a.id, firstName: 'Aya', email: a.email });
+    expect(Object.keys(fullA.owner as object)).not.toContain('passwordHash');
 
     const asSup = await request(app).get(adminAnimals()).set(bearer(supervisor.accessToken));
     expect(asSup.status).toBe(200);

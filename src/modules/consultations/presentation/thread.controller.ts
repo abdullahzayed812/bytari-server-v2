@@ -13,6 +13,7 @@ import type {
   CreateConsultationBody,
   CreateInquiryBody,
   CreateSupportBody,
+  AdminUnreadCountQuery,
   ListAdminThreadsQuery,
   ListMessagesQuery,
   ListThreadsQuery,
@@ -87,8 +88,20 @@ export class ThreadController {
       status: q.status,
       createdByUserId: q.createdBy,
       category: this.cfg.hasCategory ? q.category : undefined,
+      unread: q.unread || undefined,
     });
     sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
+  };
+
+  adminUnreadCount = async (req: Request, res: Response): Promise<void> => {
+    const q = validatedQuery<AdminUnreadCountQuery>(req);
+    sendSuccess(
+      res,
+      await this.service.countAdminUnread(requireAuth(req), {
+        status: q.status,
+        category: this.cfg.hasCategory ? q.category : undefined,
+      }),
+    );
   };
 
   get = async (req: Request, res: Response): Promise<void> => {

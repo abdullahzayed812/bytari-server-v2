@@ -17,6 +17,7 @@ function thread(over: Partial<SupportThread> = {}): SupportThread {
     lastMessageAt: null,
     closedAt: null,
     closedByUserId: null,
+    responderUnread: false,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     ...over,

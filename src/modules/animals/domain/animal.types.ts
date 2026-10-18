@@ -154,8 +154,19 @@ export interface ListAdminAnimalsFilter extends ListAnimalsFilter {
 }
 
 /** Admin projection — an animal plus its current owner's name for the queue. */
+export interface AdminAnimalOwnerDTO {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string | null;
+  whatsapp: string | null;
+}
+
 export interface AdminAnimalDTO extends AnimalDTO {
   ownerName: string | null;
+  /** Current owner's account contact (admin / ANIMAL supervisor only) — never credentials. */
+  owner: AdminAnimalOwnerDTO | null;
 }
 
 // --- rows -------------------------------------------------------

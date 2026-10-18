@@ -24,6 +24,11 @@ export interface SupportThread {
   lastMessageAt: string | null;
   closedAt: string | null;
   closedByUserId: string | null;
+  /**
+   * Responder-side "new": a creator message arrived after the responder team
+   * last opened the thread. Only computed by the list/find queries.
+   */
+  responderUnread: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -88,6 +93,9 @@ export interface ThreadRow {
   category?: string | null;
   /** Computed by the list/find queries (sub-select), not a column. */
   first_message_preview?: string | null;
+  /** Computed by the list/find queries (sub-select), not a column. */
+  responder_unread?: boolean | null;
+  responder_read_at?: Date | null;
   status: string;
   sender_blocked_at: Date | null;
   ai_responded: boolean;
@@ -124,6 +132,7 @@ export function rowToThread(row: ThreadRow): SupportThread {
     lastMessageAt: row.last_message_at ? row.last_message_at.toISOString() : null,
     closedAt: row.closed_at ? row.closed_at.toISOString() : null,
     closedByUserId: row.closed_by_user_id,
+    responderUnread: row.responder_unread === true,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
   };
@@ -161,6 +170,15 @@ export function toThreadDTO(kind: ThreadKind, t: SupportThread): ThreadDTO {
   };
 }
 
+/** Admin / responder queue row: the thread plus whether it is new to the responder team. */
+export interface AdminThreadDTO extends ThreadDTO {
+  responderUnread: boolean;
+}
+
+export function toAdminThreadDTO(kind: ThreadKind, t: SupportThread): AdminThreadDTO {
+  return { ...toThreadDTO(kind, t), responderUnread: t.responderUnread };
+}
+
 /**
  * `imageUrls` is left empty here — resolving storage keys to URLs needs
  * `ObjectStorage`, which this pure converter doesn't have. The service layer
@@ -186,4 +204,6 @@ export interface ListThreadsFilter {
   createdByUserId?: string;
   /** INQUIRY only. */
   category?: InquiryCategory;
+  /** Admin queue: only threads with a creator message the responders have not opened yet. */
+  unread?: boolean;
 }

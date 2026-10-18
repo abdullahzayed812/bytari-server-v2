@@ -68,7 +68,20 @@ export const listThreadsQuerySchema = paginationQuerySchema.extend({
 
 export const listAdminThreadsQuerySchema = listThreadsQuerySchema.extend({
   createdBy: z.string().uuid().optional(),
+  /** `true` → only threads new to the responder team (unreviewed creator messages). */
+  unread: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((v) => v === 'true'),
 });
+
+/** `GET /admin/<kind>/unread-count` — the admin queue's "new" badge. */
+export const adminUnreadCountQuerySchema = z
+  .object({
+    status: z.enum(THREAD_STATUSES).optional(),
+    category: z.enum(INQUIRY_CATEGORIES).optional(),
+  })
+  .strict();
 
 export const listMessagesQuerySchema = paginationQuerySchema;
 
@@ -119,6 +132,7 @@ export type CreateSupportBody = z.infer<typeof createSupportBodySchema>;
 export type SendThreadMessageBody = z.infer<typeof sendThreadMessageBodySchema>;
 export type ListThreadsQuery = z.infer<typeof listThreadsQuerySchema>;
 export type ListAdminThreadsQuery = z.infer<typeof listAdminThreadsQuerySchema>;
+export type AdminUnreadCountQuery = z.infer<typeof adminUnreadCountQuerySchema>;
 export type ListMessagesQuery = z.infer<typeof listMessagesQuerySchema>;
 export type UpdateAiSettingsBody = z.infer<typeof updateAiSettingsBodySchema>;
 export type AttachmentUploadUrlBody = z.infer<typeof attachmentUploadUrlBodySchema>;

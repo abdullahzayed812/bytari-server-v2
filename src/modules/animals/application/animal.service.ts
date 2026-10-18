@@ -158,9 +158,10 @@ export class AnimalService {
   ): Promise<{ items: AdminAnimalDTO[]; total: number }> {
     const { items, total } = await this.animals.listForAdmin(filter);
     const dtos = await Promise.all(
-      items.map(async ({ animal, ownerUserId, ownerName }) => ({
+      items.map(async ({ animal, ownerUserId, ownerName, owner }) => ({
         ...toAnimalDTO(animal, ownerUserId, await this.resolveGalleryUrls(animal.galleryKeys)),
         ownerName,
+        owner,
       })),
     );
     return { items: dtos, total };

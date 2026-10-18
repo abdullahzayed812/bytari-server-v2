@@ -140,3 +140,49 @@ describe('admin publication edit — rules', () => {
     expect(missing.status).toBe(404);
   });
 });
+
+describe.each(['LOST', 'ADOPTION', 'MATING'] as const)(
+  'admin %s listing — owner information',
+  (kind) => {
+    it('moderators see who submitted it and the animal’s current owner; the public and plain users never do', async () => {
+      const { admin, owner, pub } = await seed(kind);
+      const keys = (o: unknown): string[] =>
+        o && typeof o === 'object'
+          ? Object.entries(o).flatMap(([k, v]) => [k.toLowerCase(), ...keys(v)])
+          : [];
+
+      for (const res of [
+        await request(app).get(`${adminPath()}?kind=${kind}`).set(bearer(admin.accessToken)),
+        await request(app).get(adminPath(pub.id)).set(bearer(admin.accessToken)),
+      ]) {
+        expect(res.status).toBe(200);
+        const row = Array.isArray(res.body.data)
+          ? res.body.data.find((p: { id: string }) => p.id === pub.id)
+          : res.body.data;
+        expect(row.submittedBy).toMatchObject({ id: owner.id, email: owner.email });
+        expect(row.currentOwner).toMatchObject({ id: owner.id, email: owner.email });
+        expect(keys(row)).not.toEqual(
+          expect.arrayContaining(['password', 'passwordhash', 'password_hash']),
+        );
+      }
+
+      const supervisor = await registerAnimalSupervisor(app, admin.accessToken);
+      const asSup = await request(app).get(adminPath(pub.id)).set(bearer(supervisor.accessToken));
+      expect(asSup.body.data.submittedBy.id).toBe(owner.id);
+
+      const stranger = await registerUser(app);
+      expect(
+        (await request(app).get(adminPath(pub.id)).set(bearer(stranger.accessToken))).status,
+      ).toBe(403);
+
+      await approvePublication(app, admin.accessToken, pub.id);
+      const pub1 = await request(app)
+        .get(`/api/v1/animal-publications/${pub.id}`)
+        .set(bearer(stranger.accessToken));
+      expect(pub1.status).toBe(200);
+      expect(pub1.body.data.submittedBy).toBeUndefined();
+      expect(pub1.body.data.currentOwner).toBeUndefined();
+      expect(JSON.stringify(pub1.body.data)).not.toContain(owner.email);
+    });
+  },
+);

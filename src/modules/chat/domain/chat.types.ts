@@ -63,6 +63,33 @@ export interface Message {
 
 // --- API DTOs ------------------------------------------------------
 
+/**
+ * Admin read-only oversight view of ONE conversation — the raw relationship
+ * ids (not viewer-relative like {@link ConversationDTO}) plus every participant
+ * row. Never mutates read state or membership.
+ */
+export interface AdminConversationDTO {
+  id: string;
+  type: ConversationType;
+  status: ConversationStatus;
+  organizationId: string | null;
+  organizationName: string | null;
+  petOwnerUserId: string | null;
+  memberUserId: string | null;
+  veterinarianUserId: string | null;
+  subjectType: ConversationSubjectType | null;
+  subjectId: string | null;
+  createdByUserId: string | null;
+  lastMessageAt: string | null;
+  createdAt: string;
+  participants: Array<{
+    userId: string;
+    role: ParticipantRole;
+    joinedAt: string;
+    leftAt: string | null;
+  }>;
+}
+
 export interface ConversationDTO {
   id: string;
   type: ConversationType;

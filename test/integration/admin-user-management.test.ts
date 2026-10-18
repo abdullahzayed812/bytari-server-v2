@@ -64,6 +64,44 @@ describe('admin user management — details', () => {
     }
   });
 
+  it('the list, create, update and password endpoints never return credentials, hashes or reset tokens', async () => {
+    const admin = await registerAdmin(app);
+    const user = await registerUser(app);
+    const forbidden = [
+      'password',
+      'passwordhash',
+      'password_hash',
+      'newpassword',
+      'token',
+      'tokenhash',
+      'refreshtoken',
+      'accesstoken',
+      'code',
+      'codehash',
+      'avatarkey',
+    ];
+    const responses = [
+      await request(app).get(`${API}/admin/users`).set(bearer(admin.accessToken)),
+      await request(app)
+        .patch(`${API}/admin/users/${user.id}`)
+        .set(bearer(admin.accessToken))
+        .send({ firstName: 'Renamed' }),
+      await request(app)
+        .post(`${API}/admin/users/${user.id}/password`)
+        .set(bearer(admin.accessToken))
+        .send({ newPassword: NEW_PASSWORD }),
+      await request(app)
+        .post(`${API}/admin/users/${user.id}/password-reset`)
+        .set(bearer(admin.accessToken)),
+    ];
+    for (const res of responses) {
+      expect(res.status).toBeLessThan(300);
+      const keys = allKeys(res.body.data).map((k) => k.toLowerCase());
+      for (const f of forbidden) expect(keys).not.toContain(f);
+      expect(JSON.stringify(res.body)).not.toContain(NEW_PASSWORD);
+    }
+  });
+
   it('a plain user cannot read another user through the admin API (403)', async () => {
     const user = await registerUser(app);
     const other = await registerUser(app);

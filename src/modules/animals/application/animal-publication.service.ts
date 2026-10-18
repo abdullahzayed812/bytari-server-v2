@@ -290,8 +290,14 @@ export class AnimalPublicationService {
     filter: ListPublicationsFilter,
   ): Promise<{ items: ModerationPublicationDTO[]; total: number }> {
     const { items, total } = await this.publications.listForModeration(filter);
+    const people = await this.publications.findModerationPeople(items.map((i) => i.id));
     return {
-      items: await Promise.all(items.map((i) => this.withResolvedGalleryModeration(i))),
+      items: await Promise.all(
+        items.map(async (i) => ({
+          ...(await this.withResolvedGalleryModeration(i)),
+          ...people.get(i.id),
+        })),
+      ),
       total,
     };
   }
@@ -299,7 +305,8 @@ export class AnimalPublicationService {
   async getForModeration(publicationId: string): Promise<ModerationPublicationDTO> {
     const found = await this.publications.findByIdWithAnimal(publicationId);
     if (!found) throw new NotFoundError('Publication not found');
-    return this.withResolvedGalleryModeration(found);
+    const people = await this.publications.findModerationPeople([found.id]);
+    return { ...(await this.withResolvedGalleryModeration(found)), ...people.get(found.id) };
   }
 
   async approve(publicationId: string, actor: PublicationActor): Promise<AnimalPublicationDTO> {

@@ -2,6 +2,7 @@ import type { Knex } from 'knex';
 import type { AnimalStatus } from '../domain/animal.constants.js';
 import {
   rowToAnimal,
+  type AdminAnimalOwnerDTO,
   type Animal,
   type AnimalRow,
   type ListAdminAnimalsFilter,
@@ -170,7 +171,12 @@ export class AnimalRepository {
     filter: ListAdminAnimalsFilter,
     trx?: Knex.Transaction,
   ): Promise<{
-    items: { animal: Animal; ownerUserId: string | null; ownerName: string | null }[];
+    items: {
+      animal: Animal;
+      ownerUserId: string | null;
+      ownerName: string | null;
+      owner: AdminAnimalOwnerDTO | null;
+    }[];
     total: number;
   }> {
     const apply = (qb: Knex.QueryBuilder): Knex.QueryBuilder => {
@@ -197,6 +203,9 @@ export class AnimalRepository {
       owner_user_id: string | null;
       owner_first_name: string | null;
       owner_last_name: string | null;
+      owner_email: string | null;
+      owner_phone: string | null;
+      owner_whatsapp: string | null;
     })[] = await apply(this.conn(trx)(`${TABLE} as a`))
       .orderBy('a.created_at', 'desc')
       .limit(filter.pageSize)
@@ -206,6 +215,9 @@ export class AnimalRepository {
         'o.owner_user_id as owner_user_id',
         'u.first_name as owner_first_name',
         'u.last_name as owner_last_name',
+        'u.email as owner_email',
+        'u.phone as owner_phone',
+        'u.whatsapp as owner_whatsapp',
       );
 
     return {
@@ -213,6 +225,16 @@ export class AnimalRepository {
         animal: rowToAnimal(r),
         ownerUserId: r.owner_user_id,
         ownerName: [r.owner_first_name, r.owner_last_name].filter(Boolean).join(' ').trim() || null,
+        owner: r.owner_user_id
+          ? {
+              id: r.owner_user_id,
+              firstName: r.owner_first_name ?? '',
+              lastName: r.owner_last_name ?? '',
+              email: r.owner_email ?? '',
+              phone: r.owner_phone,
+              whatsapp: r.owner_whatsapp,
+            }
+          : null,
       })),
       total,
     };

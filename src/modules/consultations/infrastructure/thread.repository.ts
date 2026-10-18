@@ -73,7 +73,19 @@ export class ThreadRepository {
             ORDER BY m.created_at ASC, m.id ASC LIMIT 1) AS first_message_preview`,
         [THREAD_PREVIEW_CHARS, msg],
       ),
+      conn.raw(`${this.unreadSql()} AS responder_unread`, [msg]),
     );
+  }
+
+  /**
+   * "New to the responder team": the creator (`source = 'USER'`) wrote after the
+   * responders last opened the thread (`responder_read_at`). Binds the message
+   * table once. Computed per row — never a stored counter, so it cannot drift.
+   */
+  private unreadSql(): string {
+    return `EXISTS (SELECT 1 FROM ?? AS um
+      WHERE um.thread_id = t.id AND um.source = 'USER' AND um.deleted_at IS NULL
+        AND um.created_at > COALESCE(t.responder_read_at, '-infinity'::timestamptz))`;
   }
 
   async findById(id: string, trx?: Knex.Transaction): Promise<SupportThread | null> {
@@ -142,7 +154,28 @@ export class ThreadRepository {
     if (filter.status) qb.where('t.status', filter.status);
     if (filter.createdByUserId) qb.where('t.created_by_user_id', filter.createdByUserId);
     if (filter.category && this.cfg.hasCategory) qb.where('t.category', filter.category);
+    if (filter.unread) qb.whereRaw(this.unreadSql(), [this.cfg.messageTable]);
     return qb;
+  }
+
+  /** Threads that are new to the responder team (optionally only OPEN / CLOSED). */
+  async countUnread(filter: Pick<ListThreadsFilter, 'status' | 'category'> = {}): Promise<number> {
+    const row = (await this.applyList(this.db(`${this.cfg.threadTable} as t`), {
+      ...filter,
+      page: 1,
+      pageSize: 1,
+      unread: true,
+    })
+      .count({ count: '*' })
+      .first()) as { count: string } | undefined;
+    return Number(row?.count ?? 0);
+  }
+
+  /** The responder team opened the thread — everything up to now is reviewed. */
+  async markResponderRead(id: string): Promise<void> {
+    await this.db(this.cfg.threadTable)
+      .where({ id })
+      .update({ responder_read_at: this.db.fn.now() });
   }
 
   async list(

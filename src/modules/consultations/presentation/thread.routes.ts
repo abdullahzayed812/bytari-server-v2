@@ -2,7 +2,11 @@ import { Router } from 'express';
 import { asyncHandler } from '../../../shared/http/async-handler.js';
 import { validate } from '../../../shared/http/validate.js';
 import type { Container } from '../../../container.js';
-import { CONSULTATION_CONFIG, INQUIRY_CONFIG, SUPPORT_CONFIG } from '../application/thread.config.js';
+import {
+  CONSULTATION_CONFIG,
+  INQUIRY_CONFIG,
+  SUPPORT_CONFIG,
+} from '../application/thread.config.js';
 import { AiSettingsController } from './ai-settings.controller.js';
 import { ThreadController } from './thread.controller.js';
 import {
@@ -10,6 +14,7 @@ import {
   createConsultationBodySchema,
   createInquiryBodySchema,
   createSupportBodySchema,
+  adminUnreadCountQuerySchema,
   listAdminThreadsQuerySchema,
   listMessagesQuerySchema,
   listThreadsQuerySchema,
@@ -110,6 +115,13 @@ export function createSupportAdminRouter(c: Container): Router {
     validate({ query: listAdminThreadsQuerySchema }),
     asyncHandler(consultations.listAdmin),
   );
+  // Before `/:threadId` so the literal segment is not parsed as an id.
+  r.get(
+    '/consultations/unread-count',
+    authorize('consultation.admin.read'),
+    validate({ query: adminUnreadCountQuerySchema }),
+    asyncHandler(consultations.adminUnreadCount),
+  );
   r.get(
     '/consultations/:threadId',
     authorize('consultation.admin.read'),
@@ -122,6 +134,13 @@ export function createSupportAdminRouter(c: Container): Router {
     validate({ query: listAdminThreadsQuerySchema }),
     asyncHandler(inquiries.listAdmin),
   );
+  // Before `/:threadId` so the literal segment is not parsed as an id.
+  r.get(
+    '/inquiries/unread-count',
+    authorize('inquiry.admin.read'),
+    validate({ query: adminUnreadCountQuerySchema }),
+    asyncHandler(inquiries.adminUnreadCount),
+  );
   r.get(
     '/inquiries/:threadId',
     authorize('inquiry.admin.read'),
@@ -133,6 +152,13 @@ export function createSupportAdminRouter(c: Container): Router {
     authorize('support.admin.read'),
     validate({ query: listAdminThreadsQuerySchema }),
     asyncHandler(support.listAdmin),
+  );
+  // Before `/:threadId` so the literal segment is not parsed as an id.
+  r.get(
+    '/support-messages/unread-count',
+    authorize('support.admin.read'),
+    validate({ query: adminUnreadCountQuerySchema }),
+    asyncHandler(support.adminUnreadCount),
   );
   r.get(
     '/support-messages/:threadId',

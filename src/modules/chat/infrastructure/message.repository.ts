@@ -57,12 +57,16 @@ export class MessageRepository {
     return row ? rowToMessage(row) : null;
   }
 
-  /** One page of a conversation, newest first, deterministic tiebreak on id. */
+  /**
+   * One page of a conversation, newest first (default) or — `order: 'asc'`,
+   * the admin read-only viewer — oldest first; deterministic tiebreak on id.
+   */
   async listForConversation(
     conversationId: string,
-    filter: { page: number; pageSize: number },
+    filter: { page: number; pageSize: number; order?: 'asc' | 'desc' },
     trx?: Knex.Transaction,
   ): Promise<{ items: Message[]; total: number }> {
+    const order = filter.order ?? 'desc';
     const base = (): Knex.QueryBuilder =>
       this.conn(trx)<MessageRow>(TABLE).where('conversation_id', conversationId);
 
@@ -71,8 +75,8 @@ export class MessageRepository {
 
     const rows: MessageRow[] = await base()
       .orderBy([
-        { column: 'created_at', order: 'desc' },
-        { column: 'id', order: 'desc' },
+        { column: 'created_at', order },
+        { column: 'id', order },
       ])
       .limit(filter.pageSize)
       .offset((filter.page - 1) * filter.pageSize);

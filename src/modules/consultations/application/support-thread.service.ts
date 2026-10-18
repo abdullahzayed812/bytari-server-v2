@@ -21,6 +21,7 @@ import type {
 } from '../domain/thread.constants.js';
 import { ThreadPolicy } from '../domain/thread.policy.js';
 import {
+  toAdminThreadDTO,
   toThreadDTO,
   toThreadMessageDTO,
   type ListThreadsFilter,
@@ -415,7 +416,16 @@ export class SupportThreadService {
   ): Promise<{ items: ThreadDTO[]; total: number }> {
     await this.authz.assert(principal, this.cfg.perms.adminRead);
     const { items, total } = await this.repo.list(filter);
-    return { items: items.map((t) => toThreadDTO(this.cfg.kind, t)), total };
+    return { items: items.map((t) => toAdminThreadDTO(this.cfg.kind, t)), total };
+  }
+
+  /** Admin queue badge: threads with a creator message no responder has opened yet. */
+  async countAdminUnread(
+    principal: AuthPrincipal,
+    filter: Pick<ListThreadsFilter, 'status' | 'category'> = {},
+  ): Promise<{ count: number }> {
+    await this.authz.assert(principal, this.cfg.perms.adminRead);
+    return { count: await this.repo.countUnread(filter) };
   }
 
   async get(principal: AuthPrincipal, threadId: string): Promise<ThreadDTO> {
@@ -431,11 +441,15 @@ export class SupportThreadService {
     pageSize: number,
   ): Promise<{ items: ThreadMessageDTO[]; total: number }> {
     const thread = await this.load(threadId);
-    await this.assertAccess(principal, thread);
+    const side = await this.assertAccess(principal, thread);
     const { items, total } = await this.repo.listMessages(thread.id, { page, pageSize });
-    // Opening the thread (first page) reads it: clear its unread alerts.
+    // Opening the thread (first page) reads it: clear its unread alerts, and —
+    // for the responder team — mark it reviewed (the admin "new" badge).
     if (page === 1) {
       await this.notificationReads?.markReadForEntity(principal.userId, this.cfg.kind, thread.id);
+      if (side === 'RESPONDER' && thread.responderUnread) {
+        await this.repo.markResponderRead(thread.id);
+      }
     }
     return { items: await Promise.all(items.map((m) => this.resolveMessageDto(m))), total };
   }

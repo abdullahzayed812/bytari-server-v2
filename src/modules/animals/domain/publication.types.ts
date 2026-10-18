@@ -100,6 +100,27 @@ export interface AnimalPublicationDTO {
  */
 export interface ModerationPublicationDTO extends AnimalPublicationDTO {
   animal: PublicationAnimalSummary;
+  /**
+   * The account that submitted the listing (`created_by_user_id`, always the
+   * authenticated session at creation — never taken from the body).
+   * Moderators only (`animal.read`); never on the public projection.
+   */
+  submittedBy: PublicationPersonDTO | null;
+  /**
+   * The animal's CURRENT registered owner (`animal_ownerships.ended_at IS NULL`)
+   * — normally the submitter; differs after an ownership transfer.
+   */
+  currentOwner: PublicationPersonDTO | null;
+}
+
+/** Account contact details shown to moderators — never credentials. */
+export interface PublicationPersonDTO {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string | null;
+  whatsapp: string | null;
 }
 
 /**
@@ -326,7 +347,12 @@ export function toModerationPublicationDTO(
   void _galleryKeys;
   const { animal: _animal, ...publicationRest } = p;
   void _animal;
-  return { ...publicationRest, animal: { ...animalRest, galleryUrls: [] } };
+  return {
+    ...publicationRest,
+    animal: { ...animalRest, galleryUrls: [] },
+    submittedBy: null,
+    currentOwner: null,
+  };
 }
 
 export function toMyPublicationDTO(p: AnimalPublicationWithAnimal): MyPublicationDTO {

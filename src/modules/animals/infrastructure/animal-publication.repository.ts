@@ -8,6 +8,7 @@ import {
   type ListPublicationsFilter,
   type MinePublicationsFilter,
   type PublicListFilter,
+  type PublicationPersonDTO,
 } from '../domain/publication.types.js';
 
 const TABLE = 'animal_publications';
@@ -274,6 +275,60 @@ export class AnimalPublicationRepository {
       .select('p.*', ...ANIMAL_JOIN_COLUMNS);
 
     return { items: rows.map(toWithAnimal), total };
+  }
+
+  /**
+   * Moderation only: the submitting account and the animal's CURRENT owner for
+   * each publication — real relationships (`created_by_user_id`,
+   * `animal_ownerships.ended_at IS NULL`), never inferred from listing text.
+   * Selects contact columns explicitly (no password hash / keys).
+   */
+  async findModerationPeople(
+    publicationIds: string[],
+    trx?: Knex.Transaction,
+  ): Promise<
+    Map<
+      string,
+      { submittedBy: PublicationPersonDTO | null; currentOwner: PublicationPersonDTO | null }
+    >
+  > {
+    const out = new Map<
+      string,
+      { submittedBy: PublicationPersonDTO | null; currentOwner: PublicationPersonDTO | null }
+    >();
+    if (publicationIds.length === 0) return out;
+    const rows: Array<Record<string, string | null>> = await this.conn(trx)(`${TABLE} as p`)
+      .leftJoin('users as su', 'su.id', 'p.created_by_user_id')
+      .leftJoin('animal_ownerships as o', function joinCurrent() {
+        this.on('o.animal_id', 'p.animal_id').andOnNull('o.ended_at');
+      })
+      .leftJoin('users as ou', 'ou.id', 'o.owner_user_id')
+      .whereIn('p.id', publicationIds)
+      .select(
+        'p.id as id',
+        ...['id', 'first_name', 'last_name', 'email', 'phone', 'whatsapp'].flatMap((c) => [
+          `su.${c} as su_${c}`,
+          `ou.${c} as ou_${c}`,
+        ]),
+      );
+    const person = (
+      r: Record<string, string | null>,
+      p: 'su' | 'ou',
+    ): PublicationPersonDTO | null =>
+      r[`${p}_id`]
+        ? {
+            id: r[`${p}_id`] as string,
+            firstName: r[`${p}_first_name`] ?? '',
+            lastName: r[`${p}_last_name`] ?? '',
+            email: r[`${p}_email`] ?? '',
+            phone: r[`${p}_phone`] ?? null,
+            whatsapp: r[`${p}_whatsapp`] ?? null,
+          }
+        : null;
+    for (const r of rows) {
+      out.set(r.id as string, { submittedBy: person(r, 'su'), currentOwner: person(r, 'ou') });
+    }
+    return out;
   }
 
   /** One publication of ANY status, joined with the animal summary (moderation detail). */
