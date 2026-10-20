@@ -9,6 +9,7 @@ import {
   type VetServiceListingRow,
   type VetServiceUserSummary,
 } from '../domain/vet-service.types.js';
+import { matchingUserIds, whereTextSearch } from '../../../shared/database/search.js';
 
 const T = 'vet_service_listings';
 
@@ -32,11 +33,7 @@ export class VetServiceListingRepository {
   private joined(trx?: Knex.Transaction): Knex.QueryBuilder {
     return this.conn(trx)(`${T} as l`)
       .join('users as u', 'u.id', 'l.veterinarian_user_id')
-      .select(
-        'l.*',
-        'u.first_name as vet_first_name',
-        'u.last_name as vet_last_name',
-      );
+      .select('l.*', 'u.first_name as vet_first_name', 'u.last_name as vet_last_name');
   }
 
   private map(row: JoinedRow): VetServiceListingWithVet {
@@ -111,7 +108,10 @@ export class VetServiceListingRepository {
     if (patch.reviewedAt !== undefined) dbPatch.reviewed_at = patch.reviewedAt;
     if (patch.rejectionReason !== undefined) dbPatch.rejection_reason = patch.rejectionReason;
     if (patch.closedAt !== undefined) dbPatch.closed_at = patch.closedAt;
-    const [row] = (await trx(T).where({ id }).update(dbPatch).returning('*')) as VetServiceListingRow[];
+    const [row] = (await trx(T)
+      .where({ id })
+      .update(dbPatch)
+      .returning('*')) as VetServiceListingRow[];
     if (!row) throw new Error('vet_service_listing not found on update');
     return rowToListing(row);
   }
@@ -143,7 +143,9 @@ export class VetServiceListingRepository {
       }
       return qb;
     };
-    const countRow = await scope(this.conn()(`${T} as l`).join('users as u', 'u.id', 'l.veterinarian_user_id'))
+    const countRow = await scope(
+      this.conn()(`${T} as l`).join('users as u', 'u.id', 'l.veterinarian_user_id'),
+    )
       .count<{ count: string }>({ count: '*' })
       .first();
     const total = Number(countRow?.count ?? 0);
@@ -171,6 +173,16 @@ export class VetServiceListingRepository {
   ): Promise<{ items: VetServiceListingWithVet[]; total: number }> {
     return this.listScoped((qb) => {
       qb.andWhere('l.status', filter.status ?? 'PENDING');
+      if (filter.search) {
+        const term = filter.search;
+        qb.andWhere((w) => {
+          whereTextSearch(w, term, {
+            columns: ['l.title', 'l.description', 'l.governorate'],
+            ids: ['l.id'],
+          });
+          void w.orWhereIn('l.veterinarian_user_id', matchingUserIds(this.conn(), term));
+        });
+      }
     }, filter);
   }
 

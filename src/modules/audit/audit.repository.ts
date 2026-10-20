@@ -1,5 +1,6 @@
 import type { Knex } from 'knex';
 import type { AuditLogRecord, AuditLogRow, ListAuditFilter } from './audit.types.js';
+import { matchingUserIds, whereTextSearch } from '../../shared/database/search.js';
 
 const TABLE = 'audit_logs';
 
@@ -82,6 +83,17 @@ export class AuditRepository {
       if (filter.actorUserId) qb.where(`${TABLE}.actor_user_id`, filter.actorUserId);
       if (filter.from) qb.where(`${TABLE}.created_at`, '>=', filter.from);
       if (filter.to) qb.where(`${TABLE}.created_at`, '<=', filter.to);
+      if (filter.search) {
+        // Action / entity type, an entity id (or the 8-char prefix the list shows), or the actor.
+        const term = filter.search;
+        qb.where((w) => {
+          whereTextSearch(w, term, {
+            columns: [`${TABLE}.action`, `${TABLE}.entity_type`, `${TABLE}.entity_id`],
+            ids: [`${TABLE}.id`],
+          });
+          void w.orWhereIn(`${TABLE}.actor_user_id`, matchingUserIds(trx ?? this.db, term));
+        });
+      }
       return qb;
     };
 

@@ -47,6 +47,8 @@ export type ApproveTraderBody = z.infer<typeof approveTraderBodySchema>;
 
 export const listTradersQuerySchema = paginationQuerySchema.extend({
   status: z.enum(TRADER_STATUSES).optional(),
+  /** Trade name / phone / governorate, or the account's name / email / phone / id. */
+  search: z.string().trim().min(1).max(160).optional(),
 });
 export type ListTradersQuery = z.infer<typeof listTradersQuerySchema>;
 

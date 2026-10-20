@@ -1,4 +1,5 @@
 import type { Knex } from 'knex';
+import { userSearchSpec, whereTextSearch } from '../../shared/database/search.js';
 import {
   rowToApplication,
   type VetApplicationStatus,
@@ -134,10 +135,19 @@ export class VeterinarianRepository {
   async listPending(
     page: number,
     pageSize: number,
+    search?: string,
     trx?: Knex.Transaction,
   ): Promise<{ items: PendingApplicationRecord[]; total: number }> {
-    const countRow = await this.conn(trx)(TABLE)
-      .where({ status: 'PENDING' })
+    // Applicant name / email / phone / user id, or the application id.
+    const scope = (qb: Knex.QueryBuilder): Knex.QueryBuilder => {
+      qb.join('users as u', 'u.id', 'a.user_id').where('a.status', 'PENDING');
+      whereTextSearch(qb, search, {
+        ...userSearchSpec('u'),
+        ids: ['u.id', 'a.id'],
+      });
+      return qb;
+    };
+    const countRow = await scope(this.conn(trx)(`${TABLE} as a`))
       .count<{ count: string }>({ count: '*' })
       .first();
     const total = Number(countRow?.count ?? 0);
@@ -150,9 +160,7 @@ export class VeterinarianRepository {
         u_phone: string | null;
         u_specialization: string | null;
       }
-    > = await this.conn(trx)(`${TABLE} as a`)
-      .join('users as u', 'u.id', 'a.user_id')
-      .where('a.status', 'PENDING')
+    > = await scope(this.conn(trx)(`${TABLE} as a`))
       .orderBy('a.created_at', 'asc')
       .limit(pageSize)
       .offset((page - 1) * pageSize)

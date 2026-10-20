@@ -240,24 +240,24 @@ requirement.
 
 ## Scripts
 
-| Script                           | Purpose                                              |
-| -------------------------------- | ---------------------------------------------------- |
-| `npm run dev`                    | Watch-mode dev server (tsx)                          |
-| `npm run build`                  | Compile TypeScript to `dist/`                        |
-| `npm start`                      | Run compiled server                                  |
-| `npm run typecheck`              | `tsc --noEmit`                                       |
-| `npm run lint`                   | ESLint (type-checked)                                |
-| `npm run format`                 | Prettier write                                       |
-| `npm test`                       | Migrate, then run Vitest (unit + integration)        |
-| `npm run test:unit`              | Unit tests only (no DB required)                     |
-| `npm run test:integration`       | Migrate, then run integration tests (needs Postgres) |
-| `npm run test:coverage`          | Coverage report                                      |
-| `npm run db:migrate`             | Apply pending migrations                             |
-| `npm run db:rollback`            | Roll back the last migration batch                   |
-| `npm run db:status`              | Show current migration version                       |
-| `npm run db:seed`                | Run seed files                                       |
+| Script                           | Purpose                                                    |
+| -------------------------------- | ---------------------------------------------------------- |
+| `npm run dev`                    | Watch-mode dev server (tsx)                                |
+| `npm run build`                  | Compile TypeScript to `dist/`                              |
+| `npm start`                      | Run compiled server                                        |
+| `npm run typecheck`              | `tsc --noEmit`                                             |
+| `npm run lint`                   | ESLint (type-checked)                                      |
+| `npm run format`                 | Prettier write                                             |
+| `npm test`                       | Migrate, then run Vitest (unit + integration)              |
+| `npm run test:unit`              | Unit tests only (no DB required)                           |
+| `npm run test:integration`       | Migrate, then run integration tests (needs Postgres)       |
+| `npm run test:coverage`          | Coverage report                                            |
+| `npm run db:migrate`             | Apply pending migrations                                   |
+| `npm run db:rollback`            | Roll back the last migration batch                         |
+| `npm run db:status`              | Show current migration version                             |
+| `npm run db:seed`                | Run seed files                                             |
 | `npm run db:seed:dev`            | Seed development personas (dev-only, see docs/DEV_SEED.md) |
-| `npm run db:migrate:make <name>` | Generate a new migration from the stub               |
+| `npm run db:migrate:make <name>` | Generate a new migration from the stub                     |
 
 `npm test` / `npm run test:integration` need a **separate** `.env.test`
 pointing at its own database (e.g. `bytari_test`) — copy `.env.example`,
@@ -841,3 +841,35 @@ docs/  OPERATIONS.md  (+ 01–05 product spec)
 
 See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the layering conventions, the
 authorization model and future-compatibility notes.
+
+Server
+cd ~/dev/bytariv2/server
+git add -A
+git commit -m "feat: featured clinics/offices carousel, clinic expiry fix on appointments, per-permission admin tasks, admin chat search
+
+- featured_home_organizations migration + public and admin endpoints (home_section.manage, audited)
+- /clinic-appointments/:id now blocked for staff of expired or suspended clinics
+- admin dashboard Required Tasks filtered by each task's own permission
+- admin chat list: search by conversation or participant name, filter by type and status
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git push origin main
+git tag -a v1.19.0 -m "v1.19.0: featured orgs carousel, clinic expiry fix, admin tasks/chat search"
+git push origin v1.19.0
+
+Mobile
+cd ~/dev/bytariv2/mobile
+git add -A
+git commit -m "feat: store/magazine/books/news/tips redesigns, home carousel and previews, jobs grid, admin featured orgs and chat search
+
+- shared store UI (storeShared) used by both stores and the vet-home office products
+- magazine, books (list, all books, details), news and tips rebuilt to match the references
+- 3-card news/tips/office-product previews and the auto-moving clinics/offices carousel on home
+- jobs: 2 columns on wide screens, 1 on narrow phones
+- clinic restriction message for staff; greeting fixes
+- fix: app opening on Notifications (repeated launch tap, logout deep link)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git push origin main
+git tag -a v1.19.0 -m "v1.19.0: UI redesigns, home carousel, admin featured orgs and chat search"
+git push origin v1.19.0

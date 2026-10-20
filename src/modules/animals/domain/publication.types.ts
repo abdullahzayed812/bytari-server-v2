@@ -179,6 +179,8 @@ export interface ListPublicationsFilter {
   pageSize: number;
   kind?: PublicationKind;
   status?: PublicationStatus;
+  /** Moderation list only — animal / contact / location / ids / submitter. */
+  search?: string;
 }
 
 export interface PublicListFilter {

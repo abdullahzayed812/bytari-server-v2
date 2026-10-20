@@ -38,6 +38,8 @@ export interface ListSupervisorFilter {
   domain?: SupervisorDomain;
   userId?: string;
   status?: SupervisorAssignmentStatus;
+  /** The supervisor's name / email / phone / id. */
+  search?: string;
 }
 
 export function rowToAssignment(row: SupervisorAssignmentRow): SupervisorAssignment {

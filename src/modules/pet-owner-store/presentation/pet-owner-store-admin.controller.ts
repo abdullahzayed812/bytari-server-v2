@@ -136,6 +136,7 @@ export class PetStoreAdminController {
       status: q.status,
       userId: q.userId,
       newOnly: q.newOnly,
+      search: q.search,
     });
     sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
   };

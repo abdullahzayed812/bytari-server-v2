@@ -349,6 +349,8 @@ export interface ListPetStoreOrdersFilter {
   userId?: string;
   /** Admin-only — orders no store manager has opened yet. */
   newOnly?: boolean;
+  /** Admin-only — order number / id, recipient name / phone / address, or the buyer. */
+  search?: string;
 }
 
 /** Store-manager view of an order: `isNew` = not yet opened by any manager. */

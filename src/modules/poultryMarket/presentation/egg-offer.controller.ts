@@ -102,6 +102,7 @@ export class EggOfferController {
       governorate: q.governorate,
       status: q.status,
       moderationStatus: q.moderationStatus,
+      search: q.search,
     });
     // The reviewer needs to see WHO is selling (admin-only, `market.offer.admin.read`).
     const sellers = await this.traders.findSellerSummaries(items.map((o) => o.traderUserId));

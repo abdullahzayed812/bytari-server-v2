@@ -323,3 +323,78 @@ describe('scope: Veterinary Office behaviour unchanged', () => {
     expect(members.status).toBe(200);
   });
 });
+
+describe('direct-by-id appointment routes (no organization in the URL)', () => {
+  async function bookedAppointment(ctx: Ctx): Promise<string> {
+    const res = await request(ctx.app)
+      .post(`${API}/organizations/${ctx.clinic.id}/clinic-appointments`)
+      .set(bearer(ctx.petOwner.accessToken))
+      .send({
+        animalId: ctx.animal.id,
+        visitType: 'CHECKUP',
+        scheduledFor: new Date(Date.now() + 3 * 3_600_000).toISOString(),
+      });
+    expect(res.status).toBe(201);
+    return res.body.data.id as string;
+  }
+
+  it('staff and vet lose /clinic-appointments/:id while expired or suspended; renewal restores it', async () => {
+    const ctx = await setup();
+    const id = await bookedAppointment(ctx);
+    const get = (token: string) =>
+      request(ctx.app).get(`${API}/clinic-appointments/${id}`).set(bearer(token));
+    const history = (token: string) =>
+      request(ctx.app).get(`${API}/clinic-appointments/${id}/history`).set(bearer(token));
+
+    // ACTIVE: clinic staff see it.
+    expect((await get(ctx.vet.accessToken)).status).toBe(200);
+    expect((await get(ctx.staff.accessToken)).status).toBe(200);
+
+    // EXPIRED: direct API access is refused for owner AND staff (404 — ids don't leak).
+    await setPeriod(ctx.clinic.id, addDays(ctx.today, -60), addDays(ctx.today, -1));
+    for (const token of [ctx.owner.accessToken, ctx.vet.accessToken, ctx.staff.accessToken]) {
+      expect((await get(token)).status).toBe(404);
+      expect((await history(token)).status).toBe(404);
+    }
+    // The pet owner keeps their own booking.
+    expect((await get(ctx.petOwner.accessToken)).status).toBe(200);
+
+    // SUSPENDED (inactive): same.
+    await setPeriod(ctx.clinic.id, ctx.today, addDays(ctx.today, 30));
+    await setStatus(ctx.clinic.id, 'SUSPENDED');
+    expect((await get(ctx.vet.accessToken)).status).toBe(404);
+
+    // Back to ACTIVE + valid subscription → restored automatically.
+    await setStatus(ctx.clinic.id, 'ACTIVE');
+    expect((await get(ctx.vet.accessToken)).status).toBe(200);
+    expect((await history(ctx.staff.accessToken)).status).toBe(200);
+  });
+
+  it('an expired clinic does not affect another clinic the same vet works at', async () => {
+    const ctx = await setup();
+    const other = await createActiveOrganization(
+      ctx.app,
+      ctx.newcomer.accessToken,
+      ctx.admin.accessToken,
+      { type: 'CLINIC', name: 'Second Clinic' },
+    );
+    await addOrganizationMember(ctx.app, ctx.newcomer.accessToken, other.id, {
+      userId: ctx.vet.id,
+      role: 'VETERINARIAN',
+    });
+    await setPeriod(other.id, addDays(ctx.today, -10), addDays(ctx.today, 30));
+    await setPeriod(ctx.clinic.id, addDays(ctx.today, -60), addDays(ctx.today, -1));
+
+    const expired = await request(ctx.app)
+      .get(`${API}/organizations/${ctx.clinic.id}/clinic-dashboard/summary`)
+      .set(bearer(ctx.vet.accessToken));
+    expect(expired.status).toBe(403);
+    const stillActive = await request(ctx.app)
+      .get(`${API}/organizations/${other.id}/clinic-dashboard/summary`)
+      .set(bearer(ctx.vet.accessToken));
+    expect(stillActive.status).toBe(200);
+    // Personal account access is untouched.
+    const me = await request(ctx.app).get(`${API}/auth/me`).set(bearer(ctx.vet.accessToken));
+    expect(me.status).toBe(200);
+  });
+});

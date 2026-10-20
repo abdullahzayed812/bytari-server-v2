@@ -10,6 +10,7 @@ export const listAuditQuerySchema = paginationQuerySchema.extend({
   /** `YYYY-M-D` / `YYYY-MM-DD` (whole Baghdad day) or a full ISO date-time. */
   from: dateBoundSchema('start').optional(),
   to: dateBoundSchema('end').optional(),
+  search: z.string().trim().min(1).max(160).optional(),
 });
 export type ListAuditQuery = z.infer<typeof listAuditQuerySchema>;
 

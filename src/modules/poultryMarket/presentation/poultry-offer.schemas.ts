@@ -75,6 +75,7 @@ export type ListPoultryOffersQuery = z.infer<typeof listPoultryOffersQuerySchema
 export const listAdminPoultryOffersQuerySchema = listPoultryOffersQuerySchema.extend({
   status: z.enum(['ACTIVE', 'REMOVED']).optional(),
   moderationStatus: z.enum(['PENDING', 'APPROVED', 'REJECTED']).optional(),
+  search: z.string().trim().min(1).max(160).optional(),
 });
 
 export const rejectPoultryOfferBodySchema = z

@@ -9,6 +9,7 @@ import {
   type ListAnimalsFilter,
 } from '../domain/animal.types.js';
 import { normalizePublicCode } from '../domain/public-code.js';
+import { userSearchSpec, whereTextSearch } from '../../../shared/database/search.js';
 
 const TABLE = 'animals';
 
@@ -190,7 +191,21 @@ export class AnimalRepository {
       if (filter.ownerUserId) qb.where('o.owner_user_id', filter.ownerUserId);
       if (filter.status) qb.where('a.status', filter.status);
       if (filter.species) qb.where('a.species', filter.species);
-      if (filter.search) searchNameOrCode(qb, filter.search);
+      if (filter.search) {
+        // Admin: name / public code / breed / id, or the current owner's name / email / phone.
+        const term = filter.search;
+        qb.where((w) => {
+          void w
+            .where((n) => searchNameOrCode(n, term))
+            .orWhere((o) =>
+              whereTextSearch(o, term, {
+                columns: ['a.breed', ...userSearchSpec('u').columns],
+                fullNames: userSearchSpec('u').fullNames,
+                ids: ['a.id', 'u.id'],
+              }),
+            );
+        });
+      }
       return qb;
     };
 

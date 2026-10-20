@@ -110,6 +110,12 @@ export interface AdminDashboardServiceDeps {
  * section's total when it has no active/inactive lifecycle; never affected
  * by "seen").
  */
+/** Decides whether the caller may see one pending-task kind (for one organization type). */
+export type PendingTaskVisibility = (
+  kind: AdminPendingTask['kind'],
+  organizationType: string | null,
+) => Promise<boolean>;
+
 export class AdminDashboardService {
   constructor(private readonly deps: AdminDashboardServiceDeps) {}
 
@@ -119,7 +125,16 @@ export class AdminDashboardService {
    */
   async getSummary(
     userId: string,
-    opts: { includeRecentActivity: boolean } = { includeRecentActivity: true },
+    opts: {
+      includeRecentActivity: boolean;
+      /**
+       * Per-task visibility ("المهام المطلوبة"). ADMIN sees every task; a
+       * system supervisor only the tasks whose target action their own
+       * permissions allow (the same keys the target screens enforce).
+       * Omitted → every task (ADMIN-equivalent; tests / internal callers).
+       */
+      canSeeTask?: PendingTaskVisibility;
+    } = { includeRecentActivity: true },
   ): Promise<AdminDashboardSummary> {
     const [
       seenMap,
@@ -235,7 +250,7 @@ export class AdminDashboardService {
       opts.includeRecentActivity
         ? this.deps.audit.list({ page: 1, pageSize: RECENT_ACTIVITY_SIZE })
         : Promise.resolve({ items: [], total: 0 }),
-      this.deps.organizations.listPendingForAdmin(1, CARD_WINDOW_SIZE),
+      this.deps.organizations.listPendingForAdmin({ page: 1, pageSize: CARD_WINDOW_SIZE }),
       this.deps.farmSubscriptionRenewals.listAllPendingForAdmin({
         page: 1,
         pageSize: CARD_WINDOW_SIZE,
@@ -533,10 +548,11 @@ export class AdminDashboardService {
       createdAt: entry.createdAt,
     }));
 
-    const pendingTasks = this.buildPendingTasks(
+    const pendingTasks = await this.buildPendingTasks(
       vetApplicationsPending,
       organizationsPending,
       renewalsPending,
+      opts.canSeeTask ?? (() => Promise.resolve(true)),
     );
 
     return { cards, recentActivity, pendingTasks };
@@ -547,7 +563,7 @@ export class AdminDashboardService {
     await this.deps.seen.markSeen(userId, cardId);
   }
 
-  private buildPendingTasks(
+  private async buildPendingTasks(
     vetApplications: {
       items: Array<{
         id: string;
@@ -555,18 +571,42 @@ export class AdminDashboardService {
         user: { firstName: string; lastName: string };
       }>;
     },
-    organizations: { items: Array<{ id: string; name: string; createdAt: string }> },
+    organizations: {
+      items: Array<{ id: string; name: string; type: string; createdAt: string }>;
+    },
     renewals: {
       items: Array<{
         id: string;
         organizationId: string;
         organizationName: string;
+        organizationType: string;
         createdAt: string;
       }>;
     },
-  ): AdminPendingTask[] {
+    canSeeTask: PendingTaskVisibility,
+  ): Promise<AdminPendingTask[]> {
+    // One permission check per (kind, organization type), not per row.
+    const memo = new Map<string, Promise<boolean>>();
+    const visible = (
+      kind: AdminPendingTask['kind'],
+      organizationType: string | null,
+    ): Promise<boolean> => {
+      const key = `${kind}:${organizationType ?? ''}`;
+      let decision = memo.get(key);
+      if (!decision) {
+        decision = canSeeTask(kind, organizationType);
+        memo.set(key, decision);
+      }
+      return decision;
+    };
+    const [vetAllowed, orgAllowed, renewalAllowed] = await Promise.all([
+      visible('VET_APPLICATION', null),
+      Promise.all(organizations.items.map((o) => visible('ORGANIZATION_APPROVAL', o.type))),
+      Promise.all(renewals.items.map((r) => visible('SUBSCRIPTION_RENEWAL', r.organizationType))),
+    ]);
+
     const tasks: AdminPendingTask[] = [
-      ...vetApplications.items.map((a) => ({
+      ...(vetAllowed ? vetApplications.items : []).map((a) => ({
         id: `VET_APPLICATION:${a.id}`,
         kind: 'VET_APPLICATION' as const,
         targetId: a.id,
@@ -574,22 +614,26 @@ export class AdminDashboardService {
         priority: priorityFromAge(a.createdAt),
         createdAt: a.createdAt,
       })),
-      ...organizations.items.map((o) => ({
-        id: `ORGANIZATION_APPROVAL:${o.id}`,
-        kind: 'ORGANIZATION_APPROVAL' as const,
-        targetId: o.id,
-        label: `مراجعة طلب تسجيل ${o.name}`,
-        priority: priorityFromAge(o.createdAt),
-        createdAt: o.createdAt,
-      })),
-      ...renewals.items.map((r) => ({
-        id: `SUBSCRIPTION_RENEWAL:${r.id}`,
-        kind: 'SUBSCRIPTION_RENEWAL' as const,
-        targetId: r.organizationId,
-        label: `مراجعة طلب تجديد اشتراك ${r.organizationName}`,
-        priority: priorityFromAge(r.createdAt),
-        createdAt: r.createdAt,
-      })),
+      ...organizations.items
+        .filter((_, i) => orgAllowed[i])
+        .map((o) => ({
+          id: `ORGANIZATION_APPROVAL:${o.id}`,
+          kind: 'ORGANIZATION_APPROVAL' as const,
+          targetId: o.id,
+          label: `مراجعة طلب تسجيل ${o.name}`,
+          priority: priorityFromAge(o.createdAt),
+          createdAt: o.createdAt,
+        })),
+      ...renewals.items
+        .filter((_, i) => renewalAllowed[i])
+        .map((r) => ({
+          id: `SUBSCRIPTION_RENEWAL:${r.id}`,
+          kind: 'SUBSCRIPTION_RENEWAL' as const,
+          targetId: r.organizationId,
+          label: `مراجعة طلب تجديد اشتراك ${r.organizationName}`,
+          priority: priorityFromAge(r.createdAt),
+          createdAt: r.createdAt,
+        })),
     ];
 
     return tasks

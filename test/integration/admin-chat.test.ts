@@ -47,6 +47,76 @@ describe('admin chat oversight — GET /admin/chat/conversations', () => {
   });
 });
 
+describe('admin chat oversight — search + filters', () => {
+  async function seed() {
+    const admin = await registerAdmin(app);
+    const vetOwner = await registerApprovedVet(app);
+    const alice = await registerUser(app);
+    const bob = await registerUser(app);
+    await getTestDb()('users')
+      .where({ id: alice.id })
+      .update({ first_name: 'Zainab', last_name: 'Kareem' });
+    await getTestDb()('users')
+      .where({ id: bob.id })
+      .update({ first_name: 'Omar', last_name: 'Saleh' });
+    const clinic = await createActiveOrganization(app, vetOwner.accessToken, admin.accessToken, {
+      type: 'CLINIC',
+      name: 'عيادة النور',
+    });
+    const other = await createActiveOrganization(app, vetOwner.accessToken, admin.accessToken, {
+      type: 'VETERINARY_OFFICE',
+      name: 'Delta Office',
+    });
+    const c1 = await startConversation(app, alice.accessToken, clinic.id);
+    const c2 = await startConversation(app, bob.accessToken, other.id);
+    return { admin, alice, bob, clinic, other, c1, c2 };
+  }
+  const list = (token: string, query: Record<string, string>) =>
+    request(app).get('/api/v1/admin/chat/conversations').query(query).set(bearer(token));
+
+  it('rows carry the conversation name and participant names', async () => {
+    const { admin, c1 } = await seed();
+    const res = await list(admin.accessToken, {});
+    expect(res.status).toBe(200);
+    const row = res.body.data.find((c: { id: string }) => c.id === c1.id);
+    expect(row.organizationName).toBe('عيادة النور');
+    expect(row.people).toEqual([
+      expect.objectContaining({ side: 'PET_OWNER', firstName: 'Zainab', lastName: 'Kareem' }),
+    ]);
+    expect(row).not.toHaveProperty('body');
+  });
+
+  it('searches by conversation name, participant first/full name; filters by type + status', async () => {
+    const { admin, c1, c2 } = await seed();
+    const ids = (res: request.Response) => res.body.data.map((c: { id: string }) => c.id);
+
+    const byOrg = await list(admin.accessToken, { q: 'النور' });
+    expect(ids(byOrg)).toEqual([c1.id]);
+    expect(byOrg.body.meta.total).toBe(1);
+
+    expect(ids(await list(admin.accessToken, { q: 'omar' }))).toEqual([c2.id]);
+    expect(ids(await list(admin.accessToken, { q: 'Zainab Kareem' }))).toEqual([c1.id]);
+    // LIKE wildcards are literal, not "match everything".
+    expect(ids(await list(admin.accessToken, { q: '%' }))).toEqual([]);
+
+    expect(ids(await list(admin.accessToken, { type: 'PET_OWNER_VETERINARY_OFFICE' }))).toEqual([
+      c2.id,
+    ]);
+    expect(ids(await list(admin.accessToken, { status: 'CLOSED' }))).toEqual([]);
+    expect(ids(await list(admin.accessToken, { q: 'Delta', type: 'PET_OWNER_CLINIC' }))).toEqual(
+      [],
+    );
+
+    const bad = await list(admin.accessToken, { type: 'NOPE' });
+    expect(bad.status).toBe(422);
+  });
+
+  it('search stays admin-only', async () => {
+    const { alice } = await seed();
+    expect((await list(alice.accessToken, { q: 'Omar' })).status).toBe(403);
+  });
+});
+
 describe('admin chat oversight — read-only conversation viewer', () => {
   async function seedConversation() {
     const admin = await registerAdmin(app);

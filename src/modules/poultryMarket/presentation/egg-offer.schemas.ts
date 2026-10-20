@@ -60,6 +60,7 @@ export type ListEggOffersQuery = z.infer<typeof listEggOffersQuerySchema>;
 export const listAdminEggOffersQuerySchema = listEggOffersQuerySchema.extend({
   status: z.enum(['ACTIVE', 'REMOVED']).optional(),
   moderationStatus: z.enum(['PENDING', 'APPROVED', 'REJECTED']).optional(),
+  search: z.string().trim().min(1).max(160).optional(),
 });
 
 export const rejectEggOfferBodySchema = z

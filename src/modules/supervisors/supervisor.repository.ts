@@ -6,6 +6,7 @@ import {
   type SupervisorAssignmentRow,
   type SupervisorAssignmentSummary,
 } from './supervisor.types.js';
+import { matchingUserIds } from '../../shared/database/search.js';
 
 const TABLE = 'system_supervisor_assignments';
 
@@ -79,6 +80,10 @@ export class SupervisorRepository {
       if (filter.domain) qb.where('a.domain', filter.domain);
       if (filter.userId) qb.where('a.user_id', filter.userId);
       if (filter.status) qb.where('a.status', filter.status);
+      if (filter.search) {
+        // The supervisor's name / email / phone / id.
+        qb.whereIn('a.user_id', matchingUserIds(this.conn(trx), filter.search));
+      }
       return qb;
     };
 

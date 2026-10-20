@@ -303,6 +303,9 @@ export const AuditAction = {
   // --- Home-page section images ---
   HOME_SECTION_IMAGE_UPDATED: 'HOME_SECTION_IMAGE_UPDATED',
   HOME_SECTION_IMAGE_REMOVED: 'HOME_SECTION_IMAGE_REMOVED',
+  HOME_FEATURED_ORGANIZATION_ADDED: 'HOME_FEATURED_ORGANIZATION_ADDED',
+  HOME_FEATURED_ORGANIZATION_UPDATED: 'HOME_FEATURED_ORGANIZATION_UPDATED',
+  HOME_FEATURED_ORGANIZATION_REMOVED: 'HOME_FEATURED_ORGANIZATION_REMOVED',
 
   // --- Poultry Markets (trader registration / offers / exchange rates) ---
   TRADER_APPLICATION_CREATED: 'TRADER_APPLICATION_CREATED',
@@ -385,6 +388,7 @@ export const AuditEntityType = {
   AD_CAMPAIGN: 'AD_CAMPAIGN',
   AD_SLIDE: 'AD_SLIDE',
   HOME_SECTION: 'HOME_SECTION',
+  HOME_FEATURED_ORGANIZATION: 'HOME_FEATURED_ORGANIZATION',
   TRADER_PROFILE: 'TRADER_PROFILE',
   POULTRY_OFFER: 'POULTRY_OFFER',
   EGG_OFFER: 'EGG_OFFER',
@@ -443,6 +447,8 @@ export interface ListAuditFilter {
   actorUserId?: string;
   from?: Date;
   to?: Date;
+  /** Action / entity type / entity id (prefix) / actor name / email. */
+  search?: string;
 }
 
 export interface AuditLogRow {

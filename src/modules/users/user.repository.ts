@@ -1,5 +1,6 @@
 import { DELETED_USER_ID } from './user.types.js';
 import type { Knex } from 'knex';
+import { userSearchSpec, whereTextSearch } from '../../shared/database/search.js';
 import { rowToUser } from './user.mapper.js';
 import type {
   CreateUserData,
@@ -90,14 +91,8 @@ export class UserRepository {
       qb.whereNot('id', DELETED_USER_ID);
       if (filter.status) qb.where('status', filter.status);
       if (filter.veterinarianStatus) qb.where('veterinarian_status', filter.veterinarianStatus);
-      if (filter.search) {
-        const like = `%${filter.search.toLowerCase()}%`;
-        qb.where((w) => {
-          w.whereRaw('lower(email::text) like ?', [like])
-            .orWhereRaw('lower(first_name) like ?', [like])
-            .orWhereRaw('lower(last_name) like ?', [like]);
-        });
-      }
+      // Name ("first last" too), email, phone or id.
+      whereTextSearch(qb, filter.search, userSearchSpec('users'));
       if (filter.role) {
         qb.whereIn(
           'id',

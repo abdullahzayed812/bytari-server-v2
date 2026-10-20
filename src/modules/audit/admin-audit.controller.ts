@@ -20,6 +20,7 @@ export class AdminAuditController {
       actorUserId: q.actorUserId,
       from: q.from,
       to: q.to,
+      search: q.search,
     });
     sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
   };

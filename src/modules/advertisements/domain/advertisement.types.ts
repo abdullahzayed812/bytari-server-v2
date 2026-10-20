@@ -149,4 +149,6 @@ export interface ListCampaignsFilter {
   includeDeleted?: boolean;
   placement?: AdPlacement;
   type?: AdType;
+  /** Campaign title / id or a slide's title / subtitle. */
+  search?: string;
 }

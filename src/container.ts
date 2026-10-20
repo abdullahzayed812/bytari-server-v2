@@ -221,6 +221,8 @@ import { AdSlideRepository } from './modules/advertisements/infrastructure/ad-sl
 import { AdvertisementService } from './modules/advertisements/application/advertisement.service.js';
 import { HomeSectionImageRepository } from './modules/home-sections/infrastructure/home-section-image.repository.js';
 import { HomeSectionImageService } from './modules/home-sections/application/home-section-image.service.js';
+import { FeaturedOrganizationRepository } from './modules/home-sections/infrastructure/featured-organization.repository.js';
+import { FeaturedOrganizationService } from './modules/home-sections/application/featured-organization.service.js';
 import {
   createPushProvider,
   PushNotificationService,
@@ -475,6 +477,8 @@ export interface Container {
   advertisementService: AdvertisementService;
   homeSectionImageRepository: HomeSectionImageRepository;
   homeSectionImageService: HomeSectionImageService;
+  featuredOrganizationRepository: FeaturedOrganizationRepository;
+  featuredOrganizationService: FeaturedOrganizationService;
 
   supervisorRepository: SupervisorRepository;
   pushProvider: PushNotificationProvider;
@@ -808,6 +812,13 @@ export function createContainer(deps: ContainerDeps): Container {
   const clinicAppointmentRepository = new ClinicAppointmentRepository(db);
   // Clinic ↔ pet relationship = the clinic's own records (no link table).
   const clinicPetRepository = new ClinicPetRepository(db);
+  const farmSubscriptionRenewalRepository = new FarmSubscriptionRenewalRepository(db);
+  // The shared "may this organization operate?" rule (status + subscription).
+  const organizationOperabilityService = new OrganizationOperabilityService(
+    farmSubscriptionRenewalRepository,
+    authorizationService,
+  );
+
   const clinicAppointmentService = new ClinicAppointmentService(
     db,
     clinicAppointmentRepository,
@@ -817,6 +828,7 @@ export function createContainer(deps: ContainerDeps): Container {
     auditService,
     eventBus,
     logger,
+    organizationOperabilityService,
   );
 
   // --- veterinary care (Phase 5) -----------------------------
@@ -904,12 +916,6 @@ export function createContainer(deps: ContainerDeps): Container {
   );
 
   const farmProfileRepository = new FarmProfileRepository(db);
-  const farmSubscriptionRenewalRepository = new FarmSubscriptionRenewalRepository(db);
-  // "May this organization operate?" — status + subscription expiry, one rule.
-  const organizationOperabilityService = new OrganizationOperabilityService(
-    farmSubscriptionRenewalRepository,
-    authorizationService,
-  );
   const poultryDailyRecordRepository = new PoultryDailyRecordRepository(db);
   const farmExpenseRepository = new FarmExpenseRepository(db);
   const poultryHealthEventRepository = new PoultryHealthEventRepository(db);
@@ -1549,6 +1555,16 @@ export function createContainer(deps: ContainerDeps): Container {
     auditService,
     logger,
   );
+  // Featured clinics / offices of the home carousel (existing organizations only).
+  const featuredOrganizationRepository = new FeaturedOrganizationRepository(db);
+  const featuredOrganizationService = new FeaturedOrganizationService(
+    db,
+    featuredOrganizationRepository,
+    organizationRepository,
+    organizationService,
+    organizationEngagementService,
+    auditService,
+  );
 
   // --- notifications & FCM (Phase 15) -----------------------
   // Reuses the Phase-1 push infrastructure (provider abstraction + Firebase
@@ -1865,6 +1881,8 @@ export function createContainer(deps: ContainerDeps): Container {
     advertisementService,
     homeSectionImageRepository,
     homeSectionImageService,
+    featuredOrganizationRepository,
+    featuredOrganizationService,
     supervisorRepository,
     pushProvider,
     pushNotificationService,

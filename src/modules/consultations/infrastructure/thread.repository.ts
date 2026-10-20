@@ -14,6 +14,7 @@ import {
   type ThreadMessageRow,
   type ThreadRow,
 } from '../domain/thread.types.js';
+import { escapeLike, matchingUserIds, whereTextSearch } from '../../../shared/database/search.js';
 
 export interface ThreadRepositoryConfig {
   threadTable: string;
@@ -155,6 +156,24 @@ export class ThreadRepository {
     if (filter.createdByUserId) qb.where('t.created_by_user_id', filter.createdByUserId);
     if (filter.category && this.cfg.hasCategory) qb.where('t.category', filter.category);
     if (filter.unread) qb.whereRaw(this.unreadSql(), [this.cfg.messageTable]);
+    if (filter.search) {
+      // Admin queue: the creator's name / email / phone, a thread id, or any message text.
+      const term = filter.search;
+      const like = `%${escapeLike(term)}%`;
+      qb.where((w) => {
+        whereTextSearch(w, term, { columns: [], ids: ['t.id', 't.created_by_user_id'] });
+        void w
+          .orWhereIn('t.created_by_user_id', matchingUserIds(this.db, term))
+          .orWhereExists((m) => {
+            void m
+              .from(`${this.cfg.messageTable} as sm`)
+              .select(this.db.raw('1'))
+              .whereRaw('sm.thread_id = t.id')
+              .whereNull('sm.deleted_at')
+              .whereRaw('sm.body ilike ?', [like]);
+          });
+      });
+    }
     return qb;
   }
 

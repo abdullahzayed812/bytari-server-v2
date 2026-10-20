@@ -7,6 +7,7 @@ export const listSupervisorsQuerySchema = paginationQuerySchema.extend({
   domain: z.enum(SUPERVISOR_DOMAINS).optional(),
   userId: z.string().uuid().optional(),
   status: z.enum(SUPERVISOR_ASSIGNMENT_STATUSES).optional(),
+  search: z.string().trim().min(1).max(160).optional(),
 });
 export type ListSupervisorsQuery = z.infer<typeof listSupervisorsQuerySchema>;
 

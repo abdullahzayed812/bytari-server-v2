@@ -7,6 +7,7 @@ import {
   type EggOfferRow,
   type ListEggOffersFilter,
 } from '../domain/egg-offer.types.js';
+import { matchingUserIds, whereTextSearch } from '../../../shared/database/search.js';
 
 const TABLE = 'egg_offers';
 
@@ -111,6 +112,23 @@ export class EggOfferRepository {
       if (filter.moderationStatus) qb.andWhere('moderation_status', filter.moderationStatus);
       if (filter.eggType) qb.andWhere('egg_type', filter.eggType);
       if (filter.governorate) qb.andWhere('governorate', filter.governorate);
+      if (filter.search) {
+        // Offer id / location / phone / notes, or the seller (trade name or account identity).
+        const term = filter.search;
+        const conn = this.conn(trx);
+        qb.where((w) => {
+          whereTextSearch(w, term, {
+            columns: ['governorate', 'district', 'phone', 'whatsapp', 'notes'],
+            ids: ['id'],
+          });
+          void w
+            .orWhereIn('trader_user_id', matchingUserIds(conn, term))
+            .orWhereIn('trader_user_id', (sub) => {
+              void sub.from('trader_profiles as tp').select('tp.user_id');
+              whereTextSearch(sub, term, { columns: ['tp.display_name', 'tp.phone'] });
+            });
+        });
+      }
       return qb;
     };
 

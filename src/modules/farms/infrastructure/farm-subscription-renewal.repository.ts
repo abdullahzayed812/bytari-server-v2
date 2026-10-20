@@ -11,6 +11,8 @@ import {
   type RenewalRequestStatus,
 } from '../domain/farm-subscription.types.js';
 
+import { userSearchSpec, whereTextSearch } from '../../../shared/database/search.js';
+
 const TABLE = 'farm_subscription_renewal_requests';
 
 /**
@@ -89,6 +91,7 @@ export interface ListFarmsForAdminFilter {
   subscriptionStatus?: 'NOT_STARTED' | 'ACTIVE' | 'EXPIRED';
   /** See `adminListFarmsQuerySchema.speciesGroup`. */
   speciesGroup?: 'POULTRY' | 'LIVESTOCK' | 'SHEEP' | 'CATTLE';
+  search?: string;
 }
 
 function numOrNull(v: number | string | null): number | null {
@@ -300,6 +303,21 @@ export class FarmSubscriptionRenewalRepository {
             });
         });
       }
+      // Farm name / id / join code / location / contact, or the owner's identity.
+      whereTextSearch(qb, filter.search, {
+        columns: [
+          'o.name',
+          'd.join_code',
+          'd.governorate',
+          'd.location',
+          'd.contact_name',
+          'd.contact_phone',
+          'd.contact_email',
+          ...userSearchSpec('u').columns,
+        ],
+        fullNames: userSearchSpec('u').fullNames,
+        ids: ['o.id', 'u.id'],
+      });
       if (filter.subscriptionStatus === 'NOT_STARTED') {
         qb.where((b) => {
           b.whereNull('d.subscription_start_date').orWhereNull('d.subscription_end_date');
@@ -465,10 +483,17 @@ export class FarmSubscriptionRenewalRepository {
    * VETERINARY_OFFICE requests, never CLINIC/FARM ones mixed in).
    */
   async listAllPendingForAdmin(
-    filter: { page: number; pageSize: number; organizationType?: OrganizationType },
+    filter: {
+      page: number;
+      pageSize: number;
+      organizationType?: OrganizationType;
+      search?: string;
+    },
     trx?: Knex.Transaction,
   ): Promise<{
-    items: Array<FarmSubscriptionRenewalRequest & { organizationName: string }>;
+    items: Array<
+      FarmSubscriptionRenewalRequest & { organizationName: string; organizationType: string }
+    >;
     total: number;
   }> {
     const conn = this.conn(trx);
@@ -476,6 +501,7 @@ export class FarmSubscriptionRenewalRepository {
       const qb = conn(`${TABLE} as req`)
         .join('organizations as o', 'o.id', 'req.organization_id')
         .where('req.status', 'PENDING');
+      whereTextSearch(qb, filter.search, { columns: ['o.name'], ids: ['o.id', 'req.id'] });
       return filter.organizationType ? qb.where('o.type', filter.organizationType) : qb;
     };
 
@@ -483,17 +509,18 @@ export class FarmSubscriptionRenewalRepository {
     const total = Number(countRow?.count ?? 0);
 
     const rows = (await base()
-      .select('req.*', 'o.name as organization_name')
+      .select('req.*', 'o.name as organization_name', 'o.type as organization_type')
       .orderBy('req.created_at', 'desc')
       .limit(filter.pageSize)
       .offset((filter.page - 1) * filter.pageSize)) as Array<
-      FarmSubscriptionRenewalRequestRow & { organization_name: string }
+      FarmSubscriptionRenewalRequestRow & { organization_name: string; organization_type: string }
     >;
 
     return {
       items: rows.map((r) => ({
         ...rowToFarmSubscriptionRenewalRequest(r),
         organizationName: r.organization_name,
+        organizationType: r.organization_type,
       })),
       total,
     };

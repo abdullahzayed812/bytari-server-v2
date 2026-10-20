@@ -51,6 +51,8 @@ export const adminListFarmsQuerySchema = paginationQuerySchema.extend({
    * null-species farms) stays under `POULTRY` so no request is orphaned.
    */
   speciesGroup: z.enum(['POULTRY', 'LIVESTOCK', 'SHEEP', 'CATTLE']).optional(),
+  /** Farm name / id / join code / location / contact, or the owner's name / email / phone. */
+  search: z.string().trim().min(1).max(160).optional(),
 });
 export type AdminListFarmsQuery = z.infer<typeof adminListFarmsQuerySchema>;
 

@@ -6,6 +6,7 @@ import {
   type AdCampaignRow,
   type ListCampaignsFilter,
 } from '../domain/advertisement.types.js';
+import { whereTextSearch } from '../../../shared/database/search.js';
 
 const T = 'ad_campaigns';
 
@@ -131,6 +132,17 @@ export class AdCampaignRepository {
       if (!filter.includeDeleted) qb.whereNull('deleted_at');
       if (filter.placement) qb.where('placement', filter.placement);
       if (filter.type) qb.where('type', filter.type);
+      if (filter.search) {
+        // Campaign title / id, or any of its slides' title / subtitle.
+        const term = filter.search;
+        qb.where((w) => {
+          whereTextSearch(w, term, { columns: [`${T}.title`], ids: [`${T}.id`] });
+          void w.orWhereIn(`${T}.id`, (sub) => {
+            void sub.from('ad_slides as s').select('s.campaign_id');
+            whereTextSearch(sub, term, { columns: ['s.title', 's.subtitle'] });
+          });
+        });
+      }
     };
 
     const countRow = await this.conn(trx)<AdCampaignRow>(T)

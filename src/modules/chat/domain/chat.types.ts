@@ -90,6 +90,24 @@ export interface AdminConversationDTO {
   }>;
 }
 
+/**
+ * One row of the admin conversation list: the raw conversation plus display
+ * context — the organization / room name and the named people on its
+ * relationship columns — so the oversight screen can show and search names
+ * without one request per row. Never includes message content.
+ */
+export interface AdminConversationListItemDTO extends Conversation {
+  organizationName: string | null;
+  people: Array<{
+    userId: string;
+    side: 'PET_OWNER' | 'MEMBER' | 'VETERINARIAN';
+    firstName: string;
+    lastName: string;
+  }>;
+  /** Active explicit participant rows (e.g. a chat room's member count). */
+  participantCount: number;
+}
+
 export interface ConversationDTO {
   id: string;
   type: ConversationType;

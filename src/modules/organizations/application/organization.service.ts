@@ -481,10 +481,9 @@ export class OrganizationService {
   }
 
   async listPendingForAdmin(
-    page: number,
-    pageSize: number,
+    filter: Pick<ListOrganizationsFilter, 'page' | 'pageSize' | 'type' | 'search'>,
   ): Promise<{ items: Array<Organization & { logoUrl?: string | null }>; total: number }> {
-    const { items, total } = await this.organizations.list({ page, pageSize, status: 'PENDING' });
+    const { items, total } = await this.organizations.list({ ...filter, status: 'PENDING' });
     return { items: await this.attachLogoUrls(items), total };
   }
 

@@ -54,6 +54,7 @@ export const listAdminCampaignsQuerySchema = paginationQuerySchema.extend({
     .enum(['true', 'false'])
     .transform((v) => v === 'true')
     .optional(),
+  search: z.string().trim().min(1).max(160).optional(),
 });
 
 /** Public feed — `GET /ads?placement=HOME`. */

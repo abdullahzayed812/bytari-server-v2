@@ -4,6 +4,7 @@ import type {
   PetStoreOrderItemRow,
   PetStoreOrderRow,
 } from '../domain/pet-owner-store.types.js';
+import { matchingUserIds, whereTextSearch } from '../../../shared/database/search.js';
 
 const ORDERS = 'pet_owner_store_orders';
 const ITEMS = 'pet_owner_store_order_items';
@@ -108,6 +109,17 @@ export class PetStoreOrderRepository {
       if (filter.userId) qb.where('user_id', filter.userId);
       if (filter.status) qb.andWhere('status', filter.status);
       if (filter.newOnly) qb.whereNull('admin_viewed_at');
+      if (filter.search) {
+        // Order number / id, recipient name / phone / city / address, or the buyer's account.
+        const term = filter.search;
+        qb.where((w) => {
+          whereTextSearch(w, term, {
+            columns: ['order_number', 'recipient_name', 'recipient_phone', 'city', 'address_line'],
+            ids: ['id'],
+          });
+          void w.orWhereIn('user_id', matchingUserIds(this.db, term));
+        });
+      }
       return qb;
     };
 

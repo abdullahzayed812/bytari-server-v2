@@ -10,6 +10,7 @@ import {
   type PublicListFilter,
   type PublicationPersonDTO,
 } from '../domain/publication.types.js';
+import { matchingUserIds, whereTextSearch } from '../../../shared/database/search.js';
 
 const TABLE = 'animal_publications';
 
@@ -263,6 +264,26 @@ export class AnimalPublicationRepository {
       const qb = this.conn(trx)(`${TABLE} as p`).join('animals as a', 'a.id', 'p.animal_id');
       if (filter.kind) qb.where('p.kind', filter.kind);
       if (filter.status) qb.where('p.status', filter.status);
+      if (filter.search) {
+        // Animal name / breed / code, listing contact & location, ids, or the submitter.
+        const term = filter.search;
+        qb.where((w) => {
+          whereTextSearch(w, term, {
+            columns: [
+              'a.name',
+              'a.breed',
+              'a.public_code',
+              'p.contact_name',
+              'p.contact_phone',
+              'p.city',
+              'p.lost_governorate',
+              'p.lost_district',
+            ],
+            ids: ['p.id', 'a.id'],
+          });
+          void w.orWhereIn('p.created_by_user_id', matchingUserIds(this.conn(trx), term));
+        });
+      }
       return qb;
     };
 

@@ -14,6 +14,7 @@ import { requireAuth } from '../auth/authenticate.middleware.js';
 import type { RbacService } from '../rbac/rbac.service.js';
 import type { UserDeletionService } from './user-deletion.service.js';
 import type { UserService } from './user.service.js';
+import { DELETED_USER_ID } from './user.types.js';
 import type {
   AdminMessageUserBody,
   AdminSetPasswordBody,
@@ -74,6 +75,9 @@ export class AdminUsersController {
 
   get = async (req: Request, res: Response): Promise<void> => {
     const { id } = validatedParams<{ id: string }>(req);
+    // The deleted-accounts placeholder (owner of re-attributed records) is not
+    // a person — a profile link to it (e.g. from a message) is "not found".
+    if (id === DELETED_USER_ID) throw new NotFoundError('User not found');
     const user = await this.users.getById(id);
     // Identity / licence documents are private: only a caller who may review
     // veterinarian applications gets their (short-lived, signed) URLs.

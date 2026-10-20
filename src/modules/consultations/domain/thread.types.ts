@@ -206,4 +206,6 @@ export interface ListThreadsFilter {
   category?: InquiryCategory;
   /** Admin queue: only threads with a creator message the responders have not opened yet. */
   unread?: boolean;
+  /** Admin queue: creator name / email / phone, a thread id, or message text. */
+  search?: string;
 }

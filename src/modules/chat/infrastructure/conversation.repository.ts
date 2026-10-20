@@ -1,5 +1,6 @@
 import type { Knex } from 'knex';
 import type {
+  ConversationStatus,
   ConversationSubjectType,
   ConversationType,
   ParticipantRole,
@@ -432,23 +433,132 @@ export class ConversationRepository {
   }
 
   /** Admin oversight — every conversation platform-wide, newest activity first. */
+  /**
+   * Admin oversight list ("إدارة المحادثات"): every conversation, newest
+   * activity first, with optional filters. `search` matches the conversation's
+   * name (its organization / clinic / office / room name) OR any person in it —
+   * the relationship columns (pet owner / member / veterinarian) and explicit
+   * participant rows — by first, last or full name. EXISTS sub-queries keep it
+   * one row per conversation, so count + page stay exact.
+   */
   async listAllForAdmin(
-    filter: { page: number; pageSize: number },
+    filter: {
+      page: number;
+      pageSize: number;
+      search?: string;
+      type?: ConversationType;
+      status?: ConversationStatus;
+      organizationId?: string;
+    },
     trx?: Knex.Transaction,
   ): Promise<{ items: Conversation[]; total: number }> {
     const conn = this.conn(trx);
+    const term = filter.search?.trim();
+    const like = term ? `%${term.replace(/[\\%_]/g, (m) => `\\${m}`)}%` : null;
+    const nameMatches = (alias: string): string =>
+      `(${alias}.first_name ILIKE ? OR ${alias}.last_name ILIKE ? OR ` +
+      `(${alias}.first_name || ' ' || ${alias}.last_name) ILIKE ?)`;
 
-    const countRow = await conn<ConversationRow>(T_CONV)
-      .count<{ count: string }>({ count: '*' })
-      .first();
+    const scoped = (): Knex.QueryBuilder => {
+      const qb = conn(`${T_CONV} as c`);
+      if (filter.type) void qb.where('c.type', filter.type);
+      if (filter.status) void qb.where('c.status', filter.status);
+      if (filter.organizationId) void qb.where('c.organization_id', filter.organizationId);
+      if (like) {
+        void qb.andWhere((w) => {
+          void w
+            .whereExists((sub) => {
+              void sub
+                .select(conn.raw('1'))
+                .from('organizations as o')
+                .whereRaw('o.id = c.organization_id')
+                .whereILike('o.name', like);
+            })
+            .orWhereExists((sub) => {
+              void sub
+                .select(conn.raw('1'))
+                .from('users as u')
+                .whereRaw('u.id IN (c.pet_owner_user_id, c.member_user_id, c.veterinarian_user_id)')
+                .whereRaw(nameMatches('u'), [like, like, like]);
+            })
+            .orWhereExists((sub) => {
+              void sub
+                .select(conn.raw('1'))
+                .from(`${T_PART} as p`)
+                .join('users as pu', 'pu.id', 'p.user_id')
+                .whereRaw('p.conversation_id = c.id')
+                .whereRaw(nameMatches('pu'), [like, like, like]);
+            });
+        });
+      }
+      return qb;
+    };
+
+    const countRow = await scoped().count<{ count: string }>({ count: '*' }).first();
     const total = Number(countRow?.count ?? 0);
 
-    const rows = await conn<ConversationRow>(T_CONV)
-      .orderByRaw('last_message_at desc nulls last')
-      .orderBy('created_at', 'desc')
+    const rows = (await scoped()
+      .select('c.*')
+      .orderByRaw('c.last_message_at desc nulls last')
+      .orderBy('c.created_at', 'desc')
       .limit(filter.pageSize)
-      .offset((filter.page - 1) * filter.pageSize);
+      .offset((filter.page - 1) * filter.pageSize)) as ConversationRow[];
 
     return { items: rows.map(rowToConversation), total };
+  }
+
+  /**
+   * Display names for the admin list — organization names, every person on a
+   * relationship column, and each conversation's participant count — in three
+   * batched queries for one page (no N+1).
+   */
+  async adminListContext(
+    conversations: Conversation[],
+    trx?: Knex.Transaction,
+  ): Promise<{
+    organizations: Map<string, string>;
+    users: Map<string, { firstName: string; lastName: string }>;
+    participantCounts: Map<string, number>;
+  }> {
+    const conn = this.conn(trx);
+    const orgIds = [
+      ...new Set(conversations.map((c) => c.organizationId).filter((x): x is string => !!x)),
+    ];
+    const userIds = [
+      ...new Set(
+        conversations
+          .flatMap((c) => [c.petOwnerUserId, c.memberUserId, c.veterinarianUserId])
+          .filter((x): x is string => !!x),
+      ),
+    ];
+    const ids = conversations.map((c) => c.id);
+    const [orgRows, userRows, countRows] = await Promise.all([
+      orgIds.length
+        ? conn('organizations').whereIn('id', orgIds).select('id', 'name')
+        : Promise.resolve([] as Array<{ id: string; name: string }>),
+      userIds.length
+        ? conn('users').whereIn('id', userIds).select('id', 'first_name', 'last_name')
+        : Promise.resolve([] as Array<{ id: string; first_name: string; last_name: string }>),
+      ids.length
+        ? conn(T_PART)
+            .whereIn('conversation_id', ids)
+            .whereNull('left_at')
+            .groupBy('conversation_id')
+            .select('conversation_id')
+            .count<Array<{ conversation_id: string; count: string }>>({ count: '*' })
+        : Promise.resolve([] as Array<{ conversation_id: string; count: string }>),
+    ]);
+    return {
+      organizations: new Map(
+        (orgRows as Array<{ id: string; name: string }>).map((o) => [o.id, o.name]),
+      ),
+      users: new Map(
+        (userRows as Array<{ id: string; first_name: string; last_name: string }>).map((u) => [
+          u.id,
+          { firstName: u.first_name, lastName: u.last_name },
+        ]),
+      ),
+      participantCounts: new Map(countRows.map((r) => [r.conversation_id, Number(r.count)])),
+    };
   }
 }

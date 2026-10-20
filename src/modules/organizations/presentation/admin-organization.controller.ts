@@ -59,7 +59,12 @@ export class AdminOrganizationController {
 
   pending = async (req: Request, res: Response): Promise<void> => {
     const q = validatedQuery<AdminListOrganizationsQuery>(req);
-    const { items, total } = await this.organizations.listPendingForAdmin(q.page, q.pageSize);
+    const { items, total } = await this.organizations.listPendingForAdmin({
+      page: q.page,
+      pageSize: q.pageSize,
+      type: q.type,
+      search: q.search,
+    });
     sendSuccess(res, items, 200, pageMeta(q.page, q.pageSize, total));
   };
 
@@ -176,6 +181,7 @@ export class AdminOrganizationController {
       page: q.page,
       pageSize: q.pageSize,
       organizationType: q.type,
+      search: q.search,
     });
     sendSuccess(res, items, 200, pageMeta(q.page, q.pageSize, total));
   };
@@ -188,6 +194,7 @@ export class AdminOrganizationController {
       status: q.status,
       subscriptionStatus: q.subscriptionStatus,
       speciesGroup: q.speciesGroup,
+      search: q.search,
     });
     // Swap the raw `imageKey` for a resolved `imageUrl` — storage keys never
     // leave the server, and the admin list renders a farm thumbnail.

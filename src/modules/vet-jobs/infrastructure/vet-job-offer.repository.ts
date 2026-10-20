@@ -9,6 +9,7 @@ import {
   type VetJobOfferRow,
   type VetJobUserSummary,
 } from '../domain/vet-job.types.js';
+import { matchingUserIds, whereTextSearch } from '../../../shared/database/search.js';
 
 const T = 'vet_job_offers';
 
@@ -220,6 +221,16 @@ export class VetJobOfferRepository {
   ): Promise<{ items: VetJobOfferWithPoster[]; total: number }> {
     return this.listScoped((qb) => {
       qb.andWhere('o.status', filter.status ?? 'PENDING');
+      if (filter.search) {
+        const term = filter.search;
+        qb.andWhere((w) => {
+          whereTextSearch(w, term, {
+            columns: ['o.title', 'o.organization_name', 'o.governorate'],
+            ids: ['o.id'],
+          });
+          void w.orWhereIn('o.posted_by_user_id', matchingUserIds(this.conn(), term));
+        });
+      }
     }, filter);
   }
 

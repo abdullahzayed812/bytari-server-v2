@@ -102,6 +102,7 @@ export type PublicPublicationsQuery = z.infer<typeof publicPublicationsQuerySche
 export const moderationPublicationsQuerySchema = paginationQuerySchema.extend({
   kind: z.enum(PUBLICATION_KINDS).optional(),
   status: z.enum(PUBLICATION_STATUSES).optional(),
+  search: z.string().trim().min(1).max(120).optional(),
 });
 export type ModerationPublicationsQuery = z.infer<typeof moderationPublicationsQuerySchema>;
 

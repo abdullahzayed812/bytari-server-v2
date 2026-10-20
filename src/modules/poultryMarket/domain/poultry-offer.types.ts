@@ -111,4 +111,6 @@ export interface ListPoultryOffersFilter {
   status?: PoultryOfferStatus;
   /** Admin listing only. */
   moderationStatus?: MarketModerationStatus;
+  /** Admin listing only — offer id / location / phone / notes / seller. */
+  search?: string;
 }

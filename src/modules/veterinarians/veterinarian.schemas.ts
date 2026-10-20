@@ -94,5 +94,8 @@ export const rejectBodySchema = z.object({
 });
 export type RejectBody = z.infer<typeof rejectBodySchema>;
 
-export const pendingQuerySchema = paginationQuerySchema;
+export const pendingQuerySchema = paginationQuerySchema.extend({
+  /** Applicant name / email / phone, or a user / application id. */
+  search: z.string().trim().min(1).max(160).optional(),
+});
 export type PendingQuery = z.infer<typeof pendingQuerySchema>;

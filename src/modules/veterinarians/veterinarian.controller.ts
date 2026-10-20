@@ -58,7 +58,7 @@ export class VeterinarianController {
 
   listPending = async (req: Request, res: Response): Promise<void> => {
     const q = validatedQuery<PendingQuery>(req);
-    const { items, total } = await this.vets.listPending(q.page, q.pageSize);
+    const { items, total } = await this.vets.listPending(q.page, q.pageSize, q.search);
     sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
   };
 

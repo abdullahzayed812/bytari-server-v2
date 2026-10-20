@@ -12,6 +12,8 @@ import {
   type ProfileDetailRow,
 } from '../domain/organization.types.js';
 
+import { matchingUserIds, whereTextSearch } from '../../../shared/database/search.js';
+
 const TABLE = 'organizations';
 
 function toDateOnly(v: string | Date | null): string | null {
@@ -477,7 +479,12 @@ export class OrganizationRepository {
       else if (filter.excludeDeactivated) qb.whereNot('status', 'DEACTIVATED');
       if (filter.ownerUserId) qb.where('owner_user_id', filter.ownerUserId);
       if (filter.search) {
-        qb.whereRaw('lower(name) like ?', [`%${filter.search.toLowerCase()}%`]);
+        // Name / id, or the owner's name / email / phone.
+        const term = filter.search;
+        qb.where((w) => {
+          whereTextSearch(w, term, { columns: [`${TABLE}.name`], ids: [`${TABLE}.id`] });
+          void w.orWhereIn(`${TABLE}.owner_user_id`, matchingUserIds(this.conn(trx), term));
+        });
       }
       return qb;
     };

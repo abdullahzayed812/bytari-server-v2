@@ -258,8 +258,9 @@ export class VeterinarianService {
   async listPending(
     page: number,
     pageSize: number,
+    search?: string,
   ): Promise<{ items: PendingApplicationSummary[]; total: number }> {
-    const { items, total } = await this.applications.listPending(page, pageSize);
+    const { items, total } = await this.applications.listPending(page, pageSize, search);
     const docMap = await this.documents.listForApplications(items.map((a) => a.id));
 
     const withDocs: PendingApplicationSummary[] = await Promise.all(

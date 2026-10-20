@@ -127,8 +127,9 @@ export class TraderService {
     status: TraderStatus | undefined,
     page: number,
     pageSize: number,
+    search?: string,
   ): Promise<{ items: TraderApplicationSummary[]; total: number }> {
-    return this.traders.list(status, page, pageSize);
+    return this.traders.list(status, page, pageSize, search);
   }
 
   /** Approved traders waiting for the admin to renew their activation period. */
@@ -137,7 +138,8 @@ export class TraderService {
   }
 
   async getOne(userId: string): Promise<TraderApplicationSummary> {
-    const { items } = await this.traders.list(undefined, 1, 1000);
+    // A uuid search term matches the account id exactly — one row, not a scan of every trader.
+    const { items } = await this.traders.list(undefined, 1, 10, userId);
     const found = items.find((i) => i.userId === userId);
     if (!found) throw new NotFoundError('No trader profile for this user');
     return found;

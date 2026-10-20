@@ -7,6 +7,7 @@ import { BUSINESS_TIME_ZONE, businessToday } from '../../../shared/time/business
 import type { AuditContext } from '../../audit/audit.types.js';
 import type { AuditService } from '../../audit/audit.service.js';
 import type { AnimalService } from '../../animals/application/animal.service.js';
+import type { OrganizationOperabilityService } from '../../organizations/application/organization-operability.service.js';
 import type { MembershipRepository } from '../../organizations/infrastructure/membership.repository.js';
 import type { OrganizationRepository } from '../../organizations/infrastructure/organization.repository.js';
 import {
@@ -45,7 +46,11 @@ export type ClinicStatusUpdate = 'CONFIRMED' | 'REJECTED' | 'COMPLETED' | 'CANCE
  * Authorization is RELATIONSHIP-scoped and evaluated against CURRENT state
  * (mirrors {@link ChatService}):
  *  - the PET OWNER side is `clinic_appointments.pet_owner_user_id`;
- *  - the CLINIC side is any ACTIVE member of the appointment's organization.
+ *  - the CLINIC side is any ACTIVE member of the appointment's organization,
+ *    and only while that clinic may operate (ACTIVE status + subscription not
+ *    expired — the shared operability rule). Staff of a suspended / expired
+ *    clinic lose the clinic side of the direct `/clinic-appointments/:id`
+ *    routes too, not just the org-scoped dashboard routes.
  *
  * A request that the caller has no relationship to 404s (never 403) so ids do
  * not leak. Ownership of the selected pet, the clinic's existence + ACTIVE
@@ -64,6 +69,7 @@ export class ClinicAppointmentService {
     private readonly audit: AuditService,
     private readonly events: EventBus,
     logger: Logger,
+    private readonly operability: OrganizationOperabilityService | null = null,
   ) {
     this.log = logger.child({ component: 'clinic-appointment-service' });
   }
@@ -76,7 +82,16 @@ export class ClinicAppointmentService {
   ): Promise<ClinicAppointmentActorSide | null> {
     if (userId === appointment.petOwnerUserId) return 'PET_OWNER';
     const membership = await this.memberships.findByUserAndOrg(userId, appointment.organizationId);
-    return membership?.status === 'ACTIVE' ? 'CLINIC' : null;
+    if (membership?.status !== 'ACTIVE') return null;
+    return (await this.clinicOperational(appointment.organizationId)) ? 'CLINIC' : null;
+  }
+
+  /** Clinic side only exists while the clinic may operate (shared rule, same as chat). */
+  private async clinicOperational(organizationId: string): Promise<boolean> {
+    const org = await this.organizations.findById(organizationId);
+    if (!org) return false;
+    if (!this.operability) return org.status === 'ACTIVE';
+    return (await this.operability.assess(org)).operational;
   }
 
   private async loadForActor(

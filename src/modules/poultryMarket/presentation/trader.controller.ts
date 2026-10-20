@@ -49,7 +49,7 @@ export class TraderController {
 
   list = async (req: Request, res: Response): Promise<void> => {
     const q = validatedQuery<ListTradersQuery>(req);
-    const { items, total } = await this.traders.list(q.status, q.page, q.pageSize);
+    const { items, total } = await this.traders.list(q.status, q.page, q.pageSize, q.search);
     sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
   };
 

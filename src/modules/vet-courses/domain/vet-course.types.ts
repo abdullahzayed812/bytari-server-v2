@@ -286,6 +286,8 @@ export interface ModerationFilter {
   pageSize: number;
   status?: VetCourseModerationStatus;
   type?: VetCourseType;
+  /** Title / text / location, an id, or the author's name / email / phone. */
+  search?: string;
 }
 
 export interface RegistrationListFilter {

@@ -538,6 +538,8 @@ export interface ModerationFilter {
   page: number;
   pageSize: number;
   status?: VetServiceModerationStatus;
+  /** Title / text / location, an id, or the author's name / email / phone. */
+  search?: string;
 }
 
 export interface EngagementListFilter {

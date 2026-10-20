@@ -99,4 +99,6 @@ export interface ListEggOffersFilter {
   status?: EggOfferStatus;
   /** Admin listing only. */
   moderationStatus?: MarketModerationStatus;
+  /** Admin listing only — offer id / location / phone / notes / seller. */
+  search?: string;
 }

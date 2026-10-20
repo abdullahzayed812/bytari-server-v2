@@ -151,6 +151,7 @@ export type EngagementListQuery = z.infer<typeof engagementListQuerySchema>;
 
 export const moderationQuerySchema = paginationQuerySchema.extend({
   status: z.enum(VET_SERVICE_MODERATION_STATUSES).optional(),
+  search: z.string().trim().min(1).max(160).optional(),
 });
 export type ModerationQuery = z.infer<typeof moderationQuerySchema>;
 

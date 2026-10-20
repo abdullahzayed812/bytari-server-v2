@@ -89,6 +89,7 @@ export class ThreadController {
       createdByUserId: q.createdBy,
       category: this.cfg.hasCategory ? q.category : undefined,
       unread: q.unread || undefined,
+      search: q.search,
     });
     sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
   };

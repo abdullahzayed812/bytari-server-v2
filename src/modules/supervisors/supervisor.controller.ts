@@ -30,6 +30,7 @@ export class SupervisorController {
       domain: q.domain,
       userId: q.userId,
       status: q.status,
+      search: q.search,
     });
     sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
   };

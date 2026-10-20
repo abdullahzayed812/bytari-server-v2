@@ -8,6 +8,7 @@ import {
   type VetJobSeekerProfileRow,
   type VetJobUserSummary,
 } from '../domain/vet-job.types.js';
+import { matchingUserIds, whereTextSearch } from '../../../shared/database/search.js';
 
 const T = 'vet_job_seeker_profiles';
 
@@ -174,8 +175,20 @@ export class VetJobSeekerProfileRepository {
   async listForModeration(
     filter: ModerationFilter,
   ): Promise<{ items: VetJobSeekerProfileWithUser[]; total: number }> {
-    const apply = (qb: Knex.QueryBuilder): Knex.QueryBuilder =>
+    const apply = (qb: Knex.QueryBuilder): Knex.QueryBuilder => {
       qb.andWhere('p.status', filter.status ?? 'PENDING');
+      if (filter.search) {
+        const term = filter.search;
+        qb.andWhere((w) => {
+          whereTextSearch(w, term, {
+            columns: ['p.specialty', 'p.headline', 'p.governorate', 'p.phone', 'p.email'],
+            ids: ['p.id'],
+          });
+          void w.orWhereIn('p.user_id', matchingUserIds(this.conn(), term));
+        });
+      }
+      return qb;
+    };
     const countRow = await apply(this.conn()(`${T} as p`))
       .count<{ count: string }>({ count: '*' })
       .first();

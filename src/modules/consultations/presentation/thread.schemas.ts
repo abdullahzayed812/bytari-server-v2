@@ -73,6 +73,7 @@ export const listAdminThreadsQuerySchema = listThreadsQuerySchema.extend({
     .enum(['true', 'false'])
     .optional()
     .transform((v) => v === 'true'),
+  search: z.string().trim().min(1).max(160).optional(),
 });
 
 /** `GET /admin/<kind>/unread-count` — the admin queue's "new" badge. */

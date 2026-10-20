@@ -9,6 +9,7 @@ import {
   type VetCourseRow,
   type VetCourseUserSummary,
 } from '../domain/vet-course.types.js';
+import { matchingUserIds, whereTextSearch } from '../../../shared/database/search.js';
 
 const T = 'vet_courses';
 
@@ -252,6 +253,16 @@ export class VetCourseRepository {
       // every state; only its "All" chip inherits this same PENDING default.
       qb.andWhere('c.status', filter.status ?? 'PENDING');
       if (filter.type) qb.andWhere('c.type', filter.type);
+      if (filter.search) {
+        const term = filter.search;
+        qb.andWhere((w) => {
+          whereTextSearch(w, term, {
+            columns: ['c.title', 'c.organizing_body', 'c.instructor_name'],
+            ids: ['c.id'],
+          });
+          void w.orWhereIn('c.creator_user_id', matchingUserIds(this.conn(), term));
+        });
+      }
     }, filter);
   }
 

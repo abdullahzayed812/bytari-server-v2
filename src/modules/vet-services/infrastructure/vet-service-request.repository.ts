@@ -9,6 +9,7 @@ import {
   type VetServiceRequestRow,
   type VetServiceUserSummary,
 } from '../domain/vet-service.types.js';
+import { matchingUserIds, whereTextSearch } from '../../../shared/database/search.js';
 
 const T = 'vet_service_requests';
 
@@ -125,7 +126,10 @@ export class VetServiceRequestRepository {
     if (patch.reviewedAt !== undefined) dbPatch.reviewed_at = patch.reviewedAt;
     if (patch.rejectionReason !== undefined) dbPatch.rejection_reason = patch.rejectionReason;
     if (patch.closedAt !== undefined) dbPatch.closed_at = patch.closedAt;
-    const [row] = (await trx(T).where({ id }).update(dbPatch).returning('*')) as VetServiceRequestRow[];
+    const [row] = (await trx(T)
+      .where({ id })
+      .update(dbPatch)
+      .returning('*')) as VetServiceRequestRow[];
     if (!row) throw new Error('vet_service_request not found on update');
     return rowToRequest(row);
   }
@@ -137,19 +141,23 @@ export class VetServiceRequestRepository {
   async listPublic(
     filter: RequestBrowseFilter,
   ): Promise<{ items: VetServiceRequestWithOwner[]; total: number }> {
-    return this.listScoped((qb) => {
-      qb.where('r.status', 'APPROVED').whereNull('r.closed_at');
-      if (filter.serviceType) qb.andWhere('r.service_type', filter.serviceType);
-      if (filter.animalType) qb.andWhere('r.animal_type', filter.animalType);
-      if (filter.governorate) qb.andWhere('r.governorate', filter.governorate);
-      if (filter.urgency) qb.andWhere('r.urgency', filter.urgency);
-      if (filter.search) {
-        const s = `%${filter.search}%`;
-        qb.andWhere((w) => {
-          w.whereILike('r.title', s).orWhereILike('r.description', s);
-        });
-      }
-    }, filter, filter.sort === 'oldest' ? 'asc' : 'desc');
+    return this.listScoped(
+      (qb) => {
+        qb.where('r.status', 'APPROVED').whereNull('r.closed_at');
+        if (filter.serviceType) qb.andWhere('r.service_type', filter.serviceType);
+        if (filter.animalType) qb.andWhere('r.animal_type', filter.animalType);
+        if (filter.governorate) qb.andWhere('r.governorate', filter.governorate);
+        if (filter.urgency) qb.andWhere('r.urgency', filter.urgency);
+        if (filter.search) {
+          const s = `%${filter.search}%`;
+          qb.andWhere((w) => {
+            w.whereILike('r.title', s).orWhereILike('r.description', s);
+          });
+        }
+      },
+      filter,
+      filter.sort === 'oldest' ? 'asc' : 'desc',
+    );
   }
 
   async listMine(
@@ -167,6 +175,16 @@ export class VetServiceRequestRepository {
   ): Promise<{ items: VetServiceRequestWithOwner[]; total: number }> {
     return this.listScoped((qb) => {
       qb.andWhere('r.status', filter.status ?? 'PENDING');
+      if (filter.search) {
+        const term = filter.search;
+        qb.andWhere((w) => {
+          whereTextSearch(w, term, {
+            columns: ['r.title', 'r.description', 'r.governorate'],
+            ids: ['r.id'],
+          });
+          void w.orWhereIn('r.pet_owner_user_id', matchingUserIds(this.conn(), term));
+        });
+      }
     }, filter);
   }
 

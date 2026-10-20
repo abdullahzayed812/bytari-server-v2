@@ -7,6 +7,7 @@ import {
   type TraderProfileRow,
 } from '../domain/trader.types.js';
 import type { TraderStatus } from '../domain/trader.constants.js';
+import { userSearchSpec, whereTextSearch } from '../../../shared/database/search.js';
 
 const TABLE = 'trader_profiles';
 
@@ -169,11 +170,25 @@ export class TraderRepository {
     status: TraderStatus | undefined,
     page: number,
     pageSize: number,
+    search?: string,
     trx?: Knex.Transaction,
   ): Promise<{ items: TraderApplicationSummary[]; total: number }> {
     const base = (): Knex.QueryBuilder => {
       const qb = this.conn(trx)(`${TABLE} as t`).join('users as u', 'u.id', 't.user_id');
       if (status) qb.andWhere('t.status', status);
+      // Trade name / phone / governorate, or the account's name / email / phone / id.
+      whereTextSearch(qb, search, {
+        columns: [
+          't.display_name',
+          't.phone',
+          't.whatsapp',
+          't.governorate',
+          't.district',
+          ...userSearchSpec('u').columns,
+        ],
+        fullNames: userSearchSpec('u').fullNames,
+        ids: ['u.id', 't.id'],
+      });
       return qb;
     };
 

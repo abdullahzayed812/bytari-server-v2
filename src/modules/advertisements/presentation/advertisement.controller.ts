@@ -50,6 +50,7 @@ export class AdvertisementController {
       placement: q.placement,
       type: q.type,
       includeDeleted: q.includeDeleted,
+      search: q.search,
     });
     sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
   };

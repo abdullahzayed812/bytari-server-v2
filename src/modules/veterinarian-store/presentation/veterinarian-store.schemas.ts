@@ -167,6 +167,7 @@ export const adminListOrdersQuerySchema = paginationQuerySchema.extend({
     .enum(['true', 'false'])
     .optional()
     .transform((v) => (v === undefined ? undefined : v === 'true')),
+  search: z.string().trim().min(1).max(160).optional(),
 });
 export type AdminListOrdersQuery = z.infer<typeof adminListOrdersQuerySchema>;
 

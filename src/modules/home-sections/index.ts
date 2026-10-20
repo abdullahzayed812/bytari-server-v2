@@ -8,3 +8,6 @@ export {
   createPublicHomeSectionRouter,
   createAdminHomeSectionRouter,
 } from './presentation/home-section.routes.js';
+export * from './domain/featured-organization.types.js';
+export { FeaturedOrganizationRepository } from './infrastructure/featured-organization.repository.js';
+export { FeaturedOrganizationService } from './application/featured-organization.service.js';
