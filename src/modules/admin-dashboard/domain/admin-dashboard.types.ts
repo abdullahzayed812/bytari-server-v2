@@ -56,8 +56,10 @@ export interface AdminDashboardCard {
   activeCount: number;
   /**
    * PENDING subscription renewal requests for this section's organization
-   * type — the TOTAL open queue (not "new since seen"). Only set on the
-   * subscription-capable organization cards (`clinics`, `offices`).
+   * type — the TOTAL open queue (not "new since seen"), defined exactly like
+   * the section's own "طلبات التجديد" tab. Set on the subscription-capable
+   * cards (`clinics`, `offices`, and the farm cards `poultry` / `livestock`),
+   * and omitted when the caller may not open that queue.
    */
   pendingRenewals?: number;
   /**

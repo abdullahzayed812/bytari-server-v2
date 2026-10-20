@@ -15,6 +15,8 @@ export interface AccessTokenResult {
 export interface VerifiedAccessToken {
   userId: string;
   sessionId: string | null;
+  /** `iat` claim (seconds since the epoch), or `null` when absent. */
+  issuedAt: number | null;
 }
 
 /**
@@ -63,6 +65,7 @@ export class TokenService {
       return {
         userId: payload.sub,
         sessionId: typeof payload.sid === 'string' ? payload.sid : null,
+        issuedAt: typeof payload.iat === 'number' ? payload.iat : null,
       };
     } catch (err) {
       throw new UnauthorizedError('Invalid or expired access token', {

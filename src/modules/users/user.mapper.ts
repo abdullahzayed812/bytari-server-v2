@@ -29,6 +29,7 @@ export function rowToUser(row: UserRow): User {
     veterinarianStatus: row.veterinarian_status as VeterinarianStatus,
     traderStatus: row.trader_status as TraderStatus,
     registrationType: row.registration_type as RegistrationType,
+    passwordChangedAt: row.password_changed_at ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

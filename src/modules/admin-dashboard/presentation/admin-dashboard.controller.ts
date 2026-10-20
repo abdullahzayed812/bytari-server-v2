@@ -33,6 +33,15 @@ export class AdminDashboardController {
           organizationType,
         );
       },
+      // Same gate as the renewal queues themselves (`orgAdmin('organization.admin.read')`).
+      canSeeRenewals: (organizationType) =>
+        isAdmin
+          ? Promise.resolve(true)
+          : this.authz.canForOrganizationType(
+              principal,
+              'organization.admin.read',
+              organizationType,
+            ),
     });
     sendSuccess(res, summary, StatusCodes.OK);
   };

@@ -91,6 +91,13 @@ export interface ListFarmsForAdminFilter {
   subscriptionStatus?: 'NOT_STARTED' | 'ACTIVE' | 'EXPIRED';
   /** See `adminListFarmsQuerySchema.speciesGroup`. */
   speciesGroup?: 'POULTRY' | 'LIVESTOCK' | 'SHEEP' | 'CATTLE';
+  /**
+   * `PENDING` → only farms with an open renewal request. At most one PENDING
+   * request exists per organization (`uq_farm_renewal_requests_one_pending`),
+   * so this `total` IS the number of pending requests in the section — the
+   * dashboard counter and the "طلبات التجديد" tab share this one definition.
+   */
+  renewal?: 'PENDING';
   search?: string;
 }
 
@@ -318,6 +325,15 @@ export class FarmSubscriptionRenewalRepository {
         fullNames: userSearchSpec('u').fullNames,
         ids: ['o.id', 'u.id'],
       });
+      if (filter.renewal === 'PENDING') {
+        qb.whereExists((sub) => {
+          void sub
+            .select(conn.raw('1'))
+            .from(`${TABLE} as rr`)
+            .whereRaw('rr.organization_id = o.id')
+            .where('rr.status', 'PENDING');
+        });
+      }
       if (filter.subscriptionStatus === 'NOT_STARTED') {
         qb.where((b) => {
           b.whereNull('d.subscription_start_date').orWhereNull('d.subscription_end_date');
@@ -500,7 +516,10 @@ export class FarmSubscriptionRenewalRepository {
     const base = (): Knex.QueryBuilder => {
       const qb = conn(`${TABLE} as req`)
         .join('organizations as o', 'o.id', 'req.organization_id')
-        .where('req.status', 'PENDING');
+        .where('req.status', 'PENDING')
+        // An admin-deleted (DEACTIVATED) organization's request is not
+        // actionable — same exclusion as the default farms list.
+        .whereNot('o.status', 'DEACTIVATED');
       whereTextSearch(qb, filter.search, { columns: ['o.name'], ids: ['o.id', 'req.id'] });
       return filter.organizationType ? qb.where('o.type', filter.organizationType) : qb;
     };

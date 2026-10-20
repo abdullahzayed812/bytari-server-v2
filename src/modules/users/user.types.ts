@@ -73,6 +73,8 @@ export interface User {
   veterinarianStatus: VeterinarianStatus;
   traderStatus: TraderStatus;
   registrationType: RegistrationType;
+  /** Last time the password hash was replaced; access tokens issued earlier are rejected. */
+  passwordChangedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -201,6 +203,7 @@ export interface UserRow {
   veterinarian_status: string;
   trader_status: string;
   registration_type: string;
+  password_changed_at?: Date | null;
   created_at: Date;
   updated_at: Date;
 }

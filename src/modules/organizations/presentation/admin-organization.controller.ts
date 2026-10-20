@@ -194,6 +194,7 @@ export class AdminOrganizationController {
       status: q.status,
       subscriptionStatus: q.subscriptionStatus,
       speciesGroup: q.speciesGroup,
+      renewal: q.renewal,
       search: q.search,
     });
     // Swap the raw `imageKey` for a resolved `imageUrl` — storage keys never

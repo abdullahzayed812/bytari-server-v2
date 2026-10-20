@@ -26,7 +26,12 @@ describe('TokenService', () => {
     const { token, expiresIn } = await svc.signAccessToken('user-1', 'session-9');
     expect(expiresIn).toBe(900);
     const verified = await svc.verifyAccessToken(token);
-    expect(verified).toEqual({ userId: 'user-1', sessionId: 'session-9' });
+    expect(verified).toEqual({
+      userId: 'user-1',
+      sessionId: 'session-9',
+      issuedAt: expect.any(Number),
+    });
+    expect(Math.abs((verified.issuedAt ?? 0) - Math.floor(Date.now() / 1000))).toBeLessThan(5);
   });
 
   it('rejects a token signed with a different secret', async () => {

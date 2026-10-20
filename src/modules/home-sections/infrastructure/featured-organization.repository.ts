@@ -1,6 +1,6 @@
 import type { Knex } from 'knex';
 import {
-  FEATURED_ORGANIZATION_TYPES,
+  FEATURED_TYPES_BY_PLACEMENT,
   rowToFeaturedOrganization,
   type FeaturedOrganization,
   type FeaturedOrganizationRow,
@@ -88,7 +88,7 @@ export class FeaturedOrganizationRepository {
       .where('f.is_enabled', true)
       .where('f.starts_on', '<=', today)
       .where('f.ends_on', '>=', today)
-      .whereIn('o.type', FEATURED_ORGANIZATION_TYPES)
+      .whereIn('o.type', FEATURED_TYPES_BY_PLACEMENT[placement])
       .where('o.status', 'ACTIVE')
       .whereRaw(
         'coalesce(cd.subscription_end_date, vd.subscription_end_date) IS NULL OR coalesce(cd.subscription_end_date, vd.subscription_end_date) >= ?',

@@ -205,6 +205,15 @@ export class UserService {
   }
 
   /**
+   * Announce a committed password replacement made on the user's behalf
+   * (admin set / reset code) — open realtime sockets of the account are
+   * closed, so a stolen session cannot keep listening. Call AFTER the commit.
+   */
+  announcePasswordChanged(id: string): void {
+    this.events.publish('user.password.changed', { userId: id });
+  }
+
+  /**
    * Change account status. SUSPENDED / DEACTIVATED also revoke every active
    * refresh session so the account cannot continue an existing login.
    */

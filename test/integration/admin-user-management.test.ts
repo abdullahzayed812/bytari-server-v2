@@ -330,3 +330,75 @@ describe('admin user management — message user', () => {
     expect(missing.status).toBe(404);
   });
 });
+
+describe('admin user management — password change ends existing sessions', () => {
+  // Access-token `iat` has second precision: a token minted in the same second
+  // as the change is deliberately still accepted, so step past that second.
+  const nextSecond = () => new Promise((r) => setTimeout(r, 1100));
+  const me = (token: string) => request(app).get(`${API}/auth/me`).set(bearer(token));
+
+  it('admin set: the user’s already-issued access token is rejected (401); the admin’s is not', async () => {
+    const admin = await registerAdmin(app);
+    const user = await registerUser(app);
+    expect((await me(user.accessToken)).status).toBe(200);
+    await nextSecond();
+
+    const res = await request(app)
+      .post(`${API}/admin/users/${user.id}/password`)
+      .set(bearer(admin.accessToken))
+      .send({ newPassword: NEW_PASSWORD });
+    expect(res.status).toBe(200);
+
+    const stale = await me(user.accessToken);
+    expect(stale.status).toBe(401);
+    expect(stale.body.error.code).toBe('INVALID_TOKEN');
+    expect((await me(admin.accessToken)).status).toBe(200);
+
+    // a fresh login with the new password works normally
+    const relog = await loginUser(app, user.email, NEW_PASSWORD);
+    expect((await me(relog.accessToken)).status).toBe(200);
+  });
+
+  it('reset code: old access + refresh tokens stop working', async () => {
+    const admin = await registerAdmin(app);
+    const user = await registerUser(app);
+    await nextSecond();
+    await request(app)
+      .post(`${API}/admin/users/${user.id}/password-reset`)
+      .set(bearer(admin.accessToken));
+    const code = extractVerificationCode(app, user.email);
+    // sending the code alone changes nothing
+    expect((await me(user.accessToken)).status).toBe(200);
+    await request(app)
+      .post(`${API}/auth/reset-password`)
+      .send({ email: user.email, code, newPassword: NEW_PASSWORD })
+      .expect(200);
+
+    expect((await me(user.accessToken)).status).toBe(401);
+    const refresh = await request(app)
+      .post(`${API}/auth/refresh`)
+      .send({ refreshToken: user.refreshToken });
+    expect(refresh.status).toBe(401);
+  });
+
+  it('a supervisor with user.read but not user.update cannot set or reset a password (403)', async () => {
+    const mod = await registerModerator(app);
+    const user = await registerUser(app);
+    const set = await request(app)
+      .post(`${API}/admin/users/${user.id}/password`)
+      .set(bearer(mod.accessToken))
+      .send({ newPassword: NEW_PASSWORD });
+    expect(set.status).toBe(403);
+    const reset = await request(app)
+      .post(`${API}/admin/users/${user.id}/password-reset`)
+      .set(bearer(mod.accessToken));
+    expect(reset.status).toBe(403);
+    expect((await loginUser(app, user.email, user.password)).status).toBe(200);
+    expect(
+      await getTestDb()('audit_logs').whereIn('action', [
+        'PASSWORD_SET_BY_ADMIN',
+        'PASSWORD_RESET_SENT_BY_ADMIN',
+      ]),
+    ).toHaveLength(0);
+  });
+});

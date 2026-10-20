@@ -8,7 +8,7 @@ import {
 import type { RoleRepository } from '../../rbac/role.repository.js';
 import type { TokenService } from '../../auth/token.service.js';
 import type { UserService } from '../../users/user.service.js';
-import { accessStateFor } from '../../users/user-access.js';
+import { accessStateFor, tokenPredatesPasswordChange } from '../../users/user-access.js';
 
 /**
  * WebSocket connection authenticator. Reuses the SAME access-token verification
@@ -43,14 +43,18 @@ export class JwtConnectionAuthenticator implements ConnectionAuthenticator {
     if (!token) throw new RealtimeAuthError('Missing access token');
 
     let userId: string;
+    let issuedAt: number | null;
     try {
-      ({ userId } = await this.deps.tokens.verifyAccessToken(token));
+      ({ userId, issuedAt } = await this.deps.tokens.verifyAccessToken(token));
     } catch {
       throw new RealtimeAuthError('Invalid or expired access token');
     }
 
     const user = await this.deps.users.getByIdOrNull(userId);
     if (!user) throw new RealtimeAuthError('Account no longer exists');
+    if (tokenPredatesPasswordChange(user, issuedAt)) {
+      throw new RealtimeAuthError('Session ended after a password change');
+    }
     // Same gate as the HTTP `authenticate` middleware — an unverified Pet Owner or
     // an unapproved Veterinarian gets no realtime (chat) access either.
     const access = accessStateFor(user);

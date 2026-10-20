@@ -245,7 +245,8 @@ export class AuthService {
    * ADMIN: set a new password for another account. Hashed with the same
    * `PasswordService` as every other path; ALL of the target's refresh
    * sessions are revoked in the same transaction so an attacker holding a
-   * stolen session is cut off. The plaintext is never stored, logged,
+   * stolen session is cut off (and `password_changed_at` makes every access
+   * token issued before now invalid; open sockets are closed). The plaintext is never stored, logged,
    * audited or returned — and there is no endpoint that can read a password.
    */
   async adminSetPassword(
@@ -258,7 +259,7 @@ export class AuthService {
     }
     await this.users.getById(targetUserId); // 404 when unknown
     const passwordHash = await this.passwords.hash(newPassword);
-    return this.db.transaction(async (tx) => {
+    const result = await this.db.transaction(async (tx) => {
       await this.users.setPasswordHash(targetUserId, passwordHash, tx);
       const revokedSessions = await this.sessions.revokeAllForUserInTransaction(targetUserId, tx);
       await this.audit.record(
@@ -274,6 +275,8 @@ export class AuthService {
       );
       return { revokedSessions };
     });
+    this.users.announcePasswordChanged(targetUserId);
+    return result;
   }
 
   /**
@@ -332,7 +335,7 @@ export class AuthService {
     await codes.verify(user.id, input.code);
     const passwordHash = await this.passwords.hash(input.newPassword);
 
-    return this.db.transaction(async (tx) => {
+    const result = await this.db.transaction(async (tx) => {
       await this.users.setPasswordHash(user.id, passwordHash, tx);
       await codes.invalidateAll(user.id, tx);
       const revokedSessions = await this.sessions.revokeAllForUserInTransaction(user.id, tx);
@@ -349,6 +352,8 @@ export class AuthService {
       );
       return { revokedSessions };
     });
+    this.users.announcePasswordChanged(user.id);
+    return result;
   }
 
   /**

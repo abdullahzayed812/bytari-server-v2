@@ -768,6 +768,14 @@ const paths: Obj = {
             '(POULTRY, MIXED, legacy null-species). Clean partition — no request orphaned.',
           schema: { type: 'string', enum: ['POULTRY', 'LIVESTOCK'] },
         },
+        {
+          name: 'renewal',
+          in: 'query',
+          description:
+            'PENDING → only farms with an open subscription renewal request (the ' +
+            'admin "طلبات التجديد" tab; same definition as the dashboard counter).',
+          schema: { type: 'string', enum: ['PENDING'] },
+        },
       ],
       responses: { '200': ok('Farms'), ...errs(401, 403) },
     },

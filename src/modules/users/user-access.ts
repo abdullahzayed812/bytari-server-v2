@@ -31,3 +31,20 @@ export function accessStateFor(
   }
   return 'FULL';
 }
+
+/**
+ * Was this access token issued before the account's last password change?
+ * Such a token is rejected by every entry point (HTTP + realtime): changing or
+ * resetting a password revokes the refresh sessions, and this closes the
+ * remaining window of the stateless access token. Second precision (the JWT
+ * `iat`), so a token minted in the same second as the change — e.g. the fresh
+ * pair returned by the self-service change — stays valid.
+ */
+export function tokenPredatesPasswordChange(
+  user: Pick<User, 'passwordChangedAt'>,
+  issuedAtSeconds: number | null,
+): boolean {
+  if (!user.passwordChangedAt) return false;
+  if (issuedAtSeconds === null) return true;
+  return issuedAtSeconds < Math.floor(user.passwordChangedAt.getTime() / 1000);
+}

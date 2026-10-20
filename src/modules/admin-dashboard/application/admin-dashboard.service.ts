@@ -134,6 +134,15 @@ export class AdminDashboardService {
        * Omitted → every task (ADMIN-equivalent; tests / internal callers).
        */
       canSeeTask?: PendingTaskVisibility;
+      /**
+       * May the caller see the renewal queue of one organization type? The
+       * queues are behind `organization.admin.read` (type-scoped), so a card's
+       * `pendingRenewals` is omitted for a caller who cannot open its queue.
+       * Omitted → every queue (ADMIN-equivalent; tests / internal callers).
+       */
+      canSeeRenewals?: (
+        organizationType: 'FARM' | 'CLINIC' | 'VETERINARY_OFFICE',
+      ) => Promise<boolean>;
     } = { includeRecentActivity: true },
   ): Promise<AdminDashboardSummary> {
     const [
@@ -204,6 +213,9 @@ export class AdminDashboardService {
       officeRenewalsPending,
       courseRegistrationsPending,
       traderRenewalRequests,
+      poultryRenewalsPending,
+      livestockRenewalsPending,
+      renewalAccess,
     ] = await Promise.all([
       this.deps.seen.getSeenMap(userId),
       this.deps.farmSubscriptionRenewals.listFarmsForAdmin({
@@ -373,19 +385,42 @@ export class AdminDashboardService {
       }),
       this.deps.vetCourses.pendingRegistrationTotals(),
       this.deps.traders.countRenewalRequests(),
+      // Farms with an open renewal request, per species section — exactly the
+      // admin farms screen's "طلبات التجديد" tab (one PENDING request per farm).
+      this.deps.farmSubscriptionRenewals.listFarmsForAdmin({
+        page: 1,
+        pageSize: 1,
+        speciesGroup: 'POULTRY',
+        renewal: 'PENDING',
+      }),
+      this.deps.farmSubscriptionRenewals.listFarmsForAdmin({
+        page: 1,
+        pageSize: 1,
+        speciesGroup: 'LIVESTOCK',
+        renewal: 'PENDING',
+      }),
+      Promise.all(
+        (['FARM', 'CLINIC', 'VETERINARY_OFFICE'] as const).map(
+          (type) => opts.canSeeRenewals?.(type) ?? Promise.resolve(true),
+        ),
+      ).then(([farm, clinic, office]) => ({ farm, clinic, office })),
     ]);
+    const renewalsIf = (allowed: boolean | undefined, total: number): number | undefined =>
+      allowed ? total : undefined;
 
-    const since = (id: AdminDashboardCardId) => seenMap.get(id);
+    const since = (id: AdminDashboardCardId): Date | undefined => seenMap.get(id);
     const cards: AdminDashboardCard[] = [
       {
         id: 'poultry',
         count: countNew(poultry.items, since('poultry')),
         activeCount: poultryActive.total,
+        pendingRenewals: renewalsIf(renewalAccess.farm, poultryRenewalsPending.total),
       },
       {
         id: 'livestock',
         count: countNew(livestock.items, since('livestock')),
         activeCount: livestockActive.total,
+        pendingRenewals: renewalsIf(renewalAccess.farm, livestockRenewalsPending.total),
       },
       { id: 'pets', count: countNew(pets.items, since('pets')), activeCount: pets.total },
       {
@@ -403,13 +438,13 @@ export class AdminDashboardService {
         id: 'clinics',
         count: countNew(clinics.items, since('clinics')),
         activeCount: clinicsActive.total,
-        pendingRenewals: clinicRenewalsPending.total,
+        pendingRenewals: renewalsIf(renewalAccess.clinic, clinicRenewalsPending.total),
       },
       {
         id: 'offices',
         count: countNew(offices.items, since('offices')),
         activeCount: officesActive.total,
-        pendingRenewals: officeRenewalsPending.total,
+        pendingRenewals: renewalsIf(renewalAccess.office, officeRenewalsPending.total),
       },
       {
         id: 'vetApprovals',

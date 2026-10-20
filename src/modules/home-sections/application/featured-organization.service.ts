@@ -12,6 +12,7 @@ import {
   FEATURED_ORGANIZATION_TYPES,
   FEATURED_PUBLIC_LIMIT,
   featuredState,
+  isFeaturableOn,
   type AdminFeaturedOrganizationDTO,
   type FeaturedOrganization,
   type FeaturedPlacement,
@@ -95,6 +96,14 @@ export class FeaturedOrganizationService {
       throw new BadRequestError('Only clinics and veterinary offices can be featured', {
         code: ErrorCode.ORGANIZATION_TYPE_NOT_SUPPORTED,
       });
+    }
+    if (!isFeaturableOn(input.placement, org.type)) {
+      throw new BadRequestError(
+        input.placement === 'PET_OWNER_HOME'
+          ? 'Only clinics can be featured on the Pet Owner home'
+          : 'Only veterinary offices / companies can be featured on the Veterinarian home',
+        { code: ErrorCode.ORGANIZATION_TYPE_NOT_SUPPORTED },
+      );
     }
     if (org.status !== 'ACTIVE') {
       throw new BadRequestError('Only an active organization can be featured', {
@@ -226,6 +235,7 @@ export class FeaturedOrganizationService {
         type: organizationType,
         status: organizationStatus,
         publiclyVisible:
+          isFeaturableOn(entry.placement, organizationType) &&
           organizationStatus === 'ACTIVE' &&
           (subscriptionEndDate === null || subscriptionEndDate >= today),
       },

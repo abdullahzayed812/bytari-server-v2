@@ -42,6 +42,14 @@ async function seed() {
   return { admin, vet, viewer, clinic, office, today: businessToday() };
 }
 
+async function seedOffice(vetToken: string, adminToken: string) {
+  const office = await createActiveOrganization(app, vetToken, adminToken, {
+    type: 'VETERINARY_OFFICE',
+    name: 'مكتب إضافي',
+  });
+  return { office };
+}
+
 const visibleIds = async (token: string, placement: string) => {
   const res = await request(app).get(PUBLIC).query({ placement }).set(bearer(token));
   expect(res.status).toBe(200);
@@ -162,12 +170,28 @@ describe('featured home organizations — admin management', () => {
       .send({ ...base, organizationId: clinic.id });
     expect(dup.status).toBe(409);
 
-    // Same clinic on the other home page is fine.
-    const otherPage = await request(app)
+    // Each home page features its own audience's type: clinics on the Pet
+    // Owner home, veterinary offices / companies on the Veterinarian home.
+    const clinicOnVetHome = await request(app)
       .post(ADMIN)
       .set(t)
       .send({ ...base, placement: 'VETERINARIAN_HOME', organizationId: clinic.id });
-    expect(otherPage.status).toBe(201);
+    expect(clinicOnVetHome.status).toBe(400);
+    expect(clinicOnVetHome.body.error.code).toBe('ORGANIZATION_TYPE_NOT_SUPPORTED');
+    const { office } = await seedOffice(vet.accessToken, admin.accessToken);
+    const officeOnOwnerHome = await request(app)
+      .post(ADMIN)
+      .set(t)
+      .send({ ...base, organizationId: office.id });
+    expect(officeOnOwnerHome.status).toBe(400);
+    expect(
+      (
+        await request(app)
+          .post(ADMIN)
+          .set(t)
+          .send({ ...base, placement: 'VETERINARIAN_HOME', organizationId: office.id })
+      ).status,
+    ).toBe(201);
 
     // A pending clinic cannot be featured.
     const pending = await request(app)
@@ -205,8 +229,12 @@ describe('featured home organizations — admin management', () => {
 
 describe('featured home organizations — public carousel', () => {
   it('shows only enabled entries inside their window whose organization is publicly visible', async () => {
-    const { admin, viewer, clinic, office, today } = await seed();
+    const { admin, vet, viewer, clinic, today } = await seed();
     const t = bearer(admin.accessToken);
+    const clinic2 = await createActiveOrganization(app, vet.accessToken, admin.accessToken, {
+      type: 'CLINIC',
+      name: 'عيادة ثانية',
+    });
     const add = (organizationId: string, extra: Record<string, unknown> = {}) =>
       request(app)
         .post(ADMIN)
@@ -220,8 +248,8 @@ describe('featured home organizations — public carousel', () => {
         });
 
     const c = await add(clinic.id, { sortOrder: 2 });
-    await add(office.id, { sortOrder: 1 });
-    expect(await visibleIds(viewer.accessToken, 'PET_OWNER_HOME')).toEqual([office.id, clinic.id]);
+    await add(clinic2.id, { sortOrder: 1 });
+    expect(await visibleIds(viewer.accessToken, 'PET_OWNER_HOME')).toEqual([clinic2.id, clinic.id]);
     expect(await visibleIds(viewer.accessToken, 'VETERINARIAN_HOME')).toEqual([]);
 
     // Public card carries the directory profile fields.
@@ -237,7 +265,7 @@ describe('featured home organizations — public carousel', () => {
 
     // Disabled → hidden; re-enabled → back.
     await request(app).patch(`${ADMIN}/${c.body.data.id}`).set(t).send({ isEnabled: false });
-    expect(await visibleIds(viewer.accessToken, 'PET_OWNER_HOME')).toEqual([office.id]);
+    expect(await visibleIds(viewer.accessToken, 'PET_OWNER_HOME')).toEqual([clinic2.id]);
     await request(app).patch(`${ADMIN}/${c.body.data.id}`).set(t).send({ isEnabled: true });
 
     // Scheduled for later → hidden.
@@ -245,7 +273,7 @@ describe('featured home organizations — public carousel', () => {
       .patch(`${ADMIN}/${c.body.data.id}`)
       .set(t)
       .send({ startsOn: addDays(today, 1), endsOn: addDays(today, 3) });
-    expect(await visibleIds(viewer.accessToken, 'PET_OWNER_HOME')).toEqual([office.id]);
+    expect(await visibleIds(viewer.accessToken, 'PET_OWNER_HOME')).toEqual([clinic2.id]);
     await request(app).patch(`${ADMIN}/${c.body.data.id}`).set(t).send({ startsOn: today });
 
     // Organization visibility rules still apply: expired subscription / suspended.
@@ -255,7 +283,7 @@ describe('featured home organizations — public carousel', () => {
         subscription_start_date: addDays(today, -40),
         subscription_end_date: addDays(today, -1),
       });
-    expect(await visibleIds(viewer.accessToken, 'PET_OWNER_HOME')).toEqual([office.id]);
+    expect(await visibleIds(viewer.accessToken, 'PET_OWNER_HOME')).toEqual([clinic2.id]);
     const adminRow = (await request(app).get(ADMIN).set(t)).body.data.find(
       (e: { id: string }) => e.id === c.body.data.id,
     );
@@ -265,8 +293,44 @@ describe('featured home organizations — public carousel', () => {
     await getTestDb()('clinic_details')
       .where({ organization_id: clinic.id })
       .update({ subscription_end_date: addDays(today, 30) });
-    await getTestDb()('organizations').where({ id: office.id }).update({ status: 'SUSPENDED' });
+    await getTestDb()('organizations').where({ id: clinic2.id }).update({ status: 'SUSPENDED' });
     expect(await visibleIds(viewer.accessToken, 'PET_OWNER_HOME')).toEqual([clinic.id]);
+  });
+
+  it('each home page only ever shows its own audience’s organization type', async () => {
+    const { admin, viewer, clinic, office, today } = await seed();
+    const t = bearer(admin.accessToken);
+    const window = { startsOn: today, endsOn: addDays(today, 5) };
+    await request(app)
+      .post(ADMIN)
+      .set(t)
+      .send({ ...window, placement: 'PET_OWNER_HOME', organizationId: clinic.id })
+      .expect(201);
+    await request(app)
+      .post(ADMIN)
+      .set(t)
+      .send({ ...window, placement: 'VETERINARIAN_HOME', organizationId: office.id })
+      .expect(201);
+    // A legacy cross-audience entry (created before the per-page rule) stays
+    // in the admin list, flagged hidden, and never reaches the public read.
+    const [legacy] = await getTestDb()('featured_home_organizations')
+      .insert({
+        organization_id: clinic.id,
+        placement: 'VETERINARIAN_HOME',
+        starts_on: today,
+        ends_on: addDays(today, 5),
+        is_enabled: true,
+        sort_order: 0,
+      })
+      .returning('id');
+
+    expect(await visibleIds(viewer.accessToken, 'PET_OWNER_HOME')).toEqual([clinic.id]);
+    expect(await visibleIds(viewer.accessToken, 'VETERINARIAN_HOME')).toEqual([office.id]);
+    const legacyRow = (await request(app).get(ADMIN).set(t)).body.data.find(
+      (e: { id: string }) => e.id === (legacy as { id: string }).id,
+    );
+    expect(legacyRow.state).toBe('ACTIVE');
+    expect(legacyRow.organization.publiclyVisible).toBe(false);
   });
 
   it('requires a valid placement and authentication', async () => {

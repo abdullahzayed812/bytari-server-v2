@@ -92,6 +92,12 @@ export function createInfrastructure(deps: InfrastructureDeps): Infrastructure {
     const userId = (event.payload as { userId?: unknown }).userId;
     if (typeof userId === 'string') realtime.disconnectUser(userId);
   });
+  // Same after an admin / reset-code password change: the old access token is
+  // now rejected at the handshake, so a reconnect needs a fresh login.
+  const unsubscribePasswordChanged = eventBus.subscribe('user.password.changed', (event) => {
+    const userId = (event.payload as { userId?: unknown }).userId;
+    if (typeof userId === 'string') realtime.disconnectUser(userId);
+  });
 
   return {
     realtime,
@@ -105,6 +111,7 @@ export function createInfrastructure(deps: InfrastructureDeps): Infrastructure {
     async shutdown(): Promise<void> {
       unsubscribeMemberRemoved();
       unsubscribeUserDeleted();
+      unsubscribePasswordChanged();
       realtimeBridge.stop();
       pushBridge.stop();
       await realtime.close();

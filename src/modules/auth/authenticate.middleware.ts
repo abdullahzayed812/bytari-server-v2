@@ -3,7 +3,7 @@ import { ForbiddenError, UnauthorizedError } from '../../shared/errors/app-error
 import { ErrorCode } from '../../shared/errors/error-codes.js';
 import { asyncHandler } from '../../shared/http/async-handler.js';
 import type { RoleRepository } from '../rbac/role.repository.js';
-import { accessStateFor } from '../users/user-access.js';
+import { accessStateFor, tokenPredatesPasswordChange } from '../users/user-access.js';
 import type { UserService } from '../users/user.service.js';
 import type { TokenService } from './token.service.js';
 
@@ -57,11 +57,20 @@ export function createAuthenticate(
       });
     }
 
-    const { userId, sessionId } = await deps.tokens.verifyAccessToken(header.slice(7).trim());
+    const { userId, sessionId, issuedAt } = await deps.tokens.verifyAccessToken(
+      header.slice(7).trim(),
+    );
 
     const user = await deps.users.getByIdOrNull(userId);
     if (!user) {
       throw new UnauthorizedError('Account no longer exists', { code: ErrorCode.INVALID_TOKEN });
+    }
+    // The password changed after this token was issued (admin reset, reset
+    // code, self change) — its refresh session is already revoked; end it now.
+    if (tokenPredatesPasswordChange(user, issuedAt)) {
+      throw new UnauthorizedError('Session ended after a password change', {
+        code: ErrorCode.INVALID_TOKEN,
+      });
     }
     const access = accessStateFor(user);
     const onboardingOk =

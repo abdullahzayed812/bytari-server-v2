@@ -119,6 +119,11 @@ describe('POST /auth/change-password', () => {
       .post('/api/v1/auth/refresh')
       .send({ refreshToken: ok.body.data.tokens.refreshToken });
     expect(freshRefresh.status).toBe(200);
+    // the access token issued with the change stays usable on this device
+    const meFresh = await request(app)
+      .get('/api/v1/auth/me')
+      .set(bearer(ok.body.data.tokens.accessToken));
+    expect(meFresh.status).toBe(200);
 
     // old password no longer works, new one does
     expect((await loginUser(app, u.email, u.password)).status).toBe(401);

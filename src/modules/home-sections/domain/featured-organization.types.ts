@@ -9,6 +9,25 @@ export type FeaturedPlacement = (typeof FEATURED_PLACEMENTS)[number];
 
 /** Only these existing organization types can be featured. */
 export const FEATURED_ORGANIZATION_TYPES = ['CLINIC', 'VETERINARY_OFFICE'] as const;
+export type FeaturedOrganizationType = (typeof FEATURED_ORGANIZATION_TYPES)[number];
+
+/**
+ * Which organization type each home page features: the Pet Owner home shows
+ * "العيادات المميزة" (clinics), the Veterinarian home "المكاتب والشركات
+ * البيطرية المميزة" (veterinary offices / companies). Enforced on create and on
+ * every public read, so a page never shows the other audience's organizations.
+ */
+export const FEATURED_TYPES_BY_PLACEMENT: Record<
+  FeaturedPlacement,
+  readonly FeaturedOrganizationType[]
+> = {
+  PET_OWNER_HOME: ['CLINIC'],
+  VETERINARIAN_HOME: ['VETERINARY_OFFICE'],
+};
+
+export function isFeaturableOn(placement: FeaturedPlacement, organizationType: string): boolean {
+  return (FEATURED_TYPES_BY_PLACEMENT[placement] as readonly string[]).includes(organizationType);
+}
 
 /** Most entries one page shows at a time (and the cap of the public read). */
 export const FEATURED_PUBLIC_LIMIT = 20;
@@ -85,7 +104,10 @@ export interface AdminFeaturedOrganizationDTO extends FeaturedOrganization {
     name: string;
     type: string;
     status: string;
-    /** `false` while the organization itself is hidden (not ACTIVE / subscription expired). */
+    /**
+     * `false` while the organization itself is hidden (not ACTIVE / subscription
+     * expired) or its type does not belong on this placement (a legacy entry).
+     */
     publiclyVisible: boolean;
   };
 }
