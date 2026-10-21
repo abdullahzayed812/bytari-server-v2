@@ -252,11 +252,12 @@ export const ORG_PERMISSION_DEFINITIONS: Record<OrgPermissionKey, string> = {
 /**
  * Role → permission grants applied by the seed.
  * - OWNER: empty — full access via the organization-owner override.
- * - SUPERVISOR: empty — the owner selects permissions per-membership.
+ * - SUPERVISOR: only `organization.read` (every member can view the profile
+ *   the dashboards load first); the owner selects the rest per-membership.
  */
 export const ORG_ROLE_PERMISSIONS: Record<OrgRoleKey, OrgPermissionKey[]> = {
   OWNER: [],
-  SUPERVISOR: [],
+  SUPERVISOR: ['organization.read'],
   VETERINARIAN: [
     'organization.read',
     'member.read',
