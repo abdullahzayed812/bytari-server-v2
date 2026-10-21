@@ -11,6 +11,7 @@ import type { EventBus } from '../../../shared/events/index.js';
 import { AuditAction, AuditEntityType, type AuditContext } from '../../audit/audit.types.js';
 import type { AuditService } from '../../audit/audit.service.js';
 import type { OrganizationOperabilityService } from '../../organizations/application/organization-operability.service.js';
+import { STAFF_OPERATE_WHEN_EXPIRED_ORG_TYPES } from '../../organizations/domain/organization-operability.js';
 import type { MembershipRepository } from '../../organizations/infrastructure/membership.repository.js';
 import type { OrganizationRepository } from '../../organizations/infrastructure/organization.repository.js';
 import type { UserService } from '../../users/user.service.js';
@@ -90,9 +91,11 @@ export class ChatService {
     /** Clears the conversation's "new message" alerts when the user reads it. */
     private readonly notificationReads: NotificationReadPort | null = null,
     /**
-     * The shared "may this organization operate?" rule. A pending / inactive /
-     * subscription-expired CLINIC loses its clinic-side chat access (HTTP and
-     * realtime rooms) and nobody can post into its conversations.
+     * The shared "may this organization operate?" rule. A pending / inactive
+     * CLINIC loses its clinic-side chat access (HTTP and realtime rooms) and
+     * nobody can post into its conversations. An expired subscription removes
+     * only the OWNER's clinic side — its veterinarians / employees keep chatting
+     * with pet owners (`assessForUser`).
      */
     private readonly operability: OrganizationOperabilityService | null = null,
   ) {
@@ -134,17 +137,25 @@ export class ChatService {
       });
     }
     if (conversation.type === 'PET_OWNER_CLINIC' && this.operability) {
-      // Expired clinic → read-only for both sides (owner keeps the history).
-      await this.operability.assertOperational(null, org);
+      // An expired clinic stays two-way: its staff still answer (the owner has
+      // no clinic side then — see `resolveSide`). Anything else → read-only.
+      const decision = await this.operability.assess(org);
+      const staffStillAnswer =
+        !decision.operational &&
+        decision.reason === 'SUBSCRIPTION_EXPIRED' &&
+        STAFF_OPERATE_WHEN_EXPIRED_ORG_TYPES.has(org.type);
+      if (!decision.operational && !staffStillAnswer) {
+        await this.operability.assertOperational(null, org);
+      }
     }
   }
 
-  /** Clinic side only exists while the clinic may operate (shared rule). */
-  private async clinicOperational(organizationId: string): Promise<boolean> {
+  /** This member's clinic side exists only while the clinic may operate for them (shared rule). */
+  private async clinicOperationalFor(userId: string, organizationId: string): Promise<boolean> {
     if (!this.operability) return true;
     const org = await this.organizations.findById(organizationId);
     if (!org) return false;
-    return (await this.operability.assess(org)).operational;
+    return (await this.operability.assessForUser(userId, org)).operational;
   }
 
   private requireMedia(): ChatAttachmentMedia {
@@ -208,9 +219,11 @@ export class ChatService {
       const m = await this.memberships.findByUserAndOrg(userId, conversation.organizationId);
       if (m?.status !== 'ACTIVE') return null;
       if (conversation.type === 'PET_OWNER_CLINIC') {
-        // Owner AND staff lose the clinic side (incl. realtime room joins) while the
-        // clinic is pending / inactive / subscription-expired.
-        return (await this.clinicOperational(conversation.organizationId)) ? 'CLINIC' : null;
+        // Everyone loses the clinic side (incl. realtime room joins) while the clinic
+        // is pending / inactive; an expired subscription removes only the OWNER.
+        return (await this.clinicOperationalFor(userId, conversation.organizationId))
+          ? 'CLINIC'
+          : null;
       }
       return 'VETERINARY_OFFICE';
     }
@@ -275,7 +288,14 @@ export class ChatService {
     }
 
     if (ChatPolicy.isClinicType(org.type)) {
-      if (this.operability) await this.operability.assertOperational(null, org);
+      // Expired clinic: its staff may still reach a pet owner; the owner and
+      // pet owners (non-members → organization-level rule) may not.
+      if (
+        this.operability &&
+        !(await this.operability.assessForUser(actor.actorUserId, org)).operational
+      ) {
+        await this.operability.assertOperational(null, org);
+      }
       const petOwnerUserId = await this.resolveClinicCounterpart(actor, org, targetUserId);
       return this.getOrCreatePetOwnerClinic(actor, org.id, petOwnerUserId);
     }

@@ -236,24 +236,49 @@ describe('EXPIRED subscription', () => {
     const list = records.body.data.items ?? records.body.data;
     expect(list.length).toBeGreaterThan(0);
 
-    // Pet-owner-facing channel stays closed for an expired clinic (unchanged):
-
-    // Clinic side of the chat disappears (HTTP 404 + realtime denied) …
-    const clinicSide = await request(ctx.app)
+    // Chat with pet owners: the OWNER loses the clinic side (HTTP 404 + realtime
+    // denied); the clinic's vet and employee keep answering, and the pet owner can reply.
+    const ownerSide = await request(ctx.app)
       .get(`${API}/conversations/${ctx.conv.id}`)
-      .set(bearer(ctx.vet.accessToken));
-    expect(clinicSide.status).toBe(404);
+      .set(bearer(ctx.owner.accessToken));
+    expect(ownerSide.status).toBe(404);
+    const ownerPost = await request(ctx.app)
+      .post(`${API}/conversations/${ctx.conv.id}/messages`)
+      .set(bearer(ctx.owner.accessToken))
+      .send({ body: 'من المالك' });
+    expect(ownerPost.status).toBe(404);
     expect(await realtimeSubscribe(ctx.owner.accessToken, ctx.conv.id)).toBe('denied');
-    // … the pet owner keeps the history read-only, and cannot book.
-    const ownerRead = await request(ctx.app)
-      .get(`${API}/conversations/${ctx.conv.id}/messages`)
-      .set(bearer(ctx.petOwner.accessToken));
-    expect(ownerRead.status).toBe(200);
-    const ownerSend = await request(ctx.app)
+    for (const member of [ctx.vet, ctx.staff]) {
+      const read = await request(ctx.app)
+        .get(`${API}/conversations/${ctx.conv.id}/messages`)
+        .set(bearer(member.accessToken));
+      expect(read.status).toBe(200);
+      const send = await request(ctx.app)
+        .post(`${API}/conversations/${ctx.conv.id}/messages`)
+        .set(bearer(member.accessToken))
+        .send({ body: 'رد العيادة' });
+      expect(send.status).toBe(201);
+      expect(await realtimeSubscribe(member.accessToken, ctx.conv.id)).toBe('ok');
+    }
+    const petOwnerSend = await request(ctx.app)
       .post(`${API}/conversations/${ctx.conv.id}/messages`)
       .set(bearer(ctx.petOwner.accessToken))
       .send({ body: 'مرحبا' });
-    expect(ownerSend.status).toBe(403);
+    expect(petOwnerSend.status).toBe(201);
+    // The owner cannot open a new pet-owner chat either; the vet still can.
+    const ownerOpen = await request(ctx.app)
+      .post(`${API}/organizations/${ctx.clinic.id}/conversations`)
+      .set(bearer(ctx.owner.accessToken))
+      .send({ targetUserId: ctx.newcomer.id });
+    expect(ownerOpen.status).toBe(403);
+    expect(ownerOpen.body.error.code).toBe('ORGANIZATION_SUBSCRIPTION_EXPIRED');
+    const vetOpen = await request(ctx.app)
+      .post(`${API}/organizations/${ctx.clinic.id}/conversations`)
+      .set(bearer(ctx.vet.accessToken))
+      .send({ targetUserId: ctx.newcomer.id });
+    expect([200, 201]).toContain(vetOpen.status);
+
+    // Booking stays closed to pet owners while the clinic is expired.
     const booking = await request(ctx.app)
       .post(`${API}/organizations/${ctx.clinic.id}/clinic-appointments`)
       .set(bearer(ctx.petOwner.accessToken))
