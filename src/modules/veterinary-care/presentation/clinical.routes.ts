@@ -59,7 +59,8 @@ export function createClinicalVeterinaryRouter(c: Container): Router {
   const { withClinicAnimal } = createVeterinaryCareMiddleware({ animals: c.animalRepository });
 
   // Clinic operability (single rule: ACTIVE status — via authorizeOrg — and a
-  // non-expired subscription). Applies to owner AND staff; ADMIN bypasses.
+  // non-expired subscription — for a clinic that part stops only the OWNER; ACTIVE staff keep
+  // working within their permissions). ADMIN bypasses.
   const activeSubscription = createOrganizationSubscriptionGuard({
     subscriptions: c.farmSubscriptionRenewalRepository,
     authz: c.authorizationService,

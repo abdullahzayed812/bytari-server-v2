@@ -3,6 +3,7 @@ import { ErrorCode } from '../../../shared/errors/error-codes.js';
 import type { AuthorizationService } from '../../authorization/authorization.service.js';
 import type { AuthPrincipal } from '../../authorization/authorization.types.js';
 import {
+  STAFF_OPERATE_WHEN_EXPIRED_ORG_TYPES,
   SUBSCRIPTION_GATED_ORG_TYPES,
   computeOrganizationOperability,
   type OrganizationOperability,
@@ -12,6 +13,8 @@ export interface OperabilityOrgRef {
   id: string;
   type: string;
   status: string;
+  /** `organizations.owner_user_id` — when known, an extra owner signal besides the OWNER membership. */
+  ownerUserId?: string | null;
 }
 
 export interface SubscriptionDatesSource {
@@ -35,10 +38,41 @@ export class OrganizationOperabilityService {
     return computeOrganizationOperability(org, dates);
   }
 
-  /** Throws 403 `ORGANIZATION_NOT_ACTIVE` / `ORGANIZATION_SUBSCRIPTION_EXPIRED`. A global ADMIN bypasses. */
+  /**
+   * `assess`, from one user's point of view: in a `STAFF_OPERATE_WHEN_EXPIRED`
+   * type an expired subscription only stops the OWNER — an ACTIVE non-owner
+   * member (from the membership records, never the request) still operates.
+   * Anyone else (owner, non-member) gets the organization-level answer.
+   */
+  async assessForUser(userId: string, org: OperabilityOrgRef): Promise<OrganizationOperability> {
+    const decision = await this.assess(org);
+    if (
+      decision.operational ||
+      decision.reason !== 'SUBSCRIPTION_EXPIRED' ||
+      !STAFF_OPERATE_WHEN_EXPIRED_ORG_TYPES.has(org.type)
+    ) {
+      return decision;
+    }
+    return (await this.isNonOwnerStaff(userId, org)) ? { operational: true } : decision;
+  }
+
+  private async isNonOwnerStaff(userId: string, org: OperabilityOrgRef): Promise<boolean> {
+    if (org.ownerUserId != null && org.ownerUserId === userId) return false;
+    const membership = await this.authz.getOrganizationMembershipContext(userId, org.id);
+    return membership !== null && !membership.isOwner;
+  }
+
+  /**
+   * Throws 403 `ORGANIZATION_NOT_ACTIVE` / `ORGANIZATION_SUBSCRIPTION_EXPIRED`.
+   * A global ADMIN bypasses. With a principal the decision is per user
+   * (`assessForUser`); `null` (a counterpart-neutral check such as a pet-owner
+   * chat) uses the organization-level rule.
+   */
   async assertOperational(principal: AuthPrincipal | null, org: OperabilityOrgRef): Promise<void> {
     if (principal && this.authz.isAdmin(principal)) return;
-    const decision = await this.assess(org);
+    const decision = principal
+      ? await this.assessForUser(principal.userId, org)
+      : await this.assess(org);
     if (decision.operational) return;
     if (decision.reason === 'SUBSCRIPTION_EXPIRED') {
       throw new ForbiddenError(

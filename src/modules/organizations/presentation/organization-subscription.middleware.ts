@@ -41,7 +41,10 @@ export const withSubscriptionCapableOrganization: RequestHandler = asyncHandler(
  * comes from `computeOrganizationOperability`, the single source of truth also
  * used by chat (incl. realtime rooms) and appointment booking. Other
  * organization types pass through (FARM has `requireActiveFarmSubscription`).
- * A global ADMIN bypasses, like every other organization gate.
+ * A global ADMIN bypasses, like every other organization gate. For a CLINIC
+ * only the OWNER is stopped by an expired subscription — its ACTIVE staff
+ * keep working within their role permissions (`assessForUser`); a non-member
+ * (e.g. a pet owner booking) is still refused.
  *
  * `types` narrows the gate (e.g. clinic-only member management, so Veterinary
  * Office behaviour is unchanged).

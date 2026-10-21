@@ -85,7 +85,7 @@ describe('POST /auth/register', () => {
     expect(row.password_hash).not.toContain('plaintext-secret-123');
   });
 
-  it('rejects a duplicate email with 409', async () => {
+  it('rejects a duplicate email with 409 (unless it resumes its own unverified registration)', async () => {
     const email = uniqueEmail();
     const body = {
       email,
@@ -95,9 +95,13 @@ describe('POST /auth/register', () => {
       phone: '+9647700000001',
     };
     await request(app).post('/api/v1/auth/register').send(body);
-    const res = await request(app).post('/api/v1/auth/register').send(body);
+    // Same email, different password → the plain 409, never a session.
+    const res = await request(app)
+      .post('/api/v1/auth/register')
+      .send({ ...body, password: 'another-strong-password' });
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('CONFLICT');
+    expect(res.body.data).toBeUndefined();
   });
 
   it('rejects invalid input with 422', async () => {

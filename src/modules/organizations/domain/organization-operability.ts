@@ -10,6 +10,15 @@ export const SUBSCRIPTION_GATED_ORG_TYPES: ReadonlySet<string> = new Set([
   'CLINIC',
 ]);
 
+/**
+ * Gated types whose NON-OWNER staff keep working while the subscription is
+ * EXPIRED: only the owner (the account responsible for renewing) is locked
+ * out of operations. Staff still need their ACTIVE membership + role
+ * permissions as usual; PENDING / NOT_ACTIVE organizations stay closed to all.
+ * VETERINARY_OFFICE keeps the full lock.
+ */
+export const STAFF_OPERATE_WHEN_EXPIRED_ORG_TYPES: ReadonlySet<string> = new Set(['CLINIC']);
+
 export type OrganizationOperabilityReason =
   /** Still awaiting admin approval of the registration. */
   | 'PENDING_APPROVAL'

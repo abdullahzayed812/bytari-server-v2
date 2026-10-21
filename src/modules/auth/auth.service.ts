@@ -75,6 +75,9 @@ export class AuthService {
    * so it grants no access beyond finishing registration and verifying.
    */
   async register(input: RegisterInput, ctx: AuditContext): Promise<RegisterResult> {
+    const resumed = await this.resumePendingPetOwner(input, ctx);
+    if (resumed) return resumed;
+
     const passwordHash = await this.passwords.hash(input.password);
     // Veterinarian signups skip email verification: the account is ACTIVE but
     // gated by admin approval instead (`accessStateFor` → VETERINARIAN_APPROVAL_REQUIRED
@@ -141,6 +144,64 @@ export class AuthService {
   }
 
   /**
+   * Re-submitting the Pet Owner form for an email whose account is still
+   * `PENDING_VERIFICATION` (the user went back from the verify screen, or
+   * closed the app before verifying) resumes THAT account instead of failing
+   * with 409 — never a second account. Only with the account's own password:
+   * anyone else gets the same 409 `createUser` has always returned, so this
+   * reveals nothing a plain registration attempt did not already. The edited
+   * profile fields are applied; the outstanding code is kept while it is still
+   * usable, otherwise a new one is sent once the resend cooldown allows it.
+   * Veterinarian sign-ups never take this path.
+   */
+  private async resumePendingPetOwner(
+    input: RegisterInput,
+    ctx: AuditContext,
+  ): Promise<RegisterResult | null> {
+    if (input.accountType === 'VETERINARIAN') return null;
+    const existing = await this.users.findByEmail(input.email);
+    if (
+      !existing ||
+      existing.status !== 'PENDING_VERIFICATION' ||
+      existing.registrationType !== 'PET_OWNER' ||
+      !(await this.passwords.verify(existing.passwordHash, input.password))
+    ) {
+      return null;
+    }
+
+    const user = await this.users.updateProfile(
+      existing.id,
+      {
+        firstName: input.firstName,
+        lastName: input.lastName,
+        phone: input.phone ?? null,
+        gender: input.gender ?? null,
+        country: input.country ?? null,
+        governorate: input.country ? (input.governorate ?? null) : null,
+      },
+      { actorUserId: existing.id, context: ctx },
+    );
+
+    const needsCode =
+      !(await this.emailVerification.hasUsableCode(user.id)) &&
+      (await this.emailVerification.resendAvailableInSeconds(user.id)) === 0;
+    const result = await this.db.transaction(async (tx) => ({
+      code: needsCode ? (await this.emailVerification.issueCode(user.id, tx)).code : null,
+      tokens: await this.issueTokens(user.id, ctx, tx),
+    }));
+    if (result.code !== null) {
+      await this.emailVerification.sendCodeEmail(user.email, user.firstName, result.code);
+      await this.emailVerification.auditSent(user.id, { actorUserId: null, context: ctx });
+    }
+
+    return {
+      user: await this.users.toPublicUserWithAvatar(user),
+      tokens: result.tokens,
+      codeExpiresInSeconds: this.emailVerification.codeTtlSeconds,
+    };
+  }
+
+  /**
    * Complete registration: check the code, flip the account to `ACTIVE`, and
    * issue a FULL, unrestricted session — the same `AuthResult` shape
    * `login()` returns, so the mobile app's existing "establish session" path
@@ -192,6 +253,9 @@ export class AuthService {
       if (waitSeconds > 0) {
         throw new RateLimitError(`Please wait ${waitSeconds}s before requesting another code`, {
           code: ErrorCode.RATE_LIMITED,
+          // Lets the verify screen show the real countdown. Only a real
+          // pending account inside its cooldown gets this 429 at all.
+          details: [{ rule: 'RESEND_COOLDOWN', message: String(waitSeconds) }],
         });
       }
       const { code } = await this.db.transaction((tx) =>

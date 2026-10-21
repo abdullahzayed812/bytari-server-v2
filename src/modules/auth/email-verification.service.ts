@@ -191,6 +191,20 @@ export class EmailVerificationService {
     });
   }
 
+  /**
+   * `true` while the user's latest code can still be entered: not expired and
+   * not locked out by `maxAttempts`. Used to resume a registration without
+   * superseding a code the user may already have in their inbox.
+   */
+  async hasUsableCode(userId: string): Promise<boolean> {
+    const current = await this.repo.findCurrentForUser(userId);
+    return (
+      current !== null &&
+      current.attempts < this.config.maxAttempts &&
+      current.expiresAt.getTime() > Date.now()
+    );
+  }
+
   /** Seconds until a resend is allowed again, given the current outstanding code (if any). */
   async resendAvailableInSeconds(userId: string): Promise<number> {
     const current = await this.repo.findCurrentForUser(userId);

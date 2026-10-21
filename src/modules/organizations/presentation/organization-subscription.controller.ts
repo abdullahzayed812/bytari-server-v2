@@ -71,7 +71,12 @@ export class OrganizationSubscriptionController {
     const body = validatedBody<RejectRenewalBody>(req);
     sendSuccess(
       res,
-      await this.subscription.rejectRenewal(this.orgId(req), requestId, body.reason, this.actor(req)),
+      await this.subscription.rejectRenewal(
+        this.orgId(req),
+        requestId,
+        body.reason,
+        this.actor(req),
+      ),
     );
   };
 }

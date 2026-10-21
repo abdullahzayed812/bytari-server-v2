@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
-import { buildTestApp } from '../helpers/app.js';
-import { closeTestDb, ensureSchema, resetDb } from '../helpers/db.js';
+import type { NoopEmailProvider } from '../../src/infra/email/index.js';
+import { buildTestApp, containerFor } from '../helpers/app.js';
+import { closeTestDb, ensureSchema, getTestDb, resetDb } from '../helpers/db.js';
 import {
   bearer,
   extractVerificationCode,
@@ -131,6 +132,90 @@ describe('POST /auth/resend-verification', () => {
       .post('/api/v1/auth/resend-verification')
       .send({ email });
     expect(stillTooSoon.status).toBe(429);
+  });
+});
+
+describe('re-registering an unverified Pet Owner email resumes that account', () => {
+  const body = (email: string, overrides: Record<string, unknown> = {}) => ({
+    email,
+    password: 'a-very-strong-password',
+    firstName: 'Pending',
+    lastName: 'User',
+    phone: '+9647700000001',
+    ...overrides,
+  });
+  const sentTo = (email: string) =>
+    (containerFor(app).emailProvider as NoopEmailProvider).sent.filter((m) => m.to === email)
+      .length;
+
+  it('same email + same password → 201 for the SAME account, profile edits applied, code already sent still valid', async () => {
+    const { email } = await registerPending();
+    const firstCode = extractVerificationCode(app, email);
+    const before = sentTo(email);
+
+    const again = await request(app)
+      .post('/api/v1/auth/register')
+      .send(body(email, { firstName: 'Fixed' }));
+    expect(again.status).toBe(201);
+    expect(again.body.data.user.status).toBe('PENDING_VERIFICATION');
+    expect(again.body.data.user.firstName).toBe('Fixed');
+    expect(again.body.data.tokens.accessToken).toBeTypeOf('string');
+    // the outstanding code is NOT superseded, and no extra email is sent
+    expect(sentTo(email)).toBe(before);
+
+    const rows = await getTestDb()('users').where({ email });
+    expect(rows).toHaveLength(1);
+
+    const verified = await verifyEmail(app, email, firstCode);
+    expect(verified.status).toBe(200);
+    expect(verified.body.data.user.status).toBe('ACTIVE');
+  });
+
+  it('a different password gets the plain 409 and changes nothing', async () => {
+    const { email } = await registerPending();
+    const res = await request(app)
+      .post('/api/v1/auth/register')
+      .send(body(email, { password: 'not-the-same-password', firstName: 'Hijack' }));
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('CONFLICT');
+    const [row] = await getTestDb()('users').where({ email });
+    expect(row.first_name).toBe('Pending');
+  });
+
+  it('an already-verified account is never resumed (409)', async () => {
+    const u = await registerUser(app);
+    const res = await request(app)
+      .post('/api/v1/auth/register')
+      .send(body(u.email, { password: u.password }));
+    expect(res.status).toBe(409);
+  });
+
+  it('a VETERINARIAN sign-up never resumes a pending Pet Owner account', async () => {
+    const { email, password } = await registerPending();
+    const res = await request(app)
+      .post('/api/v1/auth/register')
+      .send(body(email, { password, accountType: 'VETERINARIAN' }));
+    expect(res.status).toBe(409);
+  });
+
+  it('the resumed session stays scoped until verification', async () => {
+    const { email } = await registerPending();
+    const again = await request(app).post('/api/v1/auth/register').send(body(email));
+    const blocked = await request(app)
+      .get('/api/v1/animals')
+      .set(bearer(again.body.data.tokens.accessToken));
+    expect(blocked.status).toBe(401);
+    expect(blocked.body.error.code).toBe('EMAIL_VERIFICATION_REQUIRED');
+  });
+
+  it('the resend cooldown 429 carries the remaining seconds', async () => {
+    const { email } = await registerPending();
+    const res = await request(app).post('/api/v1/auth/resend-verification').send({ email });
+    expect(res.status).toBe(429);
+    const detail = res.body.error.details?.find(
+      (d: { rule?: string }) => d.rule === 'RESEND_COOLDOWN',
+    );
+    expect(Number(detail?.message)).toBeGreaterThan(0);
   });
 });
 
