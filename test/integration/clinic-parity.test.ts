@@ -226,11 +226,11 @@ describe('vaccinations — status, clinic-wide list, notify owner', () => {
     const due = await notificationsFor(petOwner.id, 'VACCINATION_DUE');
     expect(due).toHaveLength(1);
 
-    // STAFF has no vaccination.read.
+    // Clinic STAFF read the clinic-wide list (vaccination.read by default).
     const asStaff = await request(app)
       .get(`${API}/organizations/${clinic.id}/clinic-vaccinations`)
       .set(bearer(staff.accessToken));
-    expect(asStaff.status).toBe(403);
+    expect(asStaff.status).toBe(200);
   });
 });
 
@@ -296,11 +296,16 @@ describe('reminders (legacy pet_reminders)', () => {
     expect(crossEdit.status).toBe(403);
     expect(crossEdit.body.error.code).toBe('CLINIC_RECORD_NOT_OWNED');
 
-    // STAFF cannot read reminders (no medical_record.read).
+    // Clinic STAFF read reminders (medical_record.read by default) but never delete.
     const asStaff = await request(app)
       .get(`${base(clinic.id, animal.id)}/reminders`)
       .set(bearer(staff.accessToken));
-    expect(asStaff.status).toBe(403);
+    expect(asStaff.status).toBe(200);
+    const staffDelete = await request(app)
+      .delete(`${base(clinic.id, animal.id)}/reminders/${id}`)
+      .set(bearer(staff.accessToken));
+    expect(staffDelete.status).toBe(403);
+    expect(staffDelete.body.error.code).toBe('PERMISSION_DENIED');
 
     // Owner reads (read-only); a stranger gets 404.
     const ownerList = await request(app)
