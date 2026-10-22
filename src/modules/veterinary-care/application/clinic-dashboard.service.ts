@@ -30,6 +30,8 @@ export interface ClinicDashboardPermissions {
   canCreateMedicalRecords: boolean;
   canViewVaccinations: boolean;
   canCreateVaccinations: boolean;
+  canDeleteMedicalRecords: boolean;
+  canDeleteVaccinations: boolean;
   canViewAppointments: boolean;
   canManageAppointments: boolean;
   canSendBroadcast: boolean;
@@ -45,6 +47,8 @@ const PERMISSION_KEYS: Record<keyof ClinicDashboardPermissions, string> = {
   canCreateMedicalRecords: 'medical_record.create',
   canViewVaccinations: 'vaccination.read',
   canCreateVaccinations: 'vaccination.create',
+  canDeleteMedicalRecords: 'medical_record.delete',
+  canDeleteVaccinations: 'vaccination.delete',
   canViewAppointments: 'clinic.appointment.read',
   canManageAppointments: 'clinic.appointment.manage',
   canSendBroadcast: 'organization.broadcast.send',

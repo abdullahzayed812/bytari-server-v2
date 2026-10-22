@@ -113,6 +113,7 @@ describe('clinic dashboard summary', () => {
       canManageAnimalAccess: false,
       canViewMedicalRecords: true,
       canCreateMedicalRecords: true,
+      canDeleteMedicalRecords: true,
       canViewAppointments: true,
       canManageAppointments: true,
       canSendBroadcast: false,
@@ -122,13 +123,25 @@ describe('clinic dashboard summary', () => {
     expect(res.body.data.animals).toEqual({ activeCount: 0 });
   });
 
-  it('withholds animal + medical counts from STAFF (no animal / medical read permission)', async () => {
+  it('gives clinic STAFF the medical-record permissions by default (no delete, no management)', async () => {
     const { staff, clinic } = await setup();
     const res = await request(app).get(summaryUrl(clinic.id)).set(bearer(staff.accessToken));
     expect(res.status).toBe(200);
-    expect(res.body.data.permissions.canViewAnimals).toBe(false);
-    expect(res.body.data.animals).toBeNull();
-    expect(res.body.data.medical).toBeNull();
+    expect(res.body.data.permissions).toMatchObject({
+      canViewAnimals: true,
+      canManageAnimalAccess: false,
+      canViewMedicalRecords: true,
+      canCreateMedicalRecords: true,
+      canDeleteMedicalRecords: false,
+      canViewVaccinations: true,
+      canCreateVaccinations: true,
+      canDeleteVaccinations: false,
+      canManageAppointments: false,
+      canSendBroadcast: false,
+      canEditOrganization: false,
+    });
+    expect(res.body.data.animals).not.toBeNull();
+    expect(res.body.data.medical).not.toBeNull();
     expect(res.body.data.appointments).not.toBeNull();
   });
 
@@ -252,11 +265,11 @@ describe('clinic-visible animal profile', () => {
     expect(res.status).toBe(404);
   });
 
-  it('403s clinic STAFF (no animal.veterinary.access.read)', async () => {
+  it('opens the profile for clinic STAFF (animal.veterinary.access.read by default)', async () => {
     const { staff, clinic, animal } = await setup();
     const res = await request(app)
       .get(animalUrl(clinic.id, animal.id))
       .set(bearer(staff.accessToken));
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(200);
   });
 });

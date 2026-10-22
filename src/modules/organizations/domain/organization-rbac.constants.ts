@@ -350,6 +350,17 @@ export const ORG_ROLE_PERMISSIONS: Record<OrgRoleKey, OrgPermissionKey[]> = {
     'farm.subscription.read',
     'product.read',
     'clinic.appointment.read',
+    // Clinic STAFF (employees) find the clinic's pets and enter medical records,
+    // vaccinations and reminders (create + update, never delete — like farm
+    // STAFF). The clinical routes are CLINIC-only (`withClinic`), so these
+    // grants do nothing in a farm / office / store.
+    'animal.veterinary.access.read',
+    'medical_record.read',
+    'medical_record.create',
+    'medical_record.update',
+    'vaccination.read',
+    'vaccination.create',
+    'vaccination.update',
   ],
 };
 
