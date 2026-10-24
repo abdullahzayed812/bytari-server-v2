@@ -1372,7 +1372,6 @@ export function createContainer(deps: ContainerDeps): Container {
     config.subscriptions.freeTrialDays,
     organizationRepository,
     traderService,
-    authorizationService,
     supportService,
   );
 

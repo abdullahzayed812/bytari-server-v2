@@ -183,35 +183,40 @@ export class FarmExpenseRepository {
   }
 
   /**
-   * Total spent by the farm within `[from, to]` (inclusive dates): manual
-   * expenses by `spent_on` + daily-record expenses by `record_date` — the same
-   * lines the list shows, each counted once.
+   * Total spent on the farm's CURRENT operation within `[from, to]` (inclusive
+   * dates): manual expenses by `spent_on` + daily-record expenses by
+   * `record_date` — the same lines the list shows, each counted once — minus
+   * every expense tied to a batch that has been sold / closed. Selling a batch
+   * therefore resets the "المصاريف" summary for it without touching a single
+   * row: the list, the batch's own summary and every report keep the history,
+   * and reopening the batch brings its figures back. Farm-wide manual expenses
+   * (no batch) always count.
    */
-  async sumInRange(organizationId: string, from: string, to: string): Promise<number> {
-    const sums = await Promise.all([
-      this.sumColumn(TABLE, 'amount', 'spent_on', organizationId, from, to),
-      ...DAILY_EXPENSE_SOURCES.map((src) =>
-        this.sumColumn(src.recordTable, 'expense_amount', 'record_date', organizationId, from, to),
-      ),
-    ]);
-    return sums.reduce((acc, n) => acc + n, 0);
-  }
-
-  private async sumColumn(
-    table: string,
-    column: string,
-    dateColumn: string,
-    organizationId: string,
-    from: string,
-    to: string,
-  ): Promise<number> {
-    const row = (await this.db(table)
-      .where('organization_id', organizationId)
-      .andWhere(dateColumn, '>=', from)
-      .andWhere(dateColumn, '<=', to)
-      .sum<{ total: string | null }>({ total: column })
-      .first()) as { total: string | null } | undefined;
-    return Number(row?.total ?? 0);
+  async sumCurrentInRange(organizationId: string, from: string, to: string): Promise<number> {
+    const manual = this.db(`${TABLE} as e`)
+      .leftJoin('poultry_flocks as f', 'f.id', 'e.poultry_flock_id')
+      .where('e.organization_id', organizationId)
+      .andWhere('e.spent_on', '>=', from)
+      .andWhere('e.spent_on', '<=', to)
+      .andWhere((q) => {
+        void q.whereNull('e.poultry_flock_id').orWhere('f.status', 'ACTIVE');
+      })
+      .sum<{ total: string | null }>({ total: 'e.amount' })
+      .first();
+    const daily = DAILY_EXPENSE_SOURCES.map((src) =>
+      this.db(`${src.recordTable} as d`)
+        .join(`${src.batchTable} as b`, 'b.id', `d.${src.batchColumn}`)
+        .where('d.organization_id', organizationId)
+        .andWhere('d.record_date', '>=', from)
+        .andWhere('d.record_date', '<=', to)
+        .andWhere('b.status', 'ACTIVE')
+        .sum<{ total: string | null }>({ total: 'd.expense_amount' })
+        .first(),
+    );
+    const rows = (await Promise.all([manual, ...daily])) as (
+      { total: string | null } | undefined
+    )[];
+    return rows.reduce((acc, row) => acc + Number(row?.total ?? 0), 0);
   }
 
   /** Total expenses attributed to one batch (for the batch-summary profit calc). */

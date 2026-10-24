@@ -189,38 +189,31 @@ describe('ACTIVE clinic (approved, subscription valid)', () => {
 });
 
 describe('EXPIRED subscription', () => {
-  it('locks the OWNER only; staff keep working within their role; outsiders stay blocked; renewal restores the owner', async () => {
+  it('locks the owner, veterinarians and employees alike; outsiders stay blocked; only the owner renews; renewal restores everyone', async () => {
     const ctx = await setup();
+    const before = await request(ctx.app)
+      .post(`${API}/organizations/${ctx.clinic.id}/animals/${ctx.animal.id}/medical-records`)
+      .set(bearer(ctx.vet.accessToken))
+      .send({ diagnosis: 'قبل الانتهاء' });
+    expect(before.status).toBe(201);
     await setPeriod(ctx.clinic.id, addDays(ctx.today, -60), addDays(ctx.today, -1));
 
-    // Owner (the account responsible for renewing): every operation refused.
-    for (const [label, call] of clinicOperations(ctx, ctx.owner.accessToken)) {
-      const res = await call();
-      expect(res.status, `${label} as owner → ${res.status}`).toBe(403);
-      expect(res.body.error.code, label).toBe('ORGANIZATION_SUBSCRIPTION_EXPIRED');
-    }
-    // Clinic veterinarian: everything the role allowed before still works …
-    for (const [label, call] of clinicOperations(ctx, ctx.vet.accessToken)) {
-      const res = await call();
-      if (VET_ALLOWED(label)) {
-        expect([200, 201], `${label} as vet → ${res.status}`).toContain(res.status);
-      } else {
-        // … and nothing it did not have before is granted.
-        expect(res.status, `${label} as vet → ${res.status}`).toBe(403);
-        expect(res.body.error.code, label).toBe('PERMISSION_DENIED');
+    // Owner, clinic veterinarian and employee: every operation refused with the
+    // same code — no staff exemption.
+    for (const member of [ctx.owner, ctx.vet, ctx.staff]) {
+      for (const [label, call] of clinicOperations(ctx, member.accessToken)) {
+        const res = await call();
+        expect(res.status, `${label} → ${res.status}`).toBe(403);
+        expect(
+          ['ORGANIZATION_SUBSCRIPTION_EXPIRED', 'PERMISSION_DENIED'],
+          `${label} → ${res.body.error.code}`,
+        ).toContain(res.body.error.code);
       }
+      const summary = await request(ctx.app)
+        .get(`${API}/organizations/${ctx.clinic.id}/clinic-dashboard/summary`)
+        .set(bearer(member.accessToken));
+      expect(summary.body.error.code).toBe('ORGANIZATION_SUBSCRIPTION_EXPIRED');
     }
-    // Staff (employee): dashboard open; owner-only management still refused.
-    const staffSummary = await request(ctx.app)
-      .get(`${API}/organizations/${ctx.clinic.id}/clinic-dashboard/summary`)
-      .set(bearer(ctx.staff.accessToken));
-    expect(staffSummary.status).toBe(200);
-    const staffAdd = await request(ctx.app)
-      .post(`${API}/organizations/${ctx.clinic.id}/members`)
-      .set(bearer(ctx.staff.accessToken))
-      .send({ userId: ctx.newcomer.id, role: 'VETERINARIAN' });
-    expect(staffAdd.status).toBe(403);
-    expect(staffAdd.body.error.code).toBe('PERMISSION_DENIED');
     // A non-member (vet of no clinic here) and the pet owner remain outsiders.
     for (const token of [ctx.newcomer.accessToken, ctx.petOwner.accessToken]) {
       const res = await request(ctx.app)
@@ -228,55 +221,33 @@ describe('EXPIRED subscription', () => {
         .set(bearer(token));
       expect(res.status).toBe(403);
     }
-    // Clinical data is untouched by the expiry (the vet's records are still there).
-    const records = await request(ctx.app)
-      .get(`${API}/organizations/${ctx.clinic.id}/animals/${ctx.animal.id}/medical-records`)
-      .set(bearer(ctx.vet.accessToken));
-    expect(records.status).toBe(200);
-    const list = records.body.data.items ?? records.body.data;
-    expect(list.length).toBeGreaterThan(0);
 
-    // Chat with pet owners: the OWNER loses the clinic side (HTTP 404 + realtime
-    // denied); the clinic's vet and employee keep answering, and the pet owner can reply.
-    const ownerSide = await request(ctx.app)
-      .get(`${API}/conversations/${ctx.conv.id}`)
-      .set(bearer(ctx.owner.accessToken));
-    expect(ownerSide.status).toBe(404);
-    const ownerPost = await request(ctx.app)
-      .post(`${API}/conversations/${ctx.conv.id}/messages`)
-      .set(bearer(ctx.owner.accessToken))
-      .send({ body: 'من المالك' });
-    expect(ownerPost.status).toBe(404);
-    expect(await realtimeSubscribe(ctx.owner.accessToken, ctx.conv.id)).toBe('denied');
-    for (const member of [ctx.vet, ctx.staff]) {
+    // Chat with pet owners: every member loses the clinic side (HTTP 404 +
+    // realtime denied); the pet owner keeps the history but cannot post.
+    for (const member of [ctx.owner, ctx.vet, ctx.staff]) {
       const read = await request(ctx.app)
         .get(`${API}/conversations/${ctx.conv.id}/messages`)
         .set(bearer(member.accessToken));
-      expect(read.status).toBe(200);
+      expect(read.status).toBe(404);
       const send = await request(ctx.app)
         .post(`${API}/conversations/${ctx.conv.id}/messages`)
         .set(bearer(member.accessToken))
         .send({ body: 'رد العيادة' });
-      expect(send.status).toBe(201);
-      expect(await realtimeSubscribe(member.accessToken, ctx.conv.id)).toBe('ok');
+      expect(send.status).toBe(404);
+      expect(await realtimeSubscribe(member.accessToken, ctx.conv.id)).toBe('denied');
+      const open = await request(ctx.app)
+        .post(`${API}/organizations/${ctx.clinic.id}/conversations`)
+        .set(bearer(member.accessToken))
+        .send({ targetUserId: ctx.newcomer.id });
+      expect(open.status).toBe(403);
+      expect(open.body.error.code).toBe('ORGANIZATION_SUBSCRIPTION_EXPIRED');
     }
     const petOwnerSend = await request(ctx.app)
       .post(`${API}/conversations/${ctx.conv.id}/messages`)
       .set(bearer(ctx.petOwner.accessToken))
       .send({ body: 'مرحبا' });
-    expect(petOwnerSend.status).toBe(201);
-    // The owner cannot open a new pet-owner chat either; the vet still can.
-    const ownerOpen = await request(ctx.app)
-      .post(`${API}/organizations/${ctx.clinic.id}/conversations`)
-      .set(bearer(ctx.owner.accessToken))
-      .send({ targetUserId: ctx.newcomer.id });
-    expect(ownerOpen.status).toBe(403);
-    expect(ownerOpen.body.error.code).toBe('ORGANIZATION_SUBSCRIPTION_EXPIRED');
-    const vetOpen = await request(ctx.app)
-      .post(`${API}/organizations/${ctx.clinic.id}/conversations`)
-      .set(bearer(ctx.vet.accessToken))
-      .send({ targetUserId: ctx.newcomer.id });
-    expect([200, 201]).toContain(vetOpen.status);
+    expect(petOwnerSend.status).toBe(403);
+    expect(petOwnerSend.body.error.code).toBe('ORGANIZATION_SUBSCRIPTION_EXPIRED');
 
     // Booking stays closed to pet owners while the clinic is expired.
     const booking = await request(ctx.app)
@@ -289,17 +260,36 @@ describe('EXPIRED subscription', () => {
       });
     expect(booking.status).toBe(403);
 
-    // What must stay open: the profile (for the expired screen) and renewal.
-    const detail = await request(ctx.app)
-      .get(`${API}/organizations/${ctx.clinic.id}`)
-      .set(bearer(ctx.owner.accessToken));
-    expect(detail.status).toBe(200);
-    expect(detail.body.data.details.subscriptionStatus).toBe('EXPIRED');
+    // What must stay open: the profile (for the expired screen) …
+    for (const member of [ctx.owner, ctx.vet, ctx.staff]) {
+      const detail = await request(ctx.app)
+        .get(`${API}/organizations/${ctx.clinic.id}`)
+        .set(bearer(member.accessToken));
+      expect(detail.status).toBe(200);
+      expect(detail.body.data.details.subscriptionStatus).toBe('EXPIRED');
+    }
+    // … and the renewal request — for the OWNER only.
+    for (const member of [ctx.vet, ctx.staff]) {
+      const denied = await request(ctx.app)
+        .post(`${API}/organizations/${ctx.clinic.id}/subscription-renewals`)
+        .set(bearer(member.accessToken))
+        .send({ note: 'تجديد' });
+      expect(denied.status).toBe(403);
+      const info = await request(ctx.app)
+        .post(`${API}/subscriptions/info-requests`)
+        .set(bearer(member.accessToken))
+        .send({ subject: 'CLINIC', organizationId: ctx.clinic.id });
+      expect(info.status).toBe(404);
+    }
     const renewal = await request(ctx.app)
       .post(`${API}/organizations/${ctx.clinic.id}/subscription-renewals`)
       .set(bearer(ctx.owner.accessToken))
       .send({ note: 'تجديد' });
     expect([200, 201]).toContain(renewal.status);
+
+    // Clinical data is untouched by the expiry.
+    const kept = await getTestDb()('medical_records').where({ organization_id: ctx.clinic.id });
+    expect(kept.length).toBeGreaterThan(0);
 
     // A global ADMIN still bypasses (support / moderation).
     const asAdmin = await request(ctx.app)
@@ -307,17 +297,19 @@ describe('EXPIRED subscription', () => {
       .set(bearer(ctx.admin.accessToken));
     expect(asAdmin.status).toBe(200);
 
-    // Renewal (new dates) → the owner is back without re-login; staff unaffected; realtime too.
+    // Renewal (new dates) → everyone is back without re-login; realtime too.
     await setPeriod(ctx.clinic.id, ctx.today, addDays(ctx.today, 365));
     for (const [label, call] of clinicOperations(ctx, ctx.vet.accessToken)) {
       if (!VET_ALLOWED(label)) continue;
       const res = await call();
       expect([200, 201], `${label} after renewal → ${res.status}`).toContain(res.status);
     }
-    const ownerAgain = await request(ctx.app)
-      .get(`${API}/organizations/${ctx.clinic.id}/clinic-dashboard/summary`)
-      .set(bearer(ctx.owner.accessToken));
-    expect(ownerAgain.status).toBe(200);
+    for (const member of [ctx.owner, ctx.staff]) {
+      const again = await request(ctx.app)
+        .get(`${API}/organizations/${ctx.clinic.id}/clinic-dashboard/summary`)
+        .set(bearer(member.accessToken));
+      expect(again.status).toBe(200);
+    }
     expect(await realtimeSubscribe(ctx.vet.accessToken, ctx.conv.id)).toBe('ok');
   });
 });
@@ -394,7 +386,7 @@ describe('direct-by-id appointment routes (no organization in the URL)', () => {
     return res.body.data.id as string;
   }
 
-  it('expired: the owner loses /clinic-appointments/:id, staff and vet keep it; suspended: everyone loses it', async () => {
+  it('expired: owner, vet and staff all lose /clinic-appointments/:id; the pet owner keeps it; renewal restores it', async () => {
     const ctx = await setup();
     const id = await bookedAppointment(ctx);
     const get = (token: string) =>
@@ -406,20 +398,18 @@ describe('direct-by-id appointment routes (no organization in the URL)', () => {
     expect((await get(ctx.vet.accessToken)).status).toBe(200);
     expect((await get(ctx.staff.accessToken)).status).toBe(200);
 
-    // EXPIRED: the owner is refused (404 — ids don't leak); staff keep working.
+    // EXPIRED: every member is refused (404 — ids don't leak).
     await setPeriod(ctx.clinic.id, addDays(ctx.today, -60), addDays(ctx.today, -1));
-    expect((await get(ctx.owner.accessToken)).status).toBe(404);
-    expect((await history(ctx.owner.accessToken)).status).toBe(404);
-    for (const token of [ctx.vet.accessToken, ctx.staff.accessToken]) {
-      expect((await get(token)).status).toBe(200);
-      expect((await history(token)).status).toBe(200);
+    for (const token of [ctx.owner.accessToken, ctx.vet.accessToken, ctx.staff.accessToken]) {
+      expect((await get(token)).status).toBe(404);
+      expect((await history(token)).status).toBe(404);
     }
     // A non-member never sees it.
     expect((await get(ctx.newcomer.accessToken)).status).toBe(404);
     // The pet owner keeps their own booking.
     expect((await get(ctx.petOwner.accessToken)).status).toBe(200);
 
-    // SUSPENDED (inactive): closed for staff too.
+    // SUSPENDED (inactive): closed too.
     await setPeriod(ctx.clinic.id, ctx.today, addDays(ctx.today, 30));
     await setStatus(ctx.clinic.id, 'SUSPENDED');
     expect((await get(ctx.vet.accessToken)).status).toBe(404);
@@ -431,7 +421,7 @@ describe('direct-by-id appointment routes (no organization in the URL)', () => {
     expect((await history(ctx.staff.accessToken)).status).toBe(200);
   });
 
-  it('per clinic: a vet keeps working in an expired clinic and in another clinic; that other clinic’s owner gains nothing here', async () => {
+  it('per clinic: a vet is locked in the expired clinic but keeps working in another, active clinic', async () => {
     const ctx = await setup();
     const other = await createActiveOrganization(
       ctx.app,
@@ -449,12 +439,8 @@ describe('direct-by-id appointment routes (no organization in the URL)', () => {
     const expired = await request(ctx.app)
       .get(`${API}/organizations/${ctx.clinic.id}/clinic-dashboard/summary`)
       .set(bearer(ctx.vet.accessToken));
-    expect(expired.status).toBe(200);
-    // The other clinic's owner is not a member of the expired clinic.
-    const outsider = await request(ctx.app)
-      .get(`${API}/organizations/${ctx.clinic.id}/clinic-dashboard/summary`)
-      .set(bearer(ctx.newcomer.accessToken));
-    expect(outsider.status).toBe(403);
+    expect(expired.status).toBe(403);
+    expect(expired.body.error.code).toBe('ORGANIZATION_SUBSCRIPTION_EXPIRED');
     const stillActive = await request(ctx.app)
       .get(`${API}/organizations/${other.id}/clinic-dashboard/summary`)
       .set(bearer(ctx.vet.accessToken));

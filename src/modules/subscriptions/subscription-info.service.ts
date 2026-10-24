@@ -1,6 +1,5 @@
 import { BadRequestError, ForbiddenError, NotFoundError } from '../../shared/errors/app-error.js';
 import { ErrorCode } from '../../shared/errors/error-codes.js';
-import type { AuthorizationService } from '../authorization/authorization.service.js';
 import type { AuthPrincipal } from '../authorization/authorization.types.js';
 import type { AuditContext } from '../audit/audit.types.js';
 import type { SupportThreadService } from '../consultations/application/support-thread.service.js';
@@ -62,17 +61,16 @@ export interface SubscriptionInfoActor {
  * state, so the administration can answer in the same thread. No new
  * messaging system, no new tables.
  *
- * Authorization: an organization subject needs `organization.update` in that
- * organization (OWNER override / an explicitly-granted supervisor / ADMIN) —
- * a plain member cannot open subscription conversations on the owner's
- * behalf; a trader subject needs the caller's OWN trader registration.
+ * Authorization: an organization subject is limited to that organization's
+ * OWNER — its veterinarians, supervisors and employees (whatever their
+ * permissions) cannot open subscription conversations on the owner's behalf;
+ * a trader subject needs the caller's OWN trader registration.
  */
 export class SubscriptionInfoService {
   constructor(
     private readonly freeTrialDays: number,
     private readonly organizations: OrganizationRepository,
     private readonly traders: TraderService,
-    private readonly authz: AuthorizationService,
     private readonly support: SupportThreadService,
   ) {}
 
@@ -103,11 +101,13 @@ export class SubscriptionInfoService {
       }
       const org = await this.organizations.findByIdWithDetails(input.organizationId);
       // A foreign / missing organization is hidden as 404 (no existence leak).
+      // Only the OWNER may ask about the subscription / renewal — never its
+      // veterinarians, supervisors or employees (even with `organization.update`).
       if (
         !org ||
         org.type !== SUBJECT_ORG_TYPE[input.subject] ||
         org.status === 'DEACTIVATED' ||
-        !(await this.authz.canInOrganization(actor.principal, 'organization.update', org.id))
+        org.ownerUserId !== actor.principal.userId
       ) {
         throw new NotFoundError('Organization not found');
       }

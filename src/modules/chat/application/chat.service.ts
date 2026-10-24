@@ -11,7 +11,6 @@ import type { EventBus } from '../../../shared/events/index.js';
 import { AuditAction, AuditEntityType, type AuditContext } from '../../audit/audit.types.js';
 import type { AuditService } from '../../audit/audit.service.js';
 import type { OrganizationOperabilityService } from '../../organizations/application/organization-operability.service.js';
-import { STAFF_OPERATE_WHEN_EXPIRED_ORG_TYPES } from '../../organizations/domain/organization-operability.js';
 import type { MembershipRepository } from '../../organizations/infrastructure/membership.repository.js';
 import type { OrganizationRepository } from '../../organizations/infrastructure/organization.repository.js';
 import type { UserService } from '../../users/user.service.js';
@@ -55,6 +54,13 @@ const ORG_SIDES: ReadonlySet<ConversationSide> = new Set<ConversationSide>([
   'VETERINARY_OFFICE',
   'SYNDICATE',
 ]);
+/** Conversations that become read-only while their organization may not operate (subscription / status). */
+const SUBSCRIPTION_LOCKED_CONVERSATION_TYPES: ReadonlySet<string> = new Set([
+  'PET_OWNER_CLINIC',
+  'PET_OWNER_VETERINARY_OFFICE',
+  'FARM_OWNER_MEMBER',
+  'FARM_MEMBER_DIRECT',
+]);
 
 function isUniqueViolation(err: unknown): boolean {
   return typeof err === 'object' && err !== null && (err as { code?: string }).code === '23505';
@@ -91,11 +97,11 @@ export class ChatService {
     /** Clears the conversation's "new message" alerts when the user reads it. */
     private readonly notificationReads: NotificationReadPort | null = null,
     /**
-     * The shared "may this organization operate?" rule. A pending / inactive
-     * CLINIC loses its clinic-side chat access (HTTP and realtime rooms) and
-     * nobody can post into its conversations. An expired subscription removes
-     * only the OWNER's clinic side — its veterinarians / employees keep chatting
-     * with pet owners (`assessForUser`).
+     * The shared "may this organization operate?" rule. A pending / inactive /
+     * expired CLINIC or VETERINARY_OFFICE loses its organization-side chat
+     * access (HTTP and realtime rooms) for EVERY member — owner, veterinarians,
+     * employees — and nobody can post into its conversations. A FARM whose
+     * subscription is not ACTIVE keeps its team chats readable but read-only.
      */
     private readonly operability: OrganizationOperabilityService | null = null,
   ) {
@@ -136,26 +142,18 @@ export class ChatService {
         code: ErrorCode.ORGANIZATION_NOT_ACTIVE,
       });
     }
-    if (conversation.type === 'PET_OWNER_CLINIC' && this.operability) {
-      // An expired clinic stays two-way: its staff still answer (the owner has
-      // no clinic side then — see `resolveSide`). Anything else → read-only.
-      const decision = await this.operability.assess(org);
-      const staffStillAnswer =
-        !decision.operational &&
-        decision.reason === 'SUBSCRIPTION_EXPIRED' &&
-        STAFF_OPERATE_WHEN_EXPIRED_ORG_TYPES.has(org.type);
-      if (!decision.operational && !staffStillAnswer) {
-        await this.operability.assertOperational(null, org);
-      }
+    // A non-operational clinic / office / farm is read-only for both sides.
+    if (this.operability && SUBSCRIPTION_LOCKED_CONVERSATION_TYPES.has(conversation.type)) {
+      await this.operability.assertOperational(null, org);
     }
   }
 
-  /** This member's clinic side exists only while the clinic may operate for them (shared rule). */
-  private async clinicOperationalFor(userId: string, organizationId: string): Promise<boolean> {
+  /** The organization side exists only while the organization may operate (shared rule). */
+  private async organizationOperational(organizationId: string): Promise<boolean> {
     if (!this.operability) return true;
     const org = await this.organizations.findById(organizationId);
     if (!org) return false;
-    return (await this.operability.assessForUser(userId, org)).operational;
+    return (await this.operability.assess(org)).operational;
   }
 
   private requireMedia(): ChatAttachmentMedia {
@@ -218,14 +216,10 @@ export class ChatService {
       if (!conversation.organizationId) return null;
       const m = await this.memberships.findByUserAndOrg(userId, conversation.organizationId);
       if (m?.status !== 'ACTIVE') return null;
-      if (conversation.type === 'PET_OWNER_CLINIC') {
-        // Everyone loses the clinic side (incl. realtime room joins) while the clinic
-        // is pending / inactive; an expired subscription removes only the OWNER.
-        return (await this.clinicOperationalFor(userId, conversation.organizationId))
-          ? 'CLINIC'
-          : null;
-      }
-      return 'VETERINARY_OFFICE';
+      // Every member loses the organization side (incl. realtime room joins)
+      // while the clinic / office is pending, inactive or expired.
+      if (!(await this.organizationOperational(conversation.organizationId))) return null;
+      return conversation.type === 'PET_OWNER_CLINIC' ? 'CLINIC' : 'VETERINARY_OFFICE';
     }
     if (conversation.type === 'SYNDICATE_MEMBER') {
       if (userId === conversation.petOwnerUserId) return 'SYNDICATE_MEMBER';
@@ -287,15 +281,11 @@ export class ChatService {
       });
     }
 
+    // No new conversation with / inside a non-operational organization — the
+    // same rule for its owner, veterinarians, employees and pet owners.
+    if (this.operability) await this.operability.assertOperational(null, org);
+
     if (ChatPolicy.isClinicType(org.type)) {
-      // Expired clinic: its staff may still reach a pet owner; the owner and
-      // pet owners (non-members → organization-level rule) may not.
-      if (
-        this.operability &&
-        !(await this.operability.assessForUser(actor.actorUserId, org)).operational
-      ) {
-        await this.operability.assertOperational(null, org);
-      }
       const petOwnerUserId = await this.resolveClinicCounterpart(actor, org, targetUserId);
       return this.getOrCreatePetOwnerClinic(actor, org.id, petOwnerUserId);
     }

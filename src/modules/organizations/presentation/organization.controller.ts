@@ -12,6 +12,7 @@ import type { MembershipService } from '../application/membership.service.js';
 import type { OrganizationSupervisorService } from '../application/organization-supervisor.service.js';
 import type { OrganizationEngagementService } from '../application/organization-engagement.service.js';
 import { isFarmSectionMembership } from '../domain/organization.policy.js';
+import { ORG_PERMISSION_KEYS } from '../domain/organization-rbac.constants.js';
 import { requireOrganization } from './organization.middleware.js';
 import type {
   AddMemberBody,
@@ -128,7 +129,12 @@ export class OrganizationController {
       this.organizations.getWithDetails(org.id),
       this.authz.getOrganizationMembershipContext(auth.userId, org.id),
     ]);
-    sendSuccess(res, { ...details, myRole: ctx?.roleKey ?? null });
+    // The caller's own resolved organization permissions (role grants ∪ the
+    // owner-selected supervisor grants), so the app shows exactly the sections
+    // the owner allowed instead of guessing from `myRole`. The OWNER override
+    // is spelled out as the full catalogue; `null` for a non-member (ADMIN).
+    const myPermissions = ctx ? (ctx.isOwner ? [...ORG_PERMISSION_KEYS] : ctx.permissions) : null;
+    sendSuccess(res, { ...details, myRole: ctx?.roleKey ?? null, myPermissions });
   };
 
   update = async (req: Request, res: Response): Promise<void> => {

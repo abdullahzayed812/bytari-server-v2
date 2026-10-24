@@ -1,8 +1,9 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { buildTestApp } from '../helpers/app.js';
-import { closeTestDb, ensureSchema, resetDb } from '../helpers/db.js';
+import { closeTestDb, ensureSchema, getTestDb, resetDb } from '../helpers/db.js';
 import {
+  addOrganizationMember,
   bearer,
   createFarm,
   createPoultryFlock,
@@ -185,5 +186,97 @@ describe('farm expenses include daily-record expenses', () => {
       .get(expenses(farm.id, '/summary'))
       .set(bearer(owner.accessToken));
     expect(summary.body.data.totalThisMonth).toBe(75);
+  });
+});
+
+describe('selling a batch resets its expenses in the Expenses summary (history kept)', () => {
+  async function summaryOf(token: string, orgId: string) {
+    const res = await request(app).get(expenses(orgId, '/summary')).set(bearer(token));
+    expect(res.status).toBe(200);
+    return res.body.data as {
+      totalThisWeek: number;
+      totalThisMonth: number;
+      dailyAverageThisMonth: number;
+    };
+  }
+  const sellFlock = (token: string, orgId: string, flockId: string, status = 'CLOSED') =>
+    request(app)
+      .patch(`/api/v1/organizations/${orgId}/poultry/flocks/${flockId}`)
+      .set(bearer(token))
+      .send({ status });
+
+  it('poultry: a successful sale clears the sold batch’s daily + linked manual expenses from the summary; farm-wide expenses stay; nothing is deleted; reopening restores them', async () => {
+    const { owner, farm, flock } = await setup();
+    await request(app)
+      .post(dailyRecords(farm.id, flock.id))
+      .set(bearer(owner.accessToken))
+      .send({ feedKg: 10, waterLiters: 20, mortalityCount: 0, expenseAmount: 850 })
+      .expect(201);
+    await request(app)
+      .post(expenses(farm.id))
+      .set(bearer(owner.accessToken))
+      .send({ category: 'FEED', amount: 400, spentOn: businessToday(), poultryFlockId: flock.id })
+      .expect(201);
+    await request(app)
+      .post(expenses(farm.id))
+      .set(bearer(owner.accessToken))
+      .send({ category: 'OTHER', amount: 100, spentOn: businessToday() })
+      .expect(201);
+
+    const before = await summaryOf(owner.accessToken, farm.id);
+    expect(before.totalThisWeek).toBe(1350);
+    expect(before.dailyAverageThisMonth).toBeGreaterThan(0);
+
+    // A refused sale (farm vet: no `farm.batch.sell`) changes nothing.
+    const vet = await registerApprovedVet(app);
+    await addOrganizationMember(app, owner.accessToken, farm.id, {
+      userId: vet.id,
+      role: 'VETERINARIAN',
+    });
+    const refused = await sellFlock(vet.accessToken, farm.id, flock.id);
+    expect(refused.status).toBe(403);
+    expect(await summaryOf(owner.accessToken, farm.id)).toEqual(before);
+
+    // The sale succeeds → the batch's expenses leave the summary.
+    const sold = await sellFlock(owner.accessToken, farm.id, flock.id);
+    expect(sold.status).toBe(200);
+    expect(sold.body.data.status).toBe('CLOSED');
+    const after = await summaryOf(owner.accessToken, farm.id);
+    expect(after.totalThisWeek).toBe(100);
+    expect(after.totalThisMonth).toBe(100);
+    expect(after.dailyAverageThisMonth).toBeLessThan(before.dailyAverageThisMonth);
+
+    // History is preserved: rows, the Expenses list and the batch report.
+    const db = getTestDb();
+    expect(await db('poultry_daily_records').where({ poultry_flock_id: flock.id })).toHaveLength(1);
+    expect(await db('farm_expenses').where({ organization_id: farm.id })).toHaveLength(2);
+    expect(await list(owner.accessToken, farm.id)).toHaveLength(3);
+    const batch = await request(app)
+      .get(`/api/v1/organizations/${farm.id}/poultry/flocks/${flock.id}/summary`)
+      .set(bearer(owner.accessToken));
+    expect(batch.body.data.totalExpenses).toBe(1250);
+
+    // Reopening the batch brings its figures back.
+    await sellFlock(owner.accessToken, farm.id, flock.id, 'ACTIVE').expect(200);
+    expect(await summaryOf(owner.accessToken, farm.id)).toEqual(before);
+  });
+
+  it('sheep: closing the sold batch drops its daily expenses; another active batch keeps counting', async () => {
+    const admin = await registerAdmin(app);
+    const owner = await registerApprovedVet(app);
+    const farm = await createSheepFarm(app, owner.accessToken, admin.accessToken);
+    const sold = await createSheepBatch(app, owner.accessToken, farm.id, { name: 'Sold' });
+    const kept = await createSheepBatch(app, owner.accessToken, farm.id, { name: 'Kept' });
+    await seedDailyRecordRow('sheep', sold.id, farm.id, businessToday(), { expenseAmount: 75 });
+    await seedDailyRecordRow('sheep', kept.id, farm.id, businessToday(), { expenseAmount: 25 });
+    expect((await summaryOf(owner.accessToken, farm.id)).totalThisMonth).toBe(100);
+
+    await request(app)
+      .patch(`/api/v1/organizations/${farm.id}/sheep/batches/${sold.id}`)
+      .set(bearer(owner.accessToken))
+      .send({ status: 'CLOSED' })
+      .expect(200);
+    expect((await summaryOf(owner.accessToken, farm.id)).totalThisMonth).toBe(25);
+    expect(await list(owner.accessToken, farm.id)).toHaveLength(2);
   });
 });

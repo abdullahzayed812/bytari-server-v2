@@ -17,11 +17,12 @@ import {
 
 /**
  * End-to-end check of the clinic expiry rule from every role's point of view:
- * an EXPIRED clinic subscription stops only the OWNER; its veterinarian, its
- * STAFF employee (medical-record permissions by default) and a supervisor with
- * granted clinical permissions keep creating / updating records (persisted,
- * audited, owner notified incl. realtime); STAFF still cannot delete; outsiders
- * and STAFF of non-clinic organizations stay out; renewal restores the owner.
+ * while ACTIVE the veterinarian, the STAFF employee (medical-record permissions
+ * by default) and a supervisor with granted clinical permissions create /
+ * update records (persisted, audited, owner notified incl. realtime); STAFF
+ * cannot delete. Once the subscription EXPIRES every one of them — and the
+ * owner — is locked out until renewal; only the owner may request it. The
+ * data stays intact; outsiders and STAFF of non-clinic organizations stay out.
  */
 let harness: RealtimeHarness;
 const API = '/api/v1';
@@ -159,33 +160,11 @@ describe('clinic expiry — role-based end-to-end', () => {
     expect(summary.status).toBe(200);
   });
 
-  it('expired: owner locked (renewal open); vet, STAFF + permitted supervisor create/update/persist/notify; STAFF cannot delete; outsiders refused; renewal restores the owner', async () => {
+  it('active: vet, STAFF + permitted supervisor create/update/persist/notify (STAFF cannot delete); expired: owner AND staff locked, only the owner renews; renewal restores everyone', async () => {
     const ctx = await setup();
     const db = getTestDb();
-    await setPeriod(ctx.clinic.id, addDays(ctx.today, -60), addDays(ctx.today, -1));
     const org = `${API}/organizations/${ctx.clinic.id}`;
     const a = `${org}/animals/${ctx.animal.id}`;
-
-    // --- owner: operational writes refused with the expiry code ---------------
-    const ownerWrites = await createAll(ctx, ctx.owner.accessToken, 'owner-expired');
-    for (const [label, res] of Object.entries(ownerWrites)) {
-      expect(res.status, `owner ${label}`).toBe(403);
-      expect(res.body.error.code, `owner ${label}`).toBe('ORGANIZATION_SUBSCRIPTION_EXPIRED');
-    }
-    const ownerSummary = await request(ctx.app)
-      .get(`${org}/clinic-dashboard/summary`)
-      .set(bearer(ctx.owner.accessToken));
-    expect(ownerSummary.status).toBe(403);
-    // … but status + renewal stay reachable.
-    const ownerDetail = await request(ctx.app).get(org).set(bearer(ctx.owner.accessToken));
-    expect(ownerDetail.status).toBe(200);
-    expect(ownerDetail.body.data.details.subscriptionStatus).toBe('EXPIRED');
-    expect(ownerDetail.body.data.myRole).toBe('OWNER');
-    const renewal = await request(ctx.app)
-      .post(`${org}/subscription-renewals`)
-      .set(bearer(ctx.owner.accessToken))
-      .send({ note: 'تجديد' });
-    expect([200, 201]).toContain(renewal.status);
 
     // The pet owner listens for realtime notifications on their own user room.
     const ws = await TestWs.connect(harness.wsUrl(ctx.petOwner.accessToken));
@@ -337,6 +316,59 @@ describe('clinic expiry — role-based end-to-end', () => {
     }
     expect(await db('medical_records').where({ id: staffRecord.id })).toHaveLength(1);
 
+    // --- the subscription EXPIRES: owner, vet, supervisor and STAFF all locked --
+    await setPeriod(ctx.clinic.id, addDays(ctx.today, -60), addDays(ctx.today, -1));
+    const recordsBefore = await db('medical_records').where({ organization_id: ctx.clinic.id });
+    for (const [who, user] of [
+      ['owner', ctx.owner],
+      ['vet', ctx.vet],
+      ['employee', ctx.employee],
+      ['staff', ctx.staff],
+    ] as const) {
+      const token = user.accessToken;
+      const writes = await createAll(ctx, token, `${who}-expired`);
+      for (const [label, res] of Object.entries(writes)) {
+        expect(res.status, `${who} ${label}`).toBe(403);
+        expect(res.body.error.code, `${who} ${label}`).toBe('ORGANIZATION_SUBSCRIPTION_EXPIRED');
+      }
+      const summary = await request(ctx.app)
+        .get(`${org}/clinic-dashboard/summary`)
+        .set(bearer(token));
+      expect(summary.status, `${who} dashboard`).toBe(403);
+      const lookup = await request(ctx.app)
+        .get(`${org}/clinic-pets/lookup`)
+        .query({ code: ctx.animal.publicCode })
+        .set(bearer(token));
+      expect(lookup.status, `${who} pet search`).toBe(403);
+      const recPatch = await request(ctx.app)
+        .patch(`${a}/medical-records/${recordsBefore[0].id}`)
+        .set(bearer(token))
+        .send({ diagnosis: 'after-expiry' });
+      expect(recPatch.status, `${who} record patch`).toBe(403);
+      // … the status screen stays reachable for every member.
+      const detail = await request(ctx.app).get(org).set(bearer(token));
+      expect(detail.status, `${who} org detail`).toBe(200);
+      expect(detail.body.data.details.subscriptionStatus).toBe('EXPIRED');
+    }
+    // Only the owner may request the renewal.
+    for (const user of [ctx.vet, ctx.employee, ctx.staff]) {
+      const denied = await request(ctx.app)
+        .post(`${org}/subscription-renewals`)
+        .set(bearer(user.accessToken))
+        .send({ note: 'تجديد' });
+      expect(denied.status).toBe(403);
+    }
+    expect(await db('farm_subscription_renewal_requests')).toHaveLength(0);
+    const renewal = await request(ctx.app)
+      .post(`${org}/subscription-renewals`)
+      .set(bearer(ctx.owner.accessToken))
+      .send({ note: 'تجديد' });
+    expect([200, 201]).toContain(renewal.status);
+    // Nothing was lost or changed while locked.
+    const recordsAfter = await db('medical_records').where({ organization_id: ctx.clinic.id });
+    expect(recordsAfter).toHaveLength(recordsBefore.length);
+    expect(recordsAfter.some((r) => r.diagnosis === 'after-expiry')).toBe(false);
+
     // --- outsiders: another clinic's owner / a vet of no clinic / pet owner --
     const anyRecord = await db('medical_records')
       .where({ organization_id: ctx.clinic.id })
@@ -377,16 +409,18 @@ describe('clinic expiry — role-based end-to-end', () => {
       await db('medical_records').where({ organization_id: ctx.clinic.id, diagnosis: 'tampered' }),
     ).toHaveLength(0);
 
-    // --- renewal (admin sets new dates) restores the owner -------------------
+    // --- renewal (admin sets new dates) restores everyone --------------------
     await setPeriod(ctx.clinic.id, ctx.today, addDays(ctx.today, 365));
-    const ownerAgain = await createAll(ctx, ctx.owner.accessToken, 'owner-renewed');
-    expect(ownerAgain.record.status).toBe(201);
-    expect(ownerAgain.vaccination.status).toBe(201);
-    expect(ownerAgain.reminder.status).toBe(201);
-    const vetAgain = await request(ctx.app)
-      .get(`${org}/clinic-dashboard/summary`)
-      .set(bearer(ctx.vet.accessToken));
-    expect(vetAgain.status).toBe(200);
+    for (const [who, user] of [
+      ['owner', ctx.owner],
+      ['vet', ctx.vet],
+      ['staff', ctx.staff],
+    ] as const) {
+      const again = await createAll(ctx, user.accessToken, `${who}-renewed`);
+      expect(again.record.status, `${who} record after renewal`).toBe(201);
+      expect(again.vaccination.status, `${who} vaccination after renewal`).toBe(201);
+      expect(again.reminder.status, `${who} reminder after renewal`).toBe(201);
+    }
   });
 
   it('STAFF of a non-clinic organization gains nothing on the clinical routes', async () => {

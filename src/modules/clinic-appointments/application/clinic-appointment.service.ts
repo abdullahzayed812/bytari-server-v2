@@ -48,8 +48,8 @@ export type ClinicStatusUpdate = 'CONFIRMED' | 'REJECTED' | 'COMPLETED' | 'CANCE
  *  - the PET OWNER side is `clinic_appointments.pet_owner_user_id`;
  *  - the CLINIC side is any ACTIVE member of the appointment's organization,
  *    and only while that member may operate the clinic (the shared
- *    operability rule, per user: a suspended clinic closes it for everyone,
- *    an EXPIRED subscription only for the owner — staff keep working). Same
+ *    operability rule: a pending / suspended clinic or an EXPIRED
+ *    subscription closes it for every member — owner and staff alike). Same
  *    answer as the org-scoped dashboard routes.
  *
  * A request that the caller has no relationship to 404s (never 403) so ids do
@@ -83,15 +83,15 @@ export class ClinicAppointmentService {
     if (userId === appointment.petOwnerUserId) return 'PET_OWNER';
     const membership = await this.memberships.findByUserAndOrg(userId, appointment.organizationId);
     if (membership?.status !== 'ACTIVE') return null;
-    return (await this.clinicOperationalFor(userId, appointment.organizationId)) ? 'CLINIC' : null;
+    return (await this.clinicOperational(appointment.organizationId)) ? 'CLINIC' : null;
   }
 
-  /** Clinic side only exists while this member may operate the clinic (shared per-user rule). */
-  private async clinicOperationalFor(userId: string, organizationId: string): Promise<boolean> {
+  /** The clinic side only exists while the clinic may operate — for every member alike (shared rule). */
+  private async clinicOperational(organizationId: string): Promise<boolean> {
     const org = await this.organizations.findById(organizationId);
     if (!org) return false;
     if (!this.operability) return org.status === 'ACTIVE';
-    return (await this.operability.assessForUser(userId, org)).operational;
+    return (await this.operability.assess(org)).operational;
   }
 
   private async loadForActor(
