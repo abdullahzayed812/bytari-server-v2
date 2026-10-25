@@ -40,6 +40,23 @@ container.eventBus.subscribe(ALL_EVENTS, (e: DomainEvent) => {
   if (e.name.startsWith('notification.')) events.push(e.name);
 });
 const tick = (): Promise<void> => new Promise((r) => setTimeout(r, 40));
+/**
+ * Polls until `check` passes (event handlers run async; a fixed 40 ms tick is
+ * not enough on a slow CI runner). Use for positive waits; negative checks
+ * keep `tick()`.
+ */
+async function eventually(check: () => Promise<void>, timeoutMs = 3000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    try {
+      await check();
+      return;
+    } catch (err) {
+      if (Date.now() > deadline) throw err;
+      await tick();
+    }
+  }
+}
 
 beforeAll(() => ensureSchema());
 beforeEach(async () => {
@@ -132,12 +149,11 @@ describe('notifications — event handling', () => {
       type: 'CLINIC',
       name: 'Notif Clinic',
     });
-    await tick();
-
-    const rows = await notifRows(owner.id);
-    expect(rows.map((r) => r.type)).toContain('ORGANIZATION_APPROVED');
-    expect(events).toContain('notification.created');
-    expect(push.sent).toHaveLength(1);
+    await eventually(async () => {
+      expect((await notifRows(owner.id)).map((r) => r.type)).toContain('ORGANIZATION_APPROVED');
+      expect(events).toContain('notification.created');
+      expect(push.sent).toHaveLength(1);
+    });
     expect(push.sent[0]?.tokens).toEqual([TOKEN_A]);
     // push payload carries only ids + type
     expect(push.sent[0]?.data).toMatchObject({ type: 'ORGANIZATION_APPROVED' });
@@ -155,8 +171,9 @@ describe('notifications — event handling', () => {
       userId: staff.id,
       role: 'STAFF',
     });
-    await tick();
-    expect((await notifRows(staff.id)).map((r) => r.type)).toContain('ORGANIZATION_MEMBER_ADDED');
+    await eventually(async () => {
+      expect((await notifRows(staff.id)).map((r) => r.type)).toContain('ORGANIZATION_MEMBER_ADDED');
+    });
   });
 
   it('consultation reply from a supervisor notifies the creator — NOT the supervisor', async () => {
@@ -165,17 +182,18 @@ describe('notifications — event handling', () => {
     const sup = await registerSupportSupervisor(app, admin.accessToken, 'CONSULTATION');
     const c = await createConsultation(app, owner.accessToken, 'help');
     const id = c.body.data.id as string;
-    await tick();
     // creation already notified the supervisor
-    expect((await notifRows(sup.id)).map((r) => r.type)).toContain('CONSULTATION_CREATED');
+    await eventually(async () => {
+      expect((await notifRows(sup.id)).map((r) => r.type)).toContain('CONSULTATION_CREATED');
+    });
 
     await getTestDb()('notifications').del();
     await sendThreadMessage(app, sup.accessToken, 'consultations', id, 'reply');
-    await tick();
-
-    expect((await notifRows(owner.id)).map((r) => r.type)).toEqual([
-      'CONSULTATION_MESSAGE_RECEIVED',
-    ]);
+    await eventually(async () => {
+      expect((await notifRows(owner.id)).map((r) => r.type)).toEqual([
+        'CONSULTATION_MESSAGE_RECEIVED',
+      ]);
+    });
     expect(await notifRows(sup.id)).toHaveLength(0); // sender not notified
   });
 
@@ -185,12 +203,18 @@ describe('notifications — event handling', () => {
     const sup = await registerSupportSupervisor(app, admin.accessToken, 'CONSULTATION');
     const c = await createConsultation(app, owner.accessToken, 'first');
     const id = c.body.data.id as string;
+    await eventually(async () => {
+      expect((await notifRows(sup.id)).map((r) => r.type)).toContain('CONSULTATION_CREATED');
+    });
     await tick();
     await getTestDb()('notifications').del();
 
     await sendThreadMessage(app, owner.accessToken, 'consultations', id, 'more info');
-    await tick();
-    expect((await notifRows(sup.id)).map((r) => r.type)).toEqual(['CONSULTATION_MESSAGE_RECEIVED']);
+    await eventually(async () => {
+      expect((await notifRows(sup.id)).map((r) => r.type)).toEqual([
+        'CONSULTATION_MESSAGE_RECEIVED',
+      ]);
+    });
     expect(await notifRows(owner.id)).toHaveLength(0);
   });
 
@@ -202,8 +226,9 @@ describe('notifications — event handling', () => {
     const id = c.body.data.id as string;
     await getTestDb()('notifications').del();
     await closeThread(app, admin.accessToken, 'consultations', id);
-    await tick();
-    expect((await notifRows(owner.id)).map((r) => r.type)).toContain('CONSULTATION_CLOSED');
+    await eventually(async () => {
+      expect((await notifRows(owner.id)).map((r) => r.type)).toContain('CONSULTATION_CLOSED');
+    });
   });
 
   it('a chat message notifies the recipient, not the sender', async () => {
@@ -218,10 +243,11 @@ describe('notifications — event handling', () => {
     await getTestDb()('notifications').del();
 
     await sendChatMessage(app, petOwner.accessToken, conv.id, 'hello clinic');
-    await tick();
 
     // the clinic member (vetOwner) is notified; the pet owner (sender) is not
-    expect((await notifRows(vetOwner.id)).map((r) => r.type)).toContain('CHAT_MESSAGE_RECEIVED');
+    await eventually(async () => {
+      expect((await notifRows(vetOwner.id)).map((r) => r.type)).toContain('CHAT_MESSAGE_RECEIVED');
+    });
     expect(await notifRows(petOwner.id)).toHaveLength(0);
   });
 
@@ -239,14 +265,19 @@ describe('notifications — event handling', () => {
   it('the same domain event processed twice does not create a duplicate (source_event_key)', async () => {
     const admin = await registerAdmin(app);
     const owner = await registerUser(app);
-    await registerSupportSupervisor(app, admin.accessToken, 'CONSULTATION');
+    const sup = await registerSupportSupervisor(app, admin.accessToken, 'CONSULTATION');
     const c = await createConsultation(app, owner.accessToken, 'q');
     const id = c.body.data.id as string;
+    await eventually(async () => {
+      expect((await notifRows(sup.id)).map((r) => r.type)).toContain('CONSULTATION_CREATED');
+    });
     await tick();
     await getTestDb()('notifications').del();
 
     await sendThreadMessage(app, admin.accessToken, 'consultations', id, 'reply');
-    await tick();
+    await eventually(async () => {
+      expect(await notifRows(owner.id)).toHaveLength(1);
+    });
     // replay the exact same event
     container.eventBus.publish('consultation.message.created', {
       consultationId: id,
@@ -287,8 +318,9 @@ describe('notifications — FCM behaviour (fake provider)', () => {
       type: 'CLINIC',
       name: 'FCM Clinic',
     });
-    await tick();
-    expect(push.sent).toHaveLength(1);
+    await eventually(async () => {
+      expect(push.sent).toHaveLength(1);
+    });
     expect(push.sent[0]?.tokens.sort()).toEqual([TOKEN_A, TOKEN_B, TOKEN_C].sort());
   });
 
@@ -301,11 +333,12 @@ describe('notifications — FCM behaviour (fake provider)', () => {
       type: 'CLINIC',
       name: 'Invalid Token Clinic',
     });
-    await tick();
 
-    expect((await notifRows(ownerId)).map((r) => r.type)).toContain('ORGANIZATION_APPROVED');
-    const row = await getTestDb()('device_push_tokens').where({ token: TOKEN_B }).first();
-    expect(row.revoked_at).not.toBeNull();
+    await eventually(async () => {
+      expect((await notifRows(ownerId)).map((r) => r.type)).toContain('ORGANIZATION_APPROVED');
+      const row = await getTestDb()('device_push_tokens').where({ token: TOKEN_B }).first();
+      expect(row.revoked_at).not.toBeNull();
+    });
     const surviving = await getTestDb()('device_push_tokens')
       .where({ user_id: ownerId })
       .whereNull('revoked_at')
@@ -324,9 +357,10 @@ describe('notifications — FCM behaviour (fake provider)', () => {
       type: 'CLINIC',
       name: 'Transient Clinic',
     });
-    await tick();
 
-    expect((await notifRows(owner.id)).map((r) => r.type)).toContain('ORGANIZATION_APPROVED');
+    await eventually(async () => {
+      expect((await notifRows(owner.id)).map((r) => r.type)).toContain('ORGANIZATION_APPROVED');
+    });
   });
 
   it('a recipient with pushEnabled=false gets the in-app notification but no push', async () => {
@@ -340,9 +374,11 @@ describe('notifications — FCM behaviour (fake provider)', () => {
       type: 'CLINIC',
       name: 'No Push Clinic',
     });
-    await tick();
 
-    expect((await notifRows(owner.id)).map((r) => r.type)).toContain('ORGANIZATION_APPROVED');
+    await eventually(async () => {
+      expect((await notifRows(owner.id)).map((r) => r.type)).toContain('ORGANIZATION_APPROVED');
+    });
+    await tick();
     expect(push.sent).toHaveLength(0);
   });
 
@@ -354,8 +390,10 @@ describe('notifications — FCM behaviour (fake provider)', () => {
       type: 'CLINIC',
       name: 'Deviceless Clinic',
     });
+    await eventually(async () => {
+      expect((await notifRows(owner.id)).length).toBeGreaterThan(0);
+    });
     await tick();
-    expect((await notifRows(owner.id)).length).toBeGreaterThan(0);
     expect(push.sent).toHaveLength(0); // sendToUser short-circuits with 0 tokens
   });
 });
@@ -372,7 +410,9 @@ describe('notifications — inbox', () => {
         name: `Clinic ${i}-${Date.now()}`,
       });
     }
-    await tick();
+    await eventually(async () => {
+      expect(await notifRows(owner.id)).toHaveLength(3);
+    });
     const list = await listNotifications(app, owner.accessToken);
     return { token: owner.accessToken, ids: list.body.data.map((n: { id: string }) => n.id) };
   }
@@ -442,9 +482,10 @@ describe('notifications — admin broadcast', () => {
     });
     expect(res.status).toBe(201);
     expect(res.body.data.recipientCount).toBe(1);
-    await tick();
-    expect((await notifRows(target.id)).map((r) => r.type)).toEqual(['ADMIN_ANNOUNCEMENT']);
-    expect(push.sent).toHaveLength(1);
+    await eventually(async () => {
+      expect((await notifRows(target.id)).map((r) => r.type)).toEqual(['ADMIN_ANNOUNCEMENT']);
+      expect(push.sent).toHaveLength(1);
+    });
     // The push carries the recipient's own row id (a tap marks THAT row read /
     // opens its details) and marks the sender as the administration.
     const [row] = await getTestDb()('notifications').where({ recipient_user_id: target.id });
@@ -482,9 +523,10 @@ describe('notifications — admin broadcast', () => {
     });
     expect(res.status).toBe(201);
     expect(res.body.data.recipientCount).toBe(2);
-    await tick();
-    expect((await notifRows(v1.id)).map((r) => r.type)).toEqual(['ADMIN_ANNOUNCEMENT']);
-    expect((await notifRows(v2.id)).map((r) => r.type)).toEqual(['ADMIN_ANNOUNCEMENT']);
+    await eventually(async () => {
+      expect((await notifRows(v1.id)).map((r) => r.type)).toEqual(['ADMIN_ANNOUNCEMENT']);
+      expect((await notifRows(v2.id)).map((r) => r.type)).toEqual(['ADMIN_ANNOUNCEMENT']);
+    });
   });
 
   it('ALL target: notifies every active user; validates an unknown USER target', async () => {
@@ -498,8 +540,9 @@ describe('notifications — admin broadcast', () => {
     });
     expect(res.status).toBe(201);
     expect(res.body.data.recipientCount).toBeGreaterThanOrEqual(2); // admin + u1
-    await tick();
-    expect((await notifRows(u1.id)).map((r) => r.type)).toEqual(['ADMIN_ANNOUNCEMENT']);
+    await eventually(async () => {
+      expect((await notifRows(u1.id)).map((r) => r.type)).toEqual(['ADMIN_ANNOUNCEMENT']);
+    });
 
     const bad = await adminSendNotification(app, admin.accessToken, {
       target: { kind: 'USER', userId: '00000000-0000-0000-0000-000000000000' },
