@@ -35,6 +35,7 @@ import type {
   NewsRepository,
   NewsWithCategory,
 } from '../infrastructure/news.repository.js';
+import { deleteUnreferencedContentObject } from '../infrastructure/content-image-references.js';
 
 export interface NewsActor {
   actorUserId: string;
@@ -412,6 +413,30 @@ export class NewsService {
     return this.adminDetail(await this.load(id));
   }
 
+  /** Remove the cover image (the news item and its text stay). */
+  async removeCover(actor: NewsActor, id: string): Promise<AdminNewsDTO> {
+    const { news } = await this.load(id);
+    const key = news.coverImageStorageKey;
+    if (!key) throw new NotFoundError('News has no cover image');
+
+    await this.db.transaction(async (tx) => {
+      await this.news.clearCoverImage(id, actor.actorUserId, tx);
+      await this.audit.record(
+        {
+          action: AuditAction.NEWS_COVER_DELETED,
+          entityType: AuditEntityType.NEWS,
+          entityId: id,
+          actorUserId: actor.actorUserId,
+          metadata: { newsId: id },
+          context: actor.context,
+        },
+        tx,
+      );
+      await deleteUnreferencedContentObject(tx, this.storage, this.log, key, { newsId: id });
+    });
+    return this.adminDetail(await this.load(id));
+  }
+
   // --- management: gallery (الصور المرفقة) --------------------
 
   async requestGalleryUploadUrl(
@@ -486,8 +511,10 @@ export class NewsService {
         },
         tx,
       );
+      await deleteUnreferencedContentObject(tx, this.storage, this.log, storageKey, {
+        newsId: id,
+      });
     });
-    await this.sweep(storageKey, id);
     return this.adminDetail(await this.load(id));
   }
 

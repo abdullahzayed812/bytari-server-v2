@@ -33,6 +33,7 @@ import type { ContentEngagementRepository } from '../infrastructure/content-enga
 import type { ContentFileRepository } from '../infrastructure/content-file.repository.js';
 import type { ContentRatingRepository } from '../infrastructure/content-rating.repository.js';
 import type { ContentRepository } from '../infrastructure/content.repository.js';
+import { deleteUnreferencedContentObject } from '../infrastructure/content-image-references.js';
 
 export interface ContentActor {
   actorUserId: string;
@@ -547,8 +548,10 @@ export class ContentService {
     if (!file) throw new NotFoundError('Content file not found');
     if (file.deletedAt !== null) return this.dto(content, true); // idempotent
 
+    // The row is removed (the item and its text stay); the object goes in the
+    // same transaction, so a storage failure keeps both.
     await this.db.transaction(async (tx) => {
-      await this.files.softDelete(fileId, tx);
+      await this.files.hardDelete(fileId, tx);
       await this.audit.record(
         {
           action: AuditAction.CONTENT_FILE_DELETED,
@@ -560,13 +563,11 @@ export class ContentService {
         },
         tx,
       );
+      await deleteUnreferencedContentObject(tx, this.storage, this.log, file.storageKey, {
+        contentId,
+        fileId,
+      });
     });
-
-    try {
-      await this.storage.delete(file.storageKey);
-    } catch (err) {
-      this.log.error({ err, contentId, fileId }, 'failed to delete storage object — needs a sweep');
-    }
 
     this.events.publish('content.file.deleted', { contentId, kind: file.kind });
     return this.dto(content, true);

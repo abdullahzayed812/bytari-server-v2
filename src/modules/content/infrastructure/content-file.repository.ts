@@ -95,6 +95,11 @@ export class ContentFileRepository {
     return rowToContentFile(row);
   }
 
+  /** Explicit delete — the row goes (its object is removed in the same transaction). */
+  async hardDelete(id: string, trx: Knex.Transaction): Promise<number> {
+    return trx(T).where({ id }).del();
+  }
+
   async softDelete(id: string, trx: Knex.Transaction): Promise<ContentFile> {
     const [row] = (await trx(T)
       .where({ id })

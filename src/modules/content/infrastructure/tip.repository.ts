@@ -163,6 +163,20 @@ export class TipRepository {
     return rowToTip(row);
   }
 
+  async clearCoverImage(id: string, updatedByUserId: string, trx: Knex.Transaction): Promise<Tip> {
+    const [row] = (await trx(T)
+      .where({ id })
+      .update({
+        cover_image_storage_key: null,
+        cover_image_storage_provider: null,
+        updated_by_user_id: updatedByUserId,
+        updated_at: trx.fn.now(),
+      })
+      .returning('*')) as TipRow[];
+    if (!row) throw new Error('content_tips not found on cover delete');
+    return rowToTip(row);
+  }
+
   async setCoverImage(
     id: string,
     data: { storageKey: string; storageProvider: string; updatedByUserId: string },

@@ -32,6 +32,7 @@ import type {
 import type { CategoryRepository } from '../infrastructure/category.repository.js';
 import type { TipEngagementRepository } from '../infrastructure/tip-engagement.repository.js';
 import type { TipRepository, TipWithCategory } from '../infrastructure/tip.repository.js';
+import { deleteUnreferencedContentObject } from '../infrastructure/content-image-references.js';
 
 export interface TipActor {
   actorUserId: string;
@@ -492,6 +493,30 @@ export class TipService {
       }
     }
 
+    return this.adminDetail(await this.load(id));
+  }
+
+  /** Remove the cover image (the tip and its text stay). */
+  async removeCover(actor: TipActor, id: string): Promise<AdminTipDTO> {
+    const { tip } = await this.load(id);
+    const key = tip.coverImageStorageKey;
+    if (!key) throw new NotFoundError('Tip has no cover image');
+
+    await this.db.transaction(async (tx) => {
+      await this.tips.clearCoverImage(id, actor.actorUserId, tx);
+      await this.audit.record(
+        {
+          action: AuditAction.TIP_COVER_DELETED,
+          entityType: AuditEntityType.TIP,
+          entityId: id,
+          actorUserId: actor.actorUserId,
+          metadata: { tipId: id },
+          context: actor.context,
+        },
+        tx,
+      );
+      await deleteUnreferencedContentObject(tx, this.storage, this.log, key, { tipId: id });
+    });
     return this.adminDetail(await this.load(id));
   }
 

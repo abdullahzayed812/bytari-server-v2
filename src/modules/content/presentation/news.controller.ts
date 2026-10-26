@@ -142,6 +142,11 @@ export class NewsController {
     );
   };
 
+  removeCover = async (req: Request, res: Response): Promise<void> => {
+    const { newsId } = validatedParams<NewsParams>(req);
+    sendSuccess(res, await this.news.removeCover(this.actor(req), newsId));
+  };
+
   requestGalleryUploadUrl = async (req: Request, res: Response): Promise<void> => {
     const { newsId } = validatedParams<NewsParams>(req);
     sendSuccess(

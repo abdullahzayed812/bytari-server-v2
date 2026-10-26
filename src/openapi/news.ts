@@ -20,6 +20,7 @@ function errs(...codes: number[]): Obj {
     403: 'Authenticated but lacks the required content.* permission / approved-vet',
     404: 'News not found (or not PUBLISHED for a public read)',
     422: 'Request failed validation',
+    503: 'Object storage failed — nothing was changed; retry',
   };
   const out: Obj = {};
   for (const c of codes) out[String(c)] = { description: map[c] ?? 'Error', content: jsonError };
@@ -323,6 +324,16 @@ const paths: Obj = {
       responses: {
         201: ok('Registered', dataOf({ $ref: '#/components/schemas/AdminNews' })),
         ...errs(400, 401, 403, 404, 422),
+      },
+    },
+    delete: {
+      tags: ['News (Admin)'],
+      summary:
+        'Delete the cover image (DB reference + storage object; the news item stays) — content.upload. 503 = storage failure, nothing changed.',
+      security: bearer,
+      responses: {
+        200: ok('Deleted', dataOf({ $ref: '#/components/schemas/AdminNews' })),
+        ...errs(401, 403, 404, 503),
       },
     },
   },

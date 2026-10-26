@@ -173,6 +173,20 @@ export class NewsRepository {
     return rowToNews(row);
   }
 
+  async clearCoverImage(id: string, updatedByUserId: string, trx: Knex.Transaction): Promise<News> {
+    const [row] = (await trx(T)
+      .where({ id })
+      .update({
+        cover_image_storage_key: null,
+        cover_image_storage_provider: null,
+        updated_by_user_id: updatedByUserId,
+        updated_at: trx.fn.now(),
+      })
+      .returning('*')) as NewsRow[];
+    if (!row) throw new Error('news not found on cover delete');
+    return rowToNews(row);
+  }
+
   async setCoverImage(
     id: string,
     data: { storageKey: string; storageProvider: string; updatedByUserId: string },

@@ -466,7 +466,7 @@ describe('content — books / magazines & files', () => {
     expect(await storage.exists(firstKey)).toBe(false); // old object cleaned up
   });
 
-  it('deletes a file (soft row + storage object) idempotently', async () => {
+  it('deletes a file (row + storage object); a repeat delete is 404', async () => {
     const { adminToken, id } = await book();
     const up = await uploadContentFile(app, container, adminToken, id, {
       kind: 'ATTACHMENT',
@@ -483,14 +483,14 @@ describe('content — books / magazines & files', () => {
     expect(del.status).toBe(200);
     expect(del.body.data.files).toHaveLength(0);
     expect(await storage.exists(key)).toBe(false);
-    // idempotent
+    expect(await getTestDb()('content_files').where({ id: fileId }).first()).toBeUndefined();
     expect(
       (
         await request(app)
           .delete(`/api/v1/admin/content/${id}/files/${fileId}`)
           .set(bearer(adminToken))
       ).status,
-    ).toBe(200);
+    ).toBe(404);
   });
 
   it('download URL: signed for the in-memory (private) backend; PUBLISHED gate on the public route', async () => {
@@ -532,7 +532,7 @@ describe('content — books / magazines & files', () => {
 // --- storage failure handling (§28) ---------------------------
 
 describe('content — storage failure handling', () => {
-  it('a storage delete failure after commit does not roll back the DB (row still soft-deleted)', async () => {
+  it('a storage delete failure rolls the delete back (503; row kept, retryable)', async () => {
     class FlakyStorage extends InMemoryObjectStorage {
       override delete(): Promise<void> {
         return Promise.reject(new Error('R2 unavailable'));
@@ -555,9 +555,9 @@ describe('content — storage failure handling', () => {
     const del = await request(h.app)
       .delete(`/api/v1/admin/content/${id}/files/${fileId}`)
       .set(bearer(admin.accessToken));
-    expect(del.status).toBe(200); // storage error logged, not surfaced
+    expect(del.status).toBe(503);
     const row = await getTestDb()('content_files').where({ id: fileId }).first();
-    expect(row.deleted_at).not.toBeNull();
+    expect(row.deleted_at).toBeNull();
   });
 });
 

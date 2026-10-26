@@ -115,6 +115,12 @@ export function createAdminNewsRouter(c: Container): Router {
     validate({ params: newsIdParamSchema, body: registerImageBodySchema }),
     asyncHandler(ctrl.registerCover),
   );
+  r.delete(
+    '/:newsId/cover',
+    authorizeContent('content.upload'),
+    validate({ params: newsIdParamSchema }),
+    asyncHandler(ctrl.removeCover),
+  );
   r.post(
     '/:newsId/gallery/upload-url',
     authorizeContent('content.upload'),

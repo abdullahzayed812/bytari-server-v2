@@ -120,6 +120,12 @@ export function createAdminTipRouter(c: Container): Router {
     validate({ params: tipIdParamSchema, body: registerCoverBodySchema }),
     asyncHandler(ctrl.registerCover),
   );
+  r.delete(
+    '/:tipId/cover',
+    authorizeContent('content.upload'),
+    validate({ params: tipIdParamSchema }),
+    asyncHandler(ctrl.removeCover),
+  );
 
   return r;
 }

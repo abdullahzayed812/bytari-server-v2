@@ -149,4 +149,9 @@ export class TipController {
       StatusCodes.CREATED,
     );
   };
+
+  removeCover = async (req: Request, res: Response): Promise<void> => {
+    const { tipId } = validatedParams<TipParams>(req);
+    sendSuccess(res, await this.tips.removeCover(this.actor(req), tipId));
+  };
 }
