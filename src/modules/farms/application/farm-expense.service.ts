@@ -65,9 +65,8 @@ export class FarmExpenseService {
     const monthStart = `${todayStr.slice(0, 7)}-01`;
     const weekStart = addDays(now, -6);
 
-    // Only the current operation counts: once a batch is sold (CLOSED) its
-    // expenses leave the summary — read-time, so nothing is deleted and
-    // the list / batch reports keep the full history.
+    // Only the current operation counts: a sale deletes the sold batch's
+    // expenses, and any CLOSED batch's leftovers are skipped at read time.
     const [totalThisWeek, totalThisMonth] = await Promise.all([
       this.expenses.sumCurrentInRange(organizationId, weekStart, todayStr),
       this.expenses.sumCurrentInRange(organizationId, monthStart, todayStr),

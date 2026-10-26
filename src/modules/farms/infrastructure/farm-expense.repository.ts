@@ -185,12 +185,11 @@ export class FarmExpenseRepository {
   /**
    * Total spent on the farm's CURRENT operation within `[from, to]` (inclusive
    * dates): manual expenses by `spent_on` + daily-record expenses by
-   * `record_date` — the same lines the list shows, each counted once — minus
-   * every expense tied to a batch that has been sold / closed. Selling a batch
-   * therefore resets the "المصاريف" summary for it without touching a single
-   * row: the list, the batch's own summary and every report keep the history,
-   * and reopening the batch brings its figures back. Farm-wide manual expenses
-   * (no batch) always count.
+   * `record_date` — the same lines the list shows, each counted once. Selling
+   * a batch permanently deletes its expenses (`deleteSoldBatchExpenses`); the
+   * CLOSED-batch exclusion here only still matters for batches sold before
+   * that rule, whose expenses were kept. Farm-wide manual expenses (no batch)
+   * always count.
    */
   async sumCurrentInRange(organizationId: string, from: string, to: string): Promise<number> {
     const manual = this.db(`${TABLE} as e`)

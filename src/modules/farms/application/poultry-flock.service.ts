@@ -14,6 +14,7 @@ import {
   type UpdatePoultryFlockInput,
 } from '../domain/poultry-flock.types.js';
 import type { PoultryFlockRepository } from '../infrastructure/poultry-flock.repository.js';
+import { deleteSoldBatchExpenses, lockBatchStatus } from '../infrastructure/sold-batch-expenses.js';
 
 export interface FarmActor {
   actorUserId: string;
@@ -128,7 +129,14 @@ export class PoultryFlockService {
     const dbPatch = syncInitial ? { ...patch, initialBirdCount: patch.birdCount } : patch;
 
     await this.db.transaction(async (tx) => {
+      // ACTIVE → CLOSED is the sale: decided on the locked row, and its
+      // expenses go in this same transaction (a failed sale keeps them).
+      const statusBefore = await lockBatchStatus(tx, 'POULTRY', flockId);
       await this.flocks.update(flockId, dbPatch, tx);
+      const soldExpenses =
+        patch.status === 'CLOSED' && statusBefore !== 'CLOSED'
+          ? await deleteSoldBatchExpenses(tx, 'POULTRY', flockId)
+          : undefined;
       await this.audit.record(
         {
           action: AuditAction.POULTRY_FLOCK_UPDATED,
@@ -139,6 +147,7 @@ export class PoultryFlockService {
             organizationId,
             poultryFlockId: flockId,
             fields: Object.keys(patch),
+            ...(soldExpenses ? { soldExpenses } : {}),
           },
           context: actor.context,
         },

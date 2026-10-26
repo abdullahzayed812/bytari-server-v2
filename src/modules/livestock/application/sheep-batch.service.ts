@@ -14,6 +14,10 @@ import {
   type UpdateSheepBatchInput,
 } from '../domain/sheep-batch.types.js';
 import type { SheepBatchRepository } from '../infrastructure/sheep-batch.repository.js';
+import {
+  deleteSoldBatchExpenses,
+  lockBatchStatus,
+} from '../../farms/infrastructure/sold-batch-expenses.js';
 
 export interface FarmActor {
   actorUserId: string;
@@ -42,7 +46,11 @@ export class SheepBatchService {
     this.log = logger.child({ component: 'sheep-batch-service' });
   }
 
-  async create(org: OrgRef, input: CreateSheepBatchInput, actor: FarmActor): Promise<SheepBatchDTO> {
+  async create(
+    org: OrgRef,
+    input: CreateSheepBatchInput,
+    actor: FarmActor,
+  ): Promise<SheepBatchDTO> {
     FarmPolicy.assertFarmOrganization(org);
 
     const batch = await this.db.transaction(async (tx) => {
@@ -111,14 +119,26 @@ export class SheepBatchService {
     if (!onlyStatusChange) SheepBatchPolicy.assertBatchMutable(existing);
 
     const updated = await this.db.transaction(async (tx) => {
+      // ACTIVE → CLOSED is the sale: decided on the locked row, and its
+      // expenses go in this same transaction (a failed sale keeps them).
+      const statusBefore = await lockBatchStatus(tx, 'SHEEP', batchId);
       const batch = await this.batches.update(batchId, patch, tx);
+      const soldExpenses =
+        patch.status === 'CLOSED' && statusBefore !== 'CLOSED'
+          ? await deleteSoldBatchExpenses(tx, 'SHEEP', batchId)
+          : undefined;
       await this.audit.record(
         {
           action: AuditAction.SHEEP_BATCH_UPDATED,
           entityType: AuditEntityType.SHEEP_BATCH,
           entityId: batchId,
           actorUserId: actor.actorUserId,
-          metadata: { organizationId, sheepBatchId: batchId, fields: Object.keys(patch) },
+          metadata: {
+            organizationId,
+            sheepBatchId: batchId,
+            fields: Object.keys(patch),
+            ...(soldExpenses ? { soldExpenses } : {}),
+          },
           context: actor.context,
         },
         tx,
