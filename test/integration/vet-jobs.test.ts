@@ -330,7 +330,9 @@ describe('Veterinarian Jobs — offer images', () => {
       const detail = await request(app)
         .get(api(`/offers/${created.id}`))
         .set(bearer(viewer.accessToken));
-      expect(detail.body.data.imageUrl).toBe(list.body.data[0].imageUrl);
+      // Signed URLs carry a per-request `expires`, so compare the object path only.
+      const path = (url: string | null): string | null => url?.split('?')[0] ?? null;
+      expect(path(detail.body.data.imageUrl)).toBe(path(list.body.data[0].imageUrl));
       return list.body.data[0].imageUrl as string | null;
     };
 
