@@ -1,4 +1,4 @@
-import { BadRequestError, ConflictError } from '../../../shared/errors/app-error.js';
+import { BadRequestError } from '../../../shared/errors/app-error.js';
 import { ErrorCode } from '../../../shared/errors/error-codes.js';
 import { VETERINARY_OFFICE_ORG_TYPE } from './veterinary-office-product.constants.js';
 
@@ -16,19 +16,5 @@ export const VeterinaryOfficeProductPolicy = {
         code: ErrorCode.ORGANIZATION_TYPE_NOT_SUPPORTED,
       });
     }
-  },
-
-  /**
-   * Apply a signed stock delta and assert the result is not negative
-   * (also guarded by the `chk_vop_stock` DB CHECK — this gives a clean 409).
-   */
-  applyStockDelta(current: number, delta: number): number {
-    const next = current + delta;
-    if (next < 0) {
-      throw new ConflictError('The adjustment would take stock below zero', {
-        code: ErrorCode.INSUFFICIENT_STOCK,
-      });
-    }
-    return next;
   },
 } as const;

@@ -4,6 +4,8 @@ import { NotFoundError } from '../../../shared/errors/app-error.js';
 import type { EventBus } from '../../../shared/events/index.js';
 import { AuditAction, AuditEntityType, type AuditContext } from '../../audit/audit.types.js';
 import type { AuditService } from '../../audit/audit.service.js';
+import type { ObjectStorage } from '../../../infra/storage/index.js';
+import { deleteReplacedObjects } from '../../../shared/storage/replaced-objects.js';
 import { FarmPolicy } from '../../farms/domain/farm.policy.js';
 import { SheepBatchPolicy } from '../domain/sheep-batch.policy.js';
 import {
@@ -16,6 +18,7 @@ import {
 import type { SheepBatchRepository } from '../infrastructure/sheep-batch.repository.js';
 import {
   deleteSoldBatchExpenses,
+  deleteSoldBatchHealthRecords,
   lockBatchStatus,
 } from '../../farms/infrastructure/sold-batch-expenses.js';
 
@@ -41,6 +44,7 @@ export class SheepBatchService {
     private readonly batches: SheepBatchRepository,
     private readonly audit: AuditService,
     private readonly events: EventBus,
+    private readonly storage: ObjectStorage,
     logger: Logger,
   ) {
     this.log = logger.child({ component: 'sheep-batch-service' });
@@ -118,15 +122,19 @@ export class SheepBatchService {
     const onlyStatusChange = Object.keys(patch).length === 1 && patch.status !== undefined;
     if (!onlyStatusChange) SheepBatchPolicy.assertBatchMutable(existing);
 
+    let caseImageKeys: string[] = [];
     const updated = await this.db.transaction(async (tx) => {
       // ACTIVE → CLOSED is the sale: decided on the locked row, and its
-      // expenses go in this same transaction (a failed sale keeps them).
+      // expenses, treatments, vaccinations and sick cases go in this same
+      // transaction (a failed sale keeps them all).
       const statusBefore = await lockBatchStatus(tx, 'SHEEP', batchId);
       const batch = await this.batches.update(batchId, patch, tx);
-      const soldExpenses =
-        patch.status === 'CLOSED' && statusBefore !== 'CLOSED'
-          ? await deleteSoldBatchExpenses(tx, 'SHEEP', batchId)
-          : undefined;
+      const sold = patch.status === 'CLOSED' && statusBefore !== 'CLOSED';
+      const soldExpenses = sold ? await deleteSoldBatchExpenses(tx, 'SHEEP', batchId) : undefined;
+      const soldHealth = sold
+        ? await deleteSoldBatchHealthRecords(tx, 'SHEEP', batchId)
+        : undefined;
+      caseImageKeys = soldHealth?.caseImageKeys ?? [];
       await this.audit.record(
         {
           action: AuditAction.SHEEP_BATCH_UPDATED,
@@ -138,6 +146,7 @@ export class SheepBatchService {
             sheepBatchId: batchId,
             fields: Object.keys(patch),
             ...(soldExpenses ? { soldExpenses } : {}),
+            ...(soldHealth ? { soldRecords: soldHealth.purge } : {}),
           },
           context: actor.context,
         },
@@ -145,6 +154,9 @@ export class SheepBatchService {
       );
       return batch;
     });
+
+    // After commit only: the deleted sick cases' images leave storage.
+    await deleteReplacedObjects(this.storage, this.log, caseImageKeys, [], { batchId });
 
     this.events.publish('sheep.batch.updated', { sheepBatchId: batchId, organizationId });
     return toSheepBatchDTO(updated);

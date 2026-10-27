@@ -43,6 +43,45 @@ export class OrganizationFollowRepository {
     return Number(row?.count ?? 0);
   }
 
+  /**
+   * The dashboard "Followers" page: ACTIVE accounts following this
+   * organization, newest follow first — names only (no email / avatar /
+   * profile data leaves this query). The organization's own active members
+   * are not its audience and are left out.
+   */
+  async listFollowerNames(
+    organizationId: string,
+    page: { page: number; pageSize: number },
+  ): Promise<{ items: { userId: string; firstName: string; lastName: string }[]; total: number }> {
+    const base = this.db(`${TABLE} as f`)
+      .join('users as u', 'u.id', 'f.user_id')
+      .where('f.organization_id', organizationId)
+      .andWhere('u.status', 'ACTIVE')
+      .whereNotExists(
+        this.db('organization_memberships as m')
+          .whereRaw('m.organization_id = f.organization_id')
+          .andWhereRaw('m.user_id = f.user_id')
+          .andWhere('m.status', 'ACTIVE'),
+      );
+    const countRow = (await base.clone().count<{ n: string }>({ n: '*' }).first()) as
+      { n: string } | undefined;
+    const rows: { user_id: string; first_name: string; last_name: string }[] = await base
+      .clone()
+      .orderBy('f.created_at', 'desc')
+      .orderBy('f.user_id')
+      .limit(page.pageSize)
+      .offset((page.page - 1) * page.pageSize)
+      .select('f.user_id', 'u.first_name', 'u.last_name');
+    return {
+      items: rows.map((r) => ({
+        userId: r.user_id,
+        firstName: r.first_name,
+        lastName: r.last_name,
+      })),
+      total: Number(countRow?.n ?? 0),
+    };
+  }
+
   /** User ids following this organization — notification fan-out (e.g. a new syndicate announcement). */
   async listFollowerUserIds(
     organizationId: string,

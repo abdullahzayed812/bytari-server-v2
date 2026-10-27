@@ -11,7 +11,6 @@ import {
   withVeterinaryOffice,
 } from './veterinary-office-product.middleware.js';
 import {
-  adjustVeterinaryOfficeStockBodySchema,
   createVeterinaryOfficeProductBodySchema,
   finalizeVeterinaryOfficeProductImageBodySchema,
   listVeterinaryOfficeProductsQuerySchema,
@@ -136,20 +135,6 @@ export function createVeterinaryOfficeProductRouter(c: Container): Router {
     withVeterinaryOfficeProduct,
     asyncHandler(ctrl.deactivate),
   );
-  r.post(
-    `${base}/:productId/stock`,
-    validate({
-      params: veterinaryOfficeProductParamSchema,
-      body: adjustVeterinaryOfficeStockBodySchema,
-    }),
-    withOrganization,
-    withVeterinaryOffice,
-    authorizeOrg('product.inventory.adjust'),
-    activeSubscription,
-    withVeterinaryOfficeProduct,
-    asyncHandler(ctrl.adjustStock),
-  );
-
   // Images — same guard as PATCH (`product.update`), same presigned-direct-to-R2
   // seam as the organization gallery / Pet Owners Store products.
   r.post(

@@ -4,6 +4,8 @@ import { NotFoundError } from '../../../shared/errors/app-error.js';
 import type { EventBus } from '../../../shared/events/index.js';
 import { AuditAction, AuditEntityType, type AuditContext } from '../../audit/audit.types.js';
 import type { AuditService } from '../../audit/audit.service.js';
+import type { ObjectStorage } from '../../../infra/storage/index.js';
+import { deleteReplacedObjects } from '../../../shared/storage/replaced-objects.js';
 import { FarmPolicy } from '../domain/farm.policy.js';
 import { PoultryFlockPolicy } from '../domain/poultry-flock.policy.js';
 import {
@@ -14,7 +16,11 @@ import {
   type UpdatePoultryFlockInput,
 } from '../domain/poultry-flock.types.js';
 import type { PoultryFlockRepository } from '../infrastructure/poultry-flock.repository.js';
-import { deleteSoldBatchExpenses, lockBatchStatus } from '../infrastructure/sold-batch-expenses.js';
+import {
+  deleteSoldBatchExpenses,
+  deleteSoldBatchHealthRecords,
+  lockBatchStatus,
+} from '../infrastructure/sold-batch-expenses.js';
 
 export interface FarmActor {
   actorUserId: string;
@@ -40,6 +46,7 @@ export class PoultryFlockService {
     private readonly flocks: PoultryFlockRepository,
     private readonly audit: AuditService,
     private readonly events: EventBus,
+    private readonly storage: ObjectStorage,
     logger: Logger,
   ) {
     this.log = logger.child({ component: 'poultry-flock-service' });
@@ -128,15 +135,19 @@ export class PoultryFlockService {
       (existing.initialBirdCount === null || existing.initialBirdCount === existing.birdCount);
     const dbPatch = syncInitial ? { ...patch, initialBirdCount: patch.birdCount } : patch;
 
+    let caseImageKeys: string[] = [];
     await this.db.transaction(async (tx) => {
       // ACTIVE → CLOSED is the sale: decided on the locked row, and its
-      // expenses go in this same transaction (a failed sale keeps them).
+      // expenses, treatments, vaccinations and sick cases go in this same
+      // transaction (a failed sale keeps them all).
       const statusBefore = await lockBatchStatus(tx, 'POULTRY', flockId);
       await this.flocks.update(flockId, dbPatch, tx);
-      const soldExpenses =
-        patch.status === 'CLOSED' && statusBefore !== 'CLOSED'
-          ? await deleteSoldBatchExpenses(tx, 'POULTRY', flockId)
-          : undefined;
+      const sold = patch.status === 'CLOSED' && statusBefore !== 'CLOSED';
+      const soldExpenses = sold ? await deleteSoldBatchExpenses(tx, 'POULTRY', flockId) : undefined;
+      const soldHealth = sold
+        ? await deleteSoldBatchHealthRecords(tx, 'POULTRY', flockId)
+        : undefined;
+      caseImageKeys = soldHealth?.caseImageKeys ?? [];
       await this.audit.record(
         {
           action: AuditAction.POULTRY_FLOCK_UPDATED,
@@ -148,12 +159,16 @@ export class PoultryFlockService {
             poultryFlockId: flockId,
             fields: Object.keys(patch),
             ...(soldExpenses ? { soldExpenses } : {}),
+            ...(soldHealth ? { soldRecords: soldHealth.purge } : {}),
           },
           context: actor.context,
         },
         tx,
       );
     });
+
+    // After commit only: the deleted sick cases' images leave storage.
+    await deleteReplacedObjects(this.storage, this.log, caseImageKeys, [], { batchId: flockId });
 
     this.events.publish('poultry.flock.updated', {
       poultryFlockId: flockId,

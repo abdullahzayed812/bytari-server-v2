@@ -28,6 +28,7 @@ import type {
   VetJobOfferRepository,
   VetJobOfferWithPoster,
 } from '../infrastructure/vet-job-offer.repository.js';
+import type { VetJobMedia } from './vet-job-media.js';
 
 export interface VetJobActor {
   principal: AuthPrincipal;
@@ -57,25 +58,32 @@ export class VetJobOfferService {
     private readonly authz: AuthorizationService,
     private readonly audit: AuditService,
     private readonly events: EventBus,
+    private readonly media: VetJobMedia,
     logger: Logger,
   ) {
     this.log = logger.child({ component: 'vet-job-offer-service' });
   }
 
-  private toDTO(data: VetJobOfferWithPoster): VetJobOfferDTO {
+  private imageUrl(data: VetJobOfferWithPoster): Promise<string | null> {
+    return this.media.resolveUrl(data.imageKeys.organizationLogo ?? data.imageKeys.posterAvatar);
+  }
+
+  private async toDTO(data: VetJobOfferWithPoster): Promise<VetJobOfferDTO> {
     return {
       ...data.offer,
       postedBy: data.postedBy,
+      imageUrl: await this.imageUrl(data),
       applicationCount: data.applicationCount,
       pendingApplicationCount: data.pendingApplicationCount,
     };
   }
 
-  private toPublicDTO(data: VetJobOfferWithPoster): PublicVetJobOfferDTO {
+  private async toPublicDTO(data: VetJobOfferWithPoster): Promise<PublicVetJobOfferDTO> {
     const o = data.offer;
     return {
       id: o.id,
       organizationName: o.organizationName,
+      imageUrl: await this.imageUrl(data),
       title: o.title,
       employmentType: o.employmentType,
       governorate: o.governorate,
@@ -136,7 +144,7 @@ export class VetJobOfferService {
     filter: OfferBrowseFilter,
   ): Promise<{ items: PublicVetJobOfferDTO[]; total: number }> {
     const { items, total } = await this.offers.listPublic(filter);
-    return { items: items.map((i) => this.toPublicDTO(i)), total };
+    return { items: await Promise.all(items.map((i) => this.toPublicDTO(i))), total };
   }
 
   async getPublic(id: string): Promise<PublicVetJobOfferDTO> {
@@ -150,7 +158,7 @@ export class VetJobOfferService {
     filter: MineFilter,
   ): Promise<{ items: VetJobOfferDTO[]; total: number }> {
     const { items, total } = await this.offers.listMine(postedByUserId, filter);
-    return { items: items.map((i) => this.toDTO(i)), total };
+    return { items: await Promise.all(items.map((i) => this.toDTO(i))), total };
   }
 
   /** Owner or moderator full view (moderation metadata + application count). */
@@ -263,7 +271,7 @@ export class VetJobOfferService {
     filter: ModerationFilter,
   ): Promise<{ items: VetJobOfferDTO[]; total: number }> {
     const { items, total } = await this.offers.listForModeration(filter);
-    return { items: items.map((i) => this.toDTO(i)), total };
+    return { items: await Promise.all(items.map((i) => this.toDTO(i))), total };
   }
 
   async getForModeration(id: string): Promise<VetJobOfferDTO> {

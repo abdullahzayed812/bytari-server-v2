@@ -58,7 +58,6 @@ export interface CreateVeterinaryOfficeProductData extends VeterinaryOfficeProdu
   productType: string;
   price: string | null;
   currency: string;
-  stockQuantity: number;
   createdByUserId: string;
 }
 
@@ -111,7 +110,6 @@ export class VeterinaryOfficeProductRepository {
         product_type: data.productType,
         price: data.price,
         currency: data.currency,
-        stock_quantity: data.stockQuantity,
         subtype: data.subtype ?? null,
         weight: data.weight ?? null,
         usage_instructions: data.usageInstructions ?? null,
@@ -157,20 +155,6 @@ export class VeterinaryOfficeProductRepository {
       .update(dbPatch)
       .returning('*')) as VeterinaryOfficeProductRow[];
     if (!row) throw new Error('veterinary office product not found after update');
-    return rowToVeterinaryOfficeProduct(row);
-  }
-
-  /** Set stock to an already-validated absolute value. */
-  async setStock(
-    id: string,
-    quantity: number,
-    trx: Knex.Transaction,
-  ): Promise<VeterinaryOfficeProduct> {
-    const [row] = (await trx(TABLE)
-      .where({ id })
-      .update({ stock_quantity: quantity, updated_at: new Date() })
-      .returning('*')) as VeterinaryOfficeProductRow[];
-    if (!row) throw new Error('veterinary office product not found after stock change');
     return rowToVeterinaryOfficeProduct(row);
   }
 

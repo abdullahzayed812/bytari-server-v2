@@ -912,6 +912,7 @@ export function createContainer(deps: ContainerDeps): Container {
     poultryFlockRepository,
     auditService,
     eventBus,
+    objectStorage,
     logger,
   );
 
@@ -988,6 +989,7 @@ export function createContainer(deps: ContainerDeps): Container {
     sheepBatchRepository,
     auditService,
     eventBus,
+    objectStorage,
     logger,
   );
   const sheepDailyRecordService = new SheepDailyRecordService(
@@ -1026,6 +1028,7 @@ export function createContainer(deps: ContainerDeps): Container {
     cattleBatchRepository,
     auditService,
     eventBus,
+    objectStorage,
     logger,
   );
   const cattleDailyRecordService = new CattleDailyRecordService(
@@ -1433,6 +1436,7 @@ export function createContainer(deps: ContainerDeps): Container {
     authorizationService,
     auditService,
     eventBus,
+    vetJobMedia,
     logger,
   );
   const vetJobSeekerProfileService = new VetJobSeekerProfileService(

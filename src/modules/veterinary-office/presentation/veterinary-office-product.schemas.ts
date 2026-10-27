@@ -15,7 +15,6 @@ const priceSchema = z
   .regex(/^\d{1,8}(\.\d{1,2})?$/, 'Expected a non-negative amount like "12.50"');
 /** "دينار" (`IQD`) or "دولار" (`USD`). */
 const currencySchema = z.enum(VETERINARY_OFFICE_PRODUCT_CURRENCIES);
-const stockSchema = z.coerce.number().int().min(0).max(100_000_000);
 
 /** Short free-text detail fields shown on the product-details screen. */
 const detailFieldSchema = z.string().trim().min(1).max(300);
@@ -52,7 +51,6 @@ export const createVeterinaryOfficeProductBodySchema = z.object({
   productType: z.enum(VETERINARY_OFFICE_PRODUCT_TYPES),
   price: priceSchema.nullable().optional(),
   currency: currencySchema.optional(),
-  stockQuantity: stockSchema.optional(),
   /** Optional cover image uploaded via the org-level `images/upload-url`. */
   image: finalizeVeterinaryOfficeProductImageBodySchema.optional(),
   ...detailFieldsShape,
@@ -91,19 +89,6 @@ export const veterinaryOfficeProductImageParamSchema = z.object({
   productId: z.string().uuid(),
   imageId: z.string().uuid(),
 });
-
-// --- inventory --------------------------------------------
-
-export const adjustVeterinaryOfficeStockBodySchema = z.object({
-  delta: z.coerce
-    .number()
-    .int()
-    .min(-100_000_000)
-    .max(100_000_000)
-    .refine((v) => v !== 0, { message: 'delta must be non-zero' }),
-  reason: z.string().trim().min(1).max(500).optional(),
-});
-export type AdjustVeterinaryOfficeStockBody = z.infer<typeof adjustVeterinaryOfficeStockBodySchema>;
 
 // --- params -------------------------------------------------
 

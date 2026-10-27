@@ -9,7 +9,6 @@ import { requireOrganization } from '../../organizations/presentation/organizati
 import type { VeterinaryOfficeProductService } from '../application/veterinary-office-product.service.js';
 import { requireVeterinaryOfficeProduct } from './veterinary-office-product.middleware.js';
 import type {
-  AdjustVeterinaryOfficeStockBody,
   CreateVeterinaryOfficeProductBody,
   FinalizeVeterinaryOfficeProductImageBody,
   ListVeterinaryOfficeProductsQuery,
@@ -67,22 +66,6 @@ export class VeterinaryOfficeProductController {
     const org = requireOrganization(req);
     const product = requireVeterinaryOfficeProduct(req);
     sendSuccess(res, await this.products.deactivate(org.id, product.id, this.actor(req)));
-  };
-
-  adjustStock = async (req: Request, res: Response): Promise<void> => {
-    const org = requireOrganization(req);
-    const product = requireVeterinaryOfficeProduct(req);
-    const body = validatedBody<AdjustVeterinaryOfficeStockBody>(req);
-    sendSuccess(
-      res,
-      await this.products.adjustStock(
-        org.id,
-        product.id,
-        body.delta,
-        body.reason ?? null,
-        this.actor(req),
-      ),
-    );
   };
 
   requestImageUploadUrl = async (req: Request, res: Response): Promise<void> => {

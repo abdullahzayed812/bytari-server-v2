@@ -321,10 +321,29 @@ export class OrganizationController {
     sendSuccess(res, member, StatusCodes.CREATED);
   };
 
+  /**
+   * The unified Employees page reaches supervisors through the generic member
+   * routes too (role change / suspend / remove). Changing or removing a
+   * SUPERVISOR membership is a supervisor-management act, so on top of the
+   * route's `member.*` key the caller must also hold `supervisor.remove` —
+   * otherwise a member manager could strip a supervisor they cannot appoint.
+   */
+  private async assertSupervisorAuthority(
+    req: Request,
+    orgId: string,
+    memberId: string,
+  ): Promise<void> {
+    const target = await this.members.getMember(orgId, memberId);
+    if (target.roleKey === 'SUPERVISOR') {
+      await this.authz.assertInOrganization(requireAuth(req), 'supervisor.remove', orgId);
+    }
+  }
+
   updateMember = async (req: Request, res: Response): Promise<void> => {
     const org = requireOrganization(req);
     const { memberId } = validatedParams<{ memberId: string }>(req);
     const body = validatedBody<UpdateMemberBody>(req);
+    await this.assertSupervisorAuthority(req, org.id, memberId);
     const member = await this.members.updateMember(
       org.id,
       memberId,
@@ -338,6 +357,7 @@ export class OrganizationController {
   removeMember = async (req: Request, res: Response): Promise<void> => {
     const org = requireOrganization(req);
     const { memberId } = validatedParams<{ memberId: string }>(req);
+    await this.assertSupervisorAuthority(req, org.id, memberId);
     await this.members.removeMember(org.id, memberId, this.actor(req));
     sendSuccess(res, { success: true });
   };

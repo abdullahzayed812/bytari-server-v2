@@ -4,7 +4,6 @@ import { buildTestApp } from '../helpers/app.js';
 import { closeTestDb, ensureSchema, getTestDb, resetDb } from '../helpers/db.js';
 import {
   addOrganizationMember,
-  adjustVeterinaryOfficeProductStock,
   assignOrganizationSupervisor,
   bearer,
   createActiveOrganization,
@@ -47,7 +46,6 @@ describe('veterinary office products — CRUD', () => {
       description: 'مكمل غذائي',
       productType: 'MEDICINE',
       price: '25000',
-      stockQuantity: 40,
     });
     expect(create.status).toBe(201);
     const id = create.body.data.id as string;
@@ -56,7 +54,6 @@ describe('veterinary office products — CRUD', () => {
       name: 'Anti-Peak',
       productType: 'MEDICINE',
       price: '25000.00',
-      stockQuantity: 40,
       status: 'ACTIVE',
       createdByUserId: owner.id,
     });
@@ -141,15 +138,13 @@ describe('veterinary office products — CRUD', () => {
     ]);
   });
 
-  it('ignores a client-supplied organizationId / createdBy / status / stockQuantity on update', async () => {
+  it('ignores a client-supplied organizationId / createdBy / status on update', async () => {
     const { admin, owner, office } = await setup();
     const otherOffice = await createActiveOrganization(app, owner.accessToken, admin.accessToken, {
       type: 'VETERINARY_OFFICE',
       name: 'Other Office',
     });
-    const prod = await createVeterinaryOfficeProduct(app, owner.accessToken, office.id, {
-      stockQuantity: 5,
-    });
+    const prod = await createVeterinaryOfficeProduct(app, owner.accessToken, office.id);
 
     const res = await request(app)
       .patch(pPath(office.id, prod.id))
@@ -158,7 +153,6 @@ describe('veterinary office products — CRUD', () => {
         name: 'Renamed',
         organizationId: otherOffice.id,
         createdByUserId: admin.id,
-        stockQuantity: 9999,
         id: '00000000-0000-0000-0000-000000000001',
       });
     expect(res.status).toBe(200);
@@ -166,7 +160,6 @@ describe('veterinary office products — CRUD', () => {
       name: 'Renamed',
       organizationId: office.id,
       createdByUserId: owner.id,
-      stockQuantity: 5,
       id: prod.id,
     });
   });
@@ -306,7 +299,7 @@ describe('veterinary office products — authorization', () => {
       .send({ name: 'Sup product', productType: 'EQUIPMENT_SUPPLY' });
     expect(create.status).toBe(201);
 
-    // NOT assigned: product.update / product.delete / product.inventory.adjust
+    // NOT assigned: product.update / product.delete
     const upd = await request(app)
       .patch(pPath(office.id, prod.id))
       .set(bearer(supervisor.accessToken))
@@ -317,15 +310,6 @@ describe('veterinary office products — authorization', () => {
       .delete(pPath(office.id, prod.id))
       .set(bearer(supervisor.accessToken));
     expect(del.status).toBe(403);
-
-    const stock = await adjustVeterinaryOfficeProductStock(
-      app,
-      supervisor.accessToken,
-      office.id,
-      prod.id,
-      5,
-    );
-    expect(stock.status).toBe(403);
   });
 
   it('a non-member (pet owner) is denied (403)', async () => {
@@ -390,101 +374,57 @@ describe('veterinary office products — cross-office IDOR', () => {
   });
 });
 
-describe('veterinary office products — inventory', () => {
-  it('adjusts stock by a signed delta and records the movement in the audit metadata', async () => {
+describe('veterinary office products — no inventory management', () => {
+  it('a legacy stockQuantity on create / update is ignored and never returned', async () => {
     const { owner, office } = await setup();
-    const prod = await createVeterinaryOfficeProduct(app, owner.accessToken, office.id, {
-      stockQuantity: 10,
-    });
+    const create = await request(app)
+      .post(pPath(office.id))
+      .set(bearer(owner.accessToken))
+      .send({ name: 'Old client', productType: 'MEDICINE', stockQuantity: 12 });
+    expect(create.status).toBe(201);
+    expect(create.body.data).not.toHaveProperty('stockQuantity');
 
-    const up = await adjustVeterinaryOfficeProductStock(
-      app,
-      owner.accessToken,
-      office.id,
-      prod.id,
-      15,
-      'restock',
-    );
-    expect(up.status).toBe(200);
-    expect(up.body.data.stockQuantity).toBe(25);
-
-    const down = await adjustVeterinaryOfficeProductStock(
-      app,
-      owner.accessToken,
-      office.id,
-      prod.id,
-      -5,
-    );
-    expect(down.status).toBe(200);
-    expect(down.body.data.stockQuantity).toBe(20);
-
-    const adj = (await getTestDb()('audit_logs')
-      .where({ action: 'VETERINARY_OFFICE_PRODUCT_INVENTORY_ADJUSTED', entity_id: prod.id })
-      .orderBy('created_at', 'asc')
-      .select('actor_user_id', 'metadata')) as Array<{
-      actor_user_id: string;
-      metadata: Record<string, unknown>;
-    }>;
-    expect(adj).toHaveLength(2);
-    expect(adj[0]).toMatchObject({ actor_user_id: owner.id });
-    expect(adj[0]?.metadata).toMatchObject({
-      organizationId: office.id,
-      productId: prod.id,
-      delta: 15,
-      previousQuantity: 10,
-      newQuantity: 25,
-      reason: 'restock',
-    });
-  });
-
-  it('refuses an adjustment that would take stock below zero (409)', async () => {
-    const { owner, office } = await setup();
-    const prod = await createVeterinaryOfficeProduct(app, owner.accessToken, office.id, {
-      stockQuantity: 3,
-    });
-
-    const res = await adjustVeterinaryOfficeProductStock(
-      app,
-      owner.accessToken,
-      office.id,
-      prod.id,
-      -10,
-    );
-    expect(res.status).toBe(409);
-    expect(res.body.error.code).toBe('INSUFFICIENT_STOCK');
-
-    const row = (await getTestDb()('veterinary_office_products')
-      .where({ id: prod.id })
-      .first()) as {
-      stock_quantity: number;
-    };
-    expect(Number(row.stock_quantity)).toBe(3);
-  });
-
-  it('rejects a zero delta with 422', async () => {
-    const { owner, office } = await setup();
-    const prod = await createVeterinaryOfficeProduct(app, owner.accessToken, office.id);
-    const res = await adjustVeterinaryOfficeProductStock(
-      app,
-      owner.accessToken,
-      office.id,
-      prod.id,
-      0,
-    );
-    expect(res.status).toBe(422);
-  });
-
-  it('a generic PATCH cannot change stock', async () => {
-    const { owner, office } = await setup();
-    const prod = await createVeterinaryOfficeProduct(app, owner.accessToken, office.id, {
-      stockQuantity: 7,
-    });
-    const res = await request(app)
-      .patch(pPath(office.id, prod.id))
+    const patch = await request(app)
+      .patch(pPath(office.id, create.body.data.id))
       .set(bearer(owner.accessToken))
       .send({ stockQuantity: 999, name: 'still works' });
-    expect(res.status).toBe(200);
-    expect(res.body.data).toMatchObject({ name: 'still works', stockQuantity: 7 });
+    expect(patch.status).toBe(200);
+    expect(patch.body.data.name).toBe('still works');
+    expect(patch.body.data).not.toHaveProperty('stockQuantity');
+  });
+
+  it('the stock-adjust endpoint no longer exists', async () => {
+    const { owner, office } = await setup();
+    const prod = await createVeterinaryOfficeProduct(app, owner.accessToken, office.id);
+    const res = await request(app)
+      .post(`${pPath(office.id, prod.id)}/stock`)
+      .set(bearer(owner.accessToken))
+      .send({ delta: 5 });
+    expect(res.status).toBe(404);
+  });
+
+  it('a product whose legacy stock is zero stays visible and available everywhere', async () => {
+    const { owner, office } = await setup();
+    const prod = await createVeterinaryOfficeProduct(app, owner.accessToken, office.id, {
+      name: 'Zero stock',
+    });
+    await getTestDb()('veterinary_office_products')
+      .where({ id: prod.id })
+      .update({ stock_quantity: 0 });
+    const viewer = await registerUser(app);
+
+    const ownerList = await request(app).get(pPath(office.id)).set(bearer(owner.accessToken));
+    expect(ownerList.body.data.map((p: { id: string }) => p.id)).toContain(prod.id);
+    const publicList = await request(app)
+      .get(`/api/v1/organizations/discover/${office.id}/office-products`)
+      .set(bearer(viewer.accessToken));
+    expect(publicList.status).toBe(200);
+    expect(publicList.body.data.map((p: { id: string }) => p.id)).toContain(prod.id);
+    const publicOne = await request(app)
+      .get(`/api/v1/organizations/discover/${office.id}/office-products/${prod.id}`)
+      .set(bearer(viewer.accessToken));
+    expect(publicOne.status).toBe(200);
+    expect(publicOne.body.data).not.toHaveProperty('stockQuantity');
   });
 });
 

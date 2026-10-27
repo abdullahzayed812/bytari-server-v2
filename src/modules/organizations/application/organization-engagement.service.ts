@@ -89,6 +89,14 @@ export class OrganizationEngagementService {
     await this.follows.unfollow(organizationId, userId);
   }
 
+  /** Dashboard "Followers" page — names only; access is checked by the route. */
+  listFollowers(
+    organizationId: string,
+    page: { page: number; pageSize: number },
+  ): Promise<{ items: { userId: string; firstName: string; lastName: string }[]; total: number }> {
+    return this.follows.listFollowerNames(organizationId, page);
+  }
+
   /**
    * One review per (organization, user) — resubmitting UPDATES it (existing
    * rule, enforced by the unique key + upsert). A member of the organization

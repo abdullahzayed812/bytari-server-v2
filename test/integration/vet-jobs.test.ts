@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { buildTestApp } from '../helpers/app.js';
-import { closeTestDb, ensureSchema, resetDb } from '../helpers/db.js';
+import { closeTestDb, ensureSchema, getTestDb, resetDb } from '../helpers/db.js';
 import {
   applyToVetJobOffer,
   approveVetJobOffer,
@@ -9,6 +9,7 @@ import {
   assignSystemSupervisor,
   bearer,
   createVetJobOffer,
+  createOrganization,
   createVetJobSeekerProfile,
   registerAdmin,
   registerApprovedVet,
@@ -311,5 +312,47 @@ describe('Veterinarian Jobs — admin oversight', () => {
       .get(adminApi('/vet-job-applications'))
       .set(bearer(poster.accessToken));
     expect(denied.status).toBe(403);
+  });
+});
+
+describe('Veterinarian Jobs — offer images', () => {
+  it('an offer shows its organization logo, else the poster avatar, else null (app icon fallback)', async () => {
+    const admin = await registerAdmin(app);
+    const poster = await registerApprovedVet(app);
+    const viewer = await registerUser(app);
+    const db = getTestDb();
+    const created = await createVetJobOffer(app, poster.accessToken);
+    expect((await approveVetJobOffer(app, admin.accessToken, created.id)).status).toBe(200);
+
+    const publicImage = async (): Promise<string | null> => {
+      const list = await request(app).get(api('/offers')).set(bearer(viewer.accessToken));
+      expect(list.status).toBe(200);
+      const detail = await request(app)
+        .get(api(`/offers/${created.id}`))
+        .set(bearer(viewer.accessToken));
+      expect(detail.body.data.imageUrl).toBe(list.body.data[0].imageUrl);
+      return list.body.data[0].imageUrl as string | null;
+    };
+
+    // No organization, no avatar → null.
+    expect(await publicImage()).toBeNull();
+
+    // The poster's avatar.
+    await db('users').where({ id: poster.id }).update({ avatar_key: 'avatars/poster-avatar.jpg' });
+    expect(await publicImage()).toContain('poster-avatar.jpg');
+
+    // A linked clinic with a logo wins over the avatar — in public, "mine" and moderation views.
+    const clinic = await createOrganization(app, poster.accessToken, { type: 'CLINIC' });
+    await db('clinic_details')
+      .where({ organization_id: clinic.id })
+      .update({ logo_key: 'organization-logos/clinic-logo.png' });
+    await db('vet_job_offers').where({ id: created.id }).update({ organization_id: clinic.id });
+    expect(await publicImage()).toContain('clinic-logo.png');
+    const mine = await request(app).get(api('/offers/mine')).set(bearer(poster.accessToken));
+    expect(mine.body.data[0].imageUrl).toContain('clinic-logo.png');
+    const moderation = await request(app)
+      .get(adminApi('/vet-job-offers?status=APPROVED'))
+      .set(bearer(admin.accessToken));
+    expect(moderation.body.data[0].imageUrl).toContain('clinic-logo.png');
   });
 });

@@ -5,6 +5,8 @@ const SOLD_BATCH_EXPENSE_SOURCES = {
   POULTRY: {
     batchTable: 'poultry_flocks',
     recordTable: 'poultry_daily_records',
+    healthEventTable: 'poultry_health_events',
+    caseTable: 'poultry_cases',
     batchColumn: 'poultry_flock_id',
     /** Only poultry flocks can own manual `farm_expenses` rows. */
     manualExpenses: true,
@@ -12,12 +14,16 @@ const SOLD_BATCH_EXPENSE_SOURCES = {
   SHEEP: {
     batchTable: 'sheep_batches',
     recordTable: 'sheep_daily_records',
+    healthEventTable: 'sheep_health_events',
+    caseTable: 'sheep_cases',
     batchColumn: 'sheep_batch_id',
     manualExpenses: false,
   },
   CATTLE: {
     batchTable: 'cattle_batches',
     recordTable: 'cattle_daily_records',
+    healthEventTable: 'cattle_health_events',
+    caseTable: 'cattle_cases',
     batchColumn: 'cattle_batch_id',
     manualExpenses: false,
   },
@@ -103,5 +109,57 @@ export async function deleteSoldBatchExpenses(
     manualExpensesDeleted,
     dailyRecordExpensesCleared,
     amountRemoved: Math.round(amountRemoved * 100) / 100,
+  };
+}
+
+export interface SoldBatchHealthPurge {
+  /** `*_health_events` rows of kind TREATMENT, deleted outright. */
+  treatmentsDeleted: number;
+  /** `*_health_events` rows of kind VACCINATION, deleted outright. */
+  vaccinationsDeleted: number;
+  /** `*_cases` (sick cases) rows, deleted outright. */
+  casesDeleted: number;
+  /** Daily records whose free-text `treatment` note was erased (the record itself stays). */
+  dailyRecordTreatmentsCleared: number;
+}
+
+/**
+ * The rest of a sale's purge: the sold batch's treatments, vaccinations and
+ * sick cases are DELETEd inside the sale's transaction (nothing references
+ * those rows, so no orphans are left behind), and the daily records' treatment
+ * note is erased the same way their expense is. Rows of other batches are
+ * never matched — every statement is keyed on the batch id.
+ *
+ * Returns the deleted cases' image keys: storage I/O never runs inside the
+ * transaction, so the caller removes those objects after commit.
+ */
+export async function deleteSoldBatchHealthRecords(
+  trx: Knex.Transaction,
+  kind: SoldBatchKind,
+  batchId: string,
+): Promise<{ purge: SoldBatchHealthPurge; caseImageKeys: string[] }> {
+  const src = SOLD_BATCH_EXPENSE_SOURCES[kind];
+
+  const events: { kind: string }[] = await trx(src.healthEventTable)
+    .where(src.batchColumn, batchId)
+    .del()
+    .returning('kind');
+  const cases: { image_key: string | null }[] = await trx(src.caseTable)
+    .where(src.batchColumn, batchId)
+    .del()
+    .returning('image_key');
+  const dailyRecordTreatmentsCleared = await trx(src.recordTable)
+    .where(src.batchColumn, batchId)
+    .whereNotNull('treatment')
+    .update({ treatment: null, updated_at: new Date() });
+
+  return {
+    purge: {
+      treatmentsDeleted: events.filter((e) => e.kind === 'TREATMENT').length,
+      vaccinationsDeleted: events.filter((e) => e.kind === 'VACCINATION').length,
+      casesDeleted: cases.length,
+      dailyRecordTreatmentsCleared,
+    },
+    caseImageKeys: cases.map((c) => c.image_key).filter((k): k is string => Boolean(k)),
   };
 }

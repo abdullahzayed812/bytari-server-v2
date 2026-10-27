@@ -59,19 +59,3 @@ describe('VeterinaryStoreProductPolicy.applyStockDelta', () => {
     }
   });
 });
-
-describe('VeterinaryOfficeProductPolicy.applyStockDelta', () => {
-  it('applies a positive and a negative delta', () => {
-    expect(VeterinaryOfficeProductPolicy.applyStockDelta(10, 5)).toBe(15);
-    expect(VeterinaryOfficeProductPolicy.applyStockDelta(3, -3)).toBe(0);
-  });
-  it('rejects an adjustment that would go below zero with 409 INSUFFICIENT_STOCK', () => {
-    try {
-      VeterinaryOfficeProductPolicy.applyStockDelta(3, -4);
-      throw new Error('expected throw');
-    } catch (err) {
-      expect((err as AppError).statusCode).toBe(409);
-      expect((err as AppError).code).toBe('INSUFFICIENT_STOCK');
-    }
-  });
-});

@@ -253,7 +253,7 @@ export class SearchService {
             id: j.id,
             title: j.title,
             subtitle: j.organizationName,
-            imageUrl: null,
+            imageUrl: j.imageUrl,
           })),
         };
       },

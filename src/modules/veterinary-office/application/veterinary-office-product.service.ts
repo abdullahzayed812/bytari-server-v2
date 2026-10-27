@@ -104,7 +104,6 @@ export class VeterinaryOfficeProductService {
           productType: input.productType,
           price: input.price ?? null,
           currency: input.currency ?? VETERINARY_OFFICE_DEFAULT_CURRENCY,
-          stockQuantity: input.stockQuantity ?? 0,
           subtype: input.subtype ?? null,
           weight: input.weight ?? null,
           usageInstructions: input.usageInstructions ?? null,
@@ -342,49 +341,6 @@ export class VeterinaryOfficeProductService {
     });
 
     this.events.publish('veterinary_office.product.deactivated', { productId, organizationId });
-    return this.toDTO(updated);
-  }
-
-  /** Controlled stock movement. `delta` is signed; the result may not go negative. */
-  async adjustStock(
-    organizationId: string,
-    productId: string,
-    delta: number,
-    reason: string | null,
-    actor: VeterinaryOfficeActor,
-  ): Promise<VeterinaryOfficeProductDTO> {
-    const existing = await this.products.findByIdForOrganization(productId, organizationId);
-    if (!existing) throw new NotFoundError('Product not found');
-
-    const nextQuantity = VeterinaryOfficeProductPolicy.applyStockDelta(
-      existing.stockQuantity,
-      delta,
-    );
-
-    const updated = await this.db.transaction(async (tx) => {
-      const product = await this.products.setStock(productId, nextQuantity, tx);
-      await this.audit.record(
-        {
-          action: AuditAction.VETERINARY_OFFICE_PRODUCT_INVENTORY_ADJUSTED,
-          entityType: AuditEntityType.VETERINARY_OFFICE_PRODUCT,
-          entityId: productId,
-          actorUserId: actor.actorUserId,
-          metadata: {
-            organizationId,
-            productId,
-            delta,
-            previousQuantity: existing.stockQuantity,
-            newQuantity: nextQuantity,
-            reason,
-          },
-          context: actor.context,
-        },
-        tx,
-      );
-      return product;
-    });
-
-    this.events.publish('veterinary_office.inventory.adjusted', { productId, organizationId });
     return this.toDTO(updated);
   }
 
@@ -665,7 +621,6 @@ export class VeterinaryOfficeProductService {
       productType: p.productType,
       price: p.price,
       currency: p.currency,
-      stockQuantity: p.stockQuantity,
       status: p.status,
       isHidden: p.isHidden,
       subtype: p.subtype,

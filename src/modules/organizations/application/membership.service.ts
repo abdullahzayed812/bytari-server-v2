@@ -201,6 +201,10 @@ export class MembershipService {
       if (patch.status) dbPatch.status = patch.status;
 
       await this.memberships.update(membershipId, dbPatch, tx);
+      // A supervisor moved to an ordinary role keeps no supervisor grants.
+      if (membership.roleKey === 'SUPERVISOR' && patch.roleKey && patch.roleKey !== 'SUPERVISOR') {
+        await this.orgRbac.clearSupervisorPermissions(membershipId, tx);
+      }
       await this.audit.record(
         {
           action: AuditAction.ORGANIZATION_MEMBER_UPDATED,

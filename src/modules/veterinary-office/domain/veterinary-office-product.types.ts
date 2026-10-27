@@ -33,7 +33,6 @@ export interface VeterinaryOfficeProduct extends VeterinaryOfficeProductDetailFi
   price: string | null;
   /** Currency of `price` — `IQD` (legacy default) or `USD`. */
   currency: VeterinaryOfficeProductCurrency;
-  stockQuantity: number;
   status: VeterinaryOfficeProductStatus;
   /**
    * "إخفاء/إظهار" — orthogonal to `status`. A hidden product stays ACTIVE (still
@@ -70,7 +69,6 @@ export interface VeterinaryOfficeProductDTO extends VeterinaryOfficeProductDetai
   productType: VeterinaryOfficeProductType;
   price: string | null;
   currency: VeterinaryOfficeProductCurrency;
-  stockQuantity: number;
   status: VeterinaryOfficeProductStatus;
   isHidden: boolean;
   primaryImageUrl: string | null;
@@ -101,8 +99,6 @@ export interface CreateVeterinaryOfficeProductInput extends VeterinaryOfficeProd
   price?: string | null;
   /** Defaults to `IQD`. */
   currency?: VeterinaryOfficeProductCurrency;
-  /** Opening stock. Optional; defaults to 0. Later changes go through the stock op. */
-  stockQuantity?: number;
   /**
    * Image uploaded BEFORE the product exists (org-level presign) — attached
    * as the first / primary image in the same transaction as the product.
@@ -147,6 +143,7 @@ export interface VeterinaryOfficeProductRow {
   product_type: string;
   price: string | null;
   currency: string | null;
+  /** Legacy inventory column — no longer read or written (products are never stock-gated). */
   stock_quantity: number | string;
   status: string;
   is_hidden: boolean;
@@ -184,7 +181,6 @@ export function rowToVeterinaryOfficeProduct(
     productType: row.product_type as VeterinaryOfficeProductType,
     price: row.price,
     currency: row.currency === 'USD' ? 'USD' : 'IQD',
-    stockQuantity: Number(row.stock_quantity),
     status: row.status as VeterinaryOfficeProductStatus,
     isHidden: row.is_hidden,
     subtype: row.subtype,

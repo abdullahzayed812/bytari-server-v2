@@ -86,6 +86,14 @@ const KINDS: Kind[] = [
   },
 ];
 
+/**
+ * Stock / inventory exists on Veterinary Store products only — Veterinary
+ * Office products have no inventory management (never stock-gated).
+ */
+function storeStock(k: Kind): Obj {
+  return k.name === 'VeterinaryStore' ? { stockQuantity: { type: 'integer', minimum: 0 } } : {};
+}
+
 /** `currency` exists on Veterinary Office (office / company) products only. */
 function officeCurrency(k: Kind, description: string): Obj {
   return k.name === 'VeterinaryOffice'
@@ -117,7 +125,7 @@ function buildSchemas(k: Kind): Obj {
           description: 'Decimal string (numeric(12,2)); never a float. e.g. "12.50"',
         },
         ...officeCurrency(k, 'Currency of `price` (legacy products: IQD).'),
-        stockQuantity: { type: 'integer', minimum: 0 },
+        ...storeStock(k),
         status: { type: 'string', enum: statusEnum },
         subtype: detailFieldSchema,
         weight: detailFieldSchema,
@@ -137,15 +145,18 @@ function buildSchemas(k: Kind): Obj {
       type: 'object',
       required: ['name', 'productType'],
       description:
-        '`organizationId` comes from the URL; `createdBy` / `status` / `stockQuantity` after ' +
-        'creation are server-controlled. `stockQuantity` here is the opening stock only.',
+        k.name === 'VeterinaryStore'
+          ? '`organizationId` comes from the URL; `createdBy` / `status` / `stockQuantity` after ' +
+            'creation are server-controlled. `stockQuantity` here is the opening stock only.'
+          : '`organizationId` comes from the URL; `createdBy` / `status` are server-controlled. ' +
+            'Office products have no stock (a legacy `stockQuantity` is ignored).',
       properties: {
         name: { type: 'string', minLength: 1, maxLength: 200 },
         description: { type: 'string', minLength: 1, maxLength: 4000, nullable: true },
         productType: { type: 'string', enum: typeEnum },
         price: { type: 'string', pattern: '^\\d{1,8}(\\.\\d{1,2})?$', nullable: true },
         ...officeCurrency(k, 'Price currency; defaults to IQD.'),
-        stockQuantity: { type: 'integer', minimum: 0 },
+        ...storeStock(k),
         subtype: detailFieldSchema,
         weight: detailFieldSchema,
         usageInstructions: detailFieldSchema,
@@ -175,17 +186,21 @@ function buildSchemas(k: Kind): Obj {
         highlights: { type: 'array', items: { type: 'string', maxLength: 60 }, maxItems: 6 },
       },
     },
-    [`Adjust${k.name}StockRequest`]: {
-      type: 'object',
-      required: ['delta'],
-      properties: {
-        delta: {
-          type: 'integer',
-          description: 'Signed, non-zero. The resulting stock may not be negative.',
-        },
-        reason: { type: 'string', minLength: 1, maxLength: 500 },
-      },
-    },
+    ...(k.name === 'VeterinaryStore'
+      ? {
+          [`Adjust${k.name}StockRequest`]: {
+            type: 'object',
+            required: ['delta'],
+            properties: {
+              delta: {
+                type: 'integer',
+                description: 'Signed, non-zero. The resulting stock may not be negative.',
+              },
+              reason: { type: 'string', minLength: 1, maxLength: 500 },
+            },
+          },
+        }
+      : {}),
     [`${k.name}ProductImageUploadUrlRequest`]: {
       type: 'object',
       required: ['filename', 'mimeType', 'size'],
@@ -318,30 +333,34 @@ function buildPaths(k: Kind): Obj {
         },
       },
     },
-    [`${base}/{productId}/stock`]: {
-      post: {
-        tags: [tag],
-        summary: "Adjust a product's stock by a signed delta",
-        description:
-          'Requires `product.inventory.adjust` (a permission distinct from `product.update`). ' +
-          'The resulting quantity may not be negative (409 otherwise). Audited as ' +
-          `\`${k.orgTypeLabel}_PRODUCT_INVENTORY_ADJUSTED\` with the previous / new quantity.`,
-        security: bearer,
-        parameters: [orgIdParam, productIdParam],
-        requestBody: {
-          required: true,
-          content: {
-            'application/json': {
-              schema: { $ref: `#/components/schemas/Adjust${k.name}StockRequest` },
+    ...(k.name === 'VeterinaryStore'
+      ? {
+          [`${base}/{productId}/stock`]: {
+            post: {
+              tags: [tag],
+              summary: "Adjust a product's stock by a signed delta",
+              description:
+                'Requires `product.inventory.adjust` (a permission distinct from `product.update`). ' +
+                'The resulting quantity may not be negative (409 otherwise). Audited as ' +
+                `\`${k.orgTypeLabel}_PRODUCT_INVENTORY_ADJUSTED\` with the previous / new quantity.`,
+              security: bearer,
+              parameters: [orgIdParam, productIdParam],
+              requestBody: {
+                required: true,
+                content: {
+                  'application/json': {
+                    schema: { $ref: `#/components/schemas/Adjust${k.name}StockRequest` },
+                  },
+                },
+              },
+              responses: {
+                '200': ok('Updated product', dataOf({ $ref: productSchema })),
+                ...errs(k.orgTypeLabel, 400, 401, 403, 404, 409, 422),
+              },
             },
           },
-        },
-        responses: {
-          '200': ok('Updated product', dataOf({ $ref: productSchema })),
-          ...errs(k.orgTypeLabel, 400, 401, 403, 404, 409, 422),
-        },
-      },
-    },
+        }
+      : {}),
     [`${base}/{productId}/images/upload-url`]: {
       post: {
         tags: [tag],

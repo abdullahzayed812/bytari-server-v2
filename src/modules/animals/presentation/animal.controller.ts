@@ -43,6 +43,8 @@ export class AnimalController {
         color: body.color,
         distinguishingFeatures: body.distinguishingFeatures,
         ageEstimate: body.ageEstimate,
+        weightKg: body.weightKg,
+        isNeutered: body.isNeutered,
         listingOnly: body.listingOnly,
       },
       this.actor(req),

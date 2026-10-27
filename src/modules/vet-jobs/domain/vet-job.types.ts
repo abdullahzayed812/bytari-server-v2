@@ -46,6 +46,8 @@ export interface VetJobOffer {
 /** Client-safe offer shape (moderation metadata included — owner / admin view). */
 export interface VetJobOfferDTO extends VetJobOffer {
   postedBy: VetJobUserSummary;
+  /** The linked organization's logo, else the poster's avatar; null → the app shows its icon fallback. */
+  imageUrl: string | null;
   /** Visible to the offer owner / moderators only. */
   applicationCount?: number;
   /** Applications still awaiting the poster's decision ("new" applicants badge). */
@@ -56,6 +58,8 @@ export interface VetJobOfferDTO extends VetJobOffer {
 export interface PublicVetJobOfferDTO {
   id: string;
   organizationName: string;
+  /** The linked organization's logo, else the poster's avatar; null → the app shows its icon fallback. */
+  imageUrl: string | null;
   title: string;
   employmentType: VetJobEmploymentType;
   governorate: string;

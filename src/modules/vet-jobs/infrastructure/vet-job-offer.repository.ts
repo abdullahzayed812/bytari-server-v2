@@ -16,11 +16,15 @@ const T = 'vet_job_offers';
 interface JoinedRow extends VetJobOfferRow {
   poster_first_name: string;
   poster_last_name: string;
+  poster_avatar_key: string | null;
+  organization_logo_key: string | null;
 }
 
 export interface VetJobOfferWithPoster {
   offer: VetJobOffer;
   postedBy: VetJobUserSummary;
+  /** Offer image source: the linked organization's logo, else the poster's avatar (keys, unresolved). */
+  imageKeys: { organizationLogo: string | null; posterAvatar: string | null };
   applicationCount?: number;
   pendingApplicationCount?: number;
 }
@@ -33,9 +37,24 @@ export class VetJobOfferRepository {
   }
 
   private joined(trx?: Knex.Transaction): Knex.QueryBuilder {
-    return this.conn(trx)(`${T} as o`)
-      .join('users as u', 'u.id', 'o.posted_by_user_id')
-      .select('o.*', 'u.first_name as poster_first_name', 'u.last_name as poster_last_name');
+    return (
+      this.conn(trx)(`${T} as o`)
+        .join('users as u', 'u.id', 'o.posted_by_user_id')
+        // An offer may be linked to the poster's clinic / office / store; its
+        // logo is the offer's image (at most one of these rows exists per org).
+        .leftJoin('clinic_details as cd', 'cd.organization_id', 'o.organization_id')
+        .leftJoin('veterinary_office_details as vod', 'vod.organization_id', 'o.organization_id')
+        .leftJoin('veterinary_store_details as vsd', 'vsd.organization_id', 'o.organization_id')
+        .select(
+          'o.*',
+          'u.first_name as poster_first_name',
+          'u.last_name as poster_last_name',
+          'u.avatar_key as poster_avatar_key',
+          this.conn(trx).raw(
+            'coalesce(cd.logo_key, vod.logo_key, vsd.logo_key) as organization_logo_key',
+          ),
+        )
+    );
   }
 
   private map(row: JoinedRow): VetJobOfferWithPoster {
@@ -45,6 +64,10 @@ export class VetJobOfferRepository {
         id: row.posted_by_user_id,
         firstName: row.poster_first_name,
         lastName: row.poster_last_name,
+      },
+      imageKeys: {
+        organizationLogo: row.organization_logo_key,
+        posterAvatar: row.poster_avatar_key,
       },
     };
   }

@@ -1112,21 +1112,6 @@ export async function adjustVeterinaryStoreProductStock(
     .send({ delta, ...(reason !== undefined ? { reason } : {}) });
 }
 
-/** Adjust a Veterinary Office product's stock by a signed delta. Returns the HTTP response. */
-export async function adjustVeterinaryOfficeProductStock(
-  app: Express,
-  actorToken: string,
-  organizationId: string,
-  productId: string,
-  delta: number,
-  reason?: string,
-): Promise<request.Response> {
-  return request(app)
-    .post(`/api/v1/organizations/${organizationId}/office-products/${productId}/stock`)
-    .set(bearer(actorToken))
-    .send({ delta, ...(reason !== undefined ? { reason } : {}) });
-}
-
 // --- Phase 12: chat & real-time messaging -------------------
 
 export interface TestConversation {

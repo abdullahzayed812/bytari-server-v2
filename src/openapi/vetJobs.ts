@@ -66,6 +66,11 @@ const schemas: Obj = {
       postedBy: userSummary,
       organizationId: { ...uuid, nullable: true },
       organizationName: { type: 'string' },
+      imageUrl: {
+        type: 'string',
+        nullable: true,
+        description: "The linked organization's logo, else the poster's avatar.",
+      },
       title: { type: 'string' },
       employmentType,
       governorate: { type: 'string' },
@@ -93,6 +98,11 @@ const schemas: Obj = {
     properties: {
       id: uuid,
       organizationName: { type: 'string' },
+      imageUrl: {
+        type: 'string',
+        nullable: true,
+        description: "The linked organization's logo, else the poster's avatar.",
+      },
       title: { type: 'string' },
       employmentType,
       governorate: { type: 'string' },
