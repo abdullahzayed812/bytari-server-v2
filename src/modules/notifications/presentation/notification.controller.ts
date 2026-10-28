@@ -12,6 +12,7 @@ import type {
   ListNotificationsQuery,
   PetSectionSeenBody,
   RegisterDeviceBody,
+  SyndicateRepliesSeenBody,
   UpdatePreferencesBody,
 } from './notification.schemas.js';
 
@@ -64,6 +65,17 @@ export class NotificationController {
     const { animalId } = validatedParams<{ animalId: string }>(req);
     const { section } = validatedBody<PetSectionSeenBody>(req);
     sendSuccess(res, await this.service.markPetSectionSeen(userId, animalId, section));
+  };
+
+  syndicateRepliesUnseen = async (req: Request, res: Response): Promise<void> => {
+    const { userId } = requireAuth(req);
+    sendSuccess(res, await this.service.syndicateReplyUnseenCounts(userId));
+  };
+
+  markSyndicateRepliesSeen = async (req: Request, res: Response): Promise<void> => {
+    const { userId } = requireAuth(req);
+    const { kind } = validatedBody<SyndicateRepliesSeenBody>(req);
+    sendSuccess(res, await this.service.markSyndicateRepliesSeen(userId, kind));
   };
 
   markAllRead = async (req: Request, res: Response): Promise<void> => {

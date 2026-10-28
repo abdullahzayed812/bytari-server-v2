@@ -18,6 +18,7 @@ import {
   MAX_BROADCAST_RECIPIENTS,
   PET_CARE_SECTIONS,
   type PetCareSection,
+  type SyndicateReplyKind,
   type AdminTargetKind,
   type NotificationType,
 } from '../domain/notification.constants.js';
@@ -303,6 +304,31 @@ export class NotificationService {
     );
     if (updated > 0)
       this.events.publish('notification.read', { recipientUserId: userId, animalId, section });
+    return { updated };
+  }
+
+  /**
+   * "طلباتي واستفساراتي" badge: the caller's unread syndicate replies to their
+   * own submissions, per kind. Cleared per tab by `markSyndicateRepliesSeen`.
+   */
+  async syndicateReplyUnseenCounts(
+    userId: string,
+  ): Promise<{ inquiries: number; requests: number; total: number }> {
+    const byKind = await this.notifications.countUnreadSyndicateRepliesByKind(userId);
+    const inquiries = byKind.get('INQUIRY') ?? 0;
+    const requests = byKind.get('REQUEST') ?? 0;
+    return { inquiries, requests, total: inquiries + requests };
+  }
+
+  async markSyndicateRepliesSeen(
+    userId: string,
+    kind: SyndicateReplyKind,
+  ): Promise<{ updated: number }> {
+    const updated = await this.db.transaction((tx) =>
+      this.notifications.markSyndicateRepliesRead(userId, kind, tx),
+    );
+    if (updated > 0)
+      this.events.publish('notification.read', { recipientUserId: userId, syndicateKind: kind });
     return { updated };
   }
 

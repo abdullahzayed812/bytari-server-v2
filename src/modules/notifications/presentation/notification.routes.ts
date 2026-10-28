@@ -12,6 +12,7 @@ import {
   notificationIdParamSchema,
   petAnimalIdParamSchema,
   petSectionSeenBodySchema,
+  syndicateRepliesSeenBodySchema,
   registerDeviceBodySchema,
   updatePreferencesBodySchema,
 } from './notification.schemas.js';
@@ -62,6 +63,13 @@ export function createNotificationRouter(c: Container): Router {
     '/pets/:animalId/seen',
     validate({ params: petAnimalIdParamSchema, body: petSectionSeenBodySchema }),
     asyncHandler(ctrl.markPetSectionSeen),
+  );
+  // "طلباتي واستفساراتي" badge — unread syndicate replies to the caller's own submissions
+  r.get('/syndicate-replies/unseen', asyncHandler(ctrl.syndicateRepliesUnseen));
+  r.post(
+    '/syndicate-replies/seen',
+    validate({ body: syndicateRepliesSeenBodySchema }),
+    asyncHandler(ctrl.markSyndicateRepliesSeen),
   );
   r.get(
     '/:notificationId',

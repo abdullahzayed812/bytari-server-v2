@@ -8,6 +8,8 @@ import {
 } from '../domain/notification.types.js';
 
 const T = 'notifications';
+const SYNDICATE_REPLY_TYPE = 'SYNDICATE_SUBMISSION_RESPONDED';
+const SYNDICATE_SUBMISSION_ENTITY = 'SYNDICATE_SUBMISSION';
 
 export class NotificationRepository {
   constructor(private readonly db: Knex) {}
@@ -175,6 +177,52 @@ export class NotificationRepository {
       .whereRaw("(data->>'animalId') = ?", [animalId])
       .whereNull('read_at')
       .whereIn('type', types)
+      .update({ read_at: trx.fn.now(), updated_at: trx.fn.now() });
+  }
+
+  /**
+   * The user's unread "your syndicate submission got a reply" notifications,
+   * per submission kind (INQUIRY / REQUEST) — joined to the submission so only
+   * replies to the caller's OWN submissions are counted.
+   */
+  async countUnreadSyndicateRepliesByKind(userId: string): Promise<Map<string, number>> {
+    const rows = (await this.db(`${T} as n`)
+      .joinRaw('inner join syndicate_submissions as s on s.id::text = n.entity_id')
+      .where({
+        'n.recipient_user_id': userId,
+        'n.type': SYNDICATE_REPLY_TYPE,
+        'n.entity_type': SYNDICATE_SUBMISSION_ENTITY,
+        's.submitted_by_user_id': userId,
+      })
+      .whereNull('n.read_at')
+      .groupBy('s.kind')
+      .select('s.kind')
+      .count<{ kind: string; count: string }[]>({ count: '*' })) as {
+      kind: string;
+      count: string;
+    }[];
+    return new Map(rows.map((r) => [r.kind, Number(r.count)]));
+  }
+
+  /** Mark the user's unread reply notifications for one submission kind read. */
+  async markSyndicateRepliesRead(
+    userId: string,
+    kind: string,
+    trx: Knex.Transaction,
+  ): Promise<number> {
+    return trx(T)
+      .where({
+        recipient_user_id: userId,
+        type: SYNDICATE_REPLY_TYPE,
+        entity_type: SYNDICATE_SUBMISSION_ENTITY,
+      })
+      .whereNull('read_at')
+      .whereIn(
+        'entity_id',
+        trx('syndicate_submissions')
+          .where({ submitted_by_user_id: userId, kind })
+          .select(trx.raw('id::text')),
+      )
       .update({ read_at: trx.fn.now(), updated_at: trx.fn.now() });
   }
 

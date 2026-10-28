@@ -7,6 +7,7 @@ import {
   NOTIFICATION_TYPES,
   PET_CARE_SECTION_KEYS,
   PUSH_DATA_MAX_KEYS,
+  SYNDICATE_REPLY_KINDS,
   TITLE_MAX,
 } from '../domain/notification.constants.js';
 
@@ -73,6 +74,11 @@ export const petSectionSeenBodySchema = z
   .object({ section: z.enum(PET_CARE_SECTION_KEYS) })
   .strict();
 export type PetSectionSeenBody = z.infer<typeof petSectionSeenBodySchema>;
+
+export const syndicateRepliesSeenBodySchema = z
+  .object({ kind: z.enum(SYNDICATE_REPLY_KINDS) })
+  .strict();
+export type SyndicateRepliesSeenBody = z.infer<typeof syndicateRepliesSeenBodySchema>;
 
 export type ListNotificationsQuery = z.infer<typeof listNotificationsQuerySchema>;
 export type RegisterDeviceBody = z.infer<typeof registerDeviceBodySchema>;

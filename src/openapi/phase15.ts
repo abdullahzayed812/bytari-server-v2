@@ -205,6 +205,53 @@ const paths: Obj = {
       },
     },
   },
+  '/notifications/syndicate-replies/unseen': {
+    get: {
+      tags: [TAG],
+      summary: "Unread syndicate replies to the caller's own submissions, per kind",
+      security: bearer,
+      responses: {
+        '200': ok(
+          'Counts',
+          dataOf({
+            type: 'object',
+            properties: {
+              inquiries: { type: 'integer' },
+              requests: { type: 'integer' },
+              total: { type: 'integer' },
+            },
+          }),
+        ),
+        ...errs(401),
+      },
+    },
+  },
+  '/notifications/syndicate-replies/seen': {
+    post: {
+      tags: [TAG],
+      summary: 'Mark the syndicate replies of one submission kind read',
+      security: bearer,
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['kind'],
+              properties: { kind: { type: 'string', enum: ['INQUIRY', 'REQUEST'] } },
+            },
+          },
+        },
+      },
+      responses: {
+        '200': ok(
+          'Count updated',
+          dataOf({ type: 'object', properties: { updated: { type: 'integer' } } }),
+        ),
+        ...errs(401, 422),
+      },
+    },
+  },
   '/notifications/{notificationId}': {
     get: {
       tags: [TAG],

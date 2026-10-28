@@ -156,6 +156,10 @@ export const PET_CARE_SECTION_KEYS = Object.keys(PET_CARE_SECTIONS) as [
   ...PetCareSection[],
 ];
 
+/** "طلباتي واستفساراتي" tabs — the syndicate submission kinds whose replies are badged. */
+export const SYNDICATE_REPLY_KINDS = ['INQUIRY', 'REQUEST'] as const;
+export type SyndicateReplyKind = (typeof SYNDICATE_REPLY_KINDS)[number];
+
 export const DEVICE_PLATFORMS = ['ios', 'android', 'web'] as const;
 export type DevicePlatform = (typeof DEVICE_PLATFORMS)[number];
 
