@@ -65,7 +65,7 @@ export class VetJobOfferService {
   }
 
   private imageUrl(data: VetJobOfferWithPoster): Promise<string | null> {
-    return this.media.resolveUrl(data.imageKeys.organizationLogo ?? data.imageKeys.posterAvatar);
+    return this.media.resolveUrl(data.imageKeys.organizationLogo);
   }
 
   private async toDTO(data: VetJobOfferWithPoster): Promise<VetJobOfferDTO> {

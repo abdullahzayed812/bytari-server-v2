@@ -199,6 +199,8 @@ export class PoultryOpsController {
       pageSize: q.pageSize,
       category: q.category,
       poultryFlockId: q.poultryFlockId,
+      sheepBatchId: q.sheepBatchId,
+      cattleBatchId: q.cattleBatchId,
       from: q.from,
       to: q.to,
     });

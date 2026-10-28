@@ -33,8 +33,10 @@ interface ExpenseItem {
   amount: string;
   category: string;
   spentOn: string;
-  source: 'MANUAL' | 'DAILY_RECORD';
-  dailyRecord: { recordId: string; batchKind: string; batchId: string; batchName: string } | null;
+  poultryFlockId: string | null;
+  sheepBatchId: string | null;
+  cattleBatchId: string | null;
+  batch: { kind: string; id: string; name: string } | null;
 }
 
 async function setup() {
@@ -54,8 +56,8 @@ async function list(token: string, orgId: string, query = ''): Promise<ExpenseIt
   return res.body.data as ExpenseItem[];
 }
 
-describe('farm expenses include daily-record expenses', () => {
-  it('a daily record expense appears once in the Expenses list and totals, next to manual expenses', async () => {
+describe('farm expenses: manual cards + daily-record amounts in the totals', () => {
+  it('a daily record expense is not an expense card; its amount is in the summary totals', async () => {
     const { owner, farm, flock } = await setup();
 
     const daily = await request(app)
@@ -71,123 +73,154 @@ describe('farm expenses include daily-record expenses', () => {
     expect(manual.status).toBe(201);
 
     const items = await list(owner.accessToken, farm.id);
-    expect(items).toHaveLength(2);
-    const fromDaily = items.find((i) => i.source === 'DAILY_RECORD');
-    expect(fromDaily).toMatchObject({
-      id: daily.body.data.id,
-      amount: '850.00',
-      spentOn: businessToday(),
-      dailyRecord: {
-        recordId: daily.body.data.id,
-        batchKind: 'POULTRY',
-        batchId: flock.id,
-        batchName: 'Batch A',
-      },
-    });
-    expect(items.find((i) => i.source === 'MANUAL')).toMatchObject({
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
       id: manual.body.data.id,
       category: 'FEED',
-      dailyRecord: null,
+      amount: '1500.00',
+      batch: null,
     });
 
-    // Totals: 850 + 1500, each counted once.
+    // Totals: 850 + 1500, each counted once; the daily share is shown on its own.
     const summary = await request(app)
       .get(expenses(farm.id, '/summary'))
       .set(bearer(owner.accessToken));
     expect(summary.status).toBe(200);
-    expect(summary.body.data.totalThisWeek).toBe(2350);
-    expect(summary.body.data.totalThisMonth).toBe(2350);
+    expect(summary.body.data).toMatchObject({
+      totalThisWeek: 2350,
+      totalThisMonth: 2350,
+      dailyRecordsTotal: 850,
+      manualTotal: 1500,
+      overallTotal: 2350,
+    });
 
-    // The batch summary is unchanged by the merge: daily + this flock's manual (none here).
+    // The batch summary: daily + this flock's manual (none here).
     const batch = await request(app)
       .get(`/api/v1/organizations/${farm.id}/poultry/flocks/${flock.id}/summary`)
       .set(bearer(owner.accessToken));
     expect(batch.body.data.totalExpenses).toBe(850);
   });
 
-  it('editing or deleting the daily record updates the Expenses list (no stale copy)', async () => {
+  it('editing or deleting the daily record updates the totals (no stale copy)', async () => {
     const { owner, farm, flock } = await setup();
     const daily = await request(app)
       .post(dailyRecords(farm.id, flock.id))
       .set(bearer(owner.accessToken))
       .send({ feedKg: 1, waterLiters: 1, expenseAmount: 300 });
     const recordId = daily.body.data.id as string;
+    const dailyTotal = async () =>
+      (await request(app).get(expenses(farm.id, '/summary')).set(bearer(owner.accessToken))).body
+        .data.dailyRecordsTotal as number;
 
     await request(app)
       .patch(dailyRecords(farm.id, flock.id, recordId))
       .set(bearer(owner.accessToken))
       .send({ expenseAmount: 450 });
-    expect((await list(owner.accessToken, farm.id))[0]).toMatchObject({ amount: '450.00' });
+    expect(await dailyTotal()).toBe(450);
 
-    // An expense of 0 is not an expense line.
-    await request(app)
-      .patch(dailyRecords(farm.id, flock.id, recordId))
-      .set(bearer(owner.accessToken))
-      .send({ expenseAmount: 0 });
-    expect(await list(owner.accessToken, farm.id)).toHaveLength(0);
-
-    await request(app)
-      .patch(dailyRecords(farm.id, flock.id, recordId))
-      .set(bearer(owner.accessToken))
-      .send({ expenseAmount: 200 });
     await request(app)
       .delete(dailyRecords(farm.id, flock.id, recordId))
       .set(bearer(owner.accessToken));
+    expect(await dailyTotal()).toBe(0);
     expect(await list(owner.accessToken, farm.id)).toHaveLength(0);
   });
 
-  it('a category filter lists manual expenses only; pagination and newest-first span both sources', async () => {
+  it('newly added expenses are listed first, whatever date they were spent on', async () => {
     const { owner, farm, flock } = await setup();
-    await seedDailyRecordRow('poultry', flock.id, farm.id, '2026-03-01', { expenseAmount: 100 });
-    await seedDailyRecordRow('poultry', flock.id, farm.id, '2026-03-03', { expenseAmount: 300 });
-    await request(app)
-      .post(expenses(farm.id))
-      .set(bearer(owner.accessToken))
-      .send({ category: 'MEDICINE', amount: 200, spentOn: '2026-03-02' });
+    await seedDailyRecordRow('poultry', flock.id, farm.id, '2026-03-05', { expenseAmount: 100 });
+    const ids: string[] = [];
+    for (const spentOn of ['2026-03-03', '2026-03-01', '2026-03-02']) {
+      const res = await request(app)
+        .post(expenses(farm.id))
+        .set(bearer(owner.accessToken))
+        .send({ category: 'MEDICINE', amount: 200, spentOn })
+        .expect(201);
+      ids.push(res.body.data.id as string);
+    }
 
     const all = await list(owner.accessToken, farm.id);
-    expect(all.map((i) => i.spentOn)).toEqual(['2026-03-03', '2026-03-02', '2026-03-01']);
+    expect(all.map((i) => i.id)).toEqual([...ids].reverse());
 
     const page2 = await request(app)
       .get(expenses(farm.id, '?page=2&pageSize=2'))
       .set(bearer(owner.accessToken));
     expect(page2.body.meta.total).toBe(3);
-    expect(page2.body.data.map((i: ExpenseItem) => i.spentOn)).toEqual(['2026-03-01']);
+    expect(page2.body.data.map((i: ExpenseItem) => i.id)).toEqual([ids[0]]);
 
-    const medicine = await list(owner.accessToken, farm.id, '?category=MEDICINE');
-    expect(medicine).toHaveLength(1);
-    expect(medicine[0]).toMatchObject({ source: 'MANUAL', category: 'MEDICINE' });
+    expect(await list(owner.accessToken, farm.id, '?category=FEED')).toHaveLength(0);
   });
 
-  it('a flock filter keeps that flock’s daily records and manual expenses only', async () => {
-    const { owner, farm, flock } = await setup();
-    const other = await createPoultryFlock(app, owner.accessToken, farm.id, { birdCount: 50 });
-    await seedDailyRecordRow('poultry', flock.id, farm.id, '2026-03-01', { expenseAmount: 100 });
-    await seedDailyRecordRow('poultry', other.id, farm.id, '2026-03-01', { expenseAmount: 999 });
+  it('an expense can be linked to one active batch of this farm only', async () => {
+    const { admin, owner, farm, flock } = await setup();
+    const linked = await request(app)
+      .post(expenses(farm.id))
+      .set(bearer(owner.accessToken))
+      .send({ category: 'FEED', amount: 10, spentOn: businessToday(), poultryFlockId: flock.id });
+    expect(linked.status).toBe(201);
+    expect(linked.body.data).toMatchObject({
+      poultryFlockId: flock.id,
+      batch: { kind: 'POULTRY', id: flock.id, name: 'Batch A' },
+    });
+    const filtered = await list(owner.accessToken, farm.id, `?poultryFlockId=${flock.id}`);
+    expect(filtered.map((i) => i.id)).toEqual([linked.body.data.id]);
 
-    const items = await list(owner.accessToken, farm.id, `?poultryFlockId=${flock.id}`);
-    expect(items).toHaveLength(1);
-    expect(items[0]).toMatchObject({ amount: '100.00' });
+    // Another farm's batch is rejected.
+    const otherOwner = await registerApprovedVet(app);
+    const otherFarm = await createFarm(app, otherOwner.accessToken, admin.accessToken);
+    const foreign = await createPoultryFlock(app, otherOwner.accessToken, otherFarm.id, {
+      birdCount: 10,
+    });
+    const rejected = await request(app)
+      .post(expenses(farm.id))
+      .set(bearer(owner.accessToken))
+      .send({ category: 'FEED', amount: 10, spentOn: businessToday(), poultryFlockId: foreign.id });
+    expect(rejected.status).toBe(422);
+
+    // Two links at once are rejected.
+    const sheepFarm = await createSheepFarm(app, owner.accessToken, admin.accessToken);
+    const sheep = await createSheepBatch(app, owner.accessToken, sheepFarm.id, { name: 'S' });
+    const both = await request(app).post(expenses(farm.id)).set(bearer(owner.accessToken)).send({
+      category: 'FEED',
+      amount: 10,
+      spentOn: businessToday(),
+      poultryFlockId: flock.id,
+      sheepBatchId: sheep.id,
+    });
+    expect(both.status).toBe(422);
+
+    // Re-linking through PATCH clears the previous link; null makes it farm-wide.
+    const unlinked = await request(app)
+      .patch(expenses(farm.id, `/${linked.body.data.id}`))
+      .set(bearer(owner.accessToken))
+      .send({ poultryFlockId: null });
+    expect(unlinked.status).toBe(200);
+    expect(unlinked.body.data).toMatchObject({ poultryFlockId: null, batch: null });
   });
 
-  it('sheep daily-record expenses appear in the sheep farm’s Expenses list', async () => {
+  it('a sheep batch’s daily-record expenses reach the sheep farm’s totals; manual expenses link to the sheep batch', async () => {
     const admin = await registerAdmin(app);
     const owner = await registerApprovedVet(app);
     const farm = await createSheepFarm(app, owner.accessToken, admin.accessToken);
     const batch = await createSheepBatch(app, owner.accessToken, farm.id, { name: 'Flock S' });
     await seedDailyRecordRow('sheep', batch.id, farm.id, businessToday(), { expenseAmount: 75 });
+    const manual = await request(app)
+      .post(expenses(farm.id))
+      .set(bearer(owner.accessToken))
+      .send({ category: 'FEED', amount: 25, spentOn: businessToday(), sheepBatchId: batch.id });
+    expect(manual.status).toBe(201);
+    expect(manual.body.data.batch).toMatchObject({ kind: 'SHEEP', id: batch.id, name: 'Flock S' });
 
     const items = await list(owner.accessToken, farm.id);
     expect(items).toHaveLength(1);
-    expect(items[0]).toMatchObject({
-      source: 'DAILY_RECORD',
-      amount: '75.00',
-      dailyRecord: { batchKind: 'SHEEP', batchId: batch.id, batchName: 'Flock S' },
-    });
     const summary = await request(app)
       .get(expenses(farm.id, '/summary'))
       .set(bearer(owner.accessToken));
-    expect(summary.body.data.totalThisMonth).toBe(75);
+    expect(summary.body.data).toMatchObject({ totalThisMonth: 100, dailyRecordsTotal: 75 });
+    // The sheep batch summary counts its linked manual expense too.
+    const batchSummary = await request(app)
+      .get(`/api/v1/organizations/${farm.id}/sheep/batches/${batch.id}/summary`)
+      .set(bearer(owner.accessToken));
+    expect(batchSummary.body.data.totalExpenses).toBe(100);
   });
 });
 
@@ -199,6 +232,8 @@ describe('selling a batch permanently deletes its expenses', () => {
       totalThisWeek: number;
       totalThisMonth: number;
       dailyAverageThisMonth: number;
+      manualTotal: number;
+      dailyRecordsTotal: number;
     };
   }
   const sellFlock = (token: string, orgId: string, flockId: string, status = 'CLOSED') =>
@@ -284,7 +319,7 @@ describe('selling a batch permanently deletes its expenses', () => {
 
     // Lists, summaries and the batch report no longer see the deleted lines.
     const items = await list(owner.accessToken, farm.id);
-    expect(items.map((i) => Number(i.amount)).sort((a, b) => a - b)).toEqual([20, 30, 100]);
+    expect(items.map((i) => Number(i.amount)).sort((a, b) => a - b)).toEqual([20, 100]);
     expect((await summaryOf(owner.accessToken, farm.id)).totalThisMonth).toBe(150);
     expect((await flockSummary(owner.accessToken, farm.id, flock.id)).totalExpenses).toBe(0);
     expect((await flockSummary(owner.accessToken, farm.id, other.id)).totalExpenses).toBe(50);
@@ -388,7 +423,44 @@ describe('selling a batch permanently deletes its expenses', () => {
     const keptRows = await db('sheep_daily_records').where({ sheep_batch_id: kept.id });
     expect(Number(keptRows[0].expense_amount)).toBe(25);
     expect((await summaryOf(owner.accessToken, farm.id)).totalThisMonth).toBe(25);
-    expect(await list(owner.accessToken, farm.id)).toHaveLength(1);
+  });
+
+  it('sheep / cattle: selling deletes the manual expenses linked to the sold batch only', async () => {
+    const admin = await registerAdmin(app);
+    const owner = await registerApprovedVet(app);
+    const sheepFarm = await createSheepFarm(app, owner.accessToken, admin.accessToken);
+    const sold = await createSheepBatch(app, owner.accessToken, sheepFarm.id, { name: 'Sold' });
+    const kept = await createSheepBatch(app, owner.accessToken, sheepFarm.id, { name: 'Kept' });
+    const cattleFarm = await createCattleFarm(app, owner.accessToken, admin.accessToken);
+    const cow = await createCattleBatch(app, owner.accessToken, cattleFarm.id, { name: 'Cow' });
+    for (const [farmId, body] of [
+      [sheepFarm.id, { amount: 40, sheepBatchId: sold.id }],
+      [sheepFarm.id, { amount: 15, sheepBatchId: kept.id }],
+      [sheepFarm.id, { amount: 5 }],
+      [cattleFarm.id, { amount: 70, cattleBatchId: cow.id }],
+    ] as const) {
+      await request(app)
+        .post(expenses(farmId))
+        .set(bearer(owner.accessToken))
+        .send({ category: 'FEED', spentOn: businessToday(), ...body })
+        .expect(201);
+    }
+
+    await request(app)
+      .patch(`/api/v1/organizations/${sheepFarm.id}/sheep/batches/${sold.id}`)
+      .set(bearer(owner.accessToken))
+      .send({ status: 'CLOSED' })
+      .expect(200);
+    const left = await list(owner.accessToken, sheepFarm.id);
+    expect(left.map((i) => Number(i.amount)).sort((a, b) => a - b)).toEqual([5, 15]);
+    expect((await summaryOf(owner.accessToken, sheepFarm.id)).manualTotal).toBe(20);
+
+    await request(app)
+      .patch(`/api/v1/organizations/${cattleFarm.id}/cattle/batches/${cow.id}`)
+      .set(bearer(owner.accessToken))
+      .send({ status: 'CLOSED' })
+      .expect(200);
+    expect(await list(owner.accessToken, cattleFarm.id)).toHaveLength(0);
   });
 
   it('cattle: selling clears the sold batch’s daily expenses only', async () => {

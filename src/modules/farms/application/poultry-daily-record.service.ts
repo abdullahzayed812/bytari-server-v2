@@ -226,7 +226,7 @@ export class PoultryDailyRecordService {
     const flock = await this.loadFlock(organizationId, flockId);
     const [agg, flockExpenses, latestWeight] = await Promise.all([
       this.records.aggregateForFlock(flockId),
-      this.expenses.sumForFlock(flockId),
+      this.expenses.sumForBatch('POULTRY', flockId),
       this.records.latestWeightForFlock(flockId),
     ]);
 
@@ -266,6 +266,7 @@ export class PoultryDailyRecordService {
       ageMonths: Math.floor(ageDays / 30),
       averageWeightGrams: averageWeightGrams ?? null,
       targetPricePerKg: flock.targetPricePerKg,
+      purchasePricePerKg: flock.purchasePricePerKg,
       expectedSaleDate: flock.expectedSaleDate,
       totalExpenses,
       estimatedProfit,

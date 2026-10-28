@@ -316,7 +316,7 @@ describe('Veterinarian Jobs — admin oversight', () => {
 });
 
 describe('Veterinarian Jobs — offer images', () => {
-  it('an offer shows its organization logo, else the poster avatar, else null (app icon fallback)', async () => {
+  it('an offer shows its organization logo, never the poster’s profile photo, else null (app icon fallback)', async () => {
     const admin = await registerAdmin(app);
     const poster = await registerApprovedVet(app);
     const viewer = await registerUser(app);
@@ -339,11 +339,11 @@ describe('Veterinarian Jobs — offer images', () => {
     // No organization, no avatar → null.
     expect(await publicImage()).toBeNull();
 
-    // The poster's avatar.
+    // The poster's own profile photo is NOT a substitute image.
     await db('users').where({ id: poster.id }).update({ avatar_key: 'avatars/poster-avatar.jpg' });
-    expect(await publicImage()).toContain('poster-avatar.jpg');
+    expect(await publicImage()).toBeNull();
 
-    // A linked clinic with a logo wins over the avatar — in public, "mine" and moderation views.
+    // A linked clinic's logo — in public, "mine" and moderation views.
     const clinic = await createOrganization(app, poster.accessToken, { type: 'CLINIC' });
     await db('clinic_details')
       .where({ organization_id: clinic.id })

@@ -13,6 +13,9 @@ export {
   type EntityNotificationReads,
 } from './application/syndicate-submission.service.js';
 export { SyndicateMemberService } from './application/syndicate-member.service.js';
+export { SyndicateServiceItems } from './application/syndicate-service-items.js';
+export { SyndicateServiceItemRepository } from './infrastructure/syndicate-service-item.repository.js';
+export * from './domain/syndicate-service-item.types.js';
 export {
   SyndicateController,
   SyndicateMediaController,
@@ -20,6 +23,7 @@ export {
   SyndicateAnnouncementController,
   SyndicateSubmissionController,
   SyndicateMemberController,
+  SyndicateServiceItemController,
 } from './presentation/syndicate.controllers.js';
 export * from './presentation/syndicate.schemas.js';
 export {

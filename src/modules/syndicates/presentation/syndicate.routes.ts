@@ -10,6 +10,7 @@ import {
   SyndicateController,
   SyndicateMediaController,
   SyndicateMemberController,
+  SyndicateServiceItemController,
   SyndicateSubmissionController,
 } from './syndicate.controllers.js';
 import {
@@ -29,8 +30,10 @@ import {
   respondSubmissionBodySchema,
   submissionListQuerySchema,
   syndicateBrowseQuerySchema,
+  syndicateServiceParamSchema,
   updateAnnouncementBodySchema,
   updateSyndicateProfileBodySchema,
+  updateSyndicateServiceBodySchema,
   uploadUrlBodySchema,
 } from './syndicate.schemas.js';
 
@@ -55,6 +58,7 @@ export function createSyndicateRouter(c: Container): Router {
   const announcements = new SyndicateAnnouncementController(c.syndicateAnnouncementService);
   const submissions = new SyndicateSubmissionController(c.syndicateSubmissionService);
   const members = new SyndicateMemberController(c.syndicateMemberService);
+  const services = new SyndicateServiceItemController(c.syndicateServiceItems);
   const { withOrganization, authorizeOrg } = createOrganizationMiddleware({
     organizations: c.organizationRepository,
     authz: c.authorizationService,
@@ -125,6 +129,20 @@ export function createSyndicateRouter(c: Container): Router {
     '/:organizationId/announcements',
     validate({ params: organizationIdParamSchema, query: announcementListQuerySchema }),
     asyncHandler(announcements.list),
+  );
+
+  // --- services ("الخدمات"): public read, edit = syndicate.profile.manage ---
+  r.get(
+    '/:organizationId/services',
+    validate({ params: organizationIdParamSchema }),
+    asyncHandler(services.list),
+  );
+  r.patch(
+    '/:organizationId/services/:serviceId',
+    validate({ params: syndicateServiceParamSchema, body: updateSyndicateServiceBodySchema }),
+    withOrganization,
+    authorizeOrg('syndicate.profile.manage'),
+    asyncHandler(services.update),
   );
 
   // --- profile management (syndicate.profile.manage) ---------------

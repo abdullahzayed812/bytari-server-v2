@@ -154,6 +154,7 @@ export interface SheepBatchSummary {
   ageMonths: number;
   averageWeightKg: string | null;
   targetPricePerKg: string | null;
+  purchasePricePerKg: string | null;
   expectedSaleDate: string | null;
   totalExpenses: number;
   estimatedProfit: number | null;

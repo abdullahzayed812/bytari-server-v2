@@ -71,7 +71,10 @@ const schemas: Obj = {
       name: { type: 'string' },
       location: { type: 'string' },
       governorate: { type: 'string' },
-      cattleProductionType: { type: 'string', enum: ['DAIRY', 'BEEF', 'BREEDING', 'MIXED', 'OTHER'] },
+      cattleProductionType: {
+        type: 'string',
+        enum: ['DAIRY', 'BEEF', 'BREEDING', 'MIXED', 'OTHER'],
+      },
       description: { type: 'string', nullable: true },
       address: { type: 'string', nullable: true },
       capacity: { type: 'integer', minimum: 0, nullable: true },
@@ -99,6 +102,7 @@ const schemas: Obj = {
       initialHeadCount: { type: 'integer', nullable: true },
       averageWeightKg: { type: 'string', nullable: true },
       targetPricePerKg: { type: 'string', nullable: true },
+      purchasePricePerKg: { type: 'string', nullable: true },
       expectedSaleDate: { ...dateStr, nullable: true },
       createdAt: { type: 'string', format: 'date-time' },
       updatedAt: { type: 'string', format: 'date-time' },
@@ -119,6 +123,7 @@ const schemas: Obj = {
       initialHeadCount: { type: 'integer', minimum: 0, nullable: true },
       averageWeightKg: { type: 'number', minimum: 0, nullable: true },
       targetPricePerKg: { type: 'number', minimum: 0, nullable: true },
+      purchasePricePerKg: { type: 'number', minimum: 0, nullable: true },
       expectedSaleDate: { ...dateStr, nullable: true },
     },
   },
@@ -140,6 +145,7 @@ const schemas: Obj = {
       ageMonths: { type: 'integer' },
       averageWeightKg: { type: 'string', nullable: true },
       targetPricePerKg: { type: 'string', nullable: true },
+      purchasePricePerKg: { type: 'string', nullable: true },
       expectedSaleDate: { ...dateStr, nullable: true },
       totalExpenses: { type: 'number' },
       estimatedProfit: { type: 'number', nullable: true },
@@ -177,7 +183,11 @@ const schemas: Obj = {
       mortalityCount: { type: 'integer' },
       mortalityCause: { type: 'string', nullable: true },
       sickCasesCount: { type: 'integer' },
-      feedType: { type: 'string', nullable: true, enum: ['CONCENTRATED', 'GREEN_FODDER', 'MIXED', 'OTHER'] },
+      feedType: {
+        type: 'string',
+        nullable: true,
+        enum: ['CONCENTRATED', 'GREEN_FODDER', 'MIXED', 'OTHER'],
+      },
       treatment: { type: 'string', nullable: true },
       expenseAmount: { type: 'string' },
       averageWeightKg: { type: 'string', nullable: true },
@@ -198,7 +208,11 @@ const schemas: Obj = {
       mortalityCount: { type: 'integer', minimum: 0 },
       mortalityCause: { type: 'string', nullable: true },
       sickCasesCount: { type: 'integer', minimum: 0 },
-      feedType: { type: 'string', nullable: true, enum: ['CONCENTRATED', 'GREEN_FODDER', 'MIXED', 'OTHER'] },
+      feedType: {
+        type: 'string',
+        nullable: true,
+        enum: ['CONCENTRATED', 'GREEN_FODDER', 'MIXED', 'OTHER'],
+      },
       treatment: { type: 'string', nullable: true },
       expenseAmount: { type: 'number', minimum: 0 },
       averageWeightKg: { type: 'number', minimum: 0, nullable: true },
@@ -264,7 +278,9 @@ const paths: Obj = {
       security: bearer,
       requestBody: {
         required: true,
-        content: { 'application/json': { schema: { $ref: '#/components/schemas/CreateCattleFarmRequest' } } },
+        content: {
+          'application/json': { schema: { $ref: '#/components/schemas/CreateCattleFarmRequest' } },
+        },
       },
       responses: { 201: ok('Created'), ...errs(400, 401, 422) },
     },
@@ -275,8 +291,14 @@ const paths: Obj = {
       tags: T,
       summary: 'List cattle batches — farm.cattle_batch.read',
       security: bearer,
-      parameters: [...pageParams, { name: 'status', in: 'query', schema: { type: 'string', enum: ['ACTIVE', 'CLOSED'] } }],
-      responses: { 200: ok('Batches', listOf('#/components/schemas/CattleBatch')), ...errs(400, 401, 403, 404) },
+      parameters: [
+        ...pageParams,
+        { name: 'status', in: 'query', schema: { type: 'string', enum: ['ACTIVE', 'CLOSED'] } },
+      ],
+      responses: {
+        200: ok('Batches', listOf('#/components/schemas/CattleBatch')),
+        ...errs(400, 401, 403, 404),
+      },
     },
     post: {
       tags: T,
@@ -284,7 +306,9 @@ const paths: Obj = {
       security: bearer,
       requestBody: {
         required: true,
-        content: { 'application/json': { schema: { $ref: '#/components/schemas/CreateCattleBatchRequest' } } },
+        content: {
+          'application/json': { schema: { $ref: '#/components/schemas/CreateCattleBatchRequest' } },
+        },
       },
       responses: {
         201: ok('Created', dataOf({ $ref: '#/components/schemas/CattleBatch' })),
@@ -298,7 +322,10 @@ const paths: Obj = {
       tags: T,
       summary: 'Get a cattle batch — farm.cattle_batch.read',
       security: bearer,
-      responses: { 200: ok('Batch', dataOf({ $ref: '#/components/schemas/CattleBatch' })), ...errs(401, 403, 404) },
+      responses: {
+        200: ok('Batch', dataOf({ $ref: '#/components/schemas/CattleBatch' })),
+        ...errs(401, 403, 404),
+      },
     },
     patch: {
       tags: T,
@@ -346,7 +373,11 @@ const paths: Obj = {
       tags: T,
       summary: 'List daily records — farm.daily_record.read',
       security: bearer,
-      parameters: [...pageParams, { name: 'from', in: 'query', schema: dateStr }, { name: 'to', in: 'query', schema: dateStr }],
+      parameters: [
+        ...pageParams,
+        { name: 'from', in: 'query', schema: dateStr },
+        { name: 'to', in: 'query', schema: dateStr },
+      ],
       responses: {
         200: ok('Daily records', listOf('#/components/schemas/CattleDailyRecord')),
         ...errs(400, 401, 403, 404),
@@ -358,7 +389,11 @@ const paths: Obj = {
       security: bearer,
       requestBody: {
         required: true,
-        content: { 'application/json': { schema: { $ref: '#/components/schemas/CreateCattleDailyRecordRequest' } } },
+        content: {
+          'application/json': {
+            schema: { $ref: '#/components/schemas/CreateCattleDailyRecordRequest' },
+          },
+        },
       },
       responses: {
         201: ok('Created', dataOf({ $ref: '#/components/schemas/CattleDailyRecord' })),
@@ -367,12 +402,19 @@ const paths: Obj = {
     },
   },
   '/organizations/{organizationId}/cattle/batches/{batchId}/daily-records/{recordId}': {
-    parameters: [orgIdParam, batchIdParam, { name: 'recordId', in: 'path', required: true, schema: uuid }],
+    parameters: [
+      orgIdParam,
+      batchIdParam,
+      { name: 'recordId', in: 'path', required: true, schema: uuid },
+    ],
     get: {
       tags: T,
       summary: 'Get a daily record — farm.daily_record.read',
       security: bearer,
-      responses: { 200: ok('Daily record', dataOf({ $ref: '#/components/schemas/CattleDailyRecord' })), ...errs(401, 403, 404) },
+      responses: {
+        200: ok('Daily record', dataOf({ $ref: '#/components/schemas/CattleDailyRecord' })),
+        ...errs(401, 403, 404),
+      },
     },
     patch: {
       tags: T,
@@ -396,7 +438,14 @@ const paths: Obj = {
       tags: T,
       summary: 'List treatments & vaccinations — farm.health_event.read',
       security: bearer,
-      parameters: [...pageParams, { name: 'kind', in: 'query', schema: { type: 'string', enum: ['TREATMENT', 'VACCINATION'] } }],
+      parameters: [
+        ...pageParams,
+        {
+          name: 'kind',
+          in: 'query',
+          schema: { type: 'string', enum: ['TREATMENT', 'VACCINATION'] },
+        },
+      ],
       responses: {
         200: ok('Health events', listOf('#/components/schemas/CattleHealthEvent')),
         ...errs(400, 401, 403, 404),
@@ -418,8 +467,18 @@ const paths: Obj = {
       tags: T,
       summary: 'List individual cases — farm.case.read',
       security: bearer,
-      parameters: [...pageParams, { name: 'status', in: 'query', schema: { type: 'string', enum: ['UNDER_TREATMENT', 'RECOVERED', 'DECEASED'] } }],
-      responses: { 200: ok('Cases', listOf('#/components/schemas/CattleCase')), ...errs(400, 401, 403, 404) },
+      parameters: [
+        ...pageParams,
+        {
+          name: 'status',
+          in: 'query',
+          schema: { type: 'string', enum: ['UNDER_TREATMENT', 'RECOVERED', 'DECEASED'] },
+        },
+      ],
+      responses: {
+        200: ok('Cases', listOf('#/components/schemas/CattleCase')),
+        ...errs(400, 401, 403, 404),
+      },
     },
     post: {
       tags: T,
@@ -437,7 +496,10 @@ const paths: Obj = {
       tags: T,
       summary: 'Case stat chips — farm.case.read',
       security: bearer,
-      responses: { 200: ok('Summary', dataOf({ $ref: '#/components/schemas/CattleCaseSummary' })), ...errs(400, 401, 403, 404) },
+      responses: {
+        200: ok('Summary', dataOf({ $ref: '#/components/schemas/CattleCaseSummary' })),
+        ...errs(400, 401, 403, 404),
+      },
     },
   },
 };

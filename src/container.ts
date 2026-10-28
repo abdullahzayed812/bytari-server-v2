@@ -183,6 +183,8 @@ import {
   SyndicateSubmissionService,
   SyndicateRegistrationRepository,
   SyndicateMemberService,
+  SyndicateServiceItemRepository,
+  SyndicateServiceItems,
 } from './modules/syndicates/index.js';
 import { UserNameDirectory } from './modules/users/user-name-directory.js';
 import { ChatRoomRepository, ChatRoomService } from './modules/chat-rooms/index.js';
@@ -453,6 +455,7 @@ export interface Container {
   syndicateSubmissionService: SyndicateSubmissionService;
   syndicateRegistrationRepository: SyndicateRegistrationRepository;
   syndicateMemberService: SyndicateMemberService;
+  syndicateServiceItems: SyndicateServiceItems;
   userNameDirectory: UserNameDirectory;
   chatRoomRepository: ChatRoomRepository;
   chatRoomService: ChatRoomService;
@@ -1248,6 +1251,13 @@ export function createContainer(deps: ContainerDeps): Container {
     eventBus,
     logger,
   );
+  const syndicateServiceItems = new SyndicateServiceItems(
+    db,
+    new SyndicateServiceItemRepository(db),
+    organizationRepository,
+    auditService,
+    logger,
+  );
 
   // --- Global Chat rooms — public discussion rooms (an `organizations` row
   // of type CHAT_ROOM, reusing membership/supervisor RBAC + the chat module's
@@ -1861,6 +1871,7 @@ export function createContainer(deps: ContainerDeps): Container {
     syndicateSubmissionService,
     syndicateRegistrationRepository,
     syndicateMemberService,
+    syndicateServiceItems,
     userNameDirectory: new UserNameDirectory(db),
     chatRoomRepository,
     chatRoomService,

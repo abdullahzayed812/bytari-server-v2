@@ -164,6 +164,8 @@ describe.each<Kind>(['poultry', 'sheep', 'cattle'])(
         vaccinationsDeleted: 1,
         casesDeleted: 1,
         dailyRecordTreatmentsCleared: 1,
+        // Appointments are covered by batch-sale-appointments-purge.test.ts.
+        appointmentsDeleted: 0,
       });
 
       // Permanent: reopening brings nothing back.

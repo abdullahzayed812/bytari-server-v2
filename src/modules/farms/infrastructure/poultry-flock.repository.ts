@@ -24,6 +24,7 @@ export interface CreatePoultryFlockData {
   initialBirdCount: number;
   averageWeightGrams?: number | null;
   targetPricePerKg?: number | null;
+  purchasePricePerKg?: number | null;
   expectedSaleDate?: string | null;
 }
 
@@ -37,6 +38,7 @@ export interface UpdatePoultryFlockData {
   initialBirdCount?: number | null;
   averageWeightGrams?: number | null;
   targetPricePerKg?: number | null;
+  purchasePricePerKg?: number | null;
   expectedSaleDate?: string | null;
 }
 
@@ -98,6 +100,7 @@ export class PoultryFlockRepository {
         initial_bird_count: data.initialBirdCount,
         average_weight_grams: data.averageWeightGrams ?? null,
         target_price_per_kg: data.targetPricePerKg ?? null,
+        purchase_price_per_kg: data.purchasePricePerKg ?? null,
         expected_sale_date: data.expectedSaleDate ?? null,
       })
       .returning('*')) as PoultryFlockRow[];
@@ -121,6 +124,8 @@ export class PoultryFlockRepository {
       dbPatch.average_weight_grams = patch.averageWeightGrams;
     }
     if (patch.targetPricePerKg !== undefined) dbPatch.target_price_per_kg = patch.targetPricePerKg;
+    if (patch.purchasePricePerKg !== undefined)
+      dbPatch.purchase_price_per_kg = patch.purchasePricePerKg;
     if (patch.expectedSaleDate !== undefined) dbPatch.expected_sale_date = patch.expectedSaleDate;
     if (patch.status !== undefined) {
       dbPatch.status = patch.status;

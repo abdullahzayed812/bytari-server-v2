@@ -22,6 +22,7 @@ export interface CattleBatch {
   averageWeightKg: string | null;
   /** Optional planned sale price, used for the profit estimate. `numeric` → string. */
   targetPricePerKg: string | null;
+  purchasePricePerKg: string | null;
   expectedSaleDate: string | null;
   createdByUserId: string | null;
   closedAt: string | null;
@@ -45,6 +46,7 @@ export interface CreateCattleBatchInput {
   initialHeadCount?: number | null;
   averageWeightKg?: number | null;
   targetPricePerKg?: number | null;
+  purchasePricePerKg?: number | null;
   expectedSaleDate?: string | null;
 }
 
@@ -61,6 +63,7 @@ export interface UpdateCattleBatchInput {
   initialHeadCount?: number | null;
   averageWeightKg?: number | null;
   targetPricePerKg?: number | null;
+  purchasePricePerKg?: number | null;
   expectedSaleDate?: string | null;
 }
 
@@ -89,6 +92,7 @@ export interface CattleBatchRow {
   initial_head_count: number | string | null;
   average_weight_kg: number | string | null;
   target_price_per_kg: number | string | null;
+  purchase_price_per_kg: number | string | null;
   expected_sale_date: string | Date | null;
   created_by_user_id: string | null;
   closed_at: Date | null;
@@ -123,6 +127,8 @@ export function rowToCattleBatch(row: CattleBatchRow): CattleBatch {
     initialHeadCount: intOrNull(row.initial_head_count),
     averageWeightKg: row.average_weight_kg === null ? null : String(row.average_weight_kg),
     targetPricePerKg: row.target_price_per_kg === null ? null : String(row.target_price_per_kg),
+    purchasePricePerKg:
+      row.purchase_price_per_kg === null ? null : String(row.purchase_price_per_kg),
     expectedSaleDate: dateOnly(row.expected_sale_date),
     createdByUserId: row.created_by_user_id,
     closedAt: row.closed_at ? row.closed_at.toISOString() : null,

@@ -124,15 +124,34 @@ export type WeeklySummaryQuery = z.infer<typeof weeklySummaryQuerySchema>;
 
 // --- expenses ------------------------------------------------
 
+/**
+ * Optional link to ONE batch of the farm (poultry flock / sheep batch / cattle
+ * batch); selling that batch deletes the row. The service checks the batch is
+ * an ACTIVE batch of this farm.
+ */
+const batchLink = {
+  poultryFlockId: uuid.nullable().optional(),
+  sheepBatchId: uuid.nullable().optional(),
+  cattleBatchId: uuid.nullable().optional(),
+};
+const singleBatch = (v: {
+  poultryFlockId?: unknown;
+  sheepBatchId?: unknown;
+  cattleBatchId?: unknown;
+}): boolean => [v.poultryFlockId, v.sheepBatchId, v.cattleBatchId].filter(Boolean).length <= 1;
+const singleBatchMessage = { message: 'Link at most one batch', path: ['poultryFlockId'] };
+
 export const expenseIdParamSchema = organizationParamSchema.extend({ expenseId: uuid });
 
-export const createExpenseBodySchema = z.object({
-  category: z.enum(FARM_EXPENSE_CATEGORIES),
-  amount: money,
-  description: longText.nullable().optional(),
-  spentOn: pastOrToday,
-  poultryFlockId: uuid.nullable().optional(),
-});
+export const createExpenseBodySchema = z
+  .object({
+    category: z.enum(FARM_EXPENSE_CATEGORIES),
+    amount: money,
+    description: longText.nullable().optional(),
+    spentOn: pastOrToday,
+    ...batchLink,
+  })
+  .refine(singleBatch, singleBatchMessage);
 export type CreateExpenseBody = z.infer<typeof createExpenseBodySchema>;
 
 export const updateExpenseBodySchema = z
@@ -141,14 +160,17 @@ export const updateExpenseBodySchema = z
     amount: money.optional(),
     description: longText.nullable().optional(),
     spentOn: pastOrToday.optional(),
-    poultryFlockId: uuid.nullable().optional(),
+    ...batchLink,
   })
-  .refine((v) => Object.keys(v).length > 0, { message: 'At least one field is required' });
+  .refine((v) => Object.keys(v).length > 0, { message: 'At least one field is required' })
+  .refine(singleBatch, singleBatchMessage);
 export type UpdateExpenseBody = z.infer<typeof updateExpenseBodySchema>;
 
 export const listExpensesQuerySchema = paginationQuerySchema.extend({
   category: z.enum(FARM_EXPENSE_CATEGORIES).optional(),
   poultryFlockId: uuid.optional(),
+  sheepBatchId: uuid.optional(),
+  cattleBatchId: uuid.optional(),
   from: isoDate.optional(),
   to: isoDate.optional(),
 });
@@ -198,14 +220,16 @@ export type ListHealthEventsQuery = z.infer<typeof listHealthEventsQuerySchema>;
 
 export const appointmentIdParamSchema = organizationParamSchema.extend({ appointmentId: uuid });
 
-export const createAppointmentBodySchema = z.object({
-  title: shortText,
-  description: longText.nullable().optional(),
-  category: z.enum(FARM_APPOINTMENT_CATEGORIES).optional(),
-  scheduledFor: isoDate,
-  poultryFlockId: uuid.nullable().optional(),
-  assignedVeterinarianUserId: uuid.nullable().optional(),
-});
+export const createAppointmentBodySchema = z
+  .object({
+    title: shortText,
+    description: longText.nullable().optional(),
+    category: z.enum(FARM_APPOINTMENT_CATEGORIES).optional(),
+    scheduledFor: isoDate,
+    ...batchLink,
+    assignedVeterinarianUserId: uuid.nullable().optional(),
+  })
+  .refine(singleBatch, singleBatchMessage);
 export type CreateAppointmentBody = z.infer<typeof createAppointmentBodySchema>;
 
 export const updateAppointmentBodySchema = z
@@ -215,10 +239,11 @@ export const updateAppointmentBodySchema = z
     category: z.enum(FARM_APPOINTMENT_CATEGORIES).optional(),
     scheduledFor: isoDate.optional(),
     status: z.enum(FARM_APPOINTMENT_STATUSES).optional(),
-    poultryFlockId: uuid.nullable().optional(),
+    ...batchLink,
     assignedVeterinarianUserId: uuid.nullable().optional(),
   })
-  .refine((v) => Object.keys(v).length > 0, { message: 'At least one field is required' });
+  .refine((v) => Object.keys(v).length > 0, { message: 'At least one field is required' })
+  .refine(singleBatch, singleBatchMessage);
 export type UpdateAppointmentBody = z.infer<typeof updateAppointmentBodySchema>;
 
 export const listAppointmentsQuerySchema = paginationQuerySchema.extend({

@@ -12,6 +12,7 @@ import type {
   ListAppointmentsFilter,
   UpdateAppointmentInput,
 } from '../domain/poultry-ops.types.js';
+import { assertBatchLinkable } from '../infrastructure/farm-batch-link.js';
 import type { FarmAppointmentRepository } from '../infrastructure/farm-appointment.repository.js';
 
 export interface FarmActor {
@@ -97,6 +98,7 @@ export class FarmAppointmentService {
     actor: FarmActor,
   ): Promise<FarmAppointment> {
     await this.assertAssignableVeterinarian(organizationId, input.assignedVeterinarianUserId);
+    await assertBatchLinkable(this.db, organizationId, input);
     const appointment = await this.db.transaction(async (tx) => {
       const created = await this.appointments.create(
         { ...input, organizationId, createdByUserId: actor.actorUserId },
@@ -133,6 +135,7 @@ export class FarmAppointmentService {
     const existing = await this.appointments.findByIdForOrganization(appointmentId, organizationId);
     if (!existing) throw new NotFoundError('Appointment not found');
     await this.assertAssignableVeterinarian(organizationId, patch.assignedVeterinarianUserId);
+    await assertBatchLinkable(this.db, organizationId, patch);
     const updated = await this.db.transaction(async (tx) => {
       const row = await this.appointments.update(appointmentId, patch, tx);
       await this.audit.record(

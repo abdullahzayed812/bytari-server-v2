@@ -3,6 +3,12 @@ import {
   type DailyRecordExtras,
   type DailyRecordRowExtras,
 } from './daily-record.js';
+import {
+  batchLinkFromRow,
+  type FarmBatchLinkFields,
+  type FarmBatchLinkInput,
+  type FarmBatchLinkRow,
+} from './farm-batch-link.js';
 import type {
   FarmAppointmentCategory,
   FarmAppointmentStatus,
@@ -241,6 +247,7 @@ export interface BatchSummary {
   ageMonths: number;
   averageWeightGrams: string | null;
   targetPricePerKg: string | null;
+  purchasePricePerKg: string | null;
   expectedSaleDate: string | null;
   totalExpenses: number;
   /**
@@ -274,28 +281,12 @@ export interface WeeklySummary {
 // =====================================================================
 
 /**
- * Where an expense line comes from:
- * - `MANUAL` — a `farm_expenses` row added in "المصاريف" (editable there);
- * - `DAILY_RECORD` — the `expense_amount` of a poultry / sheep / cattle daily
- *   record, surfaced read-only (it is edited through its daily record). It is
- *   read straight from the daily record, never copied, so it can't be counted
- *   twice.
+ * A manual "المصاريف" line (`farm_expenses`). Daily-record expenses are NOT
+ * expense lines — their amounts only feed the summary totals.
  */
-export type FarmExpenseSource = 'MANUAL' | 'DAILY_RECORD';
-export type FarmBatchKind = 'POULTRY' | 'SHEEP' | 'CATTLE';
-
-export interface FarmExpenseDailyRecordRef {
-  recordId: string;
-  batchKind: FarmBatchKind;
-  batchId: string;
-  batchName: string;
-  batchNumber: number | null;
-}
-
-export interface FarmExpense {
+export interface FarmExpense extends FarmBatchLinkFields {
   id: string;
   organizationId: string;
-  poultryFlockId: string | null;
   category: FarmExpenseCategory;
   amount: string;
   description: string | null;
@@ -303,15 +294,11 @@ export interface FarmExpense {
   createdByUserId: string | null;
   createdAt: string;
   updatedAt: string;
-  source: FarmExpenseSource;
-  /** Set only for `source = DAILY_RECORD`. */
-  dailyRecord: FarmExpenseDailyRecordRef | null;
 }
 
-export interface FarmExpenseRow {
+export interface FarmExpenseRow extends FarmBatchLinkRow {
   id: string;
   organization_id: string;
-  poultry_flock_id: string | null;
   category: string;
   amount: string | number;
   description: string | null;
@@ -319,20 +306,13 @@ export interface FarmExpenseRow {
   created_by_user_id: string | null;
   created_at: Date;
   updated_at: Date;
-  /** Present on the merged (manual + daily-record) list query only. */
-  source?: string;
-  batch_kind?: string | null;
-  batch_id?: string | null;
-  batch_name?: string | null;
-  batch_number?: number | string | null;
 }
 
 export function rowToFarmExpense(r: FarmExpenseRow): FarmExpense {
-  const fromDailyRecord = r.source === 'DAILY_RECORD';
   return {
     id: r.id,
     organizationId: r.organization_id,
-    poultryFlockId: r.poultry_flock_id,
+    ...batchLinkFromRow(r),
     category: r.category as FarmExpenseCategory,
     amount: String(r.amount),
     description: r.description,
@@ -340,26 +320,14 @@ export function rowToFarmExpense(r: FarmExpenseRow): FarmExpense {
     createdByUserId: r.created_by_user_id,
     createdAt: iso(r.created_at),
     updatedAt: iso(r.updated_at),
-    source: fromDailyRecord ? 'DAILY_RECORD' : 'MANUAL',
-    dailyRecord:
-      fromDailyRecord && r.batch_kind && r.batch_id
-        ? {
-            recordId: r.id,
-            batchKind: r.batch_kind as FarmBatchKind,
-            batchId: r.batch_id,
-            batchName: r.batch_name ?? '',
-            batchNumber: r.batch_number == null ? null : Number(r.batch_number),
-          }
-        : null,
   };
 }
 
-export interface CreateFarmExpenseInput {
+export interface CreateFarmExpenseInput extends FarmBatchLinkInput {
   category: FarmExpenseCategory;
   amount: number;
   description?: string | null;
   spentOn: string;
-  poultryFlockId?: string | null;
 }
 
 export type UpdateFarmExpenseInput = Partial<CreateFarmExpenseInput>;
@@ -369,15 +337,27 @@ export interface ListFarmExpensesFilter {
   pageSize: number;
   category?: FarmExpenseCategory;
   poultryFlockId?: string;
+  sheepBatchId?: string;
+  cattleBatchId?: string;
   from?: string;
   to?: string;
 }
 
-/** The three cards at the top of the "المصاريف" screen. */
+/**
+ * The cards at the top of the "المصاريف" screen — the current operation only
+ * (farm-wide expenses + ACTIVE batches'). Every figure includes the amounts
+ * entered in daily batch records, which are not listed as expense cards.
+ */
 export interface FarmExpenseSummary {
   totalThisWeek: number;
   totalThisMonth: number;
   dailyAverageThisMonth: number;
+  /** All daily-record expenses of the ACTIVE batches (any date). */
+  dailyRecordsTotal: number;
+  /** All manual expenses of the current operation (any date). */
+  manualTotal: number;
+  /** `manualTotal + dailyRecordsTotal`. */
+  overallTotal: number;
 }
 
 // =====================================================================
@@ -469,10 +449,9 @@ export interface ListHealthEventsFilter {
 // Farm appointments
 // =====================================================================
 
-export interface FarmAppointment {
+export interface FarmAppointment extends FarmBatchLinkFields {
   id: string;
   organizationId: string;
-  poultryFlockId: string | null;
   title: string;
   description: string | null;
   category: FarmAppointmentCategory;
@@ -485,10 +464,9 @@ export interface FarmAppointment {
   updatedAt: string;
 }
 
-export interface FarmAppointmentRow {
+export interface FarmAppointmentRow extends FarmBatchLinkRow {
   id: string;
   organization_id: string;
-  poultry_flock_id: string | null;
   title: string;
   description: string | null;
   category: string;
@@ -504,7 +482,7 @@ export function rowToAppointment(r: FarmAppointmentRow): FarmAppointment {
   return {
     id: r.id,
     organizationId: r.organization_id,
-    poultryFlockId: r.poultry_flock_id,
+    ...batchLinkFromRow(r),
     title: r.title,
     description: r.description,
     category: r.category as FarmAppointmentCategory,
@@ -517,12 +495,11 @@ export function rowToAppointment(r: FarmAppointmentRow): FarmAppointment {
   };
 }
 
-export interface CreateAppointmentInput {
+export interface CreateAppointmentInput extends FarmBatchLinkInput {
   title: string;
   description?: string | null;
   category?: FarmAppointmentCategory;
   scheduledFor: string;
-  poultryFlockId?: string | null;
   assignedVeterinarianUserId?: string | null;
 }
 

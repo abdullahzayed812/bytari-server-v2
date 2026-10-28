@@ -57,6 +57,31 @@ const tags = [
 ];
 
 const schemas: Obj = {
+  SyndicateService: {
+    type: 'object',
+    description:
+      'One of the six fixed services of a syndicate; null title/description = app default text.',
+    properties: {
+      id: uuid,
+      organizationId: uuid,
+      serviceKey: {
+        type: 'string',
+        enum: [
+          'ID_CARD',
+          'INQUIRY',
+          'ANNOUNCEMENTS',
+          'REGISTER_DOCTORS',
+          'LEGAL_SUPPORT',
+          'OFFICE_LICENSES',
+        ],
+      },
+      title: { type: 'string', nullable: true, maxLength: 120 },
+      description: { type: 'string', nullable: true, maxLength: 4000 },
+      isEnabled: { type: 'boolean' },
+      sortOrder: { type: 'integer' },
+      updatedAt: { type: 'string', format: 'date-time' },
+    },
+  },
   PublicSyndicate: {
     type: 'object',
     properties: {
@@ -234,6 +259,37 @@ const paths: Obj = {
       security: bearer,
       responses: {
         200: ok('Syndicate', dataOf({ $ref: '#/components/schemas/PublicSyndicate' })),
+        ...errs(400, 401, 403, 404, 422),
+      },
+    },
+  },
+  '/syndicates/{organizationId}/services': {
+    parameters: [{ name: 'organizationId', in: 'path', required: true, schema: uuid }],
+    get: {
+      tags: ['Veterinary Syndicates'],
+      summary: 'الخدمات — the syndicate’s services (any authenticated user)',
+      security: bearer,
+      responses: {
+        200: ok(
+          'Services',
+          dataOf({ type: 'array', items: { $ref: '#/components/schemas/SyndicateService' } }),
+        ),
+        ...errs(401, 404),
+      },
+    },
+  },
+  '/syndicates/{organizationId}/services/{serviceId}': {
+    parameters: [
+      { name: 'organizationId', in: 'path', required: true, schema: uuid },
+      { name: 'serviceId', in: 'path', required: true, schema: uuid },
+    ],
+    patch: {
+      tags: ['Veterinary Syndicates'],
+      summary:
+        'Edit a service in place (title / description / isEnabled) — syndicate.profile.manage',
+      security: bearer,
+      responses: {
+        200: ok('Service', dataOf({ $ref: '#/components/schemas/SyndicateService' })),
         ...errs(400, 401, 403, 404, 422),
       },
     },

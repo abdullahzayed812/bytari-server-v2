@@ -27,6 +27,7 @@ export interface PoultryFlock {
   averageWeightGrams: string | null;
   /** Optional planned sale price, used for the profit estimate. `numeric` → string. */
   targetPricePerKg: string | null;
+  purchasePricePerKg: string | null;
   expectedSaleDate: string | null;
   createdByUserId: string | null;
   closedAt: string | null;
@@ -49,6 +50,7 @@ export interface CreatePoultryFlockInput {
   initialBirdCount?: number | null;
   averageWeightGrams?: number | null;
   targetPricePerKg?: number | null;
+  purchasePricePerKg?: number | null;
   expectedSaleDate?: string | null;
 }
 
@@ -62,6 +64,7 @@ export interface UpdatePoultryFlockInput {
   initialBirdCount?: number | null;
   averageWeightGrams?: number | null;
   targetPricePerKg?: number | null;
+  purchasePricePerKg?: number | null;
   expectedSaleDate?: string | null;
 }
 
@@ -88,6 +91,7 @@ export interface PoultryFlockRow {
   initial_bird_count: number | string | null;
   average_weight_grams: number | string | null;
   target_price_per_kg: number | string | null;
+  purchase_price_per_kg: number | string | null;
   expected_sale_date: string | Date | null;
   created_by_user_id: string | null;
   closed_at: Date | null;
@@ -140,6 +144,8 @@ export function rowToPoultryFlock(row: PoultryFlockRow): PoultryFlock {
     currentBirdCount: remainingBirdCount(initialBirdCount, birdCount, totalMortality),
     averageWeightGrams: row.average_weight_grams === null ? null : String(row.average_weight_grams),
     targetPricePerKg: row.target_price_per_kg === null ? null : String(row.target_price_per_kg),
+    purchasePricePerKg:
+      row.purchase_price_per_kg === null ? null : String(row.purchase_price_per_kg),
     expectedSaleDate: dateOnly(row.expected_sale_date),
     createdByUserId: row.created_by_user_id,
     closedAt: row.closed_at ? row.closed_at.toISOString() : null,

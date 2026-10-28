@@ -8,8 +8,8 @@ const SOLD_BATCH_EXPENSE_SOURCES = {
     healthEventTable: 'poultry_health_events',
     caseTable: 'poultry_cases',
     batchColumn: 'poultry_flock_id',
-    /** Only poultry flocks can own manual `farm_expenses` rows. */
-    manualExpenses: true,
+    /** Column of `farm_expenses` / `farm_appointments` that links a row to this batch kind. */
+    linkColumn: 'poultry_flock_id',
   },
   SHEEP: {
     batchTable: 'sheep_batches',
@@ -17,7 +17,7 @@ const SOLD_BATCH_EXPENSE_SOURCES = {
     healthEventTable: 'sheep_health_events',
     caseTable: 'sheep_cases',
     batchColumn: 'sheep_batch_id',
-    manualExpenses: false,
+    linkColumn: 'sheep_batch_id',
   },
   CATTLE: {
     batchTable: 'cattle_batches',
@@ -25,7 +25,7 @@ const SOLD_BATCH_EXPENSE_SOURCES = {
     healthEventTable: 'cattle_health_events',
     caseTable: 'cattle_cases',
     batchColumn: 'cattle_batch_id',
-    manualExpenses: false,
+    linkColumn: 'cattle_batch_id',
   },
 } as const;
 
@@ -63,7 +63,7 @@ export async function lockBatchStatus(
  * A successful sale (ACTIVE → CLOSED) permanently removes every expense tied
  * to the sold batch, inside the sale's own transaction — if the sale rolls
  * back, so does this. Removed:
- *   - manual `farm_expenses` rows with `poultry_flock_id = batch` (DELETE);
+ *   - manual `farm_expenses` rows linked to the batch (DELETE);
  *   - the `expense_amount` of the batch's daily records. A daily record also
  *     holds mortality / feed / weight history (the remaining-birds figure is
  *     derived from it), so the record stays and only its expense is erased.
@@ -77,18 +77,12 @@ export async function deleteSoldBatchExpenses(
 ): Promise<SoldBatchExpensePurge> {
   const src = SOLD_BATCH_EXPENSE_SOURCES[kind];
 
-  let manualExpensesDeleted = 0;
-  let amountRemoved = 0;
-  if (src.manualExpenses) {
-    const deleted: { amount: string }[] = await trx<{ poultry_flock_id: string; amount: string }>(
-      'farm_expenses',
-    )
-      .where({ poultry_flock_id: batchId })
-      .del()
-      .returning('amount');
-    manualExpensesDeleted = deleted.length;
-    amountRemoved += deleted.reduce((acc, row) => acc + Number(row.amount), 0);
-  }
+  const deleted: { amount: string }[] = await trx('farm_expenses')
+    .where(src.linkColumn, batchId)
+    .del()
+    .returning('amount');
+  const manualExpensesDeleted = deleted.length;
+  let amountRemoved = deleted.reduce((acc, row) => acc + Number(row.amount), 0);
 
   // The caller holds the batch row lock (`lockBatchStatus`), and adding a
   // daily record takes the same lock, so nothing slips in between these two.
@@ -121,11 +115,13 @@ export interface SoldBatchHealthPurge {
   casesDeleted: number;
   /** Daily records whose free-text `treatment` note was erased (the record itself stays). */
   dailyRecordTreatmentsCleared: number;
+  /** `farm_appointments` rows linked to the batch, deleted outright. */
+  appointmentsDeleted: number;
 }
 
 /**
- * The rest of a sale's purge: the sold batch's treatments, vaccinations and
- * sick cases are DELETEd inside the sale's transaction (nothing references
+ * The rest of a sale's purge: the sold batch's treatments, vaccinations,
+ * sick cases and appointments are DELETEd inside the sale's transaction (nothing references
  * those rows, so no orphans are left behind), and the daily records' treatment
  * note is erased the same way their expense is. Rows of other batches are
  * never matched — every statement is keyed on the batch id.
@@ -152,6 +148,9 @@ export async function deleteSoldBatchHealthRecords(
     .where(src.batchColumn, batchId)
     .whereNotNull('treatment')
     .update({ treatment: null, updated_at: new Date() });
+  // Appointments (المواعيد) linked to the batch; farm-wide appointments (no
+  // batch) and other batches' are never matched.
+  const appointmentsDeleted = await trx('farm_appointments').where(src.linkColumn, batchId).del();
 
   return {
     purge: {
@@ -159,6 +158,7 @@ export async function deleteSoldBatchHealthRecords(
       vaccinationsDeleted: events.filter((e) => e.kind === 'VACCINATION').length,
       casesDeleted: cases.length,
       dailyRecordTreatmentsCleared,
+      appointmentsDeleted,
     },
     caseImageKeys: cases.map((c) => c.image_key).filter((k): k is string => Boolean(k)),
   };

@@ -7,10 +7,12 @@ import {
   type ListFarmExpensesFilter,
   type UpdateFarmExpenseInput,
 } from '../domain/poultry-ops.types.js';
+import { BATCH_LINKS, batchLinkPatch, type FarmBatchKind } from '../domain/farm-batch-link.js';
+import { selectBatchLink } from './farm-batch-link.js';
 
 const TABLE = 'farm_expenses';
 
-/** Daily-record tables whose `expense_amount` also belongs in "المصاريف". */
+/** Daily-record tables whose `expense_amount` counts in the "المصاريف" totals. */
 const DAILY_EXPENSE_SOURCES = [
   {
     kind: 'POULTRY',
@@ -44,9 +46,14 @@ export class FarmExpenseRepository {
     organizationId: string,
     trx?: Knex.Transaction,
   ): Promise<FarmExpense | null> {
-    const row = await this.conn(trx)<FarmExpenseRow>(TABLE)
-      .where({ id, organization_id: organizationId })
-      .first();
+    const conn = this.conn(trx);
+    const row = (await selectBatchLink(
+      conn as Knex,
+      conn(`${TABLE} as e`)
+        .where({ 'e.id': id, 'e.organization_id': organizationId })
+        .select('e.*'),
+      'e',
+    ).first()) as FarmExpenseRow | undefined;
     return row ? rowToFarmExpense(row) : null;
   }
 
@@ -58,7 +65,7 @@ export class FarmExpenseRepository {
       .insert({
         organization_id: data.organizationId,
         organization_type: 'FARM',
-        poultry_flock_id: data.poultryFlockId ?? null,
+        ...batchLinkPatch(data),
         category: data.category,
         amount: data.amount,
         description: data.description ?? null,
@@ -67,7 +74,9 @@ export class FarmExpenseRepository {
       })
       .returning('*')) as FarmExpenseRow[];
     if (!row) throw new Error('farm expense insert did not return a row');
-    return rowToFarmExpense(row);
+    const created = await this.findByIdForOrganization(row.id, row.organization_id, trx);
+    if (!created) throw new Error('farm expense insert did not return a row');
+    return created;
   }
 
   async update(
@@ -80,13 +89,15 @@ export class FarmExpenseRepository {
     if (patch.amount !== undefined) dbPatch.amount = patch.amount;
     if (patch.description !== undefined) dbPatch.description = patch.description;
     if (patch.spentOn !== undefined) dbPatch.spent_on = patch.spentOn;
-    if (patch.poultryFlockId !== undefined) dbPatch.poultry_flock_id = patch.poultryFlockId;
-    const [row] = (await trx(TABLE)
+    Object.assign(dbPatch, batchLinkPatch(patch));
+    const [row] = await trx(TABLE)
       .where({ id })
       .update(dbPatch)
-      .returning('*')) as FarmExpenseRow[];
+      .returning(['id', 'organization_id']);
     if (!row) throw new Error('farm expense not found after update');
-    return rowToFarmExpense(row);
+    const updated = await this.findByIdForOrganization(row.id, row.organization_id, trx);
+    if (!updated) throw new Error('farm expense not found after update');
+    return updated;
   }
 
   async deleteById(id: string, trx: Knex.Transaction): Promise<number> {
@@ -94,88 +105,36 @@ export class FarmExpenseRepository {
   }
 
   /**
-   * "المصاريف" list: manual `farm_expenses` rows merged with every daily record
-   * (poultry / sheep / cattle) that carries an `expense_amount`, newest first.
-   * Daily-record lines are read in place — never copied into `farm_expenses` —
-   * so each amount exists exactly once. A category filter shows manual rows
-   * only (daily records have no category); a flock filter keeps that flock's
-   * manual rows + its own daily records.
+   * "المصاريف" list: the farm's MANUAL expense cards only, newest added first
+   * (a just-added expense is always on top, whatever date it was spent on).
+   * Daily-record expenses are not cards — their amounts reach the screen
+   * through the summary totals ({@link sumCurrentInRange} / {@link currentTotals}).
    */
   async listForOrganization(
     organizationId: string,
     filter: ListFarmExpensesFilter,
   ): Promise<{ items: FarmExpense[]; total: number }> {
-    const merged = (): Knex.QueryBuilder => {
-      const manual = this.db<FarmExpenseRow>(`${TABLE} as e`)
-        .where('e.organization_id', organizationId)
-        .select(
-          'e.id',
-          'e.organization_id',
-          'e.poultry_flock_id',
-          'e.category',
-          'e.amount',
-          'e.description',
-          'e.spent_on',
-          'e.created_by_user_id',
-          'e.created_at',
-          'e.updated_at',
-          this.db.raw(`'MANUAL'::text AS source`),
-          this.db.raw('NULL::text AS batch_kind'),
-          this.db.raw('NULL::uuid AS batch_id'),
-          this.db.raw('NULL::text AS batch_name'),
-          this.db.raw('NULL::int AS batch_number'),
-        );
-      if (filter.category) manual.andWhere('e.category', filter.category);
-      if (filter.poultryFlockId) manual.andWhere('e.poultry_flock_id', filter.poultryFlockId);
-      if (filter.from) manual.andWhere('e.spent_on', '>=', filter.from);
-      if (filter.to) manual.andWhere('e.spent_on', '<=', filter.to);
-
-      const daily = filter.category
-        ? []
-        : DAILY_EXPENSE_SOURCES.filter(
-            (src) => !filter.poultryFlockId || src.kind === 'POULTRY',
-          ).map((src) => {
-            const qb = this.db(`${src.recordTable} as d`)
-              .join(`${src.batchTable} as b`, 'b.id', `d.${src.batchColumn}`)
-              .where('d.organization_id', organizationId)
-              .andWhere('d.expense_amount', '>', 0)
-              .select(
-                'd.id',
-                'd.organization_id',
-                this.db.raw(src.kind === 'POULTRY' ? 'd.poultry_flock_id' : 'NULL::uuid'),
-                this.db.raw(`'OTHER'::text`),
-                'd.expense_amount',
-                this.db.raw('NULL::text'),
-                'd.record_date',
-                'd.created_by_user_id',
-                'd.created_at',
-                'd.updated_at',
-                this.db.raw(`'DAILY_RECORD'::text`),
-                this.db.raw('?::text', [src.kind]),
-                'b.id',
-                'b.name',
-                'b.batch_number',
-              );
-            if (filter.poultryFlockId) qb.andWhere('d.poultry_flock_id', filter.poultryFlockId);
-            if (filter.from) qb.andWhere('d.record_date', '>=', filter.from);
-            if (filter.to) qb.andWhere('d.record_date', '<=', filter.to);
-            return qb;
-          });
-      return daily.length ? manual.unionAll(daily, true) : manual;
+    const base = (): Knex.QueryBuilder => {
+      const qb = this.db<FarmExpenseRow>(`${TABLE} as e`).where(
+        'e.organization_id',
+        organizationId,
+      );
+      if (filter.category) qb.andWhere('e.category', filter.category);
+      if (filter.poultryFlockId) qb.andWhere('e.poultry_flock_id', filter.poultryFlockId);
+      if (filter.sheepBatchId) qb.andWhere('e.sheep_batch_id', filter.sheepBatchId);
+      if (filter.cattleBatchId) qb.andWhere('e.cattle_batch_id', filter.cattleBatchId);
+      if (filter.from) qb.andWhere('e.spent_on', '>=', filter.from);
+      if (filter.to) qb.andWhere('e.spent_on', '<=', filter.to);
+      return qb;
     };
 
-    const countRow = (await this.db
-      .from(merged().as('x'))
-      .count<{ count: string }>({ count: '*' })
-      .first()) as { count: string } | undefined;
+    const countRow = (await base().count<{ count: string }>({ count: '*' }).first()) as
+      { count: string } | undefined;
     const total = Number(countRow?.count ?? 0);
-    const rows: FarmExpenseRow[] = await this.db
-      .from(merged().as('x'))
-      .select('*')
+    const rows: FarmExpenseRow[] = await selectBatchLink(this.db, base().select('e.*'), 'e')
       .orderBy([
-        { column: 'spent_on', order: 'desc' },
-        { column: 'created_at', order: 'desc' },
-        { column: 'id', order: 'desc' },
+        { column: 'e.created_at', order: 'desc' },
+        { column: 'e.id', order: 'desc' },
       ])
       .limit(filter.pageSize)
       .offset((filter.page - 1) * filter.pageSize);
@@ -192,36 +151,52 @@ export class FarmExpenseRepository {
    * always count.
    */
   async sumCurrentInRange(organizationId: string, from: string, to: string): Promise<number> {
-    const manual = this.db(`${TABLE} as e`)
-      .leftJoin('poultry_flocks as f', 'f.id', 'e.poultry_flock_id')
-      .where('e.organization_id', organizationId)
-      .andWhere('e.spent_on', '>=', from)
-      .andWhere('e.spent_on', '<=', to)
-      .andWhere((q) => {
-        void q.whereNull('e.poultry_flock_id').orWhere('f.status', 'ACTIVE');
-      })
-      .sum<{ total: string | null }>({ total: 'e.amount' })
-      .first();
-    const daily = DAILY_EXPENSE_SOURCES.map((src) =>
-      this.db(`${src.recordTable} as d`)
-        .join(`${src.batchTable} as b`, 'b.id', `d.${src.batchColumn}`)
-        .where('d.organization_id', organizationId)
-        .andWhere('d.record_date', '>=', from)
-        .andWhere('d.record_date', '<=', to)
-        .andWhere('b.status', 'ACTIVE')
-        .sum<{ total: string | null }>({ total: 'd.expense_amount' })
-        .first(),
-    );
-    const rows = (await Promise.all([manual, ...daily])) as (
-      { total: string | null } | undefined
-    )[];
-    return rows.reduce((acc, row) => acc + Number(row?.total ?? 0), 0);
+    const { manual, daily } = await this.currentTotals(organizationId, { from, to });
+    return manual + daily;
   }
 
-  /** Total expenses attributed to one batch (for the batch-summary profit calc). */
-  async sumForFlock(flockId: string): Promise<number> {
+  /**
+   * The current operation's expenses, split by source: manual rows (farm-wide
+   * or linked to an ACTIVE batch) and daily-record amounts of ACTIVE batches,
+   * optionally within `[from, to]`.
+   */
+  async currentTotals(
+    organizationId: string,
+    range: { from?: string; to?: string } = {},
+  ): Promise<{ manual: number; daily: number }> {
+    const manualQ = this.db(`${TABLE} as e`)
+      .leftJoin('poultry_flocks as f', 'f.id', 'e.poultry_flock_id')
+      .leftJoin('sheep_batches as s', 's.id', 'e.sheep_batch_id')
+      .leftJoin('cattle_batches as c', 'c.id', 'e.cattle_batch_id')
+      .where('e.organization_id', organizationId)
+      // Farm-wide rows (no batch) count; batch rows only while the batch is ACTIVE.
+      .whereRaw(`COALESCE(f.status, s.status, c.status, 'ACTIVE') = 'ACTIVE'`);
+    if (range.from) manualQ.andWhere('e.spent_on', '>=', range.from);
+    if (range.to) manualQ.andWhere('e.spent_on', '<=', range.to);
+    const manual = manualQ.sum<{ total: string | null }>({ total: 'e.amount' }).first();
+    const daily = DAILY_EXPENSE_SOURCES.map((src) => {
+      const qb = this.db(`${src.recordTable} as d`)
+        .join(`${src.batchTable} as b`, 'b.id', `d.${src.batchColumn}`)
+        .where('d.organization_id', organizationId)
+        .andWhere('b.status', 'ACTIVE');
+      if (range.from) qb.andWhere('d.record_date', '>=', range.from);
+      if (range.to) qb.andWhere('d.record_date', '<=', range.to);
+      return qb.sum<{ total: string | null }>({ total: 'd.expense_amount' }).first();
+    });
+    const [manualRow, ...dailyRows] = (await Promise.all([manual, ...daily])) as (
+      { total: string | null } | undefined
+    )[];
+    return {
+      manual: Number(manualRow?.total ?? 0),
+      daily: dailyRows.reduce((acc, row) => acc + Number(row?.total ?? 0), 0),
+    };
+  }
+
+  /** Total manual expenses attributed to one batch (for the batch-summary profit calc). */
+  async sumForBatch(kind: FarmBatchKind, batchId: string): Promise<number> {
+    const column = BATCH_LINKS.find((l) => l.kind === kind)!.column;
     const row = (await this.db(TABLE)
-      .where('poultry_flock_id', flockId)
+      .where(column, batchId)
       .sum<{ total: string | null }>({ total: 'amount' })
       .first()) as { total: string | null } | undefined;
     return Number(row?.total ?? 0);

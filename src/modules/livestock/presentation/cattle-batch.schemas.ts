@@ -53,6 +53,7 @@ export const createCattleBatchBodySchema = z.object({
   initialHeadCount: headCountSchema.nullable().optional(),
   averageWeightKg: weightKgSchema.nullable().optional(),
   targetPricePerKg: priceSchema.nullable().optional(),
+  purchasePricePerKg: priceSchema.nullable().optional(),
   expectedSaleDate: futureOrTodayDate.nullable().optional(),
 });
 export type CreateCattleBatchBody = z.infer<typeof createCattleBatchBodySchema>;
@@ -71,6 +72,7 @@ export const updateCattleBatchBodySchema = z
     initialHeadCount: headCountSchema.nullable().optional(),
     averageWeightKg: weightKgSchema.nullable().optional(),
     targetPricePerKg: priceSchema.nullable().optional(),
+    purchasePricePerKg: priceSchema.nullable().optional(),
     expectedSaleDate: futureOrTodayDate.nullable().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: 'At least one field is required' });

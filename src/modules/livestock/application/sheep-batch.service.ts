@@ -75,6 +75,7 @@ export class SheepBatchService {
           initialHeadCount: input.initialHeadCount ?? input.headCount,
           averageWeightKg: input.averageWeightKg ?? null,
           targetPricePerKg: input.targetPricePerKg ?? null,
+          purchasePricePerKg: input.purchasePricePerKg ?? null,
           expectedSaleDate: input.expectedSaleDate ?? null,
         },
         tx,

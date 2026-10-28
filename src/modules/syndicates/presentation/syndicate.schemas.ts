@@ -74,6 +74,28 @@ export const updateSyndicateProfileBodySchema = z
   .refine((v) => Object.keys(v).length > 0, { message: 'At least one field is required' });
 export type UpdateSyndicateProfileBody = z.infer<typeof updateSyndicateProfileBodySchema>;
 
+// --- services ("الخدمات") -------------------------------------------
+
+/** Blank = back to the app's built-in text (stored as NULL). */
+const blankToNull = (v: string | null | undefined): string | null | undefined =>
+  v === '' ? null : v;
+
+export const syndicateServiceParamSchema = organizationIdParamSchema.extend({
+  serviceId: z.string().uuid(),
+});
+
+export const updateSyndicateServiceBodySchema = z
+  .object({
+    title: z.string().trim().max(120).nullable().optional().transform(blankToNull),
+    description: z.string().trim().max(4000).nullable().optional().transform(blankToNull),
+    isEnabled: z.boolean().optional(),
+  })
+  .strict()
+  .refine((v) => Object.values(v).some((x) => x !== undefined), {
+    message: 'At least one field is required',
+  });
+export type UpdateSyndicateServiceBody = z.infer<typeof updateSyndicateServiceBodySchema>;
+
 export const syndicateBrowseQuerySchema = paginationQuerySchema.extend({
   search: z.string().trim().max(160).optional(),
 });

@@ -13,6 +13,7 @@ import type {
   ListFarmExpensesFilter,
   UpdateFarmExpenseInput,
 } from '../domain/poultry-ops.types.js';
+import { assertBatchLinkable } from '../infrastructure/farm-batch-link.js';
 import type { FarmExpenseRepository } from '../infrastructure/farm-expense.repository.js';
 
 export interface FarmActor {
@@ -67,15 +68,20 @@ export class FarmExpenseService {
 
     // Only the current operation counts: a sale deletes the sold batch's
     // expenses, and any CLOSED batch's leftovers are skipped at read time.
-    const [totalThisWeek, totalThisMonth] = await Promise.all([
+    // Daily-record amounts are in every figure (they are not listed as cards).
+    const [totalThisWeek, totalThisMonth, overall] = await Promise.all([
       this.expenses.sumCurrentInRange(organizationId, weekStart, todayStr),
       this.expenses.sumCurrentInRange(organizationId, monthStart, todayStr),
+      this.expenses.currentTotals(organizationId),
     ]);
     const daysElapsed = now.getUTCDate();
     return {
       totalThisWeek: round2(totalThisWeek),
       totalThisMonth: round2(totalThisMonth),
       dailyAverageThisMonth: round2(totalThisMonth / Math.max(1, daysElapsed)),
+      dailyRecordsTotal: round2(overall.daily),
+      manualTotal: round2(overall.manual),
+      overallTotal: round2(overall.manual + overall.daily),
     };
   }
 
@@ -84,6 +90,7 @@ export class FarmExpenseService {
     input: CreateFarmExpenseInput,
     actor: FarmActor,
   ): Promise<FarmExpense> {
+    await assertBatchLinkable(this.db, organizationId, input);
     const expense = await this.db.transaction(async (tx) => {
       const created = await this.expenses.create(
         { ...input, organizationId, createdByUserId: actor.actorUserId },
@@ -114,6 +121,7 @@ export class FarmExpenseService {
   ): Promise<FarmExpense> {
     const existing = await this.expenses.findByIdForOrganization(expenseId, organizationId);
     if (!existing) throw new NotFoundError('Expense not found');
+    await assertBatchLinkable(this.db, organizationId, patch);
     return this.db.transaction(async (tx) => {
       const updated = await this.expenses.update(expenseId, patch, tx);
       await this.audit.record(

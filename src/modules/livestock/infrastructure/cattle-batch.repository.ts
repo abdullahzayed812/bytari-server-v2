@@ -23,6 +23,7 @@ export interface CreateCattleBatchData {
   initialHeadCount: number;
   averageWeightKg?: number | null;
   targetPricePerKg?: number | null;
+  purchasePricePerKg?: number | null;
   expectedSaleDate?: string | null;
 }
 
@@ -39,6 +40,7 @@ export interface UpdateCattleBatchData {
   initialHeadCount?: number | null;
   averageWeightKg?: number | null;
   targetPricePerKg?: number | null;
+  purchasePricePerKg?: number | null;
   expectedSaleDate?: string | null;
 }
 
@@ -93,6 +95,7 @@ export class CattleBatchRepository {
         initial_head_count: data.initialHeadCount,
         average_weight_kg: data.averageWeightKg ?? null,
         target_price_per_kg: data.targetPricePerKg ?? null,
+        purchase_price_per_kg: data.purchasePricePerKg ?? null,
         expected_sale_date: data.expectedSaleDate ?? null,
       })
       .returning('*')) as CattleBatchRow[];
@@ -100,7 +103,11 @@ export class CattleBatchRepository {
     return rowToCattleBatch(row);
   }
 
-  async update(id: string, patch: UpdateCattleBatchData, trx: Knex.Transaction): Promise<CattleBatch> {
+  async update(
+    id: string,
+    patch: UpdateCattleBatchData,
+    trx: Knex.Transaction,
+  ): Promise<CattleBatch> {
     const dbPatch: Record<string, unknown> = { updated_at: new Date() };
     if (patch.name !== undefined) dbPatch.name = patch.name;
     if (patch.breed !== undefined) dbPatch.breed = patch.breed;
@@ -113,6 +120,8 @@ export class CattleBatchRepository {
     if (patch.initialHeadCount !== undefined) dbPatch.initial_head_count = patch.initialHeadCount;
     if (patch.averageWeightKg !== undefined) dbPatch.average_weight_kg = patch.averageWeightKg;
     if (patch.targetPricePerKg !== undefined) dbPatch.target_price_per_kg = patch.targetPricePerKg;
+    if (patch.purchasePricePerKg !== undefined)
+      dbPatch.purchase_price_per_kg = patch.purchasePricePerKg;
     if (patch.expectedSaleDate !== undefined) dbPatch.expected_sale_date = patch.expectedSaleDate;
     if (patch.status !== undefined) {
       dbPatch.status = patch.status;

@@ -61,6 +61,7 @@ export const createPoultryFlockBodySchema = z.object({
   initialBirdCount: birdCountSchema.nullable().optional(),
   averageWeightGrams: weightGramsSchema.nullable().optional(),
   targetPricePerKg: priceSchema.nullable().optional(),
+  purchasePricePerKg: priceSchema.nullable().optional(),
   expectedSaleDate: futureOrTodayDate.nullable().optional(),
 });
 export type CreatePoultryFlockBody = z.infer<typeof createPoultryFlockBodySchema>;
@@ -76,6 +77,7 @@ export const updatePoultryFlockBodySchema = z
     initialBirdCount: birdCountSchema.nullable().optional(),
     averageWeightGrams: weightGramsSchema.nullable().optional(),
     targetPricePerKg: priceSchema.nullable().optional(),
+    purchasePricePerKg: priceSchema.nullable().optional(),
     expectedSaleDate: futureOrTodayDate.nullable().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: 'At least one field is required' });

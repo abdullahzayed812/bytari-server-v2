@@ -83,8 +83,16 @@ export class VetJobMedia {
     };
   }
 
-  /** Verify a key belongs to this prefix and points at a real uploaded object. */
-  async validateKey(key: string | null | undefined): Promise<string | null> {
+  /**
+   * Verify a key belongs to this prefix and points at a real uploaded object.
+   * `kind: 'image'` additionally requires the stored object to BE an image
+   * (the content-sniffed type, not just the declared one) — a PDF uploaded
+   * through the shared presign can't be attached as a photo.
+   */
+  async validateKey(
+    key: string | null | undefined,
+    kind: 'any' | 'image' = 'any',
+  ): Promise<string | null> {
     if (!key) return null;
     if (!key.startsWith(`${PREFIX}/`)) {
       throw new BadRequestError('an attachment storage key is not a vet-jobs upload', {
@@ -100,6 +108,14 @@ export class VetJobMedia {
     if (head.size > VET_JOB_MAX_ATTACHMENT_BYTES) {
       throw new BadRequestError('an uploaded attachment exceeds the size limit', {
         code: ErrorCode.FILE_TOO_LARGE,
+      });
+    }
+    if (
+      kind === 'image' &&
+      !(VET_JOB_ALLOWED_IMAGE_MIME as readonly string[]).includes(head.contentType ?? '')
+    ) {
+      throw new BadRequestError('the attached image must be a JPEG, PNG or WebP image', {
+        code: ErrorCode.UNSUPPORTED_FILE_TYPE,
       });
     }
     return key;

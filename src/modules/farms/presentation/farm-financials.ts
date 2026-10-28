@@ -5,8 +5,8 @@ import { requireAuth } from '../../auth/authenticate.middleware.js';
 import type { AuthorizationService } from '../../authorization/authorization.service.js';
 
 /**
- * Farm financial visibility (estimated profit + the expected sale price that
- * drives it). Held by the farm OWNER (org-owner override) and ADMIN; a
+ * Farm financial visibility (estimated profit, the expected sale price that
+ * drives it, and the batch's purchase price per kilogram). Held by the farm OWNER (org-owner override) and ADMIN; a
  * veterinarian / employee sees operational data only — unless the owner
  * explicitly grants `farm.financials.read` to a supervisor membership.
  * Enforced HERE, in the response DTO, not just by hiding UI.
@@ -24,6 +24,7 @@ export function canSeeFarmFinancials(
 interface FinancialFields {
   estimatedProfit?: number | null;
   targetPricePerKg?: string | number | null;
+  purchasePricePerKg?: string | number | null;
 }
 
 /** Null out financial fields for a caller without `farm.financials.read`; flag the result either way. */
@@ -35,16 +36,16 @@ export function applyFinancialVisibility<T extends FinancialFields>(
   const redacted: T = { ...dto };
   if ('estimatedProfit' in redacted) redacted.estimatedProfit = null;
   if ('targetPricePerKg' in redacted) redacted.targetPricePerKg = null;
+  if ('purchasePricePerKg' in redacted) redacted.purchasePricePerKg = null;
   return { ...redacted, financialsVisible: false };
 }
 
-/** A caller without the permission may not SET the sale price either — the field is dropped. */
-export function stripFinancialInput<T extends { targetPricePerKg?: unknown }>(
-  body: T,
-  visible: boolean,
-): T {
-  if (visible || body.targetPricePerKg === undefined) return body;
-  const { targetPricePerKg: _dropped, ...rest } = body;
+/** A caller without the permission may not SET the sale / purchase price either — the fields are dropped. */
+export function stripFinancialInput<
+  T extends { targetPricePerKg?: unknown; purchasePricePerKg?: unknown },
+>(body: T, visible: boolean): T {
+  if (visible) return body;
+  const { targetPricePerKg: _target, purchasePricePerKg: _purchase, ...rest } = body;
   return rest as T;
 }
 

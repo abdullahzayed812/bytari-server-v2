@@ -46,6 +46,23 @@ function listOf(ref: string): Obj {
 
 const uuid = { type: 'string', format: 'uuid' };
 const dateStr = { type: 'string', format: 'date' };
+
+/** Optional link of an expense / appointment to ONE batch; selling that batch deletes the row. */
+const batchLinkProps = {
+  poultryFlockId: { ...uuid, nullable: true },
+  sheepBatchId: { ...uuid, nullable: true },
+  cattleBatchId: { ...uuid, nullable: true },
+  batch: {
+    type: 'object',
+    nullable: true,
+    properties: {
+      kind: { type: 'string', enum: ['POULTRY', 'SHEEP', 'CATTLE'] },
+      id: uuid,
+      name: { type: 'string' },
+      batchNumber: { type: 'integer', nullable: true },
+    },
+  },
+};
 const orgIdParam = { name: 'organizationId', in: 'path', required: true, schema: uuid };
 const flockIdParam = { name: 'flockId', in: 'path', required: true, schema: uuid };
 const pageParams = [
@@ -160,6 +177,7 @@ const schemas: Obj = {
       ageMonths: { type: 'integer' },
       averageWeightGrams: { type: 'string', nullable: true },
       targetPricePerKg: { type: 'string', nullable: true },
+      purchasePricePerKg: { type: 'string', nullable: true },
       expectedSaleDate: { ...dateStr, nullable: true },
       totalExpenses: { type: 'number' },
       estimatedProfit: {
@@ -189,10 +207,12 @@ const schemas: Obj = {
   },
   FarmExpense: {
     type: 'object',
+    description:
+      'A manual expense card. Daily-record expense amounts are not listed — they are ' +
+      'included in FarmExpenseSummary.',
     properties: {
       id: uuid,
       organizationId: uuid,
-      poultryFlockId: { ...uuid, nullable: true },
       category: {
         type: 'string',
         enum: ['FEED', 'MEDICINE', 'WATER_TRANSPORT', 'LABOR', 'UTILITIES', 'EQUIPMENT', 'OTHER'],
@@ -203,24 +223,7 @@ const schemas: Obj = {
       createdByUserId: { ...uuid, nullable: true },
       createdAt: { type: 'string', format: 'date-time' },
       updatedAt: { type: 'string', format: 'date-time' },
-      source: {
-        type: 'string',
-        enum: ['MANUAL', 'DAILY_RECORD'],
-        description:
-          'DAILY_RECORD = the expense amount of a poultry/sheep/cattle daily record, listed ' +
-          'read-only (edit it through the daily record). Never stored twice.',
-      },
-      dailyRecord: {
-        type: 'object',
-        nullable: true,
-        properties: {
-          recordId: uuid,
-          batchKind: { type: 'string', enum: ['POULTRY', 'SHEEP', 'CATTLE'] },
-          batchId: uuid,
-          batchName: { type: 'string' },
-          batchNumber: { type: 'integer', nullable: true },
-        },
-      },
+      ...batchLinkProps,
     },
   },
   FarmExpenseSummary: {
@@ -230,6 +233,12 @@ const schemas: Obj = {
       totalThisWeek: { type: 'number' },
       totalThisMonth: { type: 'number' },
       dailyAverageThisMonth: { type: 'number' },
+      dailyRecordsTotal: {
+        type: 'number',
+        description: 'Daily-record expenses of the ACTIVE batches (any date)',
+      },
+      manualTotal: { type: 'number', description: 'Manual expenses of the current operation' },
+      overallTotal: { type: 'number', description: 'manualTotal + dailyRecordsTotal' },
     },
   },
   PoultryHealthEvent: {
@@ -257,7 +266,7 @@ const schemas: Obj = {
     properties: {
       id: uuid,
       organizationId: uuid,
-      poultryFlockId: { ...uuid, nullable: true },
+      ...batchLinkProps,
       title: { type: 'string' },
       description: { type: 'string', nullable: true },
       category: {

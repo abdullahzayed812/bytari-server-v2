@@ -16,15 +16,17 @@ const T = 'vet_job_offers';
 interface JoinedRow extends VetJobOfferRow {
   poster_first_name: string;
   poster_last_name: string;
-  poster_avatar_key: string | null;
   organization_logo_key: string | null;
 }
 
 export interface VetJobOfferWithPoster {
   offer: VetJobOffer;
   postedBy: VetJobUserSummary;
-  /** Offer image source: the linked organization's logo, else the poster's avatar (keys, unresolved). */
-  imageKeys: { organizationLogo: string | null; posterAvatar: string | null };
+  /**
+   * Offer image source: the linked organization's logo only (key, unresolved).
+   * The poster's own profile photo is never used as the offer's image.
+   */
+  imageKeys: { organizationLogo: string | null };
   applicationCount?: number;
   pendingApplicationCount?: number;
 }
@@ -49,7 +51,6 @@ export class VetJobOfferRepository {
           'o.*',
           'u.first_name as poster_first_name',
           'u.last_name as poster_last_name',
-          'u.avatar_key as poster_avatar_key',
           this.conn(trx).raw(
             'coalesce(cd.logo_key, vod.logo_key, vsd.logo_key) as organization_logo_key',
           ),
@@ -67,7 +68,6 @@ export class VetJobOfferRepository {
       },
       imageKeys: {
         organizationLogo: row.organization_logo_key,
-        posterAvatar: row.poster_avatar_key,
       },
     };
   }

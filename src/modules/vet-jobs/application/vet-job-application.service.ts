@@ -85,7 +85,8 @@ export class VetJobApplicationService {
     VetJobPolicy.assertNotSelf(offer.postedByUserId, actor.principal.userId);
 
     const cvStorageKey = await this.media.validateKey(input.cvStorageKey);
-    const photoStorageKey = await this.media.validateKey(input.photoStorageKey);
+    // The applicant's optional image attached to THIS application (not a profile photo).
+    const photoStorageKey = await this.media.validateKey(input.photoStorageKey, 'image');
 
     let id: string;
     try {

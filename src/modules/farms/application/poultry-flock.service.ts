@@ -74,6 +74,7 @@ export class PoultryFlockService {
           initialBirdCount: input.initialBirdCount ?? input.birdCount,
           averageWeightGrams: input.averageWeightGrams ?? null,
           targetPricePerKg: input.targetPricePerKg ?? null,
+          purchasePricePerKg: input.purchasePricePerKg ?? null,
           expectedSaleDate: input.expectedSaleDate ?? null,
         },
         tx,
@@ -138,7 +139,7 @@ export class PoultryFlockService {
     let caseImageKeys: string[] = [];
     await this.db.transaction(async (tx) => {
       // ACTIVE → CLOSED is the sale: decided on the locked row, and its
-      // expenses, treatments, vaccinations and sick cases go in this same
+      // expenses, treatments, vaccinations, sick cases and appointments go in this same
       // transaction (a failed sale keeps them all).
       const statusBefore = await lockBatchStatus(tx, 'POULTRY', flockId);
       await this.flocks.update(flockId, dbPatch, tx);

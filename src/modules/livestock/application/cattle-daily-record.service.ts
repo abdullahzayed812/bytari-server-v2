@@ -217,7 +217,7 @@ export class CattleDailyRecordService {
     const batch = await this.loadBatch(organizationId, batchId);
     const [agg, batchExpenses, latestWeight] = await Promise.all([
       this.records.aggregateForBatch(batchId),
-      this.expenses.sumForFlock(batchId),
+      this.expenses.sumForBatch('CATTLE', batchId),
       this.records.latestWeightForBatch(batchId),
     ]);
 
@@ -252,6 +252,7 @@ export class CattleDailyRecordService {
       ageMonths: Math.floor(ageDays / 30),
       averageWeightKg: averageWeightKg ?? null,
       targetPricePerKg: batch.targetPricePerKg,
+      purchasePricePerKg: batch.purchasePricePerKg,
       expectedSaleDate: batch.expectedSaleDate,
       totalExpenses,
       estimatedProfit,

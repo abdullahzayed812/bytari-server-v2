@@ -12,6 +12,7 @@ import type { SyndicateAnnouncementService } from '../application/syndicate-anno
 import type { SyndicateSubmissionService } from '../application/syndicate-submission.service.js';
 import type { SyndicateService } from '../application/syndicate.service.js';
 import type { SyndicateMemberService } from '../application/syndicate-member.service.js';
+import type { SyndicateServiceItems } from '../application/syndicate-service-items.js';
 import type {
   AnnouncementListQuery,
   AssignSyndicateAdminBody,
@@ -27,6 +28,7 @@ import type {
   SyndicateBrowseQuery,
   UpdateAnnouncementBody,
   UpdateSyndicateProfileBody,
+  UpdateSyndicateServiceBody,
   UploadUrlBody,
 } from './syndicate.schemas.js';
 
@@ -240,5 +242,22 @@ export class SyndicateSubmissionController {
     const org = requireOrganization(req);
     const { id } = validatedParams<{ id: string }>(req);
     sendSuccess(res, await this.submissions.getForActor(id, actor(req), org.id));
+  };
+}
+
+/** "الخدمات" — list (any authenticated user) + edit (`syndicate.profile.manage`, route-enforced). */
+export class SyndicateServiceItemController {
+  constructor(private readonly items: SyndicateServiceItems) {}
+
+  list = async (req: Request, res: Response): Promise<void> => {
+    const { organizationId } = validatedParams<{ organizationId: string }>(req);
+    sendSuccess(res, await this.items.list(organizationId));
+  };
+
+  update = async (req: Request, res: Response): Promise<void> => {
+    const org = requireOrganization(req);
+    const { serviceId } = validatedParams<{ serviceId: string }>(req);
+    const body = validatedBody<UpdateSyndicateServiceBody>(req);
+    sendSuccess(res, await this.items.update(org.id, serviceId, body, actor(req)));
   };
 }
