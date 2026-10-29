@@ -1,15 +1,38 @@
 import type { Knex } from 'knex';
 import type { Logger } from 'pino';
-import { NotFoundError } from '../../../shared/errors/app-error.js';
+import { randomUUID } from 'node:crypto';
+import { NotFoundError, ValidationError } from '../../../shared/errors/app-error.js';
 import type { AuditService } from '../../audit/audit.service.js';
 import type { OrganizationRepository } from '../../organizations/infrastructure/organization.repository.js';
 import { SyndicateAuditAction, SyndicateAuditEntity } from '../domain/syndicate.constants.js';
-import type {
-  SyndicateServiceItem,
-  UpdateSyndicateServiceItemInput,
+import {
+  SYNDICATE_CONTENT_SERVICE_KEYS,
+  type SyndicateServiceContent,
+  type SyndicateServiceContentInput,
+  type SyndicateServiceItem,
+  type SyndicateServiceItemPatch,
+  type UpdateSyndicateServiceItemInput,
 } from '../domain/syndicate-service-item.types.js';
 import type { SyndicateServiceItemRepository } from '../infrastructure/syndicate-service-item.repository.js';
 import type { SyndicateActor } from './syndicate.service.js';
+
+/** Keep the editor's ids (stable keys); assign one where missing or repeated. */
+function withStableIds(content: SyndicateServiceContentInput): SyndicateServiceContent {
+  const used = new Set<string>();
+  const idFor = (id: string | undefined): string => {
+    const next = id && !used.has(id) ? id : randomUUID();
+    used.add(next);
+    return next;
+  };
+  return {
+    ...content,
+    sections: content.sections.map((section) => ({
+      ...section,
+      id: idFor(section.id),
+      items: section.items.map((item) => ({ ...item, id: idFor(item.id) })),
+    })),
+  };
+}
 
 /**
  * "الخدمات" of a syndicate: readable by any authenticated user (the syndicate
@@ -51,8 +74,21 @@ export class SyndicateServiceItems {
     await this.assertSyndicate(organizationId);
     const existing = await this.items.findForOrganization(serviceId, organizationId);
     if (!existing) throw new NotFoundError('Syndicate service not found');
+    if (
+      patch.content &&
+      !(SYNDICATE_CONTENT_SERVICE_KEYS as readonly string[]).includes(existing.serviceKey)
+    ) {
+      throw new ValidationError('This service has no editable page content', [
+        { path: 'content', message: `not supported for ${existing.serviceKey}` },
+      ]);
+    }
+    const { content, ...fields } = patch;
+    const input: SyndicateServiceItemPatch =
+      content === undefined
+        ? fields
+        : { ...fields, content: content === null ? null : withStableIds(content) };
     return this.db.transaction(async (tx) => {
-      const updated = await this.items.update(serviceId, patch, actor.principal.userId, tx);
+      const updated = await this.items.update(serviceId, input, actor.principal.userId, tx);
       await this.audit.record(
         {
           action: SyndicateAuditAction.SERVICE_UPDATED,

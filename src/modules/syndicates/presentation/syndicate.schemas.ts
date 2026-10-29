@@ -15,6 +15,7 @@ import {
   SYNDICATE_TEXT_MAX,
   SYNDICATE_TITLE_MAX,
 } from '../domain/syndicate.constants.js';
+import { SYNDICATE_CONTENT_SECTION_STYLES } from '../domain/syndicate-service-item.types.js';
 
 export const idParamSchema = z.object({ id: z.string().uuid() });
 export const organizationIdParamSchema = z.object({ organizationId: z.string().uuid() });
@@ -84,11 +85,57 @@ export const syndicateServiceParamSchema = organizationIdParamSchema.extend({
   serviceId: z.string().uuid(),
 });
 
+const contentId = z
+  .string()
+  .trim()
+  .regex(/^[A-Za-z0-9_-]{1,64}$/)
+  .optional();
+const optionalText = (
+  max: number,
+): z.ZodType<string | null | undefined, z.ZodTypeDef, string | null | undefined> =>
+  z.string().trim().max(max).nullable().optional().transform(blankToNull);
+
+/**
+ * A service page's whole content document (replaced on save). Sections and
+ * items keep the order sent; a section may have no items yet.
+ */
+export const syndicateServiceContentSchema = z
+  .object({
+    heading: optionalText(120),
+    body: optionalText(4000),
+    sections: z
+      .array(
+        z
+          .object({
+            id: contentId,
+            title: z.string().trim().min(1).max(200),
+            style: z.enum(SYNDICATE_CONTENT_SECTION_STYLES).default('CHECK'),
+            items: z
+              .array(z.object({ id: contentId, text: z.string().trim().min(1).max(1000) }).strict())
+              .max(50),
+          })
+          .strict(),
+      )
+      .max(20),
+    footnote: optionalText(1000),
+    note: optionalText(1000),
+  })
+  .strict()
+  .transform((c) => ({
+    heading: c.heading ?? null,
+    body: c.body ?? null,
+    sections: c.sections,
+    footnote: c.footnote ?? null,
+    note: c.note ?? null,
+  }));
+
 export const updateSyndicateServiceBodySchema = z
   .object({
     title: z.string().trim().max(120).nullable().optional().transform(blankToNull),
     description: z.string().trim().max(4000).nullable().optional().transform(blankToNull),
     isEnabled: z.boolean().optional(),
+    /** `null` resets the page to the app's built-in content. */
+    content: syndicateServiceContentSchema.nullable().optional(),
   })
   .strict()
   .refine((v) => Object.values(v).some((x) => x !== undefined), {
@@ -148,6 +195,15 @@ export const submissionListQuerySchema = paginationQuerySchema.extend({
   status: z.enum(SYNDICATE_SUBMISSION_STATUSES).optional(),
 });
 export type SubmissionListQuery = z.infer<typeof submissionListQuerySchema>;
+
+/**
+ * Mark specific submissions read for the caller — the ones a list page just
+ * showed as unread (per inquiry, never "everything of this kind").
+ */
+export const markSubmissionsSeenBodySchema = z
+  .object({ submissionIds: z.array(z.string().uuid()).min(1).max(100) })
+  .strict();
+export type MarkSubmissionsSeenBody = z.infer<typeof markSubmissionsSeenBodySchema>;
 
 export const mySubmissionListQuerySchema = paginationQuerySchema.extend({
   kind: z.enum(SYNDICATE_SUBMISSION_KINDS).optional(),

@@ -17,6 +17,7 @@ import type {
   AnnouncementListQuery,
   AssignSyndicateAdminBody,
   MemberListQuery,
+  MarkSubmissionsSeenBody,
   MessageMembersBody,
   MembersBroadcastImageUploadUrlBody,
   CreateAnnouncementBody,
@@ -214,13 +215,23 @@ export class SyndicateSubmissionController {
   listForOrganization = async (req: Request, res: Response): Promise<void> => {
     const org = requireOrganization(req);
     const q = validatedQuery<SubmissionListQuery>(req);
-    const { items, total } = await this.submissions.listForOrganization(org.id, q);
+    const { items, total } = await this.submissions.listForOrganization(org.id, q, actor(req));
     sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
   };
   listMine = async (req: Request, res: Response): Promise<void> => {
     const q = validatedQuery<MySubmissionListQuery>(req);
     const { items, total } = await this.submissions.listMine(actor(req), q);
     sendSuccess(res, items, StatusCodes.OK, pageMeta(q.page, q.pageSize, total));
+  };
+  markMineSeen = async (req: Request, res: Response): Promise<void> => {
+    const { submissionIds } = validatedBody<MarkSubmissionsSeenBody>(req);
+    sendSuccess(res, await this.submissions.markSeen(submissionIds, actor(req), null));
+  };
+  /** Reached only after `authorizeOrg('syndicate.submission.read')` passed. */
+  markOrganizationSeen = async (req: Request, res: Response): Promise<void> => {
+    const org = requireOrganization(req);
+    const { submissionIds } = validatedBody<MarkSubmissionsSeenBody>(req);
+    sendSuccess(res, await this.submissions.markSeen(submissionIds, actor(req), org.id));
   };
   getOwn = async (req: Request, res: Response): Promise<void> => {
     const { id } = validatedParams<{ id: string }>(req);

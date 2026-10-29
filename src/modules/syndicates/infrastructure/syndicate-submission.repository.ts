@@ -46,6 +46,19 @@ export class SyndicateSubmissionRepository {
     return row ? rowToSubmission(row) : null;
   }
 
+  /** The subset of `ids` matching `scope` (an organization, or the submitter). */
+  async filterIds(
+    ids: string[],
+    scope: { organizationId: string } | { submittedByUserId: string },
+  ): Promise<string[]> {
+    if (ids.length === 0) return [];
+    const q = this.db(T).whereIn('id', ids);
+    if ('organizationId' in scope) q.andWhere('organization_id', scope.organizationId);
+    else q.andWhere('submitted_by_user_id', scope.submittedByUserId);
+    const rows: Array<{ id: string }> = await q.select('id');
+    return rows.map((r) => r.id);
+  }
+
   async update(
     id: string,
     patch: Partial<{
@@ -133,7 +146,8 @@ export class SyndicateSubmissionRepository {
       .whereNull('n.read_at')
       .groupBy('s.kind')
       .select('s.kind')
-      .count({ count: '*' });
+      // One per submission, however many alert rows it has.
+      .countDistinct({ count: 'n.entity_id' });
     const pendingRows: Array<{ kind: string; count: string }> = await this.db(T)
       .where({ organization_id: organizationId, status: 'PENDING' })
       .groupBy('kind')

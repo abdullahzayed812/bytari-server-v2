@@ -197,7 +197,8 @@ export class NotificationRepository {
       .whereNull('n.read_at')
       .groupBy('s.kind')
       .select('s.kind')
-      .count<{ kind: string; count: string }[]>({ count: '*' })) as {
+      // One per submission — a reply is never counted twice.
+      .countDistinct<{ kind: string; count: string }[]>({ count: 'n.entity_id' })) as {
       kind: string;
       count: string;
     }[];

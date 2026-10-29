@@ -35,6 +35,11 @@ export interface SyndicateActor {
  */
 export interface EntityNotificationReads {
   markReadForEntity(userId: string, entityType: string, entityId: string): Promise<void>;
+  countUnreadForEntities(
+    userId: string,
+    entityType: string,
+    entityIds: string[],
+  ): Promise<Map<string, number>>;
 }
 
 /**
@@ -62,13 +67,28 @@ export class SyndicateSubmissionService {
   }
 
   /** Best-effort — a read-state failure never fails the request itself. */
-  private async markSeen(userId: string, submissionId: string): Promise<void> {
+  private async markSeenBestEffort(userId: string, submissionId: string): Promise<void> {
     if (!this.notificationReads) return;
     try {
       await this.notificationReads.markReadForEntity(userId, 'SYNDICATE_SUBMISSION', submissionId);
     } catch (err) {
       this.log.warn({ err, submissionId }, 'failed to mark submission notifications read');
     }
+  }
+
+  /** Flags the rows the caller still has an unread alert for (list reads). */
+  private async withUnread(
+    userId: string,
+    items: SyndicateSubmissionDTO[],
+  ): Promise<SyndicateSubmissionDTO[]> {
+    const unread = this.notificationReads
+      ? await this.notificationReads.countUnreadForEntities(
+          userId,
+          'SYNDICATE_SUBMISSION',
+          items.map((s) => s.id),
+        )
+      : new Map<string, number>();
+    return items.map((s) => ({ ...s, isUnread: (unread.get(s.id) ?? 0) > 0 }));
   }
 
   private async toDTO(submission: SyndicateSubmission): Promise<SyndicateSubmissionDTO> {
@@ -137,9 +157,11 @@ export class SyndicateSubmissionService {
   async listForOrganization(
     organizationId: string,
     filter: SubmissionListFilter,
+    actor: SyndicateActor,
   ): Promise<{ items: SyndicateSubmissionDTO[]; total: number }> {
     const { items, total } = await this.submissions.listForOrganization(organizationId, filter);
-    return { items: await Promise.all(items.map((s) => this.toDTO(s))), total };
+    const dtos = await Promise.all(items.map((s) => this.toDTO(s)));
+    return { items: await this.withUnread(actor.principal.userId, dtos), total };
   }
 
   /** The caller's own submissions across every syndicate ("متابعة الطلب من خلال حسابك"). */
@@ -148,7 +170,33 @@ export class SyndicateSubmissionService {
     filter: MySubmissionListFilter,
   ): Promise<{ items: SyndicateSubmissionDTO[]; total: number }> {
     const { items, total } = await this.submissions.listMine(actor.principal.userId, filter);
-    return { items: await Promise.all(items.map((s) => this.toDTO(s))), total };
+    const dtos = await Promise.all(items.map((s) => this.toDTO(s)));
+    return { items: await this.withUnread(actor.principal.userId, dtos), total };
+  }
+
+  /**
+   * "Opened the page" read-state: clears the caller's alerts for exactly these
+   * submissions — an officer's "new submission" alerts within `organizationId`,
+   * or (organizationId `null`) the submitter's "new reply" alerts on their own
+   * submissions. Ids outside that scope are ignored, so nothing unrelated is
+   * marked read. Idempotent: re-marking an already-read one changes nothing.
+   */
+  async markSeen(
+    submissionIds: string[],
+    actor: SyndicateActor,
+    organizationId: string | null,
+  ): Promise<{ submissionIds: string[] }> {
+    const userId = actor.principal.userId;
+    const ids = await this.submissions.filterIds(
+      [...new Set(submissionIds)],
+      organizationId ? { organizationId } : { submittedByUserId: userId },
+    );
+    if (this.notificationReads) {
+      for (const id of ids) {
+        await this.notificationReads.markReadForEntity(userId, 'SYNDICATE_SUBMISSION', id);
+      }
+    }
+    return { submissionIds: ids };
   }
 
   /**
@@ -169,7 +217,9 @@ export class SyndicateSubmissionService {
     if (existing.submittedByUserId !== actor.principal.userId && !isOrgAuthorized) {
       throw new NotFoundError('Submission not found');
     }
-    if (isOrgAuthorized) await this.markSeen(actor.principal.userId, id);
+    // Opening one submission clears the caller's alert for it — the officer's
+    // "new submission" or the submitter's "new reply".
+    await this.markSeenBestEffort(actor.principal.userId, id);
     return this.toDTO(existing);
   }
 
@@ -217,7 +267,7 @@ export class SyndicateSubmissionService {
       submittedByUserId: existing.submittedByUserId,
       actorUserId: actor.principal.userId,
     });
-    await this.markSeen(actor.principal.userId, id);
+    await this.markSeenBestEffort(actor.principal.userId, id);
     return this.toDTO(updated);
   }
 
@@ -246,7 +296,7 @@ export class SyndicateSubmissionService {
       );
       return s;
     });
-    await this.markSeen(actor.principal.userId, id);
+    await this.markSeenBestEffort(actor.principal.userId, id);
     return this.toDTO(updated);
   }
 }

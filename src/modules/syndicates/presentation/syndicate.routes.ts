@@ -16,6 +16,7 @@ import {
 import {
   announcementListQuerySchema,
   assignSyndicateAdminBodySchema,
+  markSubmissionsSeenBodySchema,
   memberListQuerySchema,
   messageMembersBodySchema,
   membersBroadcastImageUploadUrlBodySchema,
@@ -81,6 +82,12 @@ export function createSyndicateRouter(c: Container): Router {
     '/submissions/mine',
     validate({ query: mySubmissionListQuerySchema }),
     asyncHandler(submissions.listMine),
+  );
+  // Opening "طلباتي واستفساراتي" clears the new-reply alerts of the rows shown.
+  r.post(
+    '/submissions/mine/seen',
+    validate({ body: markSubmissionsSeenBodySchema }),
+    asyncHandler(submissions.markMineSeen),
   );
   r.get(
     '/submissions/mine/:id',
@@ -192,6 +199,15 @@ export function createSyndicateRouter(c: Container): Router {
     withOrganization,
     authorizeOrg('syndicate.submission.read'),
     asyncHandler(submissions.listForOrganization),
+  );
+  // Opening the syndicate's requests / inquiries page clears the officer's
+  // "new submission" alerts of the rows shown.
+  r.post(
+    '/:organizationId/submissions/seen',
+    validate({ params: organizationIdParamSchema, body: markSubmissionsSeenBodySchema }),
+    withOrganization,
+    authorizeOrg('syndicate.submission.read'),
+    asyncHandler(submissions.markOrganizationSeen),
   );
   r.get(
     '/:organizationId/submissions/:id',

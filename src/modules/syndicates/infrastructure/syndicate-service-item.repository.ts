@@ -4,7 +4,7 @@ import {
   SYNDICATE_SERVICE_KEYS,
   type SyndicateServiceItem,
   type SyndicateServiceItemRow,
-  type UpdateSyndicateServiceItemInput,
+  type SyndicateServiceItemPatch,
 } from '../domain/syndicate-service-item.types.js';
 
 const T = 'syndicate_services';
@@ -51,7 +51,7 @@ export class SyndicateServiceItemRepository {
   /** Updates the existing row in place — the id, key and syndicate never change. */
   async update(
     id: string,
-    patch: UpdateSyndicateServiceItemInput,
+    patch: SyndicateServiceItemPatch,
     updatedByUserId: string,
     trx: Knex.Transaction,
   ): Promise<SyndicateServiceItem> {
@@ -62,6 +62,9 @@ export class SyndicateServiceItemRepository {
     if (patch.title !== undefined) dbPatch.title = patch.title;
     if (patch.description !== undefined) dbPatch.description = patch.description;
     if (patch.isEnabled !== undefined) dbPatch.is_enabled = patch.isEnabled;
+    if (patch.content !== undefined) {
+      dbPatch.content = patch.content === null ? null : JSON.stringify(patch.content);
+    }
     const [row] = (await trx(T).where({ id }).update(dbPatch).returning('*')) as
       SyndicateServiceItemRow[] | [];
     if (!row) throw new Error('syndicate service not found after update');

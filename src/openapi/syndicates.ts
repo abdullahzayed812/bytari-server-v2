@@ -57,6 +57,41 @@ const tags = [
 ];
 
 const schemas: Obj = {
+  SyndicateServiceContent: {
+    type: 'object',
+    description: 'A service page document; array order is display order. Replaced whole on save.',
+    properties: {
+      heading: { type: 'string', nullable: true, maxLength: 120 },
+      body: { type: 'string', nullable: true, maxLength: 4000 },
+      sections: {
+        type: 'array',
+        maxItems: 20,
+        items: {
+          type: 'object',
+          required: ['title', 'items'],
+          properties: {
+            id: { type: 'string', description: 'Stable key; assigned by the server when omitted' },
+            title: { type: 'string', minLength: 1, maxLength: 200 },
+            style: { type: 'string', enum: ['CHECK', 'NOTE'], default: 'CHECK' },
+            items: {
+              type: 'array',
+              maxItems: 50,
+              items: {
+                type: 'object',
+                required: ['text'],
+                properties: {
+                  id: { type: 'string' },
+                  text: { type: 'string', minLength: 1, maxLength: 1000 },
+                },
+              },
+            },
+          },
+        },
+      },
+      footnote: { type: 'string', nullable: true, maxLength: 1000 },
+      note: { type: 'string', nullable: true, maxLength: 1000 },
+    },
+  },
   SyndicateService: {
     type: 'object',
     description:
@@ -79,6 +114,12 @@ const schemas: Obj = {
       description: { type: 'string', nullable: true, maxLength: 4000 },
       isEnabled: { type: 'boolean' },
       sortOrder: { type: 'integer' },
+      content: {
+        nullable: true,
+        allOf: [{ $ref: '#/components/schemas/SyndicateServiceContent' }],
+        description:
+          'Page content of ID_CARD / LEGAL_SUPPORT / OFFICE_LICENSES; null = the app built-in content.',
+      },
       updatedAt: { type: 'string', format: 'date-time' },
     },
   },
@@ -131,6 +172,11 @@ const schemas: Obj = {
       id: uuid,
       organizationId: uuid,
       syndicateName: { type: 'string' },
+      isUnread: {
+        type: 'boolean',
+        description:
+          'List reads only — the caller still has an unread alert for it (officer: new submission; submitter: new reply).',
+      },
       kind: { type: 'string', enum: ['REQUEST', 'INQUIRY'] },
       requestType: {
         type: 'string',
@@ -286,8 +332,29 @@ const paths: Obj = {
     patch: {
       tags: ['Veterinary Syndicates'],
       summary:
-        'Edit a service in place (title / description / isEnabled) — syndicate.profile.manage',
+        'Edit a service in place (title / description / isEnabled / page content) — syndicate.profile.manage',
       security: bearer,
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                title: { type: 'string', nullable: true, maxLength: 120 },
+                description: { type: 'string', nullable: true, maxLength: 4000 },
+                isEnabled: { type: 'boolean' },
+                content: {
+                  nullable: true,
+                  allOf: [{ $ref: '#/components/schemas/SyndicateServiceContent' }],
+                  description:
+                    'Whole page document (422 for a service without a content page); null resets to built-in.',
+                },
+              },
+            },
+          },
+        },
+      },
       responses: {
         200: ok('Service', dataOf({ $ref: '#/components/schemas/SyndicateService' })),
         ...errs(400, 401, 403, 404, 422),
@@ -369,6 +436,36 @@ const paths: Obj = {
       },
     },
   },
+  '/syndicates/{organizationId}/submissions/seen': {
+    parameters: [{ name: 'organizationId', in: 'path', required: true, schema: uuid }],
+    post: {
+      tags: ['Veterinary Syndicates'],
+      summary:
+        "Mark the officer's new-submission alerts of these submissions read — syndicate.submission.read",
+      security: bearer,
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['submissionIds'],
+              properties: {
+                submissionIds: { type: 'array', items: uuid, minItems: 1, maxItems: 100 },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: ok(
+          'The ids actually marked (others are out of scope and ignored)',
+          dataOf({ type: 'object', properties: { submissionIds: { type: 'array', items: uuid } } }),
+        ),
+        ...errs(401, 403, 404, 422),
+      },
+    },
+  },
   '/syndicates/{organizationId}/submissions/{id}': {
     parameters: [
       { name: 'organizationId', in: 'path', required: true, schema: uuid },
@@ -422,6 +519,34 @@ const paths: Obj = {
       responses: {
         200: ok('Submissions', listOf('#/components/schemas/SyndicateSubmission')),
         ...errs(401),
+      },
+    },
+  },
+  '/syndicates/submissions/mine/seen': {
+    post: {
+      tags: ['Veterinary Syndicates'],
+      summary: 'Mark the new-reply alerts of these (own) submissions read — per submission',
+      security: bearer,
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['submissionIds'],
+              properties: {
+                submissionIds: { type: 'array', items: uuid, minItems: 1, maxItems: 100 },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: ok(
+          'The ids actually marked (others are out of scope and ignored)',
+          dataOf({ type: 'object', properties: { submissionIds: { type: 'array', items: uuid } } }),
+        ),
+        ...errs(401, 422),
       },
     },
   },

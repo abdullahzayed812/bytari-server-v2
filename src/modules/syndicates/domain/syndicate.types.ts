@@ -282,6 +282,11 @@ export interface SyndicateSubmissionDTO extends Omit<SyndicateSubmission, 'attac
   attachmentUrls: string[];
   submittedBy: SyndicateUserSummary;
   syndicateName: string;
+  /**
+   * List reads only: the CALLER still has an unread alert for this submission
+   * — the officer's "new submission" / the submitter's "new reply".
+   */
+  isUnread?: boolean;
 }
 
 export interface SyndicateSubmissionRow {
