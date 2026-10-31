@@ -64,15 +64,18 @@ export class VetJobOfferService {
     this.log = logger.child({ component: 'vet-job-offer-service' });
   }
 
+  /** The offer's own uploaded image wins; otherwise the linked organization's logo. */
   private imageUrl(data: VetJobOfferWithPoster): Promise<string | null> {
-    return this.media.resolveUrl(data.imageKeys.organizationLogo);
+    return this.media.resolveUrl(data.offer.imageStorageKey ?? data.imageKeys.organizationLogo);
   }
 
   private async toDTO(data: VetJobOfferWithPoster): Promise<VetJobOfferDTO> {
+    const { imageStorageKey: _imageStorageKey, ...offer } = data.offer;
     return {
-      ...data.offer,
+      ...offer,
       postedBy: data.postedBy,
       imageUrl: await this.imageUrl(data),
+      hasOwnImage: Boolean(data.offer.imageStorageKey),
       applicationCount: data.applicationCount,
       pendingApplicationCount: data.pendingApplicationCount,
     };
@@ -106,10 +109,12 @@ export class VetJobOfferService {
   // --- create (any authenticated user) --------------------------------
 
   async create(input: CreateVetJobOfferInput, actor: VetJobActor): Promise<VetJobOfferDTO> {
+    const imageStorageKey = await this.media.validateKey(input.imageStorageKey, 'image');
     const offer = await this.db.transaction(async (tx) => {
       const created = await this.offers.create(
         {
           ...input,
+          imageStorageKey,
           responsibilities: trimList(input.responsibilities),
           requirements: trimList(input.requirements),
           benefits: trimList(input.benefits),
@@ -189,9 +194,15 @@ export class VetJobOfferService {
       'job offer',
     );
 
+    const imageStorageKey =
+      patch.imageStorageKey !== undefined
+        ? await this.media.validateKey(patch.imageStorageKey, 'image')
+        : undefined;
+
     await this.db.transaction(async (tx) => {
       const dbPatch: Parameters<VetJobOfferRepository['update']>[1] = {
         ...patch,
+        imageStorageKey,
         responsibilities: patch.responsibilities ? trimList(patch.responsibilities) : undefined,
         requirements: patch.requirements ? trimList(patch.requirements) : undefined,
         benefits: patch.benefits ? trimList(patch.benefits) : undefined,
@@ -216,6 +227,13 @@ export class VetJobOfferService {
         tx,
       );
     });
+
+    // A replaced / removed image is orphaned in R2 — clean up after commit.
+    if (imageStorageKey !== undefined) {
+      await this.media.deleteReplaced([existing.imageStorageKey], [imageStorageKey], {
+        jobOfferId: id,
+      });
+    }
     return this.mustGetDTO(id);
   }
 
@@ -237,6 +255,7 @@ export class VetJobOfferService {
         tx,
       );
     });
+    await this.media.deleteReplaced([existing.imageStorageKey], [], { jobOfferId: id });
   }
 
   /** "إلغاء الإعلان" — the poster closes their own ad early. */

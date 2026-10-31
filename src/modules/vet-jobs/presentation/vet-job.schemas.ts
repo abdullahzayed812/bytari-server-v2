@@ -54,6 +54,7 @@ export const createOfferBodySchema = z
     contactPhone: phone,
     contactEmail: z.string().trim().email().nullish(),
     applicationDeadline: isoDate.nullish(),
+    imageStorageKey: z.string().trim().min(1).max(1024).nullish(),
   })
   .strict();
 export type CreateOfferBody = z.infer<typeof createOfferBodySchema>;

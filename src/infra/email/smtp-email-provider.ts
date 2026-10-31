@@ -1,18 +1,24 @@
 import nodemailer, { type Transporter } from 'nodemailer';
 import type { Logger } from 'pino';
 import type { EmailConfig } from '../../config/index.js';
-import { EmailProviderNotConfiguredError, type EmailMessage, type EmailProvider, type EmailSendResult } from './types.js';
+import {
+  EmailProviderNotConfiguredError,
+  type EmailMessage,
+  type EmailProvider,
+  type EmailSendResult,
+} from './types.js';
 
 /**
- * Gmail SMTP implementation of {@link EmailProvider}, via nodemailer.
+ * SMTP implementation of {@link EmailProvider}, via nodemailer.
  *
- * `EMAIL_PASS` must be a Gmail **App Password** (Google Account → Security →
- * 2-Step Verification → App passwords) — never the account's login password;
- * Gmail rejects normal-password SMTP auth for accounts with 2FA, and even
- * without 2FA using the real password here would be needlessly risky.
+ * With `EMAIL_HOST` set it talks to that server (e.g. Hostinger:
+ * `smtp.hostinger.com`, port 465, SSL) using the mailbox's own password.
+ * Without it, falls back to Gmail — there `EMAIL_PASS` must be a Gmail **App
+ * Password** (Google Account → Security → 2-Step Verification → App
+ * passwords), never the account's login password.
  */
-export class GmailEmailProvider implements EmailProvider {
-  readonly name = 'gmail';
+export class SmtpEmailProvider implements EmailProvider {
+  readonly name: string;
   private readonly log: Logger;
   private readonly transporter: Transporter;
 
@@ -20,11 +26,17 @@ export class GmailEmailProvider implements EmailProvider {
     private readonly config: EmailConfig,
     logger: Logger,
   ) {
-    this.log = logger.child({ component: 'email', provider: 'gmail' });
-    this.transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: { user: config.user, pass: config.pass },
-    });
+    this.name = config.host ?? 'gmail';
+    this.log = logger.child({ component: 'email', provider: this.name });
+    const auth = { user: config.user, pass: config.pass };
+    this.transporter = config.host
+      ? nodemailer.createTransport({
+          host: config.host,
+          port: config.port,
+          secure: config.secure,
+          auth,
+        })
+      : nodemailer.createTransport({ service: 'gmail', auth });
   }
 
   isEnabled(): boolean {

@@ -34,6 +34,8 @@ export interface VetJobOffer {
   contactPhone: string;
   contactEmail: string | null;
   applicationDeadline: string | null;
+  /** Internal — the offer's own uploaded image key; clients only see `imageUrl`. */
+  imageStorageKey: string | null;
   status: VetJobModerationStatus;
   reviewedByUserId: string | null;
   reviewedAt: string | null;
@@ -44,10 +46,12 @@ export interface VetJobOffer {
 }
 
 /** Client-safe offer shape (moderation metadata included — owner / admin view). */
-export interface VetJobOfferDTO extends VetJobOffer {
+export interface VetJobOfferDTO extends Omit<VetJobOffer, 'imageStorageKey'> {
   postedBy: VetJobUserSummary;
-  /** The linked organization's logo, else the poster's avatar; null → the app shows its icon fallback. */
+  /** The offer's uploaded image, else the linked organization's logo; null → the app shows its icon fallback. */
   imageUrl: string | null;
+  /** Whether `imageUrl` is the offer's own upload (vs. the organization-logo fallback) — the edit form's preview. */
+  hasOwnImage: boolean;
   /** Visible to the offer owner / moderators only. */
   applicationCount?: number;
   /** Applications still awaiting the poster's decision ("new" applicants badge). */
@@ -58,7 +62,7 @@ export interface VetJobOfferDTO extends VetJobOffer {
 export interface PublicVetJobOfferDTO {
   id: string;
   organizationName: string;
-  /** The linked organization's logo, else the poster's avatar; null → the app shows its icon fallback. */
+  /** The offer's uploaded image, else the linked organization's logo; null → the app shows its icon fallback. */
   imageUrl: string | null;
   title: string;
   employmentType: VetJobEmploymentType;
@@ -104,6 +108,7 @@ export interface VetJobOfferRow {
   contact_phone: string;
   contact_email: string | null;
   application_deadline: string | Date | null;
+  image_storage_key: string | null;
   status: string;
   reviewed_by_user_id: string | null;
   reviewed_at: Date | null;
@@ -139,6 +144,7 @@ export function rowToOffer(row: VetJobOfferRow): VetJobOffer {
     contactPhone: row.contact_phone,
     contactEmail: row.contact_email,
     applicationDeadline: dateOnly(row.application_deadline),
+    imageStorageKey: row.image_storage_key ?? null,
     status: row.status as VetJobModerationStatus,
     reviewedByUserId: row.reviewed_by_user_id,
     reviewedAt: row.reviewed_at ? row.reviewed_at.toISOString() : null,
@@ -360,6 +366,7 @@ export interface CreateVetJobOfferInput {
   contactPhone: string;
   contactEmail?: string | null;
   applicationDeadline?: string | null;
+  imageStorageKey?: string | null;
 }
 
 export type UpdateVetJobOfferInput = Partial<CreateVetJobOfferInput>;

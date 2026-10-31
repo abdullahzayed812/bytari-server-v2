@@ -131,9 +131,14 @@ const envSchema = z
     // elsewhere (e.g. a shared staging box) — never allowed in production.
     ENABLE_DEV_SEEDS: booleanFromString.default('false'),
 
-    // --- Outbound email (Gmail SMTP via nodemailer) — all-or-nothing ----
+    // --- Outbound email (SMTP via nodemailer) — all-or-nothing ----------
+    // SMTP server, e.g. smtp.hostinger.com. Unset → Gmail.
+    EMAIL_HOST: z.string().optional(),
+    // 465 = implicit SSL (EMAIL_SECURE=true), 587 = STARTTLS (EMAIL_SECURE=false).
+    EMAIL_PORT: z.coerce.number().int().positive().default(465),
+    EMAIL_SECURE: booleanFromString.default('true'),
     EMAIL_USER: z.string().email().optional(),
-    // A Gmail App Password (16 chars, no spaces) — never the account password.
+    // The mailbox password (for Gmail: an App Password, never the account password).
     EMAIL_PASS: z.string().optional(),
     // Display "From" address. Defaults to EMAIL_USER when unset.
     EMAIL_FROM: z.string().optional(),
@@ -291,9 +296,12 @@ const envSchema = z
       },
       email: emailConfigured
         ? {
+            host: isSet(env.EMAIL_HOST) ? env.EMAIL_HOST.trim() : null,
+            port: env.EMAIL_PORT,
+            secure: env.EMAIL_SECURE,
             user: env.EMAIL_USER as string,
             pass: env.EMAIL_PASS as string,
-            from: env.EMAIL_FROM ?? (env.EMAIL_USER as string),
+            from: isSet(env.EMAIL_FROM) ? env.EMAIL_FROM : (env.EMAIL_USER as string),
           }
         : null,
       subscriptions: {

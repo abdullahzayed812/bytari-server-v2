@@ -50,7 +50,7 @@ export function containerFor(app: Express): Container {
  * A developer's local `.env` commonly carries real Gmail credentials (for
  * manual `npm run dev` testing); without this override, any test suite run
  * on such a machine would silently try to send REAL email through the real
- * `GmailEmailProvider` (and `registerUser()`'s auto-verify — see
+ * `SmtpEmailProvider` (and `registerUser()`'s auto-verify — see
  * `factories.ts` — would fail outright, since that provider has no `.sent`
  * capture to read the code back from). Pass `{ emailProvider: ... }` to opt
  * into a different double.

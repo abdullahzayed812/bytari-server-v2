@@ -23,8 +23,9 @@ export interface VetJobOfferWithPoster {
   offer: VetJobOffer;
   postedBy: VetJobUserSummary;
   /**
-   * Offer image source: the linked organization's logo only (key, unresolved).
-   * The poster's own profile photo is never used as the offer's image.
+   * Fallback offer image when the offer has no uploaded image of its own: the
+   * linked organization's logo (key, unresolved). The poster's own profile
+   * photo is never used as the offer's image.
    */
   imageKeys: { organizationLogo: string | null };
   applicationCount?: number;
@@ -96,6 +97,7 @@ export class VetJobOfferRepository {
         contact_phone: data.contactPhone,
         contact_email: data.contactEmail ?? null,
         application_deadline: data.applicationDeadline ?? null,
+        image_storage_key: data.imageStorageKey ?? null,
         status: 'PENDING',
       })
       .returning('*')) as VetJobOfferRow[];
@@ -147,6 +149,7 @@ export class VetJobOfferRepository {
       contactPhone: string;
       contactEmail: string | null;
       applicationDeadline: string | null;
+      imageStorageKey: string | null;
       status: string;
       reviewedByUserId: string | null;
       reviewedAt: Date | null;
@@ -179,6 +182,7 @@ export class VetJobOfferRepository {
     if (patch.applicationDeadline !== undefined) {
       dbPatch.application_deadline = patch.applicationDeadline;
     }
+    if (patch.imageStorageKey !== undefined) dbPatch.image_storage_key = patch.imageStorageKey;
     if (patch.status !== undefined) dbPatch.status = patch.status;
     if (patch.reviewedByUserId !== undefined) dbPatch.reviewed_by_user_id = patch.reviewedByUserId;
     if (patch.reviewedAt !== undefined) dbPatch.reviewed_at = patch.reviewedAt;

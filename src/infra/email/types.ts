@@ -1,5 +1,5 @@
 /**
- * Outbound-email infrastructure contracts (Gmail SMTP via nodemailer today,
+ * Outbound-email infrastructure contracts (SMTP via nodemailer today,
  * swappable tomorrow). Business modules depend on {@link EmailProvider} /
  * {@link EmailService}, never on `nodemailer` directly.
  */

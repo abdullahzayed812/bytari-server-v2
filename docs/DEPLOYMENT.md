@@ -57,8 +57,8 @@ Client repo: `Dockerfile`, `deploy/nginx-web.conf`, `.github/workflows/`.
 
 ## 3. DNS [VPS config]
 
-| Type | Name             | Value           |
-| ---- | ---------------- | --------------- |
+| Type | Name              | Value           |
+| ---- | ----------------- | --------------- |
 | A    | `baytari.com`     | `VPS_PUBLIC_IP` |
 | A    | `www.baytari.com` | `VPS_PUBLIC_IP` |
 | A    | `api.baytari.com` | `VPS_PUBLIC_IP` |
@@ -149,11 +149,11 @@ and wrong file permissions. The app itself also refuses to boot with
 | ------------------------------------------------------------------------------------------------------------ | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `DB_NAME`, `DB_USER`, `DB_PASSWORD`                                                                          | yes          | Also initialise the `db` container on first start.                                                                                                                                                                                |
 | `JWT_ACCESS_SECRET`                                                                                          | yes          | ≥ 32 chars (`openssl rand -base64 48`).                                                                                                                                                                                           |
-| `CORS_ORIGINS`                                                                                               | yes          | `https://baytari.com,https://www.baytari.com`. Native apps send no `Origin`.                                                                                                                                                        |
+| `CORS_ORIGINS`                                                                                               | yes          | `https://baytari.com,https://www.baytari.com`. Native apps send no `Origin`.                                                                                                                                                      |
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`                                     | yes          | Blank = volatile in-memory storage (never in production).                                                                                                                                                                         |
 | `R2_PUBLIC_BASE_URL`                                                                                         | optional     | Only if the bucket has a public domain.                                                                                                                                                                                           |
 | `FIREBASE_PROJECT_ID` + `FIREBASE_CLIENT_EMAIL` + `FIREBASE_PRIVATE_KEY`, or `FIREBASE_SERVICE_ACCOUNT_JSON` | recommended  | Firebase **Admin** service account of project `bytari` (same project as the Android `google-services.json`). Private key on one line with literal `\n`, in double quotes. Blank = push disabled, in-app notifications still work. |
-| `EMAIL_USER`, `EMAIL_PASS`, `EMAIL_FROM`                                                                     | recommended  | Verification-code emails.                                                                                                                                                                                                         |
+| `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_SECURE`, `EMAIL_USER`, `EMAIL_PASS`, `EMAIL_FROM`                         | recommended  | Verification-code emails.                                                                                                                                                                                                         |
 | `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD`                                                          | first deploy | First admin (created by the seed step). Remove afterwards.                                                                                                                                                                        |
 | `LETSENCRYPT_EMAIL`                                                                                          | yes          | Expiry notices from Let's Encrypt.                                                                                                                                                                                                |
 | `API_IMAGE`, `WEB_IMAGE`, `API_TAG`, `WEB_TAG`                                                               | preset       | Tags are overridden by `deploy.sh`.                                                                                                                                                                                               |
@@ -167,12 +167,12 @@ the app as `""` and fails validation, so uncomment only when setting a value.
 Baked into the JS bundle by `expo export`; passed as Docker build args
 (GitHub repository **variables**, not secrets). Never put a secret here.
 
-| Variable                    | Production value         |
-| --------------------------- | ------------------------ |
+| Variable                    | Production value          |
+| --------------------------- | ------------------------- |
 | `EXPO_PUBLIC_API_BASE_URL`  | `https://api.baytari.com` |
 | `EXPO_PUBLIC_REALTIME_URL`  | `wss://api.baytari.com`   |
-| `EXPO_PUBLIC_REALTIME_PATH` | `/realtime`              |
-| `EXPO_PUBLIC_ENVIRONMENT`   | `production`             |
+| `EXPO_PUBLIC_REALTIME_PATH` | `/realtime`               |
+| `EXPO_PUBLIC_ENVIRONMENT`   | `production`              |
 
 `src/lib/env.ts` refuses a production build whose API/realtime URL is not a
 public `https://` / `wss://` origin, and dev `localhost` fallbacks exist only
@@ -280,8 +280,8 @@ Old images stay in the local Docker cache and in GHCR; prune occasionally:
 
 | Check          | Command                                                                                              |
 | -------------- | ---------------------------------------------------------------------------------------------------- |
-| Liveness       | `curl https://api.baytari.com/health`                                                                 |
-| Readiness (DB) | `curl https://api.baytari.com/health/ready` (503 until DB answers)                                    |
+| Liveness       | `curl https://api.baytari.com/health`                                                                |
+| Readiness (DB) | `curl https://api.baytari.com/health/ready` (503 until DB answers)                                   |
 | Containers     | `docker compose -f docker-compose.production.yml ps`                                                 |
 | Logs           | `docker compose -f docker-compose.production.yml logs -f --tail 200 api` (also `nginx`, `web`, `db`) |
 | Release        | `cat deploy/state/current.env`                                                                       |
