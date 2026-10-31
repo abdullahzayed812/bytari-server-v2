@@ -103,7 +103,7 @@ Fill: `DB_PASSWORD`, `JWT_ACCESS_SECRET` (new random values — `openssl rand -b
 
 ```
 PUBLIC_WEB_ORIGIN=https://baytari.com
-LETSENCRYPT_EMAIL=baytariapp@gmail.com
+LETSENCRYPT_EMAIL=info@baytari.com
 CORS_ORIGINS=https://baytari.com,https://www.baytari.com
 ```
 

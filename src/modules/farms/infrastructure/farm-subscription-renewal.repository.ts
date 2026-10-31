@@ -12,6 +12,10 @@ import {
 } from '../domain/farm-subscription.types.js';
 
 import { userSearchSpec, whereTextSearch } from '../../../shared/database/search.js';
+import {
+  SUBSCRIPTION_DETAILS_TABLE,
+  whereSubscriptionStatus,
+} from '../../organizations/infrastructure/subscription-status-sql.js';
 
 const TABLE = 'farm_subscription_renewal_requests';
 
@@ -22,12 +26,6 @@ const TABLE = 'farm_subscription_renewal_requests';
  * duplicating it). Only the subscription DATES live on a type-specific `*_details` table, so
  * `setSubscriptionDates`/`getSubscriptionDates` resolve the right one per organization.
  */
-const SUBSCRIPTION_DETAILS_TABLE: Record<string, string> = {
-  FARM: 'farm_details',
-  VETERINARY_OFFICE: 'veterinary_office_details',
-  CLINIC: 'clinic_details',
-};
-
 export interface CreateRenewalRequestData {
   organizationId: string;
   requestedByUserId: string;
@@ -219,18 +217,34 @@ export class FarmSubscriptionRenewalRepository {
     return table;
   }
 
-  /** Sets an organization's subscription period on its type's `*_details` table. */
+  /**
+   * Sets an organization's subscription period on its type's `*_details` table.
+   *
+   * Activating a new period after an earlier one has already ENDED means the
+   * organization has left its first (free-trial) period: `free_trial_ended_at`
+   * is stamped once and never cleared, so the free-trial card stays hidden
+   * through every later renewal / expiration. Correcting the dates of a
+   * still-running (or never-started) first period does not stamp it.
+   */
   async setSubscriptionDates(
     organizationId: string,
     dates: { startDate: string; endDate: string },
     trx: Knex.Transaction,
   ): Promise<void> {
     const table = await this.detailsTable(organizationId, trx);
-    const updated = await trx(table).where({ organization_id: organizationId }).update({
-      subscription_start_date: dates.startDate,
-      subscription_end_date: dates.endDate,
-      updated_at: trx.fn.now(),
-    });
+    const previous = await this.getSubscriptionDates(organizationId, trx);
+    const previousEnded =
+      computeFarmSubscriptionStatus(previous.startDate, previous.endDate) === 'EXPIRED';
+    const updated = await trx(table)
+      .where({ organization_id: organizationId })
+      .update({
+        subscription_start_date: dates.startDate,
+        subscription_end_date: dates.endDate,
+        ...(previousEnded
+          ? { free_trial_ended_at: trx.raw('coalesce(free_trial_ended_at, now())') }
+          : {}),
+        updated_at: trx.fn.now(),
+      });
     if (updated === 0) throw new Error(`${table} row not found: ${organizationId}`);
   }
 
@@ -334,19 +348,7 @@ export class FarmSubscriptionRenewalRepository {
             .where('rr.status', 'PENDING');
         });
       }
-      if (filter.subscriptionStatus === 'NOT_STARTED') {
-        qb.where((b) => {
-          b.whereNull('d.subscription_start_date').orWhereNull('d.subscription_end_date');
-        });
-      } else if (filter.subscriptionStatus === 'ACTIVE') {
-        qb.whereNotNull('d.subscription_end_date').whereRaw(
-          'd.subscription_end_date >= CURRENT_DATE',
-        );
-      } else if (filter.subscriptionStatus === 'EXPIRED') {
-        qb.whereNotNull('d.subscription_end_date').whereRaw(
-          'd.subscription_end_date < CURRENT_DATE',
-        );
-      }
+      if (filter.subscriptionStatus) whereSubscriptionStatus(qb, 'd', filter.subscriptionStatus);
       return qb;
     };
 

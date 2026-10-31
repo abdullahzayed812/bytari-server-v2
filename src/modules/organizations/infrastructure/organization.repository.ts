@@ -3,6 +3,7 @@ import {
   computeFarmSubscriptionStatus,
   emptyOrganizationProfile,
   rowToOrganization,
+  type FarmSubscriptionStatus,
   type Organization,
   type OrganizationProfile,
   type OrganizationRow,
@@ -13,6 +14,7 @@ import {
 } from '../domain/organization.types.js';
 
 import { matchingUserIds, whereTextSearch } from '../../../shared/database/search.js';
+import { SUBSCRIPTION_DETAILS_TABLE, whereSubscriptionStatus } from './subscription-status-sql.js';
 
 const TABLE = 'organizations';
 
@@ -54,6 +56,12 @@ export interface ListOrganizationsFilter {
   search?: string;
   /** Hide admin-deleted (DEACTIVATED) rows unless `status` asks for them explicitly. */
   excludeDeactivated?: boolean;
+  /**
+   * Subscription validity (computed from the `*_details` dates). Only
+   * subscription-capable types have one — with any other / no `type` the
+   * filter matches nothing.
+   */
+  subscriptionStatus?: FarmSubscriptionStatus;
 }
 
 /** Patch for a `*_details` profile row — `logoKey` maps to the `logo_key` column. */
@@ -160,6 +168,7 @@ export class OrganizationRepository {
             join_code: string;
             subscription_start_date: string | Date | null;
             subscription_end_date: string | Date | null;
+            free_trial_ended_at: Date | null;
           }
         | undefined;
       if (row) {
@@ -169,6 +178,7 @@ export class OrganizationRepository {
         details.subscriptionStartDate = startDate;
         details.subscriptionEndDate = endDate;
         details.subscriptionStatus = computeFarmSubscriptionStatus(startDate, endDate);
+        details.freeTrialEnded = row.free_trial_ended_at != null;
       }
     } else {
       const row = await this.findProfileRow(org.type, id, trx);
@@ -194,6 +204,7 @@ export class OrganizationRepository {
         details.subscriptionStartDate = startDate;
         details.subscriptionEndDate = endDate;
         details.subscriptionStatus = computeFarmSubscriptionStatus(startDate, endDate);
+        details.freeTrialEnded = row.free_trial_ended_at != null;
         details.licenseNumber = row.license_number ?? null;
       }
     }
@@ -478,6 +489,20 @@ export class OrganizationRepository {
       if (filter.status) qb.where('status', filter.status);
       else if (filter.excludeDeactivated) qb.whereNot('status', 'DEACTIVATED');
       if (filter.ownerUserId) qb.where('owner_user_id', filter.ownerUserId);
+      if (filter.subscriptionStatus) {
+        const status = filter.subscriptionStatus;
+        const detailsTable = filter.type ? SUBSCRIPTION_DETAILS_TABLE[filter.type] : undefined;
+        if (!detailsTable) qb.whereRaw('false');
+        else {
+          qb.whereExists((sub) => {
+            void sub
+              .select(this.conn(trx).raw('1'))
+              .from(`${detailsTable} as sd`)
+              .whereRaw(`sd.organization_id = ${TABLE}.id`);
+            whereSubscriptionStatus(sub, 'sd', status);
+          });
+        }
+      }
       if (filter.search) {
         // Name / id, or the owner's name / email / phone.
         const term = filter.search;

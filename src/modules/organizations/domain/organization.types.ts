@@ -178,6 +178,13 @@ export interface OrganizationDetails extends Partial<OrganizationProfile> {
   subscriptionEndDate?: string | null;
   subscriptionStatus?: FarmSubscriptionStatus;
   /**
+   * FARM / VETERINARY_OFFICE / CLINIC only — the first (free-trial) period is
+   * over for good: a new period was activated after an earlier one ended
+   * (`*_details.free_trial_ended_at`, never cleared). The app hides the
+   * "الفترة المجانية" card once this is true.
+   */
+  freeTrialEnded?: boolean;
+  /**
    * CLINIC / VETERINARY_OFFICE only — owner/admin-facing registration
    * credentials. Deliberately NEVER on {@link OrganizationProfile} /
    * {@link PublicOrganizationDTO}: reviewed by an admin before approval, not
@@ -256,6 +263,8 @@ export interface ProfileDetailRow {
   /** CLINIC / VETERINARY_OFFICE only (not VETERINARY_STORE) — see `20261017010000_org_subscription_generalize`. */
   subscription_start_date?: string | Date | null;
   subscription_end_date?: string | Date | null;
+  /** CLINIC / VETERINARY_OFFICE only — see `20261115010000_free_trial_ended`. */
+  free_trial_ended_at?: Date | null;
   /** CLINIC / VETERINARY_OFFICE only — see `20261018010000_organization_registration_details`. */
   country?: string | null;
   license_number?: string | null;

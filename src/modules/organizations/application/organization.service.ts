@@ -36,6 +36,7 @@ import type {
   ListOrganizationsFilter,
   OrganizationRepository,
 } from '../infrastructure/organization.repository.js';
+import { SUBSCRIPTION_DETAILS_TABLE } from '../infrastructure/subscription-status-sql.js';
 
 function toDateOnlyString(v: string | Date | null): string | null {
   if (v === null) return null;
@@ -468,16 +469,57 @@ export class OrganizationService {
     return org;
   }
 
-  async listForAdmin(
-    filter: ListOrganizationsFilter,
-  ): Promise<{ items: Array<Organization & { logoUrl?: string | null }>; total: number }> {
+  async listForAdmin(filter: ListOrganizationsFilter): Promise<{
+    items: Array<
+      Organization & { logoUrl?: string | null; subscriptionStatus: FarmSubscriptionStatus | null }
+    >;
+    total: number;
+  }> {
     // Admin "حذف" (soft delete → DEACTIVATED) leaves the default list, like
     // the farms list; `status=DEACTIVATED` (the "المحذوفة" tab) still finds it.
     const { items, total } = await this.organizations.list({
       ...filter,
       excludeDeactivated: true,
     });
-    return { items: await this.attachLogoUrls(items), total };
+    return { items: await this.attachSubscriptionStatus(await this.attachLogoUrls(items)), total };
+  }
+
+  /**
+   * Batched subscription status for an admin LIST page (CLINIC /
+   * VETERINARY_OFFICE / FARM; `null` for every other type) — so a row whose
+   * subscription has expired is badged as such instead of "نشطة".
+   */
+  private async attachSubscriptionStatus<T extends Organization>(
+    items: T[],
+  ): Promise<Array<T & { subscriptionStatus: FarmSubscriptionStatus | null }>> {
+    const byTable = new Map<string, string[]>();
+    for (const item of items) {
+      const table = SUBSCRIPTION_DETAILS_TABLE[item.type];
+      if (!table) continue;
+      byTable.set(table, [...(byTable.get(table) ?? []), item.id]);
+    }
+    const statusByOrg = new Map<string, FarmSubscriptionStatus>();
+    await Promise.all(
+      [...byTable.entries()].map(async ([table, ids]) => {
+        const rows: Array<{
+          organization_id: string;
+          subscription_start_date: string | Date | null;
+          subscription_end_date: string | Date | null;
+        }> = await this.db(table)
+          .whereIn('organization_id', ids)
+          .select('organization_id', 'subscription_start_date', 'subscription_end_date');
+        for (const r of rows) {
+          statusByOrg.set(
+            r.organization_id,
+            computeFarmSubscriptionStatus(
+              toDateOnlyString(r.subscription_start_date),
+              toDateOnlyString(r.subscription_end_date),
+            ),
+          );
+        }
+      }),
+    );
+    return items.map((item) => ({ ...item, subscriptionStatus: statusByOrg.get(item.id) ?? null }));
   }
 
   async listPendingForAdmin(

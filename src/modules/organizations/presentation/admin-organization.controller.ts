@@ -53,6 +53,7 @@ export class AdminOrganizationController {
       status: q.status,
       ownerUserId: q.ownerUserId,
       search: q.search,
+      subscriptionStatus: q.subscriptionStatus,
     });
     sendSuccess(res, items, 200, pageMeta(q.page, q.pageSize, total));
   };

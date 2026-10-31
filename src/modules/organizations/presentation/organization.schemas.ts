@@ -4,6 +4,7 @@ import { termsAcceptanceShape } from '../../../shared/validation/terms.js';
 import { paginationQuerySchema } from '../../../shared/http/pagination.js';
 import { ORG_PERMISSION_KEYS } from '../domain/organization-rbac.constants.js';
 import {
+  FARM_SUBSCRIPTION_STATUSES,
   MEMBERSHIP_STATUSES,
   ORGANIZATION_STATUSES,
   ORGANIZATION_TYPES,
@@ -222,6 +223,8 @@ export const adminListOrganizationsQuerySchema = paginationQuerySchema.extend({
   status: z.enum(ORGANIZATION_STATUSES).optional(),
   ownerUserId: z.string().uuid().optional(),
   search: z.string().trim().min(1).max(160).optional(),
+  /** The admin "منتهية" tab — computed from the subscription dates (CLINIC / VETERINARY_OFFICE / FARM). */
+  subscriptionStatus: z.enum(FARM_SUBSCRIPTION_STATUSES).optional(),
 });
 export type AdminListOrganizationsQuery = z.infer<typeof adminListOrganizationsQuerySchema>;
 
