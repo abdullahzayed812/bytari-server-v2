@@ -10,6 +10,7 @@ import {
   type MedicalTimelineEntryDTO,
   type MedicalTimelineEntryType,
 } from '../domain/veterinary-care.types.js';
+import type { ClinicNameLookup } from '../infrastructure/clinic-name.lookup.js';
 import type { MedicalRecordRepository } from '../infrastructure/medical-record.repository.js';
 import type { VaccinationRepository } from '../infrastructure/vaccination.repository.js';
 import type { MedicalAttachments } from './medical-attachments.js';
@@ -45,6 +46,7 @@ export class MedicalHistoryService {
     private readonly vaccinations: VaccinationRepository,
     private readonly attachments: MedicalAttachments,
     logger: Logger,
+    private readonly clinicNames: ClinicNameLookup,
   ) {
     this.log = logger.child({ component: 'medical-history-service' });
   }
@@ -87,19 +89,23 @@ export class MedicalHistoryService {
         : Promise.resolve({ items: [], total: 0 }),
     ]);
 
+    const ownerClinicNames = ownerView
+      ? await this.clinicNames.byIds(vax.items.map((v) => v.organizationId))
+      : new Map<string, string>();
     const entries = sortTimelineEntries([
       ...(await Promise.all(
         rec.items.map(async (r) =>
           medicalRecordToTimelineEntry(toMedicalRecordDTO(r, await this.attachments.resolve(r))),
         ),
       )),
-      ...vax.items.map((v) =>
-        vaccinationToTimelineEntry(
-          organizationId
-            ? redactForClinic(toVaccinationDTO(v), organizationId)
-            : toOwnerVaccinationDTO(v),
-        ),
-      ),
+      ...vax.items.map((v) => {
+        if (organizationId) {
+          return vaccinationToTimelineEntry(redactForClinic(toVaccinationDTO(v), organizationId));
+        }
+        // Owner view: the clinic's name, never the veterinarian.
+        const dto = toOwnerVaccinationDTO(v, ownerClinicNames);
+        return { ...vaccinationToTimelineEntry(dto), clinicName: dto.clinicName };
+      }),
     ]);
 
     const total = rec.total + vax.total;

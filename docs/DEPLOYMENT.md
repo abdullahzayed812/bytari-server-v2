@@ -185,7 +185,7 @@ missing API URL is found in the bundle.
   settings → Service accounts → Generate new private key). Backend-only.
 - Web: no Firebase config — the web app has no browser push (in-app inbox +
   realtime only).
-- Android: `google-services.json` (package `com.petcare.bytari`) is bundled in
+- Android: `google-services.json` (package `com.petcare.baytari`) is bundled in
   native builds; it contains no secret.
 - iOS push is not wired (see mobile `MOBILE_ARCHITECTURE.md` §12.1).
 
@@ -311,8 +311,8 @@ Ship them off-host if you need retention [Future].
   15 3 * * * cd /opt/bytari && deploy/scripts/backup.sh nightly >> backups/backup.log 2>&1
   ```
 
-  Off-site copy (e.g. `rclone copy /opt/bytari/backups r2-backups:bytari-db`) is
-  **not** implemented — configure one; a backup on the same disk is not a backup.
+  **[Implemented]** Off-site: daily 14:00 (Cairo) dump → Google Drive with
+  30-day retention — `deploy/scripts/backup-offsite.sh` + systemd timer, see `BACKUPS.md`.
 
 Restore (the dump format was rehearsed locally by restoring into a scratch database — 115 tables; the in-place `--clean` restore below has not been run against live data):
 

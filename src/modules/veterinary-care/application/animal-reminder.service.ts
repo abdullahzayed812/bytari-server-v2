@@ -9,7 +9,9 @@ import type { AnimalOwnershipRepository } from '../../animals/infrastructure/ani
 import { VeterinaryCarePolicy } from '../domain/veterinary-care.policy.js';
 import {
   redactForClinic,
+  toOwnerReminderDTO,
   type AnimalReminderDTO,
+  type OwnerAnimalReminderDTO,
   type ClinicListAnimalSummary,
   type ClinicListOwnerSummary,
   type ClinicReminderListStatus,
@@ -17,6 +19,7 @@ import {
   type UpdateReminderInput,
 } from '../domain/veterinary-care.types.js';
 import type { AnimalReminderRepository } from '../infrastructure/animal-reminder.repository.js';
+import type { ClinicNameLookup } from '../infrastructure/clinic-name.lookup.js';
 
 export interface ReminderActor {
   actorUserId: string;
@@ -53,6 +56,7 @@ export class AnimalReminderService {
     private readonly audit: AuditService,
     private readonly events: EventBus,
     logger: Logger,
+    private readonly clinicNames: ClinicNameLookup,
   ) {
     this.log = logger.child({ component: 'animal-reminder-service' });
   }
@@ -140,11 +144,14 @@ export class AnimalReminderService {
   }
 
   /** Owner view: every clinic's reminders for the pet (read-only). */
-  listForOwner(
+  /** Owner view: the adding clinic's name, never the veterinarian. */
+  async listForOwner(
     animalId: string,
     filter: { page: number; pageSize: number },
-  ): Promise<{ items: AnimalReminderDTO[]; total: number }> {
-    return this.reminders.listForAnimal(animalId, filter);
+  ): Promise<{ items: OwnerAnimalReminderDTO[]; total: number }> {
+    const { items, total } = await this.reminders.listForAnimal(animalId, filter);
+    const names = await this.clinicNames.byIds(items.map((r) => r.organizationId));
+    return { items: items.map((r) => toOwnerReminderDTO(r, names)), total };
   }
 
   /** Edit, complete / reopen, or reschedule (legacy update / updateStatus / reschedule). */

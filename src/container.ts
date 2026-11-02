@@ -67,6 +67,7 @@ import { ClinicDashboardService } from './modules/veterinary-care/application/cl
 import { MedicalAttachments } from './modules/veterinary-care/application/medical-attachments.js';
 import { AnimalReminderService } from './modules/veterinary-care/application/animal-reminder.service.js';
 import { AnimalReminderRepository } from './modules/veterinary-care/infrastructure/animal-reminder.repository.js';
+import { ClinicNameLookup } from './modules/veterinary-care/infrastructure/clinic-name.lookup.js';
 import { QuickReviewTemplateService } from './modules/veterinary-care/application/quick-review-template.service.js';
 import { QuickReviewTemplateRepository } from './modules/veterinary-care/infrastructure/quick-review-template.repository.js';
 import { FarmDetailsRepository } from './modules/farms/infrastructure/farm-details.repository.js';
@@ -856,6 +857,7 @@ export function createContainer(deps: ContainerDeps): Container {
     medicalAttachments,
     logger,
   );
+  const clinicNameLookup = new ClinicNameLookup(db);
   const vaccinationService = new VaccinationService(
     db,
     vaccinationRepository,
@@ -864,6 +866,7 @@ export function createContainer(deps: ContainerDeps): Container {
     auditService,
     eventBus,
     logger,
+    clinicNameLookup,
   );
   // Phase 8 — composed read-only medical history (records + vaccinations).
   const medicalHistoryService = new MedicalHistoryService(
@@ -871,6 +874,7 @@ export function createContainer(deps: ContainerDeps): Container {
     vaccinationRepository,
     medicalAttachments,
     logger,
+    clinicNameLookup,
   );
   // Clinic Dashboard — stats summary + clinic-visible animal profile (read-only).
   const clinicDashboardService = new ClinicDashboardService(
@@ -889,6 +893,7 @@ export function createContainer(deps: ContainerDeps): Container {
     auditService,
     eventBus,
     logger,
+    clinicNameLookup,
   );
   const quickReviewTemplateService = new QuickReviewTemplateService(
     db,

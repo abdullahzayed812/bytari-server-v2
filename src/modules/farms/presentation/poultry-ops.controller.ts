@@ -107,6 +107,13 @@ export class PoultryOpsController {
     );
   };
 
+  removeProfileImage = async (req: Request, res: Response): Promise<void> => {
+    sendSuccess(
+      res,
+      await this.creators.attach(await this.profiles.removeImage(this.orgId(req), this.actor(req))),
+    );
+  };
+
   // --- daily records ---------------------------------------
 
   listDailyRecords = async (req: Request, res: Response): Promise<void> => {

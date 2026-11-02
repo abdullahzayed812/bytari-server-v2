@@ -1,6 +1,10 @@
 import type { Knex } from 'knex';
 import type { Logger } from 'pino';
-import { BadRequestError, InternalError } from '../../../shared/errors/app-error.js';
+import {
+  BadRequestError,
+  InternalError,
+  ServiceUnavailableError,
+} from '../../../shared/errors/app-error.js';
 import { ErrorCode } from '../../../shared/errors/error-codes.js';
 import type { EventBus } from '../../../shared/events/index.js';
 import { buildObjectKey, StoragePrefix, type ObjectStorage } from '../../../infra/storage/index.js';
@@ -259,6 +263,43 @@ export class FarmProfileService {
         this.log.error({ err, organizationId }, 'failed to delete replaced farm image — sweep');
       }
     }
+    return this.getProfile(organizationId);
+  }
+
+  /**
+   * "Delete the farm photo" from the Edit Farm screen. The reference is
+   * cleared and the object deleted INSIDE one transaction: a storage failure
+   * throws 503 and rolls the reference back, so the photo stays visible and
+   * the user can retry — the object is never orphaned. A storage delete of an
+   * already-missing object is idempotent. No-op when there is no photo.
+   */
+  async removeImage(organizationId: string, actor: FarmActor): Promise<FarmProfile> {
+    const existing = await this.profiles.findByOrganizationId(organizationId);
+    if (!existing) throw new InternalError('farm_details row missing for a FARM organization');
+    const previousKey = existing.image_key;
+    if (!previousKey) return this.getProfile(organizationId);
+
+    await this.db.transaction(async (tx) => {
+      await this.profiles.update(organizationId, { imageKey: null, imageProvider: null }, tx);
+      await this.audit.record(
+        {
+          action: PoultryOpsAuditAction.FARM_PROFILE_UPDATED,
+          entityType: PoultryOpsAuditEntity.FARM_PROFILE,
+          entityId: organizationId,
+          actorUserId: actor.actorUserId,
+          metadata: { organizationId, imageRemoved: true },
+          context: actor.context,
+        },
+        tx,
+      );
+      try {
+        await this.storage.delete(previousKey);
+      } catch (err) {
+        this.log.error({ err, organizationId }, 'failed to delete farm image — reference kept');
+        throw new ServiceUnavailableError('The image could not be deleted from storage; try again');
+      }
+    });
+    this.events.publish('farm.profile.updated', { organizationId });
     return this.getProfile(organizationId);
   }
 }

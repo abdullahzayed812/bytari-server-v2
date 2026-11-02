@@ -122,6 +122,13 @@ export function createPoultryOpsRouter(c: Container): Router {
     authorizeOrg('organization.update'),
     asyncHandler(ctrl.registerProfileImage),
   );
+  r.delete(
+    '/:organizationId/farm/profile/image',
+    validate({ params: organizationParamSchema }),
+    ...orgOp,
+    authorizeOrg('organization.update'),
+    asyncHandler(ctrl.removeProfileImage),
+  );
 
   // --- batch + weekly summary (server-computed) ------------------
   const flockBase = '/:organizationId/poultry/flocks/:flockId';

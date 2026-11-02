@@ -1,0 +1,13 @@
+# Runs bytari-backup.service every day at 14:00 Egypt time (Africa/Cairo,
+# daylight saving handled by systemd). Persistent=true runs a missed backup
+# as soon as the VPS is back up.
+[Unit]
+Description=Bytari daily database backup (14:00 Africa/Cairo)
+
+[Timer]
+OnCalendar=*-*-* 14:00:00 Africa/Cairo
+Persistent=true
+Unit=bytari-backup.service
+
+[Install]
+WantedBy=timers.target

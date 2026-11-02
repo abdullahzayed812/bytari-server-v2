@@ -33,7 +33,7 @@ is [`DEPLOYMENT.md`](DEPLOYMENT.md); this file is the practical companion.
      eas env:create --name GOOGLE_SERVICES_JSON --type file --value ./google-services.json --environment production --visibility secret
      ```
    - It was already in history (commit `5b2bf21`) → restrict its API key in Google Cloud Console
-     (Android app `com.petcare.bytari` + signing SHA-1).
+     (Android app `com.petcare.baytari` + signing SHA-1).
 2. **Production env template tracked** (server repo)
    - `.gitignore` rule `.env.*` was hiding `deploy/.env.production.example` → added `!.env.production.example`.
    - Template filled with the same non-secret values as the dev `.env` (R2 account/bucket/public URL,

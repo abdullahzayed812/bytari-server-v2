@@ -20,8 +20,10 @@ import {
   type ListVaccinationsFilter,
   type UpdateVaccinationInput,
   type Vaccination,
+  type OwnerVaccinationDTO,
   type VaccinationDTO,
 } from '../domain/veterinary-care.types.js';
+import type { ClinicNameLookup } from '../infrastructure/clinic-name.lookup.js';
 import type { VaccinationRepository } from '../infrastructure/vaccination.repository.js';
 
 export interface VetCareActor {
@@ -63,6 +65,7 @@ export class VaccinationService {
     private readonly audit: AuditService,
     private readonly events: EventBus,
     logger: Logger,
+    private readonly clinicNames: ClinicNameLookup,
   ) {
     this.log = logger.child({ component: 'vaccination-service' });
   }
@@ -299,14 +302,15 @@ export class VaccinationService {
   async listForOwner(
     animalId: string,
     filter: ListVaccinationsFilter,
-  ): Promise<{ items: VaccinationDTO[]; total: number }> {
+  ): Promise<{ items: OwnerVaccinationDTO[]; total: number }> {
     const { items, total } = await this.vaccinations.listForAnimal(animalId, filter);
-    return { items: items.map(toOwnerVaccinationDTO), total };
+    const names = await this.clinicNames.byIds(items.map((v) => v.organizationId));
+    return { items: items.map((v) => toOwnerVaccinationDTO(v, names)), total };
   }
 
-  async getForOwner(animalId: string, vaccinationId: string): Promise<VaccinationDTO> {
+  async getForOwner(animalId: string, vaccinationId: string): Promise<OwnerVaccinationDTO> {
     const v = await this.vaccinations.findByIdForAnimal(vaccinationId, animalId);
     if (!v) throw new NotFoundError('Vaccination not found');
-    return toOwnerVaccinationDTO(v);
+    return toOwnerVaccinationDTO(v, await this.clinicNames.byIds([v.organizationId]));
   }
 }

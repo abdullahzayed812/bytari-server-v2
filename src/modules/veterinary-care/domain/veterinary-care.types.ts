@@ -109,6 +109,8 @@ export interface MedicalTimelineEntryDTO {
   /** `null` once the clinic removed the pet from its list (attribution hidden). */
   organizationId: string | null;
   recordedByUserId: string | null;
+  /** Owner view only: the adding clinic's name (the veterinarian is withheld). */
+  clinicName?: string | null;
   createdAt: string;
   medicalRecord?: MedicalRecordDTO;
   vaccination?: VaccinationDTO;
@@ -310,9 +312,28 @@ export function toMedicalRecordDTO(
 export function toVaccinationDTO(v: Vaccination): VaccinationDTO {
   return { ...v };
 }
+/**
+ * What a pet OWNER learns about who added a clinic item: the clinic's name,
+ * never the veterinarian. `recordedByUserId` stays in the shape (always
+ * `null`) so older clients keep parsing; `clinicName` is `null` only for a row
+ * detached by "remove pet from clinic" (its attribution is hidden).
+ */
+export interface OwnerAttribution {
+  recordedByUserId: null;
+  clinicName: string | null;
+}
+export type OwnerVaccinationDTO = Omit<VaccinationDTO, 'recordedByUserId'> & OwnerAttribution;
+
 /** Owner-facing projection of an OWNER-VISIBLE vaccination (read-only). */
-export function toOwnerVaccinationDTO(v: Vaccination): VaccinationDTO {
-  return toVaccinationDTO(v);
+export function toOwnerVaccinationDTO(
+  v: Vaccination,
+  clinicNames: ReadonlyMap<string, string>,
+): OwnerVaccinationDTO {
+  return {
+    ...toVaccinationDTO(v),
+    recordedByUserId: null,
+    clinicName: v.organizationId ? (clinicNames.get(v.organizationId) ?? null) : null,
+  };
 }
 /**
  * Clinic-facing projection of a SHARED item (vaccination / reminder) for the
@@ -346,6 +367,19 @@ export interface AnimalReminder {
   updatedAt: string;
 }
 export type AnimalReminderDTO = AnimalReminder;
+export type OwnerAnimalReminderDTO = Omit<AnimalReminderDTO, 'recordedByUserId'> & OwnerAttribution;
+
+/** Owner-facing projection of a reminder — clinic name, never the veterinarian. */
+export function toOwnerReminderDTO(
+  r: AnimalReminderDTO,
+  clinicNames: ReadonlyMap<string, string>,
+): OwnerAnimalReminderDTO {
+  return {
+    ...r,
+    recordedByUserId: null,
+    clinicName: r.organizationId ? (clinicNames.get(r.organizationId) ?? null) : null,
+  };
+}
 
 export interface AnimalReminderRow {
   id: string;
