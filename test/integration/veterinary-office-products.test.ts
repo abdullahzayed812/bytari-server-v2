@@ -166,10 +166,11 @@ describe('veterinary office products — CRUD', () => {
 });
 
 describe('veterinary office products — organization type gate', () => {
-  it('rejects product operations on non-VETERINARY_OFFICE organizations with 400, including VETERINARY_STORE', async () => {
+  // CLINIC is accepted since the Clinic Store (covered in organization-store.test.ts).
+  it('rejects product operations on organizations without a catalogue with 400, including VETERINARY_STORE', async () => {
     const admin = await registerAdmin(app);
     const owner = await registerApprovedVet(app);
-    for (const type of ['CLINIC', 'FARM', 'VETERINARY_STORE'] as const) {
+    for (const type of ['FARM', 'VETERINARY_STORE'] as const) {
       const org = await createActiveOrganization(app, owner.accessToken, admin.accessToken, {
         type,
         name: `${type} org`,
@@ -201,7 +202,7 @@ describe('veterinary office products — organization type gate', () => {
     ).toHaveLength(0);
   });
 
-  it('the database composite FK refuses a product pointing at a non-office organization', async () => {
+  it('the database composite FK refuses a product whose type does not match its organization', async () => {
     const admin = await registerAdmin(app);
     const owner = await registerApprovedVet(app);
     const clinic = await createActiveOrganization(app, owner.accessToken, admin.accessToken, {
@@ -461,12 +462,12 @@ describe('veterinary office products — events & audit', () => {
   it('a failed create (non-product-capable org) writes no audit', async () => {
     const admin = await registerAdmin(app);
     const owner = await registerApprovedVet(app);
-    const clinic = await createActiveOrganization(app, owner.accessToken, admin.accessToken, {
-      type: 'CLINIC',
-      name: 'Clinic',
+    const store = await createActiveOrganization(app, owner.accessToken, admin.accessToken, {
+      type: 'VETERINARY_STORE',
+      name: 'Store',
     });
     await request(app)
-      .post(pPath(clinic.id))
+      .post(pPath(store.id))
       .set(bearer(owner.accessToken))
       .send({ name: 'x', productType: 'MEDICINE' });
 

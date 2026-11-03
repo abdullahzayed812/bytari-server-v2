@@ -199,7 +199,7 @@ export class OrganizationEngagementService {
     organizationId: string,
     viewerUserId: string,
   ): Promise<OrganizationEngagementSummary> {
-    const [isFollowing, followersCount, isLiked, likesCount, aggregate, ownReview] =
+    const [isFollowing, followersCount, isLiked, likesCount, aggregate, ownReview, membership] =
       await Promise.all([
         this.follows.isFollowing(organizationId, viewerUserId),
         this.follows.count(organizationId),
@@ -207,6 +207,7 @@ export class OrganizationEngagementService {
         this.likes.count(organizationId),
         this.reviews.aggregate(organizationId),
         this.reviews.findOwn(organizationId, viewerUserId),
+        this.memberships.findByUserAndOrg(viewerUserId, organizationId),
       ]);
     return {
       isFollowing,
@@ -216,6 +217,7 @@ export class OrganizationEngagementService {
       rating: aggregate.average,
       reviewsCount: aggregate.count,
       myReview: ownReview ? { rating: ownReview.rating, comment: ownReview.comment } : null,
+      isMember: membership?.status === 'ACTIVE',
     };
   }
 }

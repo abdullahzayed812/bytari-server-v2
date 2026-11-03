@@ -66,7 +66,12 @@ export class OrganizationSupervisorService {
 
   async assign(
     organizationId: string,
-    input: { userId?: string; email?: string; permissions: string[] },
+    input: {
+      userId?: string;
+      email?: string;
+      permissions: string[];
+      retainRolePermissions?: boolean;
+    },
     actor: SupervisorActor,
   ): Promise<SupervisorMembershipSummary> {
     assertValidPermissions(input.permissions);
@@ -89,7 +94,21 @@ export class OrganizationSupervisorService {
     if (target.status !== 'ACTIVE') {
       throw new ConflictError('Cannot assign a non-active account as a supervisor');
     }
-    OrganizationPolicy.assertCanBeSupervisor(org.type, target);
+    // Promoting an existing member: optionally keep what their role already allowed.
+    const current = await this.memberships.findByUserAndOrg(target.id, organizationId);
+    const isActiveMember = current?.status === 'ACTIVE';
+    let permissions = [...new Set(input.permissions)];
+    if (
+      input.retainRolePermissions &&
+      isActiveMember &&
+      current &&
+      current.roleKey !== 'SUPERVISOR'
+    ) {
+      const role = await this.orgRbac.findRoleByKey(current.roleKey);
+      const roleKeys = role ? await this.orgRbac.getPermissionKeysForRole(role.id) : [];
+      permissions = [...new Set([...permissions, ...roleKeys])];
+    }
+    OrganizationPolicy.assertCanBeSupervisor(org.type, target, { isActiveMember, permissions });
 
     const membershipId = await this.db.transaction(async (tx) => {
       const supRole = await this.orgRbac.findRoleByKey(SUPERVISOR_ORG_ROLE_KEY, tx);
@@ -120,7 +139,7 @@ export class OrganizationSupervisorService {
         id = m.id;
       }
 
-      const permIds = await this.orgRbac.findPermissionIdsByKeys(input.permissions, tx);
+      const permIds = await this.orgRbac.findPermissionIdsByKeys(permissions, tx);
       await this.orgRbac.replaceSupervisorPermissions(id, [...permIds.values()], tx);
 
       await this.audit.record(
@@ -129,7 +148,7 @@ export class OrganizationSupervisorService {
           entityType: AuditEntityType.ORGANIZATION_MEMBERSHIP,
           entityId: id,
           actorUserId: actor.actorUserId,
-          metadata: { organizationId, userId: target.id, permissions: input.permissions },
+          metadata: { organizationId, userId: target.id, permissions },
           context: actor.context,
         },
         tx,
@@ -157,6 +176,17 @@ export class OrganizationSupervisorService {
       throw new NotFoundError('Supervisor membership not found in this organization');
     if (membership.roleKey !== 'SUPERVISOR' || membership.status !== 'ACTIVE') {
       throw new BadRequestError('That membership is not an active supervisor');
+    }
+    // A non-veterinarian (store) supervisor can never be widened past store keys.
+    const [org, holder] = await Promise.all([
+      this.organizations.findById(organizationId),
+      this.users.getById(membership.userId),
+    ]);
+    if (org && holder) {
+      OrganizationPolicy.assertCanBeSupervisor(org.type, holder, {
+        isActiveMember: true,
+        permissions,
+      });
     }
 
     await this.db.transaction(async (tx) => {

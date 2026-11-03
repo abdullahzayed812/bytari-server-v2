@@ -7,6 +7,8 @@
 export const NOTIFICATION_TYPES = [
   // account
   'ACCOUNT_STATUS_CHANGED',
+  /** A pet owner finished registration (email verified) — welcome + optional video. */
+  'PET_OWNER_REGISTRATION_COMPLETED',
   // veterinarian approval workflow
   'VETERINARIAN_APPLICATION_SUBMITTED',
   'VETERINARIAN_APPROVED',
@@ -93,6 +95,12 @@ export const NOTIFICATION_TYPES = [
   // platform stores (Pet Owner store / Veterinarian store) orders
   'STORE_ORDER_PLACED',
   'STORE_ORDER_STATUS_CHANGED',
+  // Clinic / Veterinary Office stores: the customer's "order received"
+  // confirmation, and a status change the seller side must know about.
+  // (STORE_ORDER_PLACED / STORE_ORDER_STATUS_CHANGED are reused with
+  // `data.store = 'ORGANIZATION'`.)
+  'STORE_ORDER_SUBMITTED',
+  'STORE_ORDER_UPDATED',
   // Veterinary Syndicates / Unions
   'SYNDICATE_ANNOUNCEMENT_PUBLISHED',
   'SYNDICATE_SUBMISSION_CREATED',
@@ -182,6 +190,38 @@ export const PUSH_DATA_MAX_KEYS = 12;
 
 /** Global permission for admin broadcast. */
 export const NOTIFICATION_ADMIN_SEND = 'notification.admin.send';
+
+/**
+ * Acceptance notifications that can carry an admin-managed video link
+ * ("فيديو تعريفي"). The policy stamps `data.videoLinkKey`; the URL itself is
+ * resolved on READ (`data.videoUrl`), so adding / changing / removing a link
+ * in the admin panel applies to already-delivered notifications too.
+ */
+export const NOTIFICATION_VIDEO_LINK_KEYS = [
+  'PET_OWNER_REGISTERED',
+  'VETERINARIAN_APPROVED',
+  'CLINIC_APPROVED',
+  'VETERINARY_OFFICE_APPROVED',
+  'POULTRY_FARM_APPROVED',
+  'SHEEP_FARM_APPROVED',
+  'CATTLE_FARM_APPROVED',
+] as const;
+export type NotificationVideoLinkKey = (typeof NOTIFICATION_VIDEO_LINK_KEYS)[number];
+
+/** The video-link key for an approved organization (farm species as in `termsKeyFor`). */
+export function organizationApprovedVideoLinkKey(
+  organizationType: string,
+  farmSpecies: string | null,
+): NotificationVideoLinkKey | null {
+  if (organizationType === 'CLINIC') return 'CLINIC_APPROVED';
+  if (organizationType === 'VETERINARY_OFFICE') return 'VETERINARY_OFFICE_APPROVED';
+  if (organizationType === 'FARM') {
+    if (farmSpecies === 'SHEEP') return 'SHEEP_FARM_APPROVED';
+    if (farmSpecies === 'CATTLE') return 'CATTLE_FARM_APPROVED';
+    return 'POULTRY_FARM_APPROVED';
+  }
+  return null;
+}
 
 export function isNotificationType(v: string): v is NotificationType {
   return (NOTIFICATION_TYPES as readonly string[]).includes(v);

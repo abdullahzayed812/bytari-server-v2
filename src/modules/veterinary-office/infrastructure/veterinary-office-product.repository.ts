@@ -53,6 +53,8 @@ export interface OfficeProductSearchRow {
 
 export interface CreateVeterinaryOfficeProductData extends VeterinaryOfficeProductDetailFieldsInput {
   organizationId: string;
+  /** VETERINARY_OFFICE | CLINIC — pinned by the composite FK to the real org type. */
+  organizationType: string;
   name: string;
   description: string | null;
   productType: string;
@@ -104,7 +106,7 @@ export class VeterinaryOfficeProductRepository {
     const [row] = (await trx(TABLE)
       .insert({
         organization_id: data.organizationId,
-        organization_type: 'VETERINARY_OFFICE',
+        organization_type: data.organizationType,
         name: data.name,
         description: data.description,
         product_type: data.productType,

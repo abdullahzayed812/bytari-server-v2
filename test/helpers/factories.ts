@@ -107,13 +107,32 @@ export async function registerUser(
     );
   }
 
+  const id = verifyRes.body.data.user.id as string;
+  await dropRegistrationWelcome(id);
+
   return {
-    id: verifyRes.body.data.user.id as string,
+    id,
     email,
     password,
     accessToken: verifyRes.body.data.tokens.accessToken as string,
     refreshToken: verifyRes.body.data.tokens.refreshToken as string,
   };
+}
+
+/**
+ * Completing email verification sends the pet owner a welcome notification
+ * (`PET_OWNER_REGISTRATION_COMPLETED`, delivered asynchronously after the
+ * event). The shared factory removes it so every test that counts a user's
+ * notifications starts from an empty inbox; the welcome itself is covered by
+ * `notification-video-links.test.ts`, which registers its user directly.
+ */
+async function dropRegistrationWelcome(userId: string): Promise<void> {
+  const db = getTestDb();
+  const where = { recipient_user_id: userId, type: 'PET_OWNER_REGISTRATION_COMPLETED' };
+  for (let i = 0; i < 100; i += 1) {
+    if ((await db('notifications').where(where).delete()) > 0) return;
+    await new Promise((r) => setTimeout(r, 10));
+  }
 }
 
 export async function loginUser(

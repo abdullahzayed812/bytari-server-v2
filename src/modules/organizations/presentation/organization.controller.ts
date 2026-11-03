@@ -374,7 +374,12 @@ export class OrganizationController {
     const body = validatedBody<AssignSupervisorBody>(req);
     const supervisor = await this.supervisors.assign(
       org.id,
-      { userId: body.userId, email: body.email, permissions: body.permissions },
+      {
+        userId: body.userId,
+        email: body.email,
+        permissions: body.permissions,
+        retainRolePermissions: body.retainRolePermissions,
+      },
       this.actor(req),
     );
     sendSuccess(res, supervisor, StatusCodes.CREATED);

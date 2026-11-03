@@ -13,6 +13,14 @@
 export const VETERINARY_OFFICE_ORG_TYPE = 'VETERINARY_OFFICE' as const;
 
 /**
+ * Organization types whose catalogue lives in `veterinary_office_products`:
+ * the Veterinary Office Store and (since the Clinic Store) the CLINIC. The DB
+ * CHECK `chk_vop_org_type` + the composite FK mirror this list.
+ */
+export const PRODUCT_CATALOG_ORG_TYPES = ['VETERINARY_OFFICE', 'CLINIC'] as const;
+export type ProductCatalogOrgType = (typeof PRODUCT_CATALOG_ORG_TYPES)[number];
+
+/**
  * Veterinary product categories, matching the product filter chips shown in
  * the mobile catalog screens. Text + CHECK, not a catalogue table — extend
  * the CHECK via migration if another category is ever needed. Shared with

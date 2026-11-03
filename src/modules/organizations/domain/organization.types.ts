@@ -96,6 +96,12 @@ export interface OrganizationEngagementSummary {
   reviewsCount: number;
   /** The viewer's own review (one per user — resubmitting updates it). */
   myReview: { rating: number; comment: string | null } | null;
+  /**
+   * The viewer is an ACTIVE member (owner/staff) of this organization — the
+   * client must not open a Pet Owner ↔ organization chat with it (the org side
+   * is them), and sends them to the organization's own inbox instead.
+   */
+  isMember: boolean;
 }
 
 export interface OrganizationReview {

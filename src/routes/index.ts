@@ -57,6 +57,10 @@ import {
   createAdminVeterinarianStoreRouter,
 } from '../modules/veterinarian-store/index.js';
 import {
+  createOrganizationStoreRouter,
+  createOrganizationStoreSellerRouter,
+} from '../modules/organization-store/index.js';
+import {
   createTraderRouters,
   createPoultryOfferRouters,
   createEggOfferRouters,
@@ -201,6 +205,8 @@ export function createApiRouter(c: Container): Router {
   router.use('/organizations', createPublicVeterinaryStoreProductRouter(c));
   router.use('/organizations', createVeterinaryOfficeProductRouter(c));
   router.use('/organizations', createPublicVeterinaryOfficeProductRouter(c));
+  // Clinic / Veterinary Office stores — the seller's incoming orders.
+  router.use('/organizations', createOrganizationStoreSellerRouter(c));
   // Product search across every Veterinary Office (results say which office).
   router.use('/office-products', createOfficeProductSearchRouter(c));
 
@@ -230,6 +236,8 @@ export function createApiRouter(c: Container): Router {
   // authentication; management lives under `/admin/veterinarian-store`
   // (permissioned).
   router.use('/veterinarian-store', createVeterinarianStoreRouter(c));
+  // Clinic / Veterinary Office stores — customer carts, checkout, orders.
+  router.use('/organization-store', createOrganizationStoreRouter(c));
 
   // --- Poultry Markets: trader registration / offers / exchange rates ---
   // Trader status is a per-USER concept, not per-organization — every route

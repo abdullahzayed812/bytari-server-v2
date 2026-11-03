@@ -1,6 +1,11 @@
 import { randomBytes } from 'node:crypto';
 import { BadRequestError, ForbiddenError } from '../../../shared/errors/app-error.js';
 import { ErrorCode } from '../../../shared/errors/error-codes.js';
+import {
+  ORG_ROLE_PERMISSIONS,
+  STORE_ORGANIZATION_TYPES,
+  STORE_SUPERVISOR_PERMISSION_KEYS,
+} from './organization-rbac.constants.js';
 import type { OrganizationType } from './organization.types.js';
 
 /**
@@ -89,20 +94,48 @@ export const OrganizationPolicy = {
 
   /**
    * May `target` be assigned as an organization SUPERVISOR? A supervisor must be
-   * a globally APPROVED veterinarian (spec §15) — EXCEPT for CHAT_ROOM, whose
-   * moderators are drawn from all registered users, not just approved vets.
+   * a globally APPROVED veterinarian (spec §15) — EXCEPT for CHAT_ROOM /
+   * SYNDICATE (any account), and a CLINIC / VETERINARY_OFFICE "store
+   * supervisor": an existing member granted only store-level keys.
    */
-  assertCanBeSupervisor(type: OrganizationType, target: { veterinarianStatus: string }): void {
+  assertCanBeSupervisor(
+    type: OrganizationType,
+    target: { veterinarianStatus: string },
+    storeGrant?: { isActiveMember: boolean; permissions: readonly string[] },
+  ): void {
     // A room moderator / syndicate admin ("مسؤول النقابة") is chosen directly
     // by a global Admin and manages only that one room/syndicate — any active
     // account may hold it, not only approved veterinarians.
     if (type === 'CHAT_ROOM' || type === 'SYNDICATE') return;
-    if (target.veterinarianStatus !== 'APPROVED') {
-      throw new ForbiddenError(
-        'Only an approved veterinarian can be assigned as an organization supervisor',
-        { code: ErrorCode.VETERINARIAN_APPROVAL_REQUIRED },
-      );
+    if (target.veterinarianStatus === 'APPROVED') return;
+    // Store supervisor: a CLINIC / VETERINARY_OFFICE owner may pick ANY of
+    // their existing members (e.g. a non-veterinarian employee) to run the
+    // store — but only with store keys (+ what an employee already has),
+    // never clinical / management rights.
+    if (
+      storeGrant &&
+      (STORE_ORGANIZATION_TYPES as readonly string[]).includes(type) &&
+      storeGrant.isActiveMember &&
+      OrganizationPolicy.isNonVeterinarianSupervisorGrant(storeGrant.permissions)
+    ) {
+      return;
     }
+    throw new ForbiddenError(
+      'Only an approved veterinarian can be assigned as an organization supervisor',
+      { code: ErrorCode.VETERINARIAN_APPROVAL_REQUIRED },
+    );
+  },
+
+  /**
+   * A non-veterinarian supervisor's grant may hold only store keys
+   * (products + incoming orders) and keys an employee (STAFF role) already has.
+   */
+  isNonVeterinarianSupervisorGrant(permissions: readonly string[]): boolean {
+    const allowed = new Set<string>([
+      ...STORE_SUPERVISOR_PERMISSION_KEYS,
+      ...ORG_ROLE_PERMISSIONS.STAFF,
+    ]);
+    return permissions.every((p) => allowed.has(p));
   },
 
   /**

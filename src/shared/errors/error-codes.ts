@@ -133,6 +133,14 @@ export const ErrorCode = {
   /** A stock adjustment would take the product's stock below zero. */
   INSUFFICIENT_STOCK: 'INSUFFICIENT_STOCK',
 
+  // --- Organization stores (Clinic Store / Veterinary Office Store) ---
+  /** The product is inactive, hidden or unpriced — it cannot be added / ordered. */
+  PRODUCT_NOT_PURCHASABLE: 'PRODUCT_NOT_PURCHASABLE',
+  /** A cart / order holds one currency; a product priced in another must be ordered separately. */
+  STORE_CART_CURRENCY_MISMATCH: 'STORE_CART_CURRENCY_MISMATCH',
+  /** The requested order status change is not allowed from the current status / for this side. */
+  ORDER_INVALID_TRANSITION: 'ORDER_INVALID_TRANSITION',
+
   // --- Consultations & inquiries (Phase 13) ---
   /** The consultation / inquiry is CLOSED, or the sender has been blocked. */
   THREAD_NOT_WRITABLE: 'THREAD_NOT_WRITABLE',

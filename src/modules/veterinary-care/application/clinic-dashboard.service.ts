@@ -38,6 +38,14 @@ export interface ClinicDashboardPermissions {
   canViewMembers: boolean;
   canViewSupervisors: boolean;
   canEditOrganization: boolean;
+  /** Clinic Store — view / manage the clinic's products (`product.*`). */
+  canViewProducts: boolean;
+  canManageProducts: boolean;
+  /** Clinic Store — incoming orders (`store.order.read` / `.manage`). */
+  canViewStoreOrders: boolean;
+  canManageStoreOrders: boolean;
+  /** Pick store supervisors among the staff (`supervisor.assign`). */
+  canAssignSupervisors: boolean;
 }
 
 const PERMISSION_KEYS: Record<keyof ClinicDashboardPermissions, string> = {
@@ -55,6 +63,11 @@ const PERMISSION_KEYS: Record<keyof ClinicDashboardPermissions, string> = {
   canViewMembers: 'member.read',
   canViewSupervisors: 'supervisor.read',
   canEditOrganization: 'organization.update',
+  canViewProducts: 'product.read',
+  canManageProducts: 'product.create',
+  canViewStoreOrders: 'store.order.read',
+  canManageStoreOrders: 'store.order.manage',
+  canAssignSupervisors: 'supervisor.assign',
 };
 
 /**
@@ -135,6 +148,8 @@ export class ClinicDashboardService {
     for (const [flag, permission] of Object.entries(PERMISSION_KEYS)) {
       out[flag as keyof ClinicDashboardPermissions] = can(permission);
     }
+    // Any product write counts as "manage products" (a store supervisor may hold only some).
+    out.canManageProducts = can('product.create') || can('product.update') || can('product.delete');
     return out;
   }
 

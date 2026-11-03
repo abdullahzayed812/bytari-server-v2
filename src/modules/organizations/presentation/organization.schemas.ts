@@ -279,6 +279,12 @@ export const assignSupervisorBodySchema = z
     userId: z.string().uuid().optional(),
     email: z.string().trim().toLowerCase().email().optional(),
     permissions: z.array(z.enum(ORG_PERMISSION_KEYS)).max(ORG_PERMISSION_KEYS.length),
+    /**
+     * Promoting an EXISTING member (e.g. a clinic employee made "store
+     * supervisor"): keep what their current role already allowed by adding
+     * those keys to the grant, so they don't lose their day-to-day access.
+     */
+    retainRolePermissions: z.boolean().optional(),
   })
   .refine((v) => Boolean(v.userId) !== Boolean(v.email), {
     message: 'Provide exactly one of userId or email',

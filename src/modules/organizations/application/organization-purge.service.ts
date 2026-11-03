@@ -142,9 +142,16 @@ export class OrganizationPurgeService {
       }
 
       const held: Record<string, number> = {};
-      for (const table of [...PET_OWNER_RECORD_TABLES, 'clinic_appointments']) {
+      // Store orders are the customers' purchase history — kept like their records.
+      for (const table of [
+        ...PET_OWNER_RECORD_TABLES,
+        'clinic_appointments',
+        'organization_store_orders',
+      ]) {
         const qb = tx(table).where('organization_id', id);
-        if (table !== 'clinic_appointments') qb.orWhere('removed_from_organization_id', id);
+        if ((PET_OWNER_RECORD_TABLES as readonly string[]).includes(table)) {
+          qb.orWhere('removed_from_organization_id', id);
+        }
         const row = (await qb.count<{ count: string }>({ count: '*' }).first()) as
           { count: string } | undefined;
         const n = Number(row?.count ?? 0);

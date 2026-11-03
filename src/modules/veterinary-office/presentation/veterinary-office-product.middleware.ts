@@ -7,7 +7,9 @@ import { VeterinaryOfficeProductPolicy } from '../domain/veterinary-office-produ
 import type { VeterinaryOfficeProductRepository } from '../infrastructure/veterinary-office-product.repository.js';
 
 /** Narrow `req.veterinaryOfficeProduct` inside a controller that runs after `withVeterinaryOfficeProduct`. */
-export function requireVeterinaryOfficeProduct(req: Request): Express.VeterinaryOfficeProductContext {
+export function requireVeterinaryOfficeProduct(
+  req: Request,
+): Express.VeterinaryOfficeProductContext {
   if (!req.veterinaryOfficeProduct) throw new NotFoundError('Product not found');
   return req.veterinaryOfficeProduct;
 }
@@ -25,7 +27,17 @@ export const withVeterinaryOffice: RequestHandler = asyncHandler((req, _res, nex
 });
 
 /**
- * MUST run after `withOrganization` + `withVeterinaryOffice` + `authorizeOrg`.
+ * MUST run after `withOrganization`. The product catalogue / store routes —
+ * VETERINARY_OFFICE or CLINIC (`400` otherwise).
+ */
+export const withStoreOrganization: RequestHandler = asyncHandler((req, _res, next) => {
+  const org = requireOrganization(req);
+  VeterinaryOfficeProductPolicy.assertStoreOrganization(org);
+  next();
+});
+
+/**
+ * MUST run after `withOrganization` + `withStoreOrganization` + `authorizeOrg`.
  * Resolves `:productId` scoped to the URL's office → `req.veterinaryOfficeProduct`.
  * A product id that does not belong to this office returns `404` (cross-office
  * isolation — Office A cannot probe Office B's product ids).

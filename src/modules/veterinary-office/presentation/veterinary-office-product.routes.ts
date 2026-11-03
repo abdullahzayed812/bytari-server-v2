@@ -8,7 +8,7 @@ import { VeterinaryOfficeProductController } from './veterinary-office-product.c
 import { PublicVeterinaryOfficeProductController } from './public-veterinary-office-product.controller.js';
 import {
   createVeterinaryOfficeProductMiddleware,
-  withVeterinaryOffice,
+  withStoreOrganization,
 } from './veterinary-office-product.middleware.js';
 import {
   createVeterinaryOfficeProductBodySchema,
@@ -35,7 +35,7 @@ import {
  * Veterinary Store router mounted at the same `/organizations` prefix. Every
  * route is:
  *
- *   authenticate → validate → withOrganization → withVeterinaryOffice (type gate)
+ *   authenticate → validate → withOrganization → withStoreOrganization (OFFICE | CLINIC)
  *                → authorizeOrg(<product perm>) → [withVeterinaryOfficeProduct for :productId]
  *
  * so the caller must be an ACTIVE member with the right organization
@@ -71,7 +71,7 @@ export function createVeterinaryOfficeProductRouter(c: Container): Router {
       query: listVeterinaryOfficeProductsQuerySchema,
     }),
     withOrganization,
-    withVeterinaryOffice,
+    withStoreOrganization,
     authorizeOrg('product.read'),
     activeSubscription,
     asyncHandler(ctrl.list),
@@ -83,7 +83,7 @@ export function createVeterinaryOfficeProductRouter(c: Container): Router {
       body: createVeterinaryOfficeProductBodySchema,
     }),
     withOrganization,
-    withVeterinaryOffice,
+    withStoreOrganization,
     authorizeOrg('product.create'),
     activeSubscription,
     asyncHandler(ctrl.create),
@@ -97,7 +97,7 @@ export function createVeterinaryOfficeProductRouter(c: Container): Router {
       body: veterinaryOfficeProductImageUploadUrlBodySchema,
     }),
     withOrganization,
-    withVeterinaryOffice,
+    withStoreOrganization,
     authorizeOrg('product.create'),
     activeSubscription,
     asyncHandler(ctrl.requestNewProductImageUploadUrl),
@@ -106,7 +106,7 @@ export function createVeterinaryOfficeProductRouter(c: Container): Router {
     `${base}/:productId`,
     validate({ params: veterinaryOfficeProductParamSchema }),
     withOrganization,
-    withVeterinaryOffice,
+    withStoreOrganization,
     authorizeOrg('product.read'),
     activeSubscription,
     withVeterinaryOfficeProduct,
@@ -119,7 +119,7 @@ export function createVeterinaryOfficeProductRouter(c: Container): Router {
       body: updateVeterinaryOfficeProductBodySchema,
     }),
     withOrganization,
-    withVeterinaryOffice,
+    withStoreOrganization,
     authorizeOrg('product.update'),
     activeSubscription,
     withVeterinaryOfficeProduct,
@@ -129,7 +129,7 @@ export function createVeterinaryOfficeProductRouter(c: Container): Router {
     `${base}/:productId`,
     validate({ params: veterinaryOfficeProductParamSchema }),
     withOrganization,
-    withVeterinaryOffice,
+    withStoreOrganization,
     authorizeOrg('product.delete'),
     activeSubscription,
     withVeterinaryOfficeProduct,
@@ -144,7 +144,7 @@ export function createVeterinaryOfficeProductRouter(c: Container): Router {
       body: veterinaryOfficeProductImageUploadUrlBodySchema,
     }),
     withOrganization,
-    withVeterinaryOffice,
+    withStoreOrganization,
     authorizeOrg('product.update'),
     activeSubscription,
     withVeterinaryOfficeProduct,
@@ -157,7 +157,7 @@ export function createVeterinaryOfficeProductRouter(c: Container): Router {
       body: finalizeVeterinaryOfficeProductImageBodySchema,
     }),
     withOrganization,
-    withVeterinaryOffice,
+    withStoreOrganization,
     authorizeOrg('product.update'),
     activeSubscription,
     withVeterinaryOfficeProduct,
@@ -172,7 +172,7 @@ export function createVeterinaryOfficeProductRouter(c: Container): Router {
       body: veterinaryOfficeProductImageUploadUrlBodySchema,
     }),
     withOrganization,
-    withVeterinaryOffice,
+    withStoreOrganization,
     authorizeOrg('product.update'),
     activeSubscription,
     withVeterinaryOfficeProduct,
@@ -185,7 +185,7 @@ export function createVeterinaryOfficeProductRouter(c: Container): Router {
       body: finalizeVeterinaryOfficeProductImageBodySchema,
     }),
     withOrganization,
-    withVeterinaryOffice,
+    withStoreOrganization,
     authorizeOrg('product.update'),
     activeSubscription,
     withVeterinaryOfficeProduct,
@@ -195,7 +195,7 @@ export function createVeterinaryOfficeProductRouter(c: Container): Router {
     `${base}/:productId/images/:imageId`,
     validate({ params: veterinaryOfficeProductImageParamSchema }),
     withOrganization,
-    withVeterinaryOffice,
+    withStoreOrganization,
     authorizeOrg('product.update'),
     activeSubscription,
     withVeterinaryOfficeProduct,

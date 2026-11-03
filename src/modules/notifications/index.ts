@@ -8,6 +8,11 @@ export {
   type NotificationPreferences,
 } from './infrastructure/preference.repository.js';
 export { NotificationService } from './application/notification.service.js';
+export {
+  NotificationVideoLinkService,
+  type NotificationVideoLinkDTO,
+} from './application/notification-video-link.service.js';
+export { NotificationVideoLinkRepository } from './infrastructure/notification-video-link.repository.js';
 export { NotificationEventHandler } from './application/notification-event-handler.js';
 export { SubscriptionExpiryNotifier } from './application/subscription-expiry-notifier.js';
 export {

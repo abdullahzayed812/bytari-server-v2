@@ -4,6 +4,7 @@ import { validate } from '../../../shared/http/validate.js';
 import type { Container } from '../../../container.js';
 import { NOTIFICATION_ADMIN_SEND } from '../domain/notification.constants.js';
 import { NotificationController } from './notification.controller.js';
+import { NotificationVideoLinkController } from './notification-video-link.controller.js';
 import {
   adminNotificationBodySchema,
   adminBroadcastImageUploadUrlBodySchema,
@@ -14,7 +15,9 @@ import {
   petSectionSeenBodySchema,
   syndicateRepliesSeenBodySchema,
   registerDeviceBodySchema,
+  setVideoLinkBodySchema,
   updatePreferencesBodySchema,
+  videoLinkKeyParamSchema,
 } from './notification.schemas.js';
 
 /**
@@ -102,6 +105,22 @@ export function createAdminNotificationRouter(c: Container): Router {
     authorize(NOTIFICATION_ADMIN_SEND),
     validate({ body: adminBroadcastImageUploadUrlBodySchema }),
     asyncHandler(ctrl.adminImageUploadUrl),
+  );
+
+  // Video links shown on acceptance notifications (same admin permission).
+  const videos = new NotificationVideoLinkController(c.notificationVideoLinkService);
+  r.get('/video-links', authorize(NOTIFICATION_ADMIN_SEND), asyncHandler(videos.list));
+  r.put(
+    '/video-links/:key',
+    authorize(NOTIFICATION_ADMIN_SEND),
+    validate({ params: videoLinkKeyParamSchema, body: setVideoLinkBodySchema }),
+    asyncHandler(videos.set),
+  );
+  r.delete(
+    '/video-links/:key',
+    authorize(NOTIFICATION_ADMIN_SEND),
+    validate({ params: videoLinkKeyParamSchema }),
+    asyncHandler(videos.remove),
   );
   return r;
 }

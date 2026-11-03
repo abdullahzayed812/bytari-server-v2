@@ -5,6 +5,7 @@ import {
   BODY_MAX,
   DEVICE_PLATFORMS,
   NOTIFICATION_TYPES,
+  NOTIFICATION_VIDEO_LINK_KEYS,
   PET_CARE_SECTION_KEYS,
   PUSH_DATA_MAX_KEYS,
   SYNDICATE_REPLY_KINDS,
@@ -84,3 +85,12 @@ export type ListNotificationsQuery = z.infer<typeof listNotificationsQuerySchema
 export type RegisterDeviceBody = z.infer<typeof registerDeviceBodySchema>;
 export type UpdatePreferencesBody = z.infer<typeof updatePreferencesBodySchema>;
 export type AdminNotificationBody = z.infer<typeof adminNotificationBodySchema>;
+
+export const videoLinkKeyParamSchema = z
+  .object({ key: z.enum(NOTIFICATION_VIDEO_LINK_KEYS) })
+  .strict();
+
+export const setVideoLinkBodySchema = z.object({ url: linkUrlSchema }).strict();
+
+export type VideoLinkKeyParam = z.infer<typeof videoLinkKeyParamSchema>;
+export type SetVideoLinkBody = z.infer<typeof setVideoLinkBodySchema>;

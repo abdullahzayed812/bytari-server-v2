@@ -1,6 +1,9 @@
 import { BadRequestError } from '../../../shared/errors/app-error.js';
 import { ErrorCode } from '../../../shared/errors/error-codes.js';
-import { VETERINARY_OFFICE_ORG_TYPE } from './veterinary-office-product.constants.js';
+import {
+  PRODUCT_CATALOG_ORG_TYPES,
+  VETERINARY_OFFICE_ORG_TYPE,
+} from './veterinary-office-product.constants.js';
 
 /** Veterinary Office product business rules. Pure — no I/O. Services call these. */
 export const VeterinaryOfficeProductPolicy = {
@@ -15,6 +18,21 @@ export const VeterinaryOfficeProductPolicy = {
       throw new BadRequestError('Product management is only available for veterinary offices', {
         code: ErrorCode.ORGANIZATION_TYPE_NOT_SUPPORTED,
       });
+    }
+  },
+
+  /**
+   * The product catalogue + store (Veterinary Office Store, Clinic Store) is
+   * available to VETERINARY_OFFICE and CLINIC organizations. Anything else —
+   * including a VETERINARY_STORE, whose catalogue is the separate
+   * `veterinary-store` module — is rejected the same way.
+   */
+  assertStoreOrganization(org: { type: string }): void {
+    if (!(PRODUCT_CATALOG_ORG_TYPES as readonly string[]).includes(org.type)) {
+      throw new BadRequestError(
+        'Product management is only available for veterinary offices and clinics',
+        { code: ErrorCode.ORGANIZATION_TYPE_NOT_SUPPORTED },
+      );
     }
   },
 } as const;

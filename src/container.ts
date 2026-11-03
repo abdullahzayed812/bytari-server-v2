@@ -125,6 +125,10 @@ import { VeterinarianStoreOrderRepository } from './modules/veterinarian-store/i
 import { VeterinarianStoreCatalogService } from './modules/veterinarian-store/application/veterinarian-store-catalog.service.js';
 import { VeterinarianStoreCartService } from './modules/veterinarian-store/application/veterinarian-store-cart.service.js';
 import { VeterinarianStoreOrderService } from './modules/veterinarian-store/application/veterinarian-store-order.service.js';
+import { OrganizationStoreCartRepository } from './modules/organization-store/infrastructure/organization-store-cart.repository.js';
+import { OrganizationStoreOrderRepository } from './modules/organization-store/infrastructure/organization-store-order.repository.js';
+import { OrganizationStoreCartService } from './modules/organization-store/application/organization-store-cart.service.js';
+import { OrganizationStoreOrderService } from './modules/organization-store/application/organization-store-order.service.js';
 import { VeterinarianStoreAdminService } from './modules/veterinarian-store/application/veterinarian-store-admin.service.js';
 import { TraderRepository } from './modules/poultryMarket/infrastructure/trader.repository.js';
 import { PoultryOfferRepository } from './modules/poultryMarket/infrastructure/poultry-offer.repository.js';
@@ -237,6 +241,8 @@ import { DeviceTokenRepository } from './modules/notifications/infrastructure/de
 import { PreferenceRepository } from './modules/notifications/infrastructure/preference.repository.js';
 import { NotificationPolicy } from './modules/notifications/domain/notification.policy.js';
 import { NotificationService } from './modules/notifications/application/notification.service.js';
+import { NotificationVideoLinkService } from './modules/notifications/application/notification-video-link.service.js';
+import { NotificationVideoLinkRepository } from './modules/notifications/infrastructure/notification-video-link.repository.js';
 import { VeterinarianApprovalEmailHandler } from './modules/veterinarians/veterinarian-approval-email.handler.js';
 import { NotificationEventHandler } from './modules/notifications/application/notification-event-handler.js';
 import { NotificationRecipientRepository } from './modules/notifications/infrastructure/recipient.repository.js';
@@ -397,6 +403,10 @@ export interface Container {
   vetStoreCatalogService: VeterinarianStoreCatalogService;
   vetStoreCartService: VeterinarianStoreCartService;
   vetStoreOrderService: VeterinarianStoreOrderService;
+  organizationStoreCartRepository: OrganizationStoreCartRepository;
+  organizationStoreOrderRepository: OrganizationStoreOrderRepository;
+  organizationStoreCartService: OrganizationStoreCartService;
+  organizationStoreOrderService: OrganizationStoreOrderService;
   vetStoreAdminService: VeterinarianStoreAdminService;
 
   traderRepository: TraderRepository;
@@ -494,6 +504,7 @@ export interface Container {
   preferenceRepository: PreferenceRepository;
   notificationPolicy: NotificationPolicy;
   notificationService: NotificationService;
+  notificationVideoLinkService: NotificationVideoLinkService;
   notificationEventHandler: NotificationEventHandler;
   veterinarianApprovalEmailHandler: VeterinarianApprovalEmailHandler;
   subscriptionExpiryNotifier: SubscriptionExpiryNotifier;
@@ -1091,9 +1102,33 @@ export function createContainer(deps: ContainerDeps): Container {
     eventBus,
     logger,
   );
+  // --- Organization stores (Clinic Store + Veterinary Office Store): cart,
+  // checkout, orders over the `veterinary_office_products` catalogue ---
+  const organizationStoreCartRepository = new OrganizationStoreCartRepository(db);
+  const organizationStoreOrderRepository = new OrganizationStoreOrderRepository(db);
+  const organizationStoreCartService = new OrganizationStoreCartService(
+    db,
+    organizationStoreCartRepository,
+    veterinaryOfficeProductRepository,
+    veterinaryOfficeProductService,
+    organizationRepository,
+    objectStorage,
+  );
+  const organizationStoreOrderService = new OrganizationStoreOrderService(
+    db,
+    organizationStoreOrderRepository,
+    organizationStoreCartRepository,
+    veterinaryOfficeProductService,
+    organizationRepository,
+    objectStorage,
+    auditService,
+    eventBus,
+    logger,
+  );
   const veterinaryOfficeDashboardService = new VeterinaryOfficeDashboardService(
     veterinaryOfficeProductRepository,
     organizationEngagementService,
+    organizationStoreOrderRepository,
   );
 
   // --- Pet Owners Store (platform-run consumer storefront) ----
@@ -1597,6 +1632,11 @@ export function createContainer(deps: ContainerDeps): Container {
     logger,
   );
   const preferenceRepository = new PreferenceRepository(db);
+  const notificationVideoLinkService = new NotificationVideoLinkService(
+    db,
+    new NotificationVideoLinkRepository(db),
+    auditService,
+  );
   const notificationService = new NotificationService(
     db,
     notificationRepository,
@@ -1609,8 +1649,12 @@ export function createContainer(deps: ContainerDeps): Container {
     logger,
     // Tests: no back-off, so a retried push can't land after the test ends.
     config.env === 'test'
-      ? { pushRetryDelaysMs: [0, 0], storage: objectStorage }
-      : { storage: objectStorage },
+      ? {
+          pushRetryDelaysMs: [0, 0],
+          storage: objectStorage,
+          videoLinks: notificationVideoLinkService,
+        }
+      : { storage: objectStorage, videoLinks: notificationVideoLinkService },
   );
   const notificationRecipientRepository = new NotificationRecipientRepository(db);
   const subscriptionExpiryNotifier = new SubscriptionExpiryNotifier(
@@ -1822,6 +1866,10 @@ export function createContainer(deps: ContainerDeps): Container {
     vetStoreCartService,
     vetStoreOrderService,
     vetStoreAdminService,
+    organizationStoreCartRepository,
+    organizationStoreOrderRepository,
+    organizationStoreCartService,
+    organizationStoreOrderService,
     traderRepository,
     traderService,
     poultryOfferRepository,
@@ -1912,6 +1960,7 @@ export function createContainer(deps: ContainerDeps): Container {
     preferenceRepository,
     notificationPolicy,
     notificationService,
+    notificationVideoLinkService,
     notificationEventHandler,
     veterinarianApprovalEmailHandler,
     subscriptionExpiryNotifier,

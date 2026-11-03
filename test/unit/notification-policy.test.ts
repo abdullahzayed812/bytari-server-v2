@@ -34,6 +34,39 @@ describe('NotificationPolicy — pure branches', () => {
     expect(await p.resolve(ev('ai.settings.updated', { key: 'X', enabled: true }))).toEqual([]);
   });
 
+  it('organization.approved → video-link key per organization type / farm species', async () => {
+    const p = new NotificationPolicy(deps());
+    const keyFor = async (organizationType: string, farmSpecies: string | null) => {
+      const [spec] = await p.resolve(
+        ev('organization.approved', {
+          organizationId: 'o1',
+          ownerUserId: 'u1',
+          organizationType,
+          farmSpecies,
+        }),
+      );
+      return spec?.data.videoLinkKey;
+    };
+    expect(await keyFor('CLINIC', null)).toBe('CLINIC_APPROVED');
+    expect(await keyFor('VETERINARY_OFFICE', null)).toBe('VETERINARY_OFFICE_APPROVED');
+    expect(await keyFor('FARM', 'POULTRY')).toBe('POULTRY_FARM_APPROVED');
+    expect(await keyFor('FARM', 'SHEEP')).toBe('SHEEP_FARM_APPROVED');
+    expect(await keyFor('FARM', 'CATTLE')).toBe('CATTLE_FARM_APPROVED');
+    expect(await keyFor('SYNDICATE', null)).toBeUndefined();
+  });
+
+  it('veterinarian.approved carries the video-link key; rejected does not', async () => {
+    const p = new NotificationPolicy(deps());
+    const [approved] = await p.resolve(
+      ev('veterinarian.approved', { userId: 'v1', applicationId: 'a1' }),
+    );
+    expect(approved?.data.videoLinkKey).toBe('VETERINARIAN_APPROVED');
+    const [rejected] = await p.resolve(
+      ev('veterinarian.rejected', { userId: 'v1', applicationId: 'a1' }),
+    );
+    expect(rejected?.data.videoLinkKey).toBeUndefined();
+  });
+
   it('content.published does NOT broadcast (no spec requires it)', async () => {
     const p = new NotificationPolicy(deps());
     expect(
@@ -149,6 +182,25 @@ describe('NotificationPolicy — pure branches', () => {
       ev('chat.message.created', { conversationId: 'c1', messageId: 'm2', senderUserId: 'member' }),
     );
     expect(fromMember.map((s) => s.recipientUserId)).toEqual(['owner']);
+    // Not a Global Chat room → no room id (the app opens the generic thread).
+    expect(fromMember[0]?.data.chatRoomId).toBeUndefined();
+  });
+
+  it('chat.message.created (Global Chat room) → carries chatRoomId, not organizationId', async () => {
+    const p = new NotificationPolicy(
+      deps({
+        conversations: {
+          findById: () => Promise.resolve({ id: 'c9', type: 'CHAT_ROOM', organizationId: 'room1' }),
+          listActiveParticipantUserIds: () => Promise.resolve(['u2']),
+        },
+      }),
+    );
+    const [spec] = await p.resolve(
+      ev('chat.message.created', { conversationId: 'c9', messageId: 'm9', senderUserId: 'u1' }),
+    );
+    expect(spec?.data).toMatchObject({ conversationId: 'c9', chatRoomId: 'room1' });
+    // kept out of organizationId so the inbox "From:" line stays the sender
+    expect(spec?.data.organizationId).toBeUndefined();
   });
 });
 
@@ -197,7 +249,15 @@ describe('NotificationPolicy — post-Phase-15 mappings', () => {
         reason: 'email_verified',
       }),
     );
-    expect(verified).toEqual([]);
+    // A pet owner finishing registration gets a welcome (not a status change),
+    // stamped with the "pet owner registered" video-link key.
+    expect(verified).toHaveLength(1);
+    expect(verified[0]).toMatchObject({
+      recipientUserId: 'u1',
+      type: 'PET_OWNER_REGISTRATION_COMPLETED',
+      sourceEventKey: 'user.registration.completed:u1',
+      data: { videoLinkKey: 'PET_OWNER_REGISTERED' },
+    });
     expect(
       await p.resolve(
         ev('user.status.changed', { userId: 'u1', status: 'ACTIVE', from: 'ACTIVE' }),

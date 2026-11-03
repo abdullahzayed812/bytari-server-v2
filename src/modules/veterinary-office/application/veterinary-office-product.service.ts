@@ -55,8 +55,9 @@ export interface VeterinaryOfficeProductImageUploadUrlResult {
 }
 
 /**
- * Product lifecycle for VETERINARY_OFFICE organizations ONLY
- * (`VeterinaryOfficeProductPolicy.assertVeterinaryOffice`). A Veterinary
+ * Product lifecycle for VETERINARY_OFFICE and CLINIC organizations
+ * (`VeterinaryOfficeProductPolicy.assertStoreOrganization` — the Veterinary
+ * Office Store and the Clinic Store share this catalogue). A Veterinary
  * Store's catalog is a fully separate table/service (`veterinary-store`) —
  * this class never reads or writes it. Every product belongs to exactly one
  * VETERINARY_OFFICE organization (DB composite FK to `organizations(id,
@@ -89,7 +90,7 @@ export class VeterinaryOfficeProductService {
     input: CreateVeterinaryOfficeProductInput,
     actor: VeterinaryOfficeActor,
   ): Promise<VeterinaryOfficeProductDTO> {
-    VeterinaryOfficeProductPolicy.assertVeterinaryOffice(org);
+    VeterinaryOfficeProductPolicy.assertStoreOrganization(org);
     // A cover uploaded before the product existed: validated up front, so a
     // bad key never leaves a half-created product behind.
     const image = input.image;
@@ -99,6 +100,7 @@ export class VeterinaryOfficeProductService {
       const created = await this.products.create(
         {
           organizationId: org.id,
+          organizationType: org.type,
           name: input.name,
           description: input.description ?? null,
           productType: input.productType,
@@ -261,15 +263,16 @@ export class VeterinaryOfficeProductService {
   }
 
   /**
-   * A non-existent org, an inactive one, and a non-VETERINARY_OFFICE type all
-   * read the same to a stranger browsing the public catalog: 404, never a
-   * 400 — this is a visibility check, not request validation.
+   * A non-existent org, an inactive one, and a non-store type all read the
+   * same to a stranger browsing the public catalog: 404, never a 400 — this is
+   * a visibility check, not request validation. Also the Organization Store's
+   * "can this store sell right now" gate (cart / checkout).
    */
-  private async assertPubliclyBrowsable(organizationId: string): Promise<void> {
+  async assertPubliclyBrowsable(organizationId: string): Promise<void> {
     const org = await this.organizations.findById(organizationId);
     if (!org || org.status !== 'ACTIVE') throw new NotFoundError('Organization not found');
     try {
-      VeterinaryOfficeProductPolicy.assertVeterinaryOffice(org);
+      VeterinaryOfficeProductPolicy.assertStoreOrganization(org);
     } catch {
       throw new NotFoundError('Organization not found');
     }
@@ -380,7 +383,7 @@ export class VeterinaryOfficeProductService {
     org: OrgRef,
     input: VeterinaryOfficeProductImageUploadUrlInput,
   ): Promise<VeterinaryOfficeProductImageUploadUrlResult> {
-    VeterinaryOfficeProductPolicy.assertVeterinaryOffice(org);
+    VeterinaryOfficeProductPolicy.assertStoreOrganization(org);
     this.assertUploadInput(input);
     return this.presignProductImage(input);
   }

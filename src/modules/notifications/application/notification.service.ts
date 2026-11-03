@@ -36,6 +36,7 @@ import type {
   RegisterDeviceInput,
 } from '../infrastructure/device-token.repository.js';
 import type { NotificationRepository } from '../infrastructure/notification.repository.js';
+import type { NotificationVideoLinkService } from './notification-video-link.service.js';
 import { NotificationSourceResolver } from '../infrastructure/notification-source.resolver.js';
 import type {
   NotificationPreferences,
@@ -74,6 +75,8 @@ export interface NotificationServiceOptions {
   pushRetryDelaysMs?: readonly number[];
   /** Resolves broadcast image keys (`data.imageKey`) to fresh URLs on read. */
   storage?: ObjectStorage;
+  /** Resolves `data.videoLinkKey` to the admin's current video URL on read. */
+  videoLinks?: Pick<NotificationVideoLinkService, 'attachVideoUrl'>;
 }
 
 const sleep = (ms: number): Promise<void> =>
@@ -96,6 +99,7 @@ export class NotificationService {
   private readonly pushRetryDelaysMs: readonly number[];
   private readonly sources: NotificationSourceResolver;
   private readonly storage: ObjectStorage | undefined;
+  private readonly videoLinks: Pick<NotificationVideoLinkService, 'attachVideoUrl'> | undefined;
 
   constructor(
     private readonly db: Knex,
@@ -113,6 +117,7 @@ export class NotificationService {
     this.sources = new NotificationSourceResolver(db);
     this.pushRetryDelaysMs = options.pushRetryDelaysMs ?? DEFAULT_PUSH_RETRY_DELAYS_MS;
     this.storage = options.storage;
+    this.videoLinks = options.videoLinks;
   }
 
   // --- event-driven delivery (called by the handler) --------------------
@@ -181,8 +186,15 @@ export class NotificationService {
     // retry back-off for one recipient never delays the rest of a fan-out;
     // `sendPushWithRetry` never rejects.
     // The storage key never leaves the server — the app opens the row by id.
+    // `entityType` / `entityId` let a push tap route like the inbox card does
+    // (many types keep their target id only in those columns).
     const { imageKey: _imageKey, ...pushData } = spec.data;
-    void this.sendPushWithRetry(logCtx, spec, { ...pushData, notificationId: created.id });
+    void this.sendPushWithRetry(logCtx, spec, {
+      ...(spec.entityType ? { entityType: spec.entityType } : {}),
+      ...(spec.entityId ? { entityId: spec.entityId } : {}),
+      ...pushData,
+      notificationId: created.id,
+    });
   }
 
   private async sendPushWithRetry(
@@ -245,7 +257,9 @@ export class NotificationService {
     return Promise.all(
       items.map(async (n) => {
         const dto = toNotificationDTO(n, sources.get(n.id));
-        return { ...dto, data: await resolveNotificationImage(this.storage, dto.data) };
+        let data = await resolveNotificationImage(this.storage, dto.data);
+        if (this.videoLinks) data = await this.videoLinks.attachVideoUrl(data);
+        return { ...dto, data };
       }),
     );
   }

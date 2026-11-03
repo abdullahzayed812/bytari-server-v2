@@ -106,6 +106,12 @@ export const ORG_PERMISSION_KEYS = [
   'product.update',
   'product.delete',
   'product.inventory.adjust',
+  // --- Organization stores (Clinic Store + Veterinary Office Store) — the
+  // incoming orders of a CLINIC / VETERINARY_OFFICE. Products reuse the
+  // `product.*` keys above. Granted to NO role by default: the OWNER override,
+  // ADMIN, or an explicit per-membership "store supervisor" grant.
+  'store.order.read',
+  'store.order.manage',
   // --- Clinic appointments (Pet Owner ↔ Clinic booking) — CLINIC organizations ---
   // The Pet Owner books via authentication + pet-ownership only (no org
   // permission, like `animal.create`). These gate the future Clinic Dashboard:
@@ -233,6 +239,9 @@ export const ORG_PERMISSION_DEFINITIONS: Record<OrgPermissionKey, string> = {
   'product.update': 'Update this store/office’s products (profile fields, not stock)',
   'product.delete': 'Deactivate (soft-delete) this store/office’s products',
   'product.inventory.adjust': 'Adjust a product’s stock quantity',
+  'store.order.read': 'View this clinic/office store’s incoming orders',
+  'store.order.manage':
+    'Confirm, process, ship, deliver or cancel this clinic/office store’s orders',
   'clinic.appointment.read': 'View appointment requests booked with this clinic',
   'clinic.appointment.manage':
     'Accept, reject, reschedule, complete or update the status of this clinic’s appointments',
@@ -363,6 +372,26 @@ export const ORG_ROLE_PERMISSIONS: Record<OrgRoleKey, OrgPermissionKey[]> = {
     'vaccination.update',
   ],
 };
+
+/**
+ * The store-only permission set: product management + incoming orders. A
+ * CLINIC / VETERINARY_OFFICE owner may make ANY existing member (e.g. a
+ * non-veterinarian employee) a "store supervisor" holding only these keys
+ * (plus what their previous role already allowed) — see
+ * `OrganizationPolicy.assertCanBeSupervisor`.
+ */
+export const STORE_SUPERVISOR_PERMISSION_KEYS = [
+  'product.read',
+  'product.create',
+  'product.update',
+  'product.delete',
+  'product.inventory.adjust',
+  'store.order.read',
+  'store.order.manage',
+] as const satisfies readonly OrgPermissionKey[];
+
+/** Organization types that run a store with orders (Clinic Store / Veterinary Office Store). */
+export const STORE_ORGANIZATION_TYPES = ['CLINIC', 'VETERINARY_OFFICE'] as const;
 
 export function isOrgRoleKey(value: string): value is OrgRoleKey {
   return (ORG_ROLE_KEYS as readonly string[]).includes(value);

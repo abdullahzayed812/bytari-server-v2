@@ -91,15 +91,17 @@ describe('public product catalog — GET /organizations/discover/:id/products*',
     expect(res.status).toBe(404);
   });
 
-  it('404s for a CLINIC (not product-capable), never leaking a 400', async () => {
+  // Since the Clinic Store a CLINIC has a public catalogue too (organization-store.test.ts);
+  // a VETERINARY_STORE keeps its own separate catalogue module.
+  it('404s for a VETERINARY_STORE (separate catalogue), never leaking a 400', async () => {
     const admin = await registerAdmin(app);
     const owner = await registerApprovedVet(app);
-    const clinic = await createActiveOrganization(app, owner.accessToken, admin.accessToken, {
-      type: 'CLINIC',
-      name: 'A Clinic',
+    const store = await createActiveOrganization(app, owner.accessToken, admin.accessToken, {
+      type: 'VETERINARY_STORE',
+      name: 'A Store',
     });
     const stranger = await registerUser(app);
-    const res = await request(app).get(publicPPath(clinic.id)).set(bearer(stranger.accessToken));
+    const res = await request(app).get(publicPPath(store.id)).set(bearer(stranger.accessToken));
     expect(res.status).toBe(404);
   });
 

@@ -14,6 +14,10 @@ import type { NotificationType } from './notification.constants.js';
 export const NOTIFICATION_COPY: Record<NotificationType, { title: string; body: string }> = {
   // account
   ACCOUNT_STATUS_CHANGED: { title: 'تحديث حالة الحساب', body: 'تم تحديث حالة حسابك.' },
+  PET_OWNER_REGISTRATION_COMPLETED: {
+    title: 'مرحباً بك في بيطري',
+    body: 'تم تفعيل حسابك بنجاح، يمكنك الآن استخدام جميع خدمات التطبيق.',
+  },
   // veterinarian approval
   VETERINARIAN_APPLICATION_SUBMITTED: {
     title: 'طلب تسجيل طبيب بيطري جديد',
@@ -217,6 +221,11 @@ export const NOTIFICATION_COPY: Record<NotificationType, { title: string; body: 
   // store orders
   STORE_ORDER_PLACED: { title: 'طلب شراء جديد', body: 'تم استلام طلب شراء جديد.' },
   STORE_ORDER_STATUS_CHANGED: { title: 'تحديث حالة الطلب', body: 'تم تحديث حالة طلبك.' },
+  STORE_ORDER_SUBMITTED: {
+    title: 'تم إرسال طلبك',
+    body: 'استلم المتجر طلبك وسيتم مراجعته قريباً.',
+  },
+  STORE_ORDER_UPDATED: { title: 'تحديث على طلب', body: 'تم تحديث حالة أحد طلبات متجرك.' },
   // syndicates
   SYNDICATE_ANNOUNCEMENT_PUBLISHED: {
     title: 'إعلان جديد من النقابة',

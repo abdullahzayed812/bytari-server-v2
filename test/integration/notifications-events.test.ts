@@ -114,6 +114,11 @@ describe('veterinarian approval notifications', () => {
     const sent = push.sent.find((m) => m.data?.type === 'VETERINARIAN_APPROVED');
     expect(sent).toBeDefined();
     expect(sent?.data?.notificationId).toBe(approved?.id);
+    // The push carries the entity columns too, so a tap routes like the inbox card.
+    expect(sent?.data).toMatchObject({
+      entityType: 'VETERINARIAN_APPLICATION',
+      entityId: approved?.entity_id,
+    });
     expect(sent?.tokens).toEqual(['fcm-token-applicant-000000000000']);
   });
 

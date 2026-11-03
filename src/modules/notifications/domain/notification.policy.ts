@@ -8,7 +8,11 @@ import type { OrganizationRepository } from '../../organizations/infrastructure/
 import type { SupervisorRepository } from '../../supervisors/supervisor.repository.js';
 import type { SyndicateRegistrationRepository } from '../../syndicates/infrastructure/syndicate-registration.repository.js';
 import type { NotificationRecipientRepository } from '../infrastructure/recipient.repository.js';
-import type { NotificationType } from './notification.constants.js';
+import {
+  organizationApprovedVideoLinkKey,
+  type NotificationType,
+  type NotificationVideoLinkKey,
+} from './notification.constants.js';
 import { NOTIFICATION_COPY, PET_CARE_BODY } from './notification.copy.js';
 import type { NotificationSpec } from './notification.types.js';
 
@@ -55,11 +59,7 @@ export class NotificationPolicy {
     const p = event.payload as P;
     switch (event.name) {
       case 'organization.approved':
-        return this.singleOwner(
-          'ORGANIZATION_APPROVED',
-          p,
-          `${event.name}:${str(p.organizationId)}`,
-        );
+        return this.organizationApproved(event.name, p);
       case 'organization.rejected':
         return this.singleOwner(
           'ORGANIZATION_REJECTED',
@@ -453,6 +453,9 @@ export class NotificationPolicy {
           str(p.userId),
           {
             applicationId: str(p.applicationId),
+            ...(event.name === 'veterinarian.approved'
+              ? { videoLinkKey: 'VETERINARIAN_APPROVED' satisfies NotificationVideoLinkKey }
+              : {}),
             entityType: 'VETERINARIAN_APPLICATION',
             entityId: str(p.applicationId),
             key: `${event.name}:${str(p.applicationId)}`,
@@ -661,6 +664,12 @@ export class NotificationPolicy {
         });
       }
 
+      // --- Clinic / Veterinary Office stores -------------------------
+      case 'organization_store.order.placed':
+        return this.organizationStoreOrderPlaced(event.name, p);
+      case 'organization_store.order.status_changed':
+        return this.organizationStoreOrderStatusChanged(event.name, p);
+
       default:
         return [];
     }
@@ -708,6 +717,21 @@ export class NotificationPolicy {
         },
       ),
     ];
+  }
+
+  /** The owner's "approved" notification, stamped with the matching video-link key. */
+  private organizationApproved(eventName: string, p: P): NotificationSpec[] {
+    const [spec] = this.singleOwner(
+      'ORGANIZATION_APPROVED',
+      p,
+      `${eventName}:${str(p.organizationId)}`,
+    );
+    if (!spec) return [];
+    const videoLinkKey = organizationApprovedVideoLinkKey(
+      str(p.organizationType),
+      str(p.farmSpecies) || null,
+    );
+    return [videoLinkKey ? { ...spec, data: { ...spec.data, videoLinkKey } } : spec];
   }
 
   private toUser(
@@ -786,7 +810,16 @@ export class NotificationPolicy {
       this.spec(
         'CHAT_MESSAGE_RECEIVED',
         uid,
-        { conversationId, messageId },
+        {
+          conversationId,
+          messageId,
+          // A Global Chat room opens its own room screen, addressed by the
+          // room organization (kept out of `organizationId` so the inbox
+          // "From:" line stays the sender, not the room).
+          ...(conv.type === 'CHAT_ROOM' && conv.organizationId
+            ? { chatRoomId: conv.organizationId }
+            : {}),
+        },
         {
           actorUserId: sender || null,
           entityType: 'CONVERSATION',
@@ -1414,6 +1447,18 @@ export class NotificationPolicy {
    * never a supervisor who cannot open the appointments screen.
    */
   private async farmAppointmentAudience(organizationId: string): Promise<Set<string>> {
+    return this.orgPermissionAudience(organizationId, 'farm.appointment.read');
+  }
+
+  /**
+   * The organization's owner + every ACTIVE member whose role permissions
+   * (∪ supervisor grants) include `permission` — never a member who could not
+   * open what they are told about.
+   */
+  private async orgPermissionAudience(
+    organizationId: string,
+    permission: string,
+  ): Promise<Set<string>> {
     const [org, { items }] = await Promise.all([
       this.deps.organizations.findById(organizationId),
       this.deps.memberships.listForOrg(organizationId, {
@@ -1444,9 +1489,112 @@ export class NotificationPolicy {
       if (m.roleKey === 'SUPERVISOR') {
         for (const k of await this.deps.orgRbac.getSupervisorPermissionKeys(m.id)) perms.add(k);
       }
-      if (perms.has('farm.appointment.read')) recipients.add(m.userId);
+      if (perms.has(permission)) recipients.add(m.userId);
     }
     return recipients;
+  }
+
+  /** `data` shared by every Clinic / Office store order notification. */
+  private organizationStoreData(p: P, audience: 'CUSTOMER' | 'SELLER'): Record<string, string> {
+    return {
+      orderId: str(p.orderId),
+      orderNumber: str(p.orderNumber),
+      organizationId: str(p.organizationId),
+      organizationType: str(p.organizationType),
+      store: 'ORGANIZATION',
+      audience,
+    };
+  }
+
+  /**
+   * A customer placed an order in a clinic / office store → the store's
+   * responsible people (owner + members holding `store.order.read`, e.g. its
+   * store supervisors) get STORE_ORDER_PLACED, and the customer gets the
+   * STORE_ORDER_SUBMITTED confirmation.
+   */
+  private async organizationStoreOrderPlaced(eventName: string, p: P): Promise<NotificationSpec[]> {
+    const orderId = str(p.orderId);
+    const organizationId = str(p.organizationId);
+    const customer = str(p.customerUserId);
+    if (!orderId || !organizationId) return [];
+    const sellers = await this.orgPermissionAudience(organizationId, 'store.order.read');
+    const extra = (key: string): Parameters<NotificationPolicy['spec']>[3] => ({
+      actorUserId: customer || null,
+      entityType: 'ORGANIZATION_STORE_ORDER',
+      entityId: orderId,
+      sourceEventKey: key,
+    });
+    const out = [...sellers]
+      .filter((uid) => uid !== customer)
+      .map((uid) =>
+        this.spec(
+          'STORE_ORDER_PLACED',
+          uid,
+          this.organizationStoreData(p, 'SELLER'),
+          extra(`${eventName}:${orderId}`),
+        ),
+      );
+    if (customer) {
+      out.push(
+        this.spec(
+          'STORE_ORDER_SUBMITTED',
+          customer,
+          this.organizationStoreData(p, 'CUSTOMER'),
+          extra(`${eventName}:${orderId}:customer`),
+        ),
+      );
+    }
+    return out;
+  }
+
+  /**
+   * A clinic / office store order changed status → the customer (unless they
+   * made the change themselves) gets STORE_ORDER_STATUS_CHANGED; the store's
+   * responsible people (owner + `store.order.read` holders) other than the
+   * actor get STORE_ORDER_UPDATED — so a co-supervisor or the owner sees what
+   * a store supervisor did, and everyone sees a customer cancellation.
+   */
+  private async organizationStoreOrderStatusChanged(
+    eventName: string,
+    p: P,
+  ): Promise<NotificationSpec[]> {
+    const orderId = str(p.orderId);
+    const organizationId = str(p.organizationId);
+    const customer = str(p.customerUserId);
+    const actor = str(p.actorUserId);
+    const status = str(p.status);
+    if (!orderId || !organizationId) return [];
+    const key = `${eventName}:${orderId}:${status}`;
+    const extra = (suffix: string): Parameters<NotificationPolicy['spec']>[3] => ({
+      actorUserId: actor || null,
+      entityType: 'ORGANIZATION_STORE_ORDER',
+      entityId: orderId,
+      sourceEventKey: `${key}:${suffix}`,
+    });
+    const out: NotificationSpec[] = [];
+    if (customer && customer !== actor) {
+      out.push(
+        this.spec(
+          'STORE_ORDER_STATUS_CHANGED',
+          customer,
+          { ...this.organizationStoreData(p, 'CUSTOMER'), status },
+          extra('customer'),
+        ),
+      );
+    }
+    const sellers = await this.orgPermissionAudience(organizationId, 'store.order.read');
+    for (const uid of sellers) {
+      if (uid === actor || uid === customer) continue;
+      out.push(
+        this.spec(
+          'STORE_ORDER_UPDATED',
+          uid,
+          { ...this.organizationStoreData(p, 'SELLER'), status },
+          extra('seller'),
+        ),
+      );
+    }
+    return out;
   }
 
   /** The assignee only counts while still an ACTIVE member of the farm. */
@@ -1572,9 +1720,16 @@ export class NotificationPolicy {
     // `from` is absent on events published before the payload carried it —
     // treat that as "unknown transition" and stay quiet rather than guess.
     if (!userId || !status || !str(p.from) || str(p.from) === status) return [];
-    // Completing email verification is not notified: the user is on the verify
-    // screen at that moment (and has no push device registered yet).
-    if (p.reason === 'email_verified') return [];
+    // Completing email verification (pet owners only — veterinarians skip it)
+    // gets an in-app welcome instead of a status change; it may carry the
+    // admin's "pet owner registered" video. No push device is registered yet,
+    // so this lands in the inbox only.
+    if (p.reason === 'email_verified') {
+      return this.toUser('PET_OWNER_REGISTRATION_COMPLETED', userId, {
+        videoLinkKey: 'PET_OWNER_REGISTERED' satisfies NotificationVideoLinkKey,
+        key: `user.registration.completed:${userId}`,
+      });
+    }
     return this.toUser('ACCOUNT_STATUS_CHANGED', userId, {
       status,
       key: repeatableKey(event, userId),

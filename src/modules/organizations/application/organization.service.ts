@@ -1413,9 +1413,18 @@ export class OrganizationService {
       );
       return u;
     });
+    // Type + farm species pick the approval notification's video link.
+    const farm =
+      org.type === 'FARM'
+        ? await this.db('farm_details')
+            .where({ organization_id: id })
+            .first<{ farm_species: string | null } | undefined>('farm_species')
+        : undefined;
     this.events.publish('organization.approved', {
       organizationId: id,
       ownerUserId: org.ownerUserId,
+      organizationType: org.type,
+      farmSpecies: farm?.farm_species ?? null,
     });
     return updated;
   }
