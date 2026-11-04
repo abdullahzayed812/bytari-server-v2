@@ -6,6 +6,7 @@ import { validatedBody, validatedParams, validatedQuery } from '../../../shared/
 import { auditContextFromRequest } from '../../audit/audit-context.js';
 import { requireAuth } from '../../auth/authenticate.middleware.js';
 import { requireOrganization } from '../../organizations/presentation/organization.middleware.js';
+import type { ChatService } from '../../chat/application/chat.service.js';
 import type { OrganizationStoreCartService } from '../application/organization-store-cart.service.js';
 import type {
   OrganizationStoreActor,
@@ -30,6 +31,7 @@ export class OrganizationStoreController {
   constructor(
     private readonly carts: OrganizationStoreCartService,
     private readonly orders: OrganizationStoreOrderService,
+    private readonly chat: Pick<ChatService, 'getOrCreateConversation'>,
   ) {}
 
   listMyCarts = async (req: Request, res: Response): Promise<void> => {
@@ -106,6 +108,22 @@ export class OrganizationStoreController {
     sendSuccess(res, await this.orders.getMyOrder(requireAuth(req).userId, orderId));
   };
 
+  /**
+   * Opens (or reuses) the customer ↔ store conversation from an order the
+   * caller placed — the existing PET_OWNER_CLINIC / PET_OWNER_VETERINARY_OFFICE
+   * chat, so every chat rule (active / operational store, access) applies.
+   */
+  openOrderConversation = async (req: Request, res: Response): Promise<void> => {
+    const { orderId } = validatedParams<{ orderId: string }>(req);
+    const org = await this.orders.customerOrderOrganization(requireAuth(req).userId, orderId);
+    const { conversation, created } = await this.chat.getOrCreateConversation(
+      actorOf(req),
+      org,
+      null,
+    );
+    sendSuccess(res, conversation, created ? StatusCodes.CREATED : StatusCodes.OK);
+  };
+
   cancelMyOrder = async (req: Request, res: Response): Promise<void> => {
     const { orderId } = validatedParams<{ orderId: string }>(req);
     const body = validatedBody<CancelOrderBody>(req);
@@ -115,7 +133,10 @@ export class OrganizationStoreController {
 
 /** Seller HTTP adapter: the organization's incoming orders. No business logic. */
 export class OrganizationStoreSellerController {
-  constructor(private readonly orders: OrganizationStoreOrderService) {}
+  constructor(
+    private readonly orders: OrganizationStoreOrderService,
+    private readonly chat: Pick<ChatService, 'getOrCreateConversation'>,
+  ) {}
 
   list = async (req: Request, res: Response): Promise<void> => {
     const org = requireOrganization(req);
@@ -137,6 +158,19 @@ export class OrganizationStoreSellerController {
   getOne = async (req: Request, res: Response): Promise<void> => {
     const { orderId } = validatedParams<{ orderId: string }>(req);
     sendSuccess(res, await this.orders.getForSeller(requireOrganization(req).id, orderId));
+  };
+
+  /** The store side opens (or reuses) its conversation with THIS order's customer. */
+  openOrderConversation = async (req: Request, res: Response): Promise<void> => {
+    const org = requireOrganization(req);
+    const { orderId } = validatedParams<{ orderId: string }>(req);
+    const customerUserId = await this.orders.sellerOrderCustomerId(org.id, orderId);
+    const { conversation, created } = await this.chat.getOrCreateConversation(
+      actorOf(req),
+      { id: org.id, type: org.type, status: org.status, ownerUserId: org.ownerUserId },
+      customerUserId,
+    );
+    sendSuccess(res, conversation, created ? StatusCodes.CREATED : StatusCodes.OK);
   };
 
   updateStatus = async (req: Request, res: Response): Promise<void> => {

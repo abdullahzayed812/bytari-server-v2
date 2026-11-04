@@ -70,10 +70,11 @@ export function createPoultryOpsRouter(c: Container): Router {
     organizations: c.organizationRepository,
     authz: c.authorizationService,
   });
-  const { requireActiveFarmSubscription } = createFarmSubscriptionMiddleware({
-    subscriptions: c.farmSubscriptionRenewalRepository,
-    authz: c.authorizationService,
-  });
+  const { requireActiveFarmSubscription, requireActiveFarmSubscriptionOrPendingOwner } =
+    createFarmSubscriptionMiddleware({
+      subscriptions: c.farmSubscriptionRenewalRepository,
+      authz: c.authorizationService,
+    });
   const { withPoultryFlock } = createPoultryFlockMiddleware({
     flocks: c.poultryFlockRepository,
   });
@@ -89,6 +90,15 @@ export function createPoultryOpsRouter(c: Container): Router {
   const org = [withOrganization, withFarmOrganization] as const;
   const orgOp = [withOrganization, withFarmOrganization, requireActiveFarmSubscription] as const;
   const flockOp = [withOrganization, withFarmOrganization, requireActiveFarmSubscription] as const;
+  // Farm photo: same lock, except the OWNER of a still-PENDING farm (the
+  // "Add farm" form uploads the picked photo right after creation, before any
+  // approval/subscription exists). EXPIRED / SUSPENDED farms stay locked.
+  const imageOp = [
+    withOrganization,
+    withFarmOrganization,
+    requireActiveFarmSubscriptionOrPendingOwner,
+  ] as const;
+  const imageAuth = authorizeOrg('organization.update', { allowInactiveForOwner: ['PENDING'] });
 
   // --- farm profile (Farm Details header) --------------------------
   r.get(
@@ -111,22 +121,22 @@ export function createPoultryOpsRouter(c: Container): Router {
   r.post(
     '/:organizationId/farm/profile/image/upload-url',
     validate({ params: organizationParamSchema, body: imageUploadUrlBodySchema }),
-    ...orgOp,
-    authorizeOrg('organization.update'),
+    ...imageOp,
+    imageAuth,
     asyncHandler(ctrl.requestProfileImageUploadUrl),
   );
   r.post(
     '/:organizationId/farm/profile/image',
     validate({ params: organizationParamSchema, body: registerImageBodySchema }),
-    ...orgOp,
-    authorizeOrg('organization.update'),
+    ...imageOp,
+    imageAuth,
     asyncHandler(ctrl.registerProfileImage),
   );
   r.delete(
     '/:organizationId/farm/profile/image',
     validate({ params: organizationParamSchema }),
-    ...orgOp,
-    authorizeOrg('organization.update'),
+    ...imageOp,
+    imageAuth,
     asyncHandler(ctrl.removeProfileImage),
   );
 

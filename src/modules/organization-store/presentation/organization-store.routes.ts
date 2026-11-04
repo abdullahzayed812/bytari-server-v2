@@ -38,6 +38,7 @@ export function createOrganizationStoreRouter(c: Container): Router {
   const ctrl = new OrganizationStoreController(
     c.organizationStoreCartService,
     c.organizationStoreOrderService,
+    c.chatService,
   );
   const r = Router();
   r.use(c.authenticate);
@@ -80,6 +81,12 @@ export function createOrganizationStoreRouter(c: Container): Router {
     validate({ params: orderIdParamSchema }),
     asyncHandler(ctrl.getMyOrder),
   );
+  // "مراسلة المتجر" from the order page — only for an order the caller placed.
+  r.post(
+    '/orders/:orderId/conversation',
+    validate({ params: orderIdParamSchema }),
+    asyncHandler(ctrl.openOrderConversation),
+  );
   r.post(
     '/orders/:orderId/cancel',
     validate({ params: orderIdParamSchema, body: cancelOrderBodySchema }),
@@ -100,7 +107,10 @@ export function createOrganizationStoreRouter(c: Container): Router {
  * cannot work its orders until renewed, like its products.
  */
 export function createOrganizationStoreSellerRouter(c: Container): Router {
-  const ctrl = new OrganizationStoreSellerController(c.organizationStoreOrderService);
+  const ctrl = new OrganizationStoreSellerController(
+    c.organizationStoreOrderService,
+    c.chatService,
+  );
   const { withOrganization, authorizeOrg } = createOrganizationMiddleware({
     organizations: c.organizationRepository,
     authz: c.authorizationService,
@@ -142,6 +152,17 @@ export function createOrganizationStoreSellerRouter(c: Container): Router {
     read,
     activeSubscription,
     asyncHandler(ctrl.getOne),
+  );
+  // "مراسلة الزبون" — anyone who may read this store's orders may message the
+  // customer of one of THEM (never an arbitrary user through this route).
+  r.post(
+    `${base}/:orderId/conversation`,
+    validate({ params: storeOrderParamSchema }),
+    withOrganization,
+    withStoreOrganization,
+    read,
+    activeSubscription,
+    asyncHandler(ctrl.openOrderConversation),
   );
   r.patch(
     `${base}/:orderId/status`,

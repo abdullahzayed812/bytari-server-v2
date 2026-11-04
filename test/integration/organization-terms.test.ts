@@ -18,13 +18,13 @@ describe('organization registration terms & conditions', () => {
     const user = await registerUser(app);
     const expected: Record<string, { count: number; first: string; last: string }> = {
       CLINIC: {
-        count: 26,
+        count: 28,
         first:
           'أن تكون العيادة البيطرية مرخصة أصولياً من الجهات الرسمية المختصة، ويجب تقديم الوثائق أو المستمسكات التي تثبت ذلك عند الطلب.',
         last: 'عند إرسال طلب التسجيل، يعتبر مقدم الطلب موافقاً على شروط وسياسات استخدام تطبيق بيطري | Baytari.',
       },
       VETERINARY_OFFICE: {
-        count: 31,
+        count: 33,
         first:
           'يجب أن يكون المكتب البيطري مسجلاً أو مرخصاً أصولياً وفق التعليمات والقوانين المعمول بها في المنطقة التي يعمل بها.',
         last: 'عند إرسال طلب التسجيل، يعتبر صاحب المكتب موافقاً على شروط وسياسات تطبيق بيطري | Baytari.',
@@ -55,6 +55,11 @@ describe('organization registration terms & conditions', () => {
       expect(res.body.data.clauses[0]).toBe(e.first);
       expect(res.body.data.clauses[e.count - 1]).toBe(e.last);
       expect(res.body.data.version).toMatch(/^[0-9a-f]{16}$/);
+      if (key === 'CLINIC' || key === 'VETERINARY_OFFICE') {
+        // Pricing addendum: Veterinary Syndicate pricing rules + suspension.
+        expect(res.body.data.clauses[e.count - 3]).toContain('نقابة الأطباء البيطريين');
+        expect(res.body.data.clauses[e.count - 2]).toContain('تعليق الحساب دون إشعار مسبق');
+      }
     }
     expect(
       (await request(app).get(`${API}/terms/STORE`).set(bearer(user.accessToken))).status,

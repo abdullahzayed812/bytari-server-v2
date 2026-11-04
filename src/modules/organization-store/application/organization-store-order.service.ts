@@ -184,6 +184,21 @@ export class OrganizationStoreOrderService {
     return this.toDetailDTO(order, 'CUSTOMER');
   }
 
+  /**
+   * "مراسلة" on the customer's order page: the store organization of an order
+   * the caller placed (another shopper's order reads as 404, like `getMyOrder`).
+   */
+  async customerOrderOrganization(
+    userId: string,
+    orderId: string,
+  ): Promise<{ id: string; type: string; status: string; ownerUserId: string }> {
+    const order = await this.orders.findById(orderId);
+    if (!order || order.user_id !== userId) throw new NotFoundError('Order not found');
+    const org = await this.organizations.findById(order.organization_id);
+    if (!org) throw new NotFoundError('Store not found');
+    return { id: org.id, type: org.type, status: org.status, ownerUserId: org.ownerUserId };
+  }
+
   async cancelMyOrder(
     actor: OrganizationStoreActor,
     orderId: string,
@@ -221,6 +236,18 @@ export class OrganizationStoreOrderService {
       { ...order, seller_viewed_at: order.seller_viewed_at ?? new Date() },
       'SELLER',
     );
+  }
+
+  /**
+   * "مراسلة الزبون" on an incoming order: the customer of an order placed with
+   * THIS organization (an order of another store reads as 404).
+   */
+  async sellerOrderCustomerId(organizationId: string, orderId: string): Promise<string> {
+    const order = await this.orders.findById(orderId);
+    if (!order || order.organization_id !== organizationId) {
+      throw new NotFoundError('Order not found');
+    }
+    return order.user_id;
   }
 
   async setStatusAsSeller(

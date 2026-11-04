@@ -5,6 +5,8 @@ import { closeTestDb, ensureSchema, resetDb } from '../helpers/db.js';
 import {
   bearer,
   createFarm,
+  createOrganization,
+  setFarmSubscriptionAsAdmin,
   fixtureBytes,
   registerAdmin,
   registerApprovedVet,
@@ -121,5 +123,53 @@ describe('farm profile image — replace / delete from the Edit Farm screen', ()
       .set(bearer(stranger.accessToken));
     expect([403, 404]).toContain(res.status);
     expect(await farmImageKey(farm.id)).not.toBeNull();
+  });
+});
+
+describe('farm profile image — right after creation (PENDING farm, no subscription)', () => {
+  it('the owner can upload the photo picked on the "Add farm" form', async () => {
+    const owner = await registerApprovedVet(app);
+    const org = await createOrganization(app, owner.accessToken, { type: 'FARM', name: 'New' });
+    expect(org.status).toBe('PENDING');
+    const key = await uploadFarmPhoto(owner.accessToken, org.id);
+    expect(await farmImageKey(org.id)).toBe(key);
+
+    const profile = await request(app)
+      .get(`/api/v1/organizations/${org.id}/farm/profile`)
+      .set(bearer(owner.accessToken));
+    expect(profile.status).toBe(200);
+    expect(typeof profile.body.data.imageUrl).toBe('string');
+
+    const del = await request(app)
+      .delete(`/api/v1/organizations/${org.id}/farm/profile/image`)
+      .set(bearer(owner.accessToken));
+    expect(del.status).toBe(200);
+    expect(await farmImageKey(org.id)).toBeNull();
+  });
+
+  it('a non-owner still cannot upload to a PENDING farm', async () => {
+    const owner = await registerApprovedVet(app);
+    const org = await createOrganization(app, owner.accessToken, { type: 'FARM', name: 'New' });
+    const stranger = await registerApprovedVet(app);
+    const res = await request(app)
+      .post(`/api/v1/organizations/${org.id}/farm/profile/image/upload-url`)
+      .set(bearer(stranger.accessToken))
+      .send({ filename: 'farm.jpg', mimeType: 'image/jpeg', size: 4096 });
+    expect([403, 404]).toContain(res.status);
+  });
+
+  it('an approved farm with an EXPIRED subscription stays locked for the owner', async () => {
+    const admin = await registerAdmin(app);
+    const owner = await registerApprovedVet(app);
+    const farm = await createFarm(app, owner.accessToken, admin.accessToken);
+    await setFarmSubscriptionAsAdmin(app, admin.accessToken, farm.id, {
+      startDate: '2020-01-01',
+      endDate: '2020-02-01',
+    });
+    const res = await request(app)
+      .post(`/api/v1/organizations/${farm.id}/farm/profile/image/upload-url`)
+      .set(bearer(owner.accessToken))
+      .send({ filename: 'farm.jpg', mimeType: 'image/jpeg', size: 4096 });
+    expect(res.status).toBe(403);
   });
 });

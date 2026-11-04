@@ -208,6 +208,14 @@ export const NOTIFICATION_VIDEO_LINK_KEYS = [
 ] as const;
 export type NotificationVideoLinkKey = (typeof NOTIFICATION_VIDEO_LINK_KEYS)[number];
 
+/**
+ * Sentence shown with the video link (client copy, exact Arabic). Like the URL
+ * it is NOT stored in the row: it is returned as `data.videoMessage` whenever a
+ * link resolves on read, and appended to the push body only when a link exists
+ * at dispatch time. Mirrored in mobile i18n `notifications.video.message`.
+ */
+export const NOTIFICATION_VIDEO_MESSAGE_AR = 'لقد أعددنا فيديو توضيحي لك، يمكنك الاطلاع عليه.';
+
 /** The video-link key for an approved organization (farm species as in `termsKeyFor`). */
 export function organizationApprovedVideoLinkKey(
   organizationType: string,

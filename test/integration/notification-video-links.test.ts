@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { buildTestApp } from '../helpers/app.js';
+import { FakePushProvider } from '../helpers/fake-push-provider.js';
 import { closeTestDb, ensureSchema, getTestDb, resetDb } from '../helpers/db.js';
 import {
   approveOrganization,
@@ -9,6 +10,7 @@ import {
   extractVerificationCode,
   registerAdmin,
   registerApprovedVet,
+  registerDevice,
   registerUser,
   verifyEmail,
 } from '../helpers/factories.js';
@@ -19,11 +21,16 @@ import {
  * `data.videoLinkKey` on the notification, and reads resolve the CURRENT URL
  * into `data.videoUrl`.
  */
-const { app } = buildTestApp();
+const push = new FakePushProvider();
+const { app } = buildTestApp({ pushProvider: push });
+const VIDEO_MESSAGE = 'لقد أعددنا فيديو توضيحي لك، يمكنك الاطلاع عليه.';
 const tick = (): Promise<void> => new Promise((r) => setTimeout(r, 60));
 
 beforeAll(() => ensureSchema());
-beforeEach(() => resetDb());
+beforeEach(async () => {
+  await resetDb();
+  push.reset();
+});
 afterAll(() => closeTestDb());
 
 async function setLink(token: string, key: string, url: string): Promise<request.Response> {
@@ -140,6 +147,7 @@ describe('video link on the receiver’s notification', () => {
       (n) => n.type === 'PET_OWNER_REGISTRATION_COMPLETED',
     );
     expect(welcome?.data.videoUrl).toBe('https://youtu.be/welcome');
+    expect(welcome?.data.videoMessage).toBe(VIDEO_MESSAGE);
 
     await setLink(admin.accessToken, 'PET_OWNER_REGISTERED', 'https://youtu.be/welcome-v2');
     await request(app)
@@ -165,12 +173,21 @@ describe('video link on the receiver’s notification', () => {
     await setLink(admin.accessToken, 'CLINIC_APPROVED', 'https://youtu.be/clinic');
     await setLink(admin.accessToken, 'VETERINARY_OFFICE_APPROVED', 'https://youtu.be/office');
 
+    await registerDevice(app, vet.accessToken, {
+      token: 'fcm-token-video-clinic-0000000000',
+      platform: 'android',
+    });
     const clinic = await createOrganization(app, vet.accessToken, {
       type: 'CLINIC',
       name: 'Video Clinic',
     });
+    push.reset();
     await approveOrganization(app, admin.accessToken, clinic.id);
     await tick();
+
+    // The push body carries the "we prepared a video" sentence.
+    const approvedPush = push.sent.find((p) => p.data?.type === 'ORGANIZATION_APPROVED');
+    expect(approvedPush?.body).toContain(VIDEO_MESSAGE);
 
     const approved = (await inbox(vet.accessToken)).filter(
       (n) => n.type === 'ORGANIZATION_APPROVED',
@@ -179,6 +196,7 @@ describe('video link on the receiver’s notification', () => {
     expect(approved[0]?.data).toMatchObject({
       videoLinkKey: 'CLINIC_APPROVED',
       videoUrl: 'https://youtu.be/clinic',
+      videoMessage: VIDEO_MESSAGE,
     });
 
     // GET /notifications/:id resolves the same way.
@@ -189,6 +207,32 @@ describe('video link on the receiver’s notification', () => {
       .get(`/api/v1/notifications/${row.id}`)
       .set(bearer(vet.accessToken));
     expect(one.body.data.data.videoUrl).toBe('https://youtu.be/clinic');
+    expect(one.body.data.data.videoMessage).toBe(VIDEO_MESSAGE);
+    // The stored body stays plain — the sentence follows the link, not the row.
+    expect(one.body.data.body).not.toContain(VIDEO_MESSAGE);
+  });
+
+  it('without a link the push body and the row carry no video sentence', async () => {
+    const admin = await registerAdmin(app);
+    const vet = await registerApprovedVet(app);
+    await registerDevice(app, vet.accessToken, {
+      token: 'fcm-token-video-none-00000000000',
+      platform: 'android',
+    });
+    const office = await createOrganization(app, vet.accessToken, {
+      type: 'VETERINARY_OFFICE',
+      name: 'No Video Office',
+    });
+    push.reset();
+    await approveOrganization(app, admin.accessToken, office.id);
+    await tick();
+    const approvedPush = push.sent.find((p) => p.data?.type === 'ORGANIZATION_APPROVED');
+    expect(approvedPush).toBeDefined();
+    expect(approvedPush?.body).not.toContain(VIDEO_MESSAGE);
+    const [approved] = (await inbox(vet.accessToken)).filter(
+      (n) => n.type === 'ORGANIZATION_APPROVED',
+    );
+    expect(approved?.data.videoMessage).toBeUndefined();
   });
 
   it('a sheep farm approval uses the sheep-farm link', async () => {

@@ -37,27 +37,41 @@ export function createFarmSubscriptionMiddleware(deps: {
   authz: AuthorizationService;
 }): {
   requireActiveFarmSubscription: RequestHandler;
+  requireActiveFarmSubscriptionOrPendingOwner: RequestHandler;
 } {
-  const requireActiveFarmSubscription: RequestHandler = asyncHandler(async (req, _res, next) => {
-    const org = requireOrganization(req);
-    // Non-FARM organizations have no `farm_details` row at all — leave the
-    // 400 ORGANIZATION_TYPE_NOT_SUPPORTED to `withFarmOrganization` / the
-    // application layer rather than misreport this as a subscription issue.
-    if (org.type !== FARM_ORG_TYPE) return next();
+  const check = (opts: { allowPendingOwner: boolean }): RequestHandler =>
+    asyncHandler(async (req, _res, next) => {
+      const org = requireOrganization(req);
+      // Non-FARM organizations have no `farm_details` row at all — leave the
+      // 400 ORGANIZATION_TYPE_NOT_SUPPORTED to `withFarmOrganization` / the
+      // application layer rather than misreport this as a subscription issue.
+      if (org.type !== FARM_ORG_TYPE) return next();
 
-    const principal = requireAuth(req);
-    if (deps.authz.isAdmin(principal)) return next();
+      const principal = requireAuth(req);
+      if (deps.authz.isAdmin(principal)) return next();
+      // A just-created farm is PENDING with no subscription yet — its owner must
+      // still be able to attach the photo picked on the "Add farm" form.
+      if (
+        opts.allowPendingOwner &&
+        org.status === 'PENDING' &&
+        org.ownerUserId === principal.userId
+      ) {
+        return next();
+      }
 
-    const dates = await deps.subscriptions.getSubscriptionDates(org.id);
-    const status = computeFarmSubscriptionStatus(dates.startDate, dates.endDate);
-    if (status !== 'ACTIVE') {
-      throw new ForbiddenError(
-        'This farm’s subscription is not active — operations are restricted',
-        { code: ErrorCode.FARM_SUBSCRIPTION_NOT_ACTIVE },
-      );
-    }
-    next();
-  });
+      const dates = await deps.subscriptions.getSubscriptionDates(org.id);
+      const status = computeFarmSubscriptionStatus(dates.startDate, dates.endDate);
+      if (status !== 'ACTIVE') {
+        throw new ForbiddenError(
+          'This farm’s subscription is not active — operations are restricted',
+          { code: ErrorCode.FARM_SUBSCRIPTION_NOT_ACTIVE },
+        );
+      }
+      next();
+    });
 
-  return { requireActiveFarmSubscription };
+  return {
+    requireActiveFarmSubscription: check({ allowPendingOwner: false }),
+    requireActiveFarmSubscriptionOrPendingOwner: check({ allowPendingOwner: true }),
+  };
 }

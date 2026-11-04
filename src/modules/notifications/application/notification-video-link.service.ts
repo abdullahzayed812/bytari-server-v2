@@ -3,6 +3,7 @@ import { AuditAction, AuditEntityType, type AuditContext } from '../../audit/aud
 import type { AuditService } from '../../audit/audit.service.js';
 import {
   NOTIFICATION_VIDEO_LINK_KEYS,
+  NOTIFICATION_VIDEO_MESSAGE_AR,
   type NotificationVideoLinkKey,
 } from '../domain/notification.constants.js';
 import type { NotificationVideoLinkRepository } from '../infrastructure/notification-video-link.repository.js';
@@ -89,13 +90,29 @@ export class NotificationVideoLinkService {
   }
 
   /**
-   * `data.videoLinkKey` → `data.videoUrl` (the current link), or unchanged
-   * when none is set. One primary-key lookup, only for stamped notifications.
+   * `data.videoLinkKey` → `data.videoUrl` (the current link) + `data.videoMessage`
+   * (the accompanying sentence), or unchanged when none is set. One
+   * primary-key lookup, only for stamped notifications.
    */
   async attachVideoUrl(data: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const url = await this.currentUrl(data);
+    return url ? { ...data, videoUrl: url, videoMessage: NOTIFICATION_VIDEO_MESSAGE_AR } : data;
+  }
+
+  /**
+   * Push body for a stamped notification: the body plus the video sentence
+   * when a link is set right now (the push itself never carries the URL — a
+   * tap opens the notification, whose details show the "watch" button).
+   */
+  async pushBody(data: Record<string, unknown>, body: string): Promise<string> {
+    const url = await this.currentUrl(data);
+    return url ? `${body}\n${NOTIFICATION_VIDEO_MESSAGE_AR}` : body;
+  }
+
+  private async currentUrl(data: Record<string, unknown>): Promise<string | null> {
     const key = data.videoLinkKey;
-    if (!(NOTIFICATION_VIDEO_LINK_KEYS as readonly unknown[]).includes(key)) return data;
+    if (!(NOTIFICATION_VIDEO_LINK_KEYS as readonly unknown[]).includes(key)) return null;
     const row = await this.links.find(key as NotificationVideoLinkKey);
-    return row ? { ...data, videoUrl: row.url } : data;
+    return row?.url ?? null;
   }
 }

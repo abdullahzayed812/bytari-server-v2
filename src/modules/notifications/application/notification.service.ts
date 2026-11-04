@@ -76,7 +76,7 @@ export interface NotificationServiceOptions {
   /** Resolves broadcast image keys (`data.imageKey`) to fresh URLs on read. */
   storage?: ObjectStorage;
   /** Resolves `data.videoLinkKey` to the admin's current video URL on read. */
-  videoLinks?: Pick<NotificationVideoLinkService, 'attachVideoUrl'>;
+  videoLinks?: Pick<NotificationVideoLinkService, 'attachVideoUrl' | 'pushBody'>;
 }
 
 const sleep = (ms: number): Promise<void> =>
@@ -99,7 +99,8 @@ export class NotificationService {
   private readonly pushRetryDelaysMs: readonly number[];
   private readonly sources: NotificationSourceResolver;
   private readonly storage: ObjectStorage | undefined;
-  private readonly videoLinks: Pick<NotificationVideoLinkService, 'attachVideoUrl'> | undefined;
+  private readonly videoLinks:
+    Pick<NotificationVideoLinkService, 'attachVideoUrl' | 'pushBody'> | undefined;
 
   constructor(
     private readonly db: Knex,
@@ -189,7 +190,17 @@ export class NotificationService {
     // `entityType` / `entityId` let a push tap route like the inbox card does
     // (many types keep their target id only in those columns).
     const { imageKey: _imageKey, ...pushData } = spec.data;
-    void this.sendPushWithRetry(logCtx, spec, {
+    // A notification with an admin video link gets the "we prepared a video"
+    // sentence appended when a link is set at dispatch time.
+    let pushSpec = spec;
+    if (this.videoLinks && spec.data.videoLinkKey) {
+      try {
+        pushSpec = { ...spec, body: await this.videoLinks.pushBody(spec.data, spec.body) };
+      } catch (err) {
+        this.log.warn({ ...logCtx, err }, 'video link lookup failed — plain push body');
+      }
+    }
+    void this.sendPushWithRetry(logCtx, pushSpec, {
       ...(spec.entityType ? { entityType: spec.entityType } : {}),
       ...(spec.entityId ? { entityId: spec.entityId } : {}),
       ...pushData,

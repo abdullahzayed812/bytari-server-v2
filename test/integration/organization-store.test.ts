@@ -531,3 +531,89 @@ describe('Organization store — isolation & permissions', () => {
     expect(purge.body.error.message).toContain('organization_store_orders');
   });
 });
+
+describe.each(['CLINIC', 'VETERINARY_OFFICE'] as const)(
+  '%s store — messaging from the order details',
+  (type) => {
+    const expectedType = type === 'CLINIC' ? 'PET_OWNER_CLINIC' : 'PET_OWNER_VETERINARY_OFFICE';
+
+    it('customer and store open the SAME existing customer ↔ store chat and can talk', async () => {
+      const ctx = await setup(type);
+      const orderId = await placeOrder(ctx);
+
+      const mine = await request(app)
+        .post(`/api/v1/organization-store/orders/${orderId}/conversation`)
+        .set(bearer(ctx.customer.accessToken));
+      expect(mine.status).toBe(201);
+      expect(mine.body.data.type).toBe(expectedType);
+      const conversationId = mine.body.data.id as string;
+
+      const seller = await request(app)
+        .post(`/api/v1/organizations/${ctx.orgId}/store-orders/${orderId}/conversation`)
+        .set(bearer(ctx.owner.accessToken));
+      expect(seller.status).toBe(200);
+      expect(seller.body.data.id).toBe(conversationId);
+
+      const sent = await request(app)
+        .post(`/api/v1/conversations/${conversationId}/messages`)
+        .set(bearer(ctx.owner.accessToken))
+        .send({ body: 'طلبك جاهز للتوصيل' });
+      expect(sent.status).toBe(201);
+      const read = await request(app)
+        .get(`/api/v1/conversations/${conversationId}/messages`)
+        .set(bearer(ctx.customer.accessToken));
+      expect(read.status).toBe(200);
+      expect(read.body.data.map((m: { body: string }) => m.body)).toContain('طلبك جاهز للتوصيل');
+    });
+
+    it('the seller may open it first (store → customer of THIS order)', async () => {
+      const ctx = await setup(type);
+      const orderId = await placeOrder(ctx);
+      const seller = await request(app)
+        .post(`/api/v1/organizations/${ctx.orgId}/store-orders/${orderId}/conversation`)
+        .set(bearer(ctx.owner.accessToken));
+      expect(seller.status).toBe(201);
+      const row = await getTestDb()('conversations').where({ id: seller.body.data.id }).first();
+      expect(row.pet_owner_user_id).toBe(ctx.customer.id);
+      expect(row.organization_id).toBe(ctx.orgId);
+    });
+
+    it('another shopper, another store and a member without order access are refused', async () => {
+      const ctx = await setup(type);
+      const orderId = await placeOrder(ctx);
+
+      const stranger = await registerUser(app);
+      const asStranger = await request(app)
+        .post(`/api/v1/organization-store/orders/${orderId}/conversation`)
+        .set(bearer(stranger.accessToken));
+      expect(asStranger.status).toBe(404);
+
+      // Another store's owner cannot reach this order through their own store.
+      const otherOwner = await registerApprovedVet(app);
+      const other = await createActiveOrganization(
+        app,
+        otherOwner.accessToken,
+        ctx.admin.accessToken,
+        { type },
+      );
+      const crossStore = await request(app)
+        .post(`/api/v1/organizations/${other.id}/store-orders/${orderId}/conversation`)
+        .set(bearer(otherOwner.accessToken));
+      expect(crossStore.status).toBe(404);
+
+      // STAFF hold no store.order.read by default.
+      const staff = await registerUser(app);
+      await addOrganizationMember(app, ctx.owner.accessToken, ctx.orgId, {
+        userId: staff.id,
+        role: 'STAFF',
+      });
+      const asStaff = await request(app)
+        .post(`/api/v1/organizations/${ctx.orgId}/store-orders/${orderId}/conversation`)
+        .set(bearer(staff.accessToken));
+      expect(asStaff.status).toBe(403);
+
+      const rows = await getTestDb()('conversations').where({ organization_id: ctx.orgId });
+      expect(rows).toHaveLength(0);
+    });
+  },
+);
