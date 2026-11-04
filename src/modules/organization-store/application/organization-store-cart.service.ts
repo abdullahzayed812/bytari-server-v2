@@ -51,6 +51,7 @@ export class OrganizationStoreCartService {
 
   async getCart(userId: string, organizationId: string): Promise<OrganizationStoreCartDTO> {
     await this.assertStoreExists(organizationId);
+    await this.catalog.assertStoreNotDisabled(organizationId);
     const cart = await this.carts.findCart(userId, organizationId);
     if (!cart) return this.toDTO(null, organizationId, []);
     return this.toDTO(cart.id, organizationId, await this.carts.listLines(cart.id));
@@ -67,8 +68,9 @@ export class OrganizationStoreCartService {
     quantity: number,
   ): Promise<OrganizationStoreCartDTO> {
     OrganizationStorePolicy.assertQuantity(quantity);
-    // The store must be open for business: ACTIVE and not expired.
-    await this.catalog.assertPubliclyBrowsable(organizationId);
+    // The store must be open for business: ACTIVE, not expired, not turned off
+    // by the Admin, and taking new orders.
+    await this.catalog.assertAcceptingOrders(organizationId);
 
     const cartId = await this.db.transaction(async (tx) => {
       const product = await this.products.findByIdForOrganization(productId, organizationId, tx);
@@ -104,6 +106,7 @@ export class OrganizationStoreCartService {
     quantity: number,
   ): Promise<OrganizationStoreCartDTO> {
     OrganizationStorePolicy.assertQuantity(quantity);
+    await this.catalog.assertStoreNotDisabled(organizationId);
     const cartId = await this.db.transaction(async (tx) => {
       const cart = await this.carts.findCart(userId, organizationId, tx);
       const item = cart ? await this.carts.findItemById(cart.id, itemId, tx) : null;

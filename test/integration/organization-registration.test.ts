@@ -40,6 +40,7 @@ const fullClinicDetails = {
   facebookUrl: 'https://facebook.com/example',
   tiktokUrl: 'https://tiktok.com/@example',
   licenseNumber: 'LIC-12345',
+  specialty: 'حيوانات أليفة',
 };
 
 describe('organization registration — full profile captured in one POST /organizations', () => {

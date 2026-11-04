@@ -29,12 +29,16 @@ afterAll(() => closeTestDb());
 describe('organization creation', () => {
   it('creates an organization as PENDING with the creator as OWNER member', async () => {
     const vet = await registerApprovedVet(app);
-    const res = await request(app).post('/api/v1/organizations').set(bearer(vet.accessToken)).send({
-      termsAccepted: true,
-      type: 'CLINIC',
-      name: 'Happy Paws Clinic',
-      description: 'Downtown',
-    });
+    const res = await request(app)
+      .post('/api/v1/organizations')
+      .set(bearer(vet.accessToken))
+      .send({
+        details: { specialty: 'عامة' },
+        termsAccepted: true,
+        type: 'CLINIC',
+        name: 'Happy Paws Clinic',
+        description: 'Downtown',
+      });
 
     expect(res.status).toBe(201);
     expect(res.body.data).toMatchObject({
@@ -67,7 +71,7 @@ describe('organization creation', () => {
     const res = await request(app)
       .post('/api/v1/organizations')
       .set(bearer(vet.accessToken))
-      .send({ termsAccepted: true, type: 'CLINIC', name: 'x' });
+      .send({ details: { specialty: 'عامة' }, termsAccepted: true, type: 'CLINIC', name: 'x' });
     expect(res.status).toBe(422);
   });
 
@@ -100,7 +104,7 @@ describe('owner veterinarian requirement', () => {
     await request(app)
       .post('/api/v1/organizations')
       .set(bearer(vet.accessToken))
-      .send({ termsAccepted: true, type: 'CLINIC', name: 'Org C' })
+      .send({ details: { specialty: 'عامة' }, termsAccepted: true, type: 'CLINIC', name: 'Org C' })
       .expect(201);
     await request(app)
       .post('/api/v1/organizations')
@@ -114,7 +118,7 @@ describe('owner veterinarian requirement', () => {
     const clinic = await request(app)
       .post('/api/v1/organizations')
       .set(bearer(user.accessToken))
-      .send({ termsAccepted: true, type: 'CLINIC', name: 'Org C' });
+      .send({ details: { specialty: 'عامة' }, termsAccepted: true, type: 'CLINIC', name: 'Org C' });
     expect(clinic.status).toBe(403);
     expect(clinic.body.error.code).toBe('VETERINARIAN_APPROVAL_REQUIRED');
 
@@ -132,7 +136,7 @@ describe('owner veterinarian requirement', () => {
     await request(app)
       .post('/api/v1/organizations')
       .set(bearer(pending.accessToken))
-      .send({ termsAccepted: true, type: 'CLINIC', name: 'Org C' })
+      .send({ details: { specialty: 'عامة' }, termsAccepted: true, type: 'CLINIC', name: 'Org C' })
       .expect(403);
   });
 
@@ -141,7 +145,7 @@ describe('owner veterinarian requirement', () => {
     const res = await request(app)
       .post('/api/v1/organizations')
       .set(bearer(rejected.accessToken))
-      .send({ termsAccepted: true, type: 'CLINIC', name: 'Org C' });
+      .send({ details: { specialty: 'عامة' }, termsAccepted: true, type: 'CLINIC', name: 'Org C' });
     expect(res.status).toBe(403);
     expect(res.body.error.code).toBe('VETERINARIAN_APPROVAL_REQUIRED');
   });
@@ -152,7 +156,7 @@ describe('owner veterinarian requirement', () => {
       await request(app)
         .post('/api/v1/organizations')
         .set(bearer(user.accessToken))
-        .send({ termsAccepted: true, type, name: `Org ${type}` })
+        .send({ details: { specialty: 'عامة' }, termsAccepted: true, type, name: `Org ${type}` })
         .expect(201);
     }
   });
@@ -160,14 +164,18 @@ describe('owner veterinarian requirement', () => {
   it('the server ignores a client-supplied owner / status (no escalation)', async () => {
     const vet = await registerApprovedVet(app);
     const other = await registerUser(app);
-    const res = await request(app).post('/api/v1/organizations').set(bearer(vet.accessToken)).send({
-      termsAccepted: true,
-      type: 'CLINIC',
-      name: 'Org C',
-      ownerUserId: other.id,
-      status: 'ACTIVE',
-      owner_user_id: other.id,
-    });
+    const res = await request(app)
+      .post('/api/v1/organizations')
+      .set(bearer(vet.accessToken))
+      .send({
+        details: { specialty: 'عامة' },
+        termsAccepted: true,
+        type: 'CLINIC',
+        name: 'Org C',
+        ownerUserId: other.id,
+        status: 'ACTIVE',
+        owner_user_id: other.id,
+      });
     expect(res.status).toBe(201);
     expect(res.body.data.ownerUserId).toBe(vet.id);
     expect(res.body.data.status).toBe('PENDING');

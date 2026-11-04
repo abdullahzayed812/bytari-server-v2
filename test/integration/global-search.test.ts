@@ -40,7 +40,12 @@ describe('GET /search — Home header global search', () => {
     const pending = await request(app)
       .post('/api/v1/organizations')
       .set(bearer(vet.accessToken))
-      .send({ type: 'CLINIC', name: 'عيادة نيوكاسل المعلقة', termsAccepted: true });
+      .send({
+        details: { specialty: 'عامة' },
+        type: 'CLINIC',
+        name: 'عيادة نيوكاسل المعلقة',
+        termsAccepted: true,
+      });
     expect(pending.status).toBe(201);
     const farm = await createFarm(app, owner.accessToken, admin.accessToken, {
       name: 'مزرعة نيوكاسل',

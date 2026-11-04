@@ -72,3 +72,7 @@ export const updateOrderStatusBodySchema = z.object({
   note: noteSchema,
 });
 export type UpdateOrderStatusBody = z.infer<typeof updateOrderStatusBodySchema>;
+
+/** `PATCH /organizations/:id/store-orders/settings` — the "receive new orders" switch. */
+export const orderSettingsBodySchema = z.object({ ordersEnabled: z.boolean() }).strict();
+export type OrderSettingsBody = z.infer<typeof orderSettingsBodySchema>;

@@ -84,6 +84,8 @@ export interface OrganizationProfilePatch {
   galleryKeys?: string[];
   /** CLINIC / VETERINARY_OFFICE only. */
   licenseNumber?: string | null;
+  /** CLINIC only. */
+  specialty?: string | null;
   /** Full replacement of the license document array — callers read-modify-write. */
   licenseDocumentKeys?: string[];
 }
@@ -206,9 +208,39 @@ export class OrganizationRepository {
         details.subscriptionStatus = computeFarmSubscriptionStatus(startDate, endDate);
         details.freeTrialEnded = row.free_trial_ended_at != null;
         details.licenseNumber = row.license_number ?? null;
+        details.ordersEnabled = row.orders_enabled !== false;
+      }
+      if (org.type === 'CLINIC' && row) {
+        details.specialty = row.specialty ?? null;
+        details.storeEnabled = row.store_enabled !== false;
       }
     }
     return { ...org, details };
+  }
+
+  /** CLINIC only — the Admin store switch. Returns false when no clinic row exists. */
+  async setClinicStoreEnabled(
+    organizationId: string,
+    enabled: boolean,
+    trx: Knex.Transaction,
+  ): Promise<boolean> {
+    const n = await trx('clinic_details')
+      .where({ organization_id: organizationId })
+      .update({ store_enabled: enabled, updated_at: trx.fn.now() });
+    return n > 0;
+  }
+
+  /** CLINIC / VETERINARY_OFFICE — the seller's "receive new orders" switch. */
+  async setOrdersEnabled(
+    type: 'CLINIC' | 'VETERINARY_OFFICE',
+    organizationId: string,
+    enabled: boolean,
+    trx: Knex.Transaction,
+  ): Promise<boolean> {
+    const n = await trx(DETAIL_TABLE[type])
+      .where({ organization_id: organizationId })
+      .update({ orders_enabled: enabled, updated_at: trx.fn.now() });
+    return n > 0;
   }
 
   /** Raw `*_details` row for a profile-bearing type — `null` for FARM. */
@@ -257,6 +289,7 @@ export class OrganizationRepository {
     if (patch.tiktokUrl !== undefined) dbPatch.tiktok_url = patch.tiktokUrl;
     if (patch.galleryKeys !== undefined) dbPatch.gallery_keys = patch.galleryKeys;
     if (patch.licenseNumber !== undefined) dbPatch.license_number = patch.licenseNumber;
+    if (patch.specialty !== undefined) dbPatch.specialty = patch.specialty;
     if (patch.licenseDocumentKeys !== undefined)
       dbPatch.license_document_keys = patch.licenseDocumentKeys;
     if (Object.keys(dbPatch).length === 1) return; // nothing but updated_at — no-op

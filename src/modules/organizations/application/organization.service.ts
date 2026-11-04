@@ -11,6 +11,7 @@ import {
   ConflictError,
   InternalError,
   NotFoundError,
+  ValidationError,
 } from '../../../shared/errors/app-error.js';
 import { ErrorCode } from '../../../shared/errors/error-codes.js';
 import type { EventBus } from '../../../shared/events/index.js';
@@ -95,6 +96,8 @@ export interface CreateOrganizationProfileInput {
   tiktokUrl?: string | null;
   /** CLINIC / VETERINARY_OFFICE only. */
   licenseNumber?: string | null;
+  /** CLINIC only — required when registering a clinic. */
+  specialty?: string | null;
 }
 
 export interface CreateOrganizationInput {
@@ -259,6 +262,12 @@ export class OrganizationService {
     const creator = await this.users.getById(actor.actorUserId);
     OrganizationPolicy.assertCanCreate(input.type, creator);
     OrganizationPolicy.validateTypeSpecificRules(input.type, input);
+    // "تخصص العيادة" is required for every new clinic.
+    if (input.type === 'CLINIC' && !input.profile?.specialty?.trim()) {
+      throw new ValidationError('Clinic specialty is required', [
+        { path: 'details.specialty', message: 'Clinic specialty is required', rule: 'required' },
+      ]);
+    }
 
     // Terms & Conditions — enforced here, where EVERY creation path (generic
     // registration, poultry / sheep / cattle farm forms) converges.
@@ -310,6 +319,9 @@ export class OrganizationService {
         if (p.tiktokUrl !== undefined) detailExtra.tiktok_url = p.tiktokUrl;
         if (p.licenseNumber !== undefined && LICENSABLE_TYPES.has(input.type)) {
           detailExtra.license_number = p.licenseNumber;
+        }
+        if (p.specialty !== undefined && input.type === 'CLINIC') {
+          detailExtra.specialty = p.specialty;
         }
       }
       if (OrganizationPolicy.hasJoinCode(input.type)) {
@@ -397,6 +409,8 @@ export class OrganizationService {
       tiktokUrl?: string | null;
       /** CLINIC / VETERINARY_OFFICE only. */
       licenseNumber?: string | null;
+      /** CLINIC only — may be changed, never cleared. */
+      specialty?: string | null;
     },
     actor: OrgActor,
   ): Promise<OrganizationWithDetails> {
@@ -420,10 +434,26 @@ export class OrganizationService {
     const org = await this.getById(id);
     if (profileFieldKeys.length > 0) OrganizationPolicy.assertHasProfileFields(org.type);
     if (patch.licenseNumber !== undefined) this.assertLicensable(org.type);
+    if (patch.specialty !== undefined) {
+      if (org.type !== 'CLINIC') {
+        throw new BadRequestError(`${org.type} organizations do not have a specialty`, {
+          code: ErrorCode.ORGANIZATION_TYPE_NOT_SUPPORTED,
+        });
+      }
+      if (!patch.specialty?.trim()) {
+        throw new ValidationError('Clinic specialty is required', [
+          { path: 'specialty', message: 'Clinic specialty is required', rule: 'required' },
+        ]);
+      }
+    }
 
     await this.db.transaction(async (tx) => {
       await this.organizations.update(id, { name: patch.name, description: patch.description }, tx);
-      if (profileFieldKeys.length > 0 || patch.licenseNumber !== undefined) {
+      if (
+        profileFieldKeys.length > 0 ||
+        patch.licenseNumber !== undefined ||
+        patch.specialty !== undefined
+      ) {
         await this.organizations.updateProfileFields(
           org.type,
           id,
@@ -442,6 +472,7 @@ export class OrganizationService {
             facebookUrl: patch.facebookUrl,
             tiktokUrl: patch.tiktokUrl,
             licenseNumber: patch.licenseNumber,
+            specialty: patch.specialty,
           },
           tx,
         );
@@ -655,7 +686,17 @@ export class OrganizationService {
       this.resolveLogoUrl(row?.logo_key ?? null),
       this.resolveGalleryUrls(row?.gallery_keys ?? []),
     ]);
-    return toPublicOrganizationDTO(org, {
+    const storeFlags =
+      org.type === 'CLINIC'
+        ? {
+            specialty: row?.specialty ?? null,
+            storeEnabled: row?.store_enabled !== false,
+            ordersEnabled: row?.orders_enabled !== false,
+          }
+        : org.type === 'VETERINARY_OFFICE'
+          ? { ordersEnabled: row?.orders_enabled !== false }
+          : {};
+    const dto = toPublicOrganizationDTO(org, {
       address: row?.address ?? null,
       country: row?.country ?? null,
       latitude: row?.latitude ?? null,
@@ -672,6 +713,7 @@ export class OrganizationService {
       tiktokUrl: row?.tiktok_url ?? null,
       galleryUrls,
     });
+    return { ...dto, ...storeFlags };
   }
 
   // --- logo (presigned direct-to-storage upload) --------------------
@@ -1002,6 +1044,77 @@ export class OrganizationService {
   // and own array column (never exposed on the public discover DTO — reviewed
   // by an admin before approval, mirrors the veterinarian application's
   // private `LICENSE_OR_ID` document at the organization level).
+
+  /**
+   * Admin "تفعيل / إيقاف المتجر" for a CLINIC. OFF hides the catalogue and
+   * blocks every customer store call; products and orders are never touched.
+   */
+  async setClinicStoreEnabled(
+    id: string,
+    enabled: boolean,
+    actor: OrgActor,
+  ): Promise<OrganizationWithDetails> {
+    const org = await this.getById(id);
+    if (org.type !== 'CLINIC') {
+      throw new BadRequestError('Only a clinic store can be enabled or disabled here', {
+        code: ErrorCode.ORGANIZATION_TYPE_NOT_SUPPORTED,
+      });
+    }
+    await this.db.transaction(async (tx) => {
+      if (!(await this.organizations.setClinicStoreEnabled(id, enabled, tx))) {
+        throw new InternalError('clinic_details row missing for a CLINIC organization');
+      }
+      await this.audit.record(
+        {
+          action: AuditAction.ORGANIZATION_UPDATED,
+          entityType: AuditEntityType.ORGANIZATION,
+          entityId: id,
+          actorUserId: actor.actorUserId,
+          metadata: { fields: ['storeEnabled'], storeEnabled: enabled },
+          context: actor.context,
+        },
+        tx,
+      );
+    });
+    const withDetails = await this.organizations.findByIdWithDetails(id);
+    if (!withDetails) throw new InternalError('organization vanished after update');
+    return this.attachMedia(withDetails);
+  }
+
+  /**
+   * The seller's "استقبال الطلبات" switch (CLINIC / VETERINARY_OFFICE). OFF
+   * stops new carts / checkouts; existing orders keep working.
+   */
+  async setOrdersEnabled(
+    id: string,
+    enabled: boolean,
+    actor: OrgActor,
+  ): Promise<{ ordersEnabled: boolean }> {
+    const org = await this.getById(id);
+    if (org.type !== 'CLINIC' && org.type !== 'VETERINARY_OFFICE') {
+      throw new BadRequestError('Only a clinic or veterinary office takes store orders', {
+        code: ErrorCode.ORGANIZATION_TYPE_NOT_SUPPORTED,
+      });
+    }
+    const type = org.type;
+    await this.db.transaction(async (tx) => {
+      if (!(await this.organizations.setOrdersEnabled(type, id, enabled, tx))) {
+        throw new InternalError('details row missing for a store organization');
+      }
+      await this.audit.record(
+        {
+          action: AuditAction.ORGANIZATION_UPDATED,
+          entityType: AuditEntityType.ORGANIZATION,
+          entityId: id,
+          actorUserId: actor.actorUserId,
+          metadata: { fields: ['ordersEnabled'], ordersEnabled: enabled },
+          context: actor.context,
+        },
+        tx,
+      );
+    });
+    return { ordersEnabled: enabled };
+  }
 
   private assertLicensable(type: OrganizationType): void {
     if (!LICENSABLE_TYPES.has(type)) {

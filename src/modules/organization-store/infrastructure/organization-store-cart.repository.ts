@@ -183,7 +183,12 @@ export class OrganizationStoreCartRepository {
     const rows = await this.db(`${CARTS} as c`)
       .join(`${ITEMS} as i`, 'i.cart_id', 'c.id')
       .join('organizations as o', 'o.id', 'c.organization_id')
+      .leftJoin('clinic_details as cd', 'cd.organization_id', 'o.id')
       .where('c.user_id', userId)
+      // A clinic store the Admin turned off is hidden (the cart itself is kept).
+      .where((w) => {
+        void w.whereNull('cd.store_enabled').orWhere('cd.store_enabled', true);
+      })
       .groupBy('c.organization_id', 'o.name', 'o.type', 'c.updated_at')
       .orderBy('c.updated_at', 'desc')
       .select(

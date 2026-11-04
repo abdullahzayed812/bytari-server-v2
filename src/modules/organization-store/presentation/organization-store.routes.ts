@@ -18,6 +18,7 @@ import {
   cancelOrderBodySchema,
   cartItemParamSchema,
   checkoutBodySchema,
+  orderSettingsBodySchema,
   listMyOrdersQuerySchema,
   orderIdParamSchema,
   sellerListOrdersQuerySchema,
@@ -110,6 +111,7 @@ export function createOrganizationStoreSellerRouter(c: Container): Router {
   const ctrl = new OrganizationStoreSellerController(
     c.organizationStoreOrderService,
     c.chatService,
+    c.organizationService,
   );
   const { withOrganization, authorizeOrg } = createOrganizationMiddleware({
     organizations: c.organizationRepository,
@@ -143,6 +145,25 @@ export function createOrganizationStoreSellerRouter(c: Container): Router {
     read,
     activeSubscription,
     asyncHandler(ctrl.summary),
+  );
+  // "استقبال الطلبات" — read by anyone who sees the orders, changed with
+  // store.order.manage. Mounted BEFORE `/:orderId`.
+  r.get(
+    `${base}/settings`,
+    validate({ params: storeOrganizationParamSchema }),
+    withOrganization,
+    withStoreOrganization,
+    read,
+    asyncHandler(ctrl.getSettings),
+  );
+  r.patch(
+    `${base}/settings`,
+    validate({ params: storeOrganizationParamSchema, body: orderSettingsBodySchema }),
+    withOrganization,
+    withStoreOrganization,
+    manage,
+    activeSubscription,
+    asyncHandler(ctrl.updateSettings),
   );
   r.get(
     `${base}/:orderId`,

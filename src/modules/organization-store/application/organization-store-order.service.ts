@@ -79,8 +79,9 @@ export class OrganizationStoreOrderService {
     input: CheckoutInput,
   ): Promise<OrganizationStoreOrderDTO> {
     OrganizationStorePolicy.assertPaymentMethodEnabled(input.paymentMethod);
-    // The store must be selling right now (ACTIVE, store type, not expired).
-    await this.catalog.assertPubliclyBrowsable(organizationId);
+    // The store must be selling right now (ACTIVE, store type, not expired,
+    // not turned off by the Admin) and taking new orders.
+    await this.catalog.assertAcceptingOrders(organizationId);
     const org = await this.organizations.findById(organizationId);
     if (!org) throw new NotFoundError('Store not found');
 

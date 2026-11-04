@@ -22,6 +22,7 @@ import {
   adminListReviewsQuerySchema,
   rejectOrganizationBodySchema,
   statusChangeBodySchema,
+  storeEnabledBodySchema,
 } from './organization.schemas.js';
 
 const orgMemberParamSchema = z.object({
@@ -158,6 +159,14 @@ export function createAdminOrganizationRouter(c: Container): Router {
     orgAdmin('organization.admin.status'),
     validate({ params: idParamSchema, body: statusChangeBodySchema }),
     asyncHandler(ctrl.deactivate),
+  );
+
+  // Clinic store on/off — hides the store without deleting products / orders.
+  r.patch(
+    '/:id/store',
+    orgAdmin('organization.admin.manage'),
+    validate({ params: idParamSchema, body: storeEnabledBodySchema }),
+    asyncHandler(ctrl.setStoreEnabled),
   );
 
   r.delete(

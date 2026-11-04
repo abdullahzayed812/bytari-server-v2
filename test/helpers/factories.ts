@@ -320,7 +320,13 @@ export async function createOrganization(
   const res = await request(app)
     .post('/api/v1/organizations')
     .set(bearer(ownerToken))
-    .send({ termsAccepted: true, name: input.name ?? `Org ${Date.now()}`, ...input });
+    .send({
+      termsAccepted: true,
+      name: input.name ?? `Org ${Date.now()}`,
+      ...input,
+      // "تخصص العيادة" is required for a new clinic.
+      details: input.type === 'CLINIC' ? { specialty: 'عامة', ...input.details } : input.details,
+    });
   if (res.status !== 201) {
     throw new Error(`createOrganization failed: ${res.status} ${JSON.stringify(res.body)}`);
   }

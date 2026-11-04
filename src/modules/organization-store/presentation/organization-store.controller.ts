@@ -7,6 +7,7 @@ import { auditContextFromRequest } from '../../audit/audit-context.js';
 import { requireAuth } from '../../auth/authenticate.middleware.js';
 import { requireOrganization } from '../../organizations/presentation/organization.middleware.js';
 import type { ChatService } from '../../chat/application/chat.service.js';
+import type { OrganizationService } from '../../organizations/application/organization.service.js';
 import type { OrganizationStoreCartService } from '../application/organization-store-cart.service.js';
 import type {
   OrganizationStoreActor,
@@ -17,6 +18,7 @@ import type {
   CancelOrderBody,
   CheckoutBody,
   ListMyOrdersQuery,
+  OrderSettingsBody,
   SellerListOrdersQuery,
   UpdateCartItemBody,
   UpdateOrderStatusBody,
@@ -136,7 +138,30 @@ export class OrganizationStoreSellerController {
   constructor(
     private readonly orders: OrganizationStoreOrderService,
     private readonly chat: Pick<ChatService, 'getOrCreateConversation'>,
+    private readonly organizations: Pick<
+      OrganizationService,
+      'getWithDetails' | 'setOrdersEnabled'
+    >,
   ) {}
+
+  /** GET …/store-orders/settings — whether the store takes new orders. */
+  getSettings = async (req: Request, res: Response): Promise<void> => {
+    const org = await this.organizations.getWithDetails(requireOrganization(req).id);
+    sendSuccess(res, { ordersEnabled: org?.details.ordersEnabled !== false });
+  };
+
+  /** PATCH …/store-orders/settings — pause / resume new orders. */
+  updateSettings = async (req: Request, res: Response): Promise<void> => {
+    const { ordersEnabled } = validatedBody<OrderSettingsBody>(req);
+    sendSuccess(
+      res,
+      await this.organizations.setOrdersEnabled(
+        requireOrganization(req).id,
+        ordersEnabled,
+        actorOf(req),
+      ),
+    );
+  };
 
   list = async (req: Request, res: Response): Promise<void> => {
     const org = requireOrganization(req);

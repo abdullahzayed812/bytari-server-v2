@@ -24,6 +24,7 @@ import type {
   AdminListOrganizationsQuery,
   RejectOrganizationBody,
   StatusChangeBody,
+  StoreEnabledBody,
 } from './organization.schemas.js';
 
 /** System-wide organization administration. Every route requires an `organization.admin.*` permission. */
@@ -106,6 +107,13 @@ export class AdminOrganizationController {
       termsAcceptances,
       ...(farm ? { farm } : {}),
     });
+  };
+
+  /** PATCH /admin/organizations/:id/store — clinic store on / off. */
+  setStoreEnabled = async (req: Request, res: Response): Promise<void> => {
+    const { id } = validatedParams<{ id: string }>(req);
+    const { enabled } = validatedBody<StoreEnabledBody>(req);
+    sendSuccess(res, await this.organizations.setClinicStoreEnabled(id, enabled, this.actor(req)));
   };
 
   approve = async (req: Request, res: Response): Promise<void> => {

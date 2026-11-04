@@ -2,7 +2,12 @@ import type { Knex } from 'knex';
 import type { Logger } from 'pino';
 import type { ObjectStorage } from '../../../infra/storage/index.js';
 import { StoragePrefix, buildObjectKey } from '../../../infra/storage/index.js';
-import { BadRequestError, ConflictError, NotFoundError } from '../../../shared/errors/app-error.js';
+import {
+  BadRequestError,
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+} from '../../../shared/errors/app-error.js';
 import { ErrorCode } from '../../../shared/errors/error-codes.js';
 import type { EventBus } from '../../../shared/events/index.js';
 import { resolveStorageUrlOrNull } from '../../../shared/storage/media-url.js';
@@ -277,14 +282,48 @@ export class VeterinaryOfficeProductService {
       throw new NotFoundError('Organization not found');
     }
     // An EXPIRED office is off the public market until renewed (§10).
-    const profile = (await this.organizations.findProfileRow(org.type, organizationId)) as
-      { subscription_end_date?: string | Date | null } | undefined;
+    const profile = await this.organizations.findProfileRow(org.type, organizationId);
     const end = profile?.subscription_end_date ?? null;
     if (end) {
       const endDay = end instanceof Date ? end.toISOString().slice(0, 10) : end.slice(0, 10);
       if (endDay < new Date().toISOString().slice(0, 10)) {
         throw new NotFoundError('Organization not found');
       }
+    }
+    // The Admin turned this clinic's store off: no browsing, cart or checkout
+    // (products and orders are kept and come back when it is turned on).
+    if (org.type === 'CLINIC' && profile?.store_enabled === false) {
+      throw new ForbiddenError('This clinic store is currently unavailable', {
+        code: ErrorCode.STORE_DISABLED,
+      });
+    }
+  }
+
+  /** Cart reads of a clinic store the Admin turned off are refused (403 STORE_DISABLED). */
+  async assertStoreNotDisabled(organizationId: string): Promise<void> {
+    const org = await this.organizations.findById(organizationId);
+    if (org?.type !== 'CLINIC') return;
+    const profile = await this.organizations.findProfileRow(org.type, organizationId);
+    if (profile?.store_enabled === false) {
+      throw new ForbiddenError('This clinic store is currently unavailable', {
+        code: ErrorCode.STORE_DISABLED,
+      });
+    }
+  }
+
+  /**
+   * Add-to-cart / checkout gate: publicly browsable AND the seller has not
+   * paused new orders ("استقبال الطلبات" OFF → 409 STORE_ORDERS_DISABLED).
+   */
+  async assertAcceptingOrders(organizationId: string): Promise<void> {
+    await this.assertPubliclyBrowsable(organizationId);
+    const org = await this.organizations.findById(organizationId);
+    if (!org) throw new NotFoundError('Organization not found');
+    const profile = await this.organizations.findProfileRow(org.type, organizationId);
+    if (profile?.orders_enabled === false) {
+      throw new ConflictError('This store is not accepting new orders right now', {
+        code: ErrorCode.STORE_ORDERS_DISABLED,
+      });
     }
   }
 

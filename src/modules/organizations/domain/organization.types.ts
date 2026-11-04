@@ -199,6 +199,12 @@ export interface OrganizationDetails extends Partial<OrganizationProfile> {
   licenseNumber?: string | null;
   /** Resolved license document photo URLs (R2 keys resolved server-side). */
   licenseDocumentUrls?: string[];
+  /** CLINIC only — "تخصص العيادة" (null for clinics registered before it existed). */
+  specialty?: string | null;
+  /** CLINIC only — Admin store switch (OFF hides the store; data is kept). */
+  storeEnabled?: boolean;
+  /** CLINIC / VETERINARY_OFFICE only — the seller's "receive new orders" switch. */
+  ordersEnabled?: boolean;
   /**
    * Raw R2 storage keys backing {@link OrganizationProfile.galleryUrls} —
    * owner/admin-only (via `attachMedia`, never on the public discover DTO).
@@ -275,6 +281,11 @@ export interface ProfileDetailRow {
   country?: string | null;
   license_number?: string | null;
   license_document_keys?: string[] | null;
+  /** CLINIC only — see `20261118010000_clinic_specialty_store_flags`. */
+  specialty?: string | null;
+  store_enabled?: boolean;
+  /** CLINIC / VETERINARY_OFFICE only. */
+  orders_enabled?: boolean;
 }
 
 export interface OrganizationMembershipRow {
@@ -313,6 +324,14 @@ export interface PublicOrganizationDTO extends OrganizationProfile {
   rating: number | null;
   reviewsCount: number;
   createdAt: string;
+  /**
+   * Single-organization view only (`GET /organizations/discover/:id`), never on
+   * the discover list. CLINIC: specialty + Admin store switch; CLINIC /
+   * VETERINARY_OFFICE: whether the store takes new orders right now.
+   */
+  specialty?: string | null;
+  storeEnabled?: boolean;
+  ordersEnabled?: boolean;
 }
 
 /**

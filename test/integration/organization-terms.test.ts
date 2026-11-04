@@ -73,13 +73,13 @@ describe('organization registration terms & conditions', () => {
       const res = await request(app)
         .post(API)
         .set(bearer(vet.accessToken))
-        .send({ type, name: 'بدون موافقة' });
+        .send({ details: { specialty: 'عامة' }, type, name: 'بدون موافقة' });
       expect(res.status).toBe(400);
       expect(res.body.error.code).toBe('TERMS_NOT_ACCEPTED');
       const rejected = await request(app)
         .post(API)
         .set(bearer(vet.accessToken))
-        .send({ type, name: 'رفض صريح', termsAccepted: false });
+        .send({ details: { specialty: 'عامة' }, type, name: 'رفض صريح', termsAccepted: false });
       expect(rejected.status).toBe(400);
     }
     const farmBody = {
@@ -107,12 +107,16 @@ describe('organization registration terms & conditions', () => {
 
   it('a stale terms version is refused (409) so the user must review the current terms', async () => {
     const vet = await registerApprovedVet(app);
-    const res = await request(app).post(API).set(bearer(vet.accessToken)).send({
-      type: 'CLINIC',
-      name: 'عيادة',
-      termsAccepted: true,
-      termsVersion: 'deadbeefdeadbeef',
-    });
+    const res = await request(app)
+      .post(API)
+      .set(bearer(vet.accessToken))
+      .send({
+        details: { specialty: 'عامة' },
+        type: 'CLINIC',
+        name: 'عيادة',
+        termsAccepted: true,
+        termsVersion: 'deadbeefdeadbeef',
+      });
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('TERMS_VERSION_OUTDATED');
   });
@@ -123,12 +127,16 @@ describe('organization registration terms & conditions', () => {
     const owner = await registerUser(app);
     const terms = await request(app).get(`${API}/terms/CLINIC`).set(bearer(vet.accessToken));
 
-    const clinic = await request(app).post(API).set(bearer(vet.accessToken)).send({
-      type: 'CLINIC',
-      name: 'عيادة الموافقة',
-      termsAccepted: true,
-      termsVersion: terms.body.data.version,
-    });
+    const clinic = await request(app)
+      .post(API)
+      .set(bearer(vet.accessToken))
+      .send({
+        details: { specialty: 'عامة' },
+        type: 'CLINIC',
+        name: 'عيادة الموافقة',
+        termsAccepted: true,
+        termsVersion: terms.body.data.version,
+      });
     expect(clinic.status).toBe(201);
     const sheep = await request(app)
       .post(`${API}/sheep-farms`)

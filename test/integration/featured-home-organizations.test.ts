@@ -197,7 +197,12 @@ describe('featured home organizations — admin management', () => {
     const pending = await request(app)
       .post(`${API}/organizations`)
       .set(bearer(vet.accessToken))
-      .send({ type: 'CLINIC', name: 'Pending', termsAccepted: true });
+      .send({
+        type: 'CLINIC',
+        name: 'Pending',
+        termsAccepted: true,
+        details: { specialty: 'عامة' },
+      });
     const pendingRes = await request(app)
       .post(ADMIN)
       .set(t)

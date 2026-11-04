@@ -43,6 +43,8 @@ const profileFieldsShape = {
   facebookUrl: optionalUrl,
   tiktokUrl: optionalUrl,
   licenseNumber: optionalText(100),
+  /** CLINIC only — "تخصص العيادة"; required on clinic registration (service-enforced). */
+  specialty: optionalText(120),
 };
 
 /**
@@ -238,6 +240,10 @@ export const statusChangeBodySchema = z
   .object({ reason: z.string().trim().max(500).optional() })
   .default({});
 export type StatusChangeBody = z.infer<typeof statusChangeBodySchema>;
+
+/** `PATCH /admin/organizations/:id/store` — Admin clinic store switch. */
+export const storeEnabledBodySchema = z.object({ enabled: z.boolean() }).strict();
+export type StoreEnabledBody = z.infer<typeof storeEnabledBodySchema>;
 
 // --- members -------------------------------------------------------
 

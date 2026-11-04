@@ -140,6 +140,10 @@ export const ErrorCode = {
   STORE_CART_CURRENCY_MISMATCH: 'STORE_CART_CURRENCY_MISMATCH',
   /** The requested order status change is not allowed from the current status / for this side. */
   ORDER_INVALID_TRANSITION: 'ORDER_INVALID_TRANSITION',
+  /** The Admin has turned this clinic's store off — no browsing / cart / checkout. */
+  STORE_DISABLED: 'STORE_DISABLED',
+  /** The seller has paused new orders — browsing still works, adding / ordering does not. */
+  STORE_ORDERS_DISABLED: 'STORE_ORDERS_DISABLED',
 
   // --- Consultations & inquiries (Phase 13) ---
   /** The consultation / inquiry is CLOSED, or the sender has been blocked. */
