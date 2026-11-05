@@ -88,6 +88,12 @@ export const ErrorCode = {
   DAILY_RECORD_LIMIT_REACHED: 'DAILY_RECORD_LIMIT_REACHED',
   /** Farms take veterinarians only through the join code / QR, never by direct add. */
   FARM_VETERINARIAN_REQUIRES_JOIN_CODE: 'FARM_VETERINARIAN_REQUIRES_JOIN_CODE',
+  /** Admin poultry supervision: the farm already has its supervising veterinarian (change it instead). */
+  FARM_ALREADY_SUPERVISED: 'FARM_ALREADY_SUPERVISED',
+  /** Admin poultry supervision: the vet already holds another active role in that farm (e.g. owner / staff). */
+  FARM_MEMBER_HAS_OTHER_ROLE: 'FARM_MEMBER_HAS_OTHER_ROLE',
+  /** Admin poultry supervision: the membership is not a current vet ↔ poultry farm link. */
+  POULTRY_SUPERVISION_LINK_NOT_FOUND: 'POULTRY_SUPERVISION_LINK_NOT_FOUND',
 
   // --- Sheep & Cattle Farms ---
   /** The sheep batch is CLOSED — updates are refused. */

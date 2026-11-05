@@ -503,18 +503,24 @@ const paths: Obj = {
   '/admin/poultry-supervisors/summary': {
     get: {
       tags: ['Poultry Markets'],
-      summary: 'Admin only: counts of linked vet↔farm pairs, unlinked poultry farms, unlinked vets',
+      summary:
+        'Admin only: linked / unlinked poultry farms and linked / unlinked vets (optional governorate)',
       security: bearer,
+      parameters: [{ name: 'governorate', in: 'query', schema: { type: 'string' } }],
       responses: { 200: ok('OK'), ...errs(401, 403) },
     },
   },
-  '/admin/poultry-supervisors/linked': {
+  '/admin/poultry-supervisors/linked-farms': {
     get: {
       tags: ['Poultry Markets'],
       summary:
-        'Admin only: veterinarians linked to poultry farms (ACTIVE VETERINARIAN / SUPERVISOR membership) with the assignment date',
+        'Admin only: poultry farms with their supervising vet(s) — assignment date, supervision type',
       security: bearer,
-      parameters: [...pageParams, { name: 'search', in: 'query', schema: { type: 'string' } }],
+      parameters: [
+        ...pageParams,
+        { name: 'search', in: 'query', schema: { type: 'string' } },
+        { name: 'governorate', in: 'query', schema: { type: 'string' } },
+      ],
       responses: { 200: ok('OK'), ...errs(401, 403, 422) },
     },
   },
@@ -523,17 +529,56 @@ const paths: Obj = {
       tags: ['Poultry Markets'],
       summary: 'Admin only: poultry farms with no linked veterinarian',
       security: bearer,
-      parameters: [...pageParams, { name: 'search', in: 'query', schema: { type: 'string' } }],
+      parameters: [
+        ...pageParams,
+        { name: 'search', in: 'query', schema: { type: 'string' } },
+        { name: 'governorate', in: 'query', schema: { type: 'string' } },
+      ],
       responses: { 200: ok('OK'), ...errs(401, 403, 422) },
     },
   },
-  '/admin/poultry-supervisors/unlinked-veterinarians': {
+  '/admin/poultry-supervisors/veterinarians': {
     get: {
       tags: ['Poultry Markets'],
-      summary: 'Admin only: approved veterinarians not linked to any poultry farm',
+      summary:
+        'Admin only: approved veterinarians with their current poultry-farm links (link=linked|unlinked)',
       security: bearer,
-      parameters: [...pageParams, { name: 'search', in: 'query', schema: { type: 'string' } }],
+      parameters: [
+        ...[
+          ...pageParams,
+          { name: 'search', in: 'query', schema: { type: 'string' } },
+          { name: 'governorate', in: 'query', schema: { type: 'string' } },
+        ],
+        { name: 'link', in: 'query', schema: { type: 'string', enum: ['linked', 'unlinked'] } },
+      ],
       responses: { 200: ok('OK'), ...errs(401, 403, 422) },
+    },
+  },
+  '/admin/poultry-supervisors/links': {
+    post: {
+      tags: ['Poultry Markets'],
+      summary:
+        'Admin only: link an approved vet to a poultry farm (organizationId, veterinarianUserId, supervisionType WEEKLY|RESIDENT|EMERGENCY, startDate, notes) — 409 FARM_ALREADY_SUPERVISED / FARM_MEMBER_HAS_OTHER_ROLE',
+      security: bearer,
+      responses: { 201: ok('Linked'), ...errs(400, 401, 403, 404, 409, 422) },
+    },
+  },
+  '/admin/poultry-supervisors/links/{membershipId}/replace': {
+    put: {
+      tags: ['Poultry Markets'],
+      summary: "Admin only: change the farm's supervising vet (one transaction)",
+      security: bearer,
+      parameters: [{ name: 'membershipId', in: 'path', required: true, schema: uuid }],
+      responses: { 200: ok('Changed'), ...errs(400, 401, 403, 404, 409, 422) },
+    },
+  },
+  '/admin/poultry-supervisors/links/{membershipId}': {
+    delete: {
+      tags: ['Poultry Markets'],
+      summary: 'Admin only: unlink the vet from the farm (membership → REMOVED)',
+      security: bearer,
+      parameters: [{ name: 'membershipId', in: 'path', required: true, schema: uuid }],
+      responses: { 200: ok('Unlinked'), ...errs(401, 403, 404) },
     },
   },
   '/poultry-market/exchange-rates/poultry': {

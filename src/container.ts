@@ -697,6 +697,16 @@ export function createContainer(deps: ContainerDeps): Container {
     eventBus,
     logger,
   );
+  const poultrySupervisionService = new PoultrySupervisionService(
+    db,
+    new PoultrySupervisionRepository(db),
+    membershipRepository,
+    organizationRbacRepository,
+    userService,
+    auditService,
+    eventBus,
+    objectStorage,
+  );
   const organizationSupervisorService = new OrganizationSupervisorService(
     db,
     membershipRepository,
@@ -922,10 +932,6 @@ export function createContainer(deps: ContainerDeps): Container {
   // --- farms & poultry (Phase 6) ----------------------------
   const farmDetailsRepository = new FarmDetailsRepository(db);
   const poultryFlockRepository = new PoultryFlockRepository(db);
-  const poultrySupervisionService = new PoultrySupervisionService(
-    new PoultrySupervisionRepository(db),
-    objectStorage,
-  );
   const farmJoinService = new FarmJoinService(
     db,
     farmDetailsRepository,
