@@ -141,6 +141,16 @@ declare global {
       traderUserId: string;
     }
 
+    /**
+     * Hatchery offer ("عروض المفاقس") resolved from `:offerId` by the market
+     * `withHatcheryOffer` middleware. NEVER derived from the request body.
+     */
+    interface HatcheryOfferContext {
+      id: string;
+      status: string;
+      traderUserId: string;
+    }
+
     interface Request {
       /** Output of the `validate()` middleware, when present. */
       validated?: {
@@ -181,6 +191,8 @@ declare global {
       poultryOffer?: PoultryOfferContext;
       /** Populated by `withEggOffer`. Use `requireEggOffer(req)` to access it. */
       eggOffer?: EggOfferContext;
+      /** Populated by `withHatcheryOffer`. Use `requireHatcheryOffer(req)` to access it. */
+      hatcheryOffer?: HatcheryOfferContext;
     }
   }
 }

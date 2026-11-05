@@ -69,7 +69,7 @@ export interface AdminDashboardCard {
   pendingRegistrations?: number;
   /**
    * Per-entry open-queue totals for a hub card's sub-screens (e.g.
-   * `poultryMarket` → `traders` / `poultryOffers` / `eggOffers`).
+   * `poultryMarket` → `traders` / `poultryOffers` / `eggOffers` / `hatcheryOffers`).
    */
   sectionCounts?: Record<string, number>;
 }

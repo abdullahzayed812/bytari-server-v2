@@ -33,6 +33,7 @@ export function createPoultryOfferRouters(c: Container): { self: Router; admin: 
   const { withPoultryOffer, requireOwnerOrPermission } = createMarketMiddleware({
     poultryOffers: c.poultryOfferRepository,
     eggOffers: c.eggOfferRepository,
+    hatcheryOffers: c.hatcheryOfferRepository,
     authz: c.authorizationService,
   });
 

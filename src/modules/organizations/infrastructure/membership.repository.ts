@@ -150,7 +150,24 @@ export class MembershipRepository {
       dbPatch.organization_role_id = patch.organizationRoleId;
     if (patch.status !== undefined) dbPatch.status = patch.status;
     if (patch.addedBy !== undefined) dbPatch.added_by = patch.addedBy;
-    await this.conn(trx)(TABLE).where({ id }).update(dbPatch);
+    // `assigned_at` = when the member took on their CURRENT role: reset on a
+    // role change and on (re-)activation of a LEFT / REMOVED row (re-joining
+    // reuses the same row). SUSPENDED → ACTIVE keeps the original date.
+    const conn = this.conn(trx);
+    const resets: string[] = [];
+    const bindings: string[] = [];
+    if (patch.organizationRoleId !== undefined) {
+      resets.push('organization_role_id <> ?');
+      bindings.push(patch.organizationRoleId);
+    }
+    if (patch.status === 'ACTIVE') resets.push(`status IN ('LEFT', 'REMOVED')`);
+    if (resets.length > 0) {
+      dbPatch.assigned_at = conn.raw(
+        `CASE WHEN ${resets.join(' OR ')} THEN now() ELSE assigned_at END`,
+        bindings,
+      );
+    }
+    await conn(TABLE).where({ id }).update(dbPatch);
     const updated = await this.findById(id, trx);
     if (!updated) throw new Error('membership not found after update');
     return updated;

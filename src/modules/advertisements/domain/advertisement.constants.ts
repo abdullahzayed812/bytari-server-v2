@@ -39,6 +39,8 @@ export const AD_PLACEMENTS = [
   // Poultry Markets module — one ad slot per market/bourse landing screen.
   'POULTRY_MARKET',
   'EGG_MARKET',
+  // "عروض المفاقس" — the hatchery offers page (`20261119010000_hatchery_offers.ts`).
+  'HATCHERY_MARKET',
   'EXCHANGE_RATES',
   // "تسجيل التجار" — shown on the main Markets & Exchanges page (market hub),
   // above the poultry-farm card. Key kept so existing campaigns carry over.

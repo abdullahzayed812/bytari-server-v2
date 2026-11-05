@@ -27,6 +27,7 @@ export const StoragePrefix = {
   supportAttachments: 'support/attachments',
   poultryOfferImages: 'market/poultry-offers',
   eggOfferImages: 'market/egg-offers',
+  hatcheryOfferImages: 'market/hatchery-offers',
   petOwnerStoreProducts: 'pet-owner-store/products',
   petOwnerStoreCategories: 'pet-owner-store/categories',
   veterinarianStoreProducts: 'veterinarian-store/products',

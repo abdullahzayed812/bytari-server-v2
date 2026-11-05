@@ -36,7 +36,11 @@ import {
   createClinicAppointmentRouter,
   createOrgClinicAppointmentRouter,
 } from '../modules/clinic-appointments/index.js';
-import { createFarmRouter, createPoultryOpsRouter } from '../modules/farms/index.js';
+import {
+  createAdminPoultrySupervisionRouter,
+  createFarmRouter,
+  createPoultryOpsRouter,
+} from '../modules/farms/index.js';
 import { createSheepBatchRouter, createCattleBatchRouter } from '../modules/livestock/index.js';
 import {
   createPublicVeterinaryStoreProductRouter,
@@ -64,6 +68,7 @@ import {
   createTraderRouters,
   createPoultryOfferRouters,
   createEggOfferRouters,
+  createHatcheryOfferRouters,
   createExchangeRateRouter,
   createPoultryMarketStatisticsRouter,
   createMarketAccessRouter,
@@ -245,9 +250,11 @@ export function createApiRouter(c: Container): Router {
   const traders = createTraderRouters(c);
   const poultryOffers = createPoultryOfferRouters(c);
   const eggOffers = createEggOfferRouters(c);
+  const hatcheryOffers = createHatcheryOfferRouters(c);
   router.use('/traders', traders.self);
   router.use('/poultry-offers', poultryOffers.self);
   router.use('/egg-offers', eggOffers.self);
+  router.use('/hatchery-offers', hatcheryOffers.self);
   router.use('/poultry-market/exchange-rates', createExchangeRateRouter(c));
   router.use('/poultry-market/statistics', createPoultryMarketStatisticsRouter(c));
   router.use('/poultry-market/access', createMarketAccessRouter(c));
@@ -338,9 +345,11 @@ export function createApiRouter(c: Container): Router {
   router.use('/admin/veterinarians', vets.admin);
   router.use('/admin/supervisors', createAdminSupervisorRouter(c));
   router.use('/admin/organizations', createAdminOrganizationRouter(c));
+  router.use('/admin/poultry-supervisors', createAdminPoultrySupervisionRouter(c));
   router.use('/admin/traders', traders.admin);
   router.use('/admin/poultry-offers', poultryOffers.admin);
   router.use('/admin/egg-offers', eggOffers.admin);
+  router.use('/admin/hatchery-offers', hatcheryOffers.admin);
   router.use('/admin/animal-publications', createAdminAnimalPublicationRouter(c));
   router.use('/admin', createAdminVetServiceRouter(c));
   router.use('/admin', createAdminVetJobRouter(c));

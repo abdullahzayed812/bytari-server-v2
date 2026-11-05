@@ -124,6 +124,33 @@ const schemas: Obj = {
       createdAt: { type: 'string', format: 'date-time' },
     },
   },
+  HatcheryOffer: {
+    type: 'object',
+    description: 'عروض المفاقس — hatchery chick offer (PENDING until a moderator approves it)',
+    properties: {
+      id: uuid,
+      traderUserId: uuid,
+      chickType: {
+        type: 'string',
+        enum: ['BROILER', 'LAYER', 'BALADI', 'TURKEY', 'DUCK', 'QUAIL', 'OTHER'],
+      },
+      breed: { type: 'string', nullable: true },
+      chickAgeDays: { type: 'integer', minimum: 0, maximum: 365 },
+      productionDate: { type: 'string', format: 'date' },
+      quantity: { type: 'integer', nullable: true },
+      pricePerChick: { type: 'string', nullable: true },
+      governorate: { type: 'string' },
+      district: { type: 'string', nullable: true },
+      phone: { type: 'string' },
+      whatsapp: { type: 'string', nullable: true },
+      notes: { type: 'string', nullable: true },
+      imageUrls: { type: 'array', items: { type: 'string' } },
+      status: { type: 'string', enum: ['ACTIVE', 'REMOVED'] },
+      moderationStatus: { type: 'string', enum: ['PENDING', 'APPROVED', 'REJECTED'] },
+      rejectionReason: { type: 'string', nullable: true },
+      createdAt: { type: 'string', format: 'date-time' },
+    },
+  },
   PoultryRateEntry: {
     type: 'object',
     properties: {
@@ -378,6 +405,135 @@ const paths: Obj = {
       summary: 'Admin: delete any egg offer — market.offer.admin.delete',
       security: bearer,
       responses: { 200: ok('Removed'), ...errs(401, 403, 404) },
+    },
+  },
+  '/hatchery-offers': {
+    get: {
+      tags: ['Poultry Markets'],
+      summary: 'Browse approved hatchery offers — عروض المفاقس (Markets & Exchanges access)',
+      security: bearer,
+      parameters: [
+        ...pageParams,
+        { name: 'chickType', in: 'query', schema: { type: 'string' } },
+        { name: 'governorate', in: 'query', schema: { type: 'string' } },
+      ],
+      responses: { 200: ok('OK', listOf('#/components/schemas/HatcheryOffer')), ...errs(401, 403) },
+    },
+    post: {
+      tags: ['Poultry Markets'],
+      summary: 'Submit a hatchery offer for review — eligible merchant or poultry farm',
+      security: bearer,
+      responses: {
+        201: ok('Created (PENDING)', dataOf({ $ref: '#/components/schemas/HatcheryOffer' })),
+        ...errs(401, 403, 422),
+      },
+    },
+  },
+  '/hatchery-offers/upload-url': {
+    post: {
+      tags: ['Poultry Markets'],
+      summary: 'Presigned upload URL for a hatchery offer photo',
+      security: bearer,
+      responses: { 201: ok('Created'), ...errs(400, 401, 403, 422) },
+    },
+  },
+  '/hatchery-offers/mine': {
+    get: {
+      tags: ['Poultry Markets'],
+      summary: 'My hatchery offers (any moderation state)',
+      security: bearer,
+      parameters: pageParams,
+      responses: { 200: ok('OK', listOf('#/components/schemas/HatcheryOffer')), ...errs(401, 403) },
+    },
+  },
+  '/hatchery-offers/{offerId}': {
+    parameters: [offerIdParam],
+    get: {
+      tags: ['Poultry Markets'],
+      summary: 'Hatchery offer detail (non-approved: owner / moderators only)',
+      security: bearer,
+      responses: {
+        200: ok('OK', dataOf({ $ref: '#/components/schemas/HatcheryOffer' })),
+        ...errs(401, 404),
+      },
+    },
+    delete: {
+      tags: ['Poultry Markets'],
+      summary: 'Remove my offer (owner or market.offer.admin.delete)',
+      security: bearer,
+      responses: { 200: ok('Removed'), ...errs(401, 403, 404) },
+    },
+  },
+  '/admin/hatchery-offers': {
+    get: {
+      tags: ['Poultry Markets'],
+      summary: 'Admin: list every hatchery offer — market.offer.admin.read',
+      security: bearer,
+      parameters: pageParams,
+      responses: { 200: ok('OK', listOf('#/components/schemas/HatcheryOffer')), ...errs(401, 403) },
+    },
+  },
+  '/admin/hatchery-offers/{offerId}': {
+    parameters: [offerIdParam],
+    delete: {
+      tags: ['Poultry Markets'],
+      summary: 'Admin: delete any hatchery offer — market.offer.admin.delete',
+      security: bearer,
+      responses: { 200: ok('Removed'), ...errs(401, 403, 404) },
+    },
+  },
+  '/admin/hatchery-offers/{offerId}/approve': {
+    parameters: [offerIdParam],
+    post: {
+      tags: ['Poultry Markets'],
+      summary: 'Admin: approve a PENDING hatchery offer — market.offer.admin.moderate',
+      security: bearer,
+      responses: { 200: ok('OK'), ...errs(401, 403, 404, 409) },
+    },
+  },
+  '/admin/hatchery-offers/{offerId}/reject': {
+    parameters: [offerIdParam],
+    post: {
+      tags: ['Poultry Markets'],
+      summary: 'Admin: reject a PENDING hatchery offer with a reason — market.offer.admin.moderate',
+      security: bearer,
+      responses: { 200: ok('OK'), ...errs(401, 403, 404, 409, 422) },
+    },
+  },
+  '/admin/poultry-supervisors/summary': {
+    get: {
+      tags: ['Poultry Markets'],
+      summary: 'Admin only: counts of linked vet↔farm pairs, unlinked poultry farms, unlinked vets',
+      security: bearer,
+      responses: { 200: ok('OK'), ...errs(401, 403) },
+    },
+  },
+  '/admin/poultry-supervisors/linked': {
+    get: {
+      tags: ['Poultry Markets'],
+      summary:
+        'Admin only: veterinarians linked to poultry farms (ACTIVE VETERINARIAN / SUPERVISOR membership) with the assignment date',
+      security: bearer,
+      parameters: [...pageParams, { name: 'search', in: 'query', schema: { type: 'string' } }],
+      responses: { 200: ok('OK'), ...errs(401, 403, 422) },
+    },
+  },
+  '/admin/poultry-supervisors/unlinked-farms': {
+    get: {
+      tags: ['Poultry Markets'],
+      summary: 'Admin only: poultry farms with no linked veterinarian',
+      security: bearer,
+      parameters: [...pageParams, { name: 'search', in: 'query', schema: { type: 'string' } }],
+      responses: { 200: ok('OK'), ...errs(401, 403, 422) },
+    },
+  },
+  '/admin/poultry-supervisors/unlinked-veterinarians': {
+    get: {
+      tags: ['Poultry Markets'],
+      summary: 'Admin only: approved veterinarians not linked to any poultry farm',
+      security: bearer,
+      parameters: [...pageParams, { name: 'search', in: 'query', schema: { type: 'string' } }],
+      responses: { 200: ok('OK'), ...errs(401, 403, 422) },
     },
   },
   '/poultry-market/exchange-rates/poultry': {

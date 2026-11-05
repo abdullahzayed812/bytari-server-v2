@@ -6,6 +6,7 @@ import type { AuthorizationService } from '../../authorization/authorization.ser
 import { requireAuth } from '../../auth/authenticate.middleware.js';
 import type { PoultryOfferRepository } from '../infrastructure/poultry-offer.repository.js';
 import type { EggOfferRepository } from '../infrastructure/egg-offer.repository.js';
+import type { HatcheryOfferRepository } from '../infrastructure/hatchery-offer.repository.js';
 import type { MarketAccessService } from '../application/market-access.service.js';
 
 /**
@@ -43,15 +44,24 @@ export function requireEggOffer(req: Request): Express.EggOfferContext {
   return req.eggOffer;
 }
 
+/** Narrow `req.hatcheryOffer` inside a controller that runs after `withHatcheryOffer`. */
+export function requireHatcheryOffer(req: Request): Express.HatcheryOfferContext {
+  if (!req.hatcheryOffer) throw new NotFoundError('Offer not found');
+  return req.hatcheryOffer;
+}
+
 export function createMarketMiddleware(deps: {
   poultryOffers: PoultryOfferRepository;
   eggOffers: EggOfferRepository;
+  hatcheryOffers: HatcheryOfferRepository;
   authz: AuthorizationService;
 }): {
   withPoultryOffer: RequestHandler;
   withEggOffer: RequestHandler;
+  withHatcheryOffer: RequestHandler;
   requireOwnerOrPermission: (permission: string) => RequestHandler;
   requireEggOwnerOrPermission: (permission: string) => RequestHandler;
+  requireHatcheryOwnerOrPermission: (permission: string) => RequestHandler;
 } {
   const withPoultryOffer: RequestHandler = asyncHandler(async (req, _res, next) => {
     const { offerId } = validatedParams<{ offerId: string }>(req);
@@ -66,6 +76,14 @@ export function createMarketMiddleware(deps: {
     const offer = await deps.eggOffers.findById(offerId);
     if (!offer) throw new NotFoundError('Offer not found');
     req.eggOffer = { id: offer.id, status: offer.status, traderUserId: offer.traderUserId };
+    next();
+  });
+
+  const withHatcheryOffer: RequestHandler = asyncHandler(async (req, _res, next) => {
+    const { offerId } = validatedParams<{ offerId: string }>(req);
+    const offer = await deps.hatcheryOffers.findById(offerId);
+    if (!offer) throw new NotFoundError('Offer not found');
+    req.hatcheryOffer = { id: offer.id, status: offer.status, traderUserId: offer.traderUserId };
     next();
   });
 
@@ -89,5 +107,22 @@ export function createMarketMiddleware(deps: {
       next();
     });
 
-  return { withPoultryOffer, withEggOffer, requireOwnerOrPermission, requireEggOwnerOrPermission };
+  /** MUST run after `withHatcheryOffer`. The offer's own trader, or `permission` (ADMIN/MARKET-supervisor). */
+  const requireHatcheryOwnerOrPermission = (permission: string): RequestHandler =>
+    asyncHandler(async (req, _res, next) => {
+      const auth = requireAuth(req);
+      const offer = requireHatcheryOffer(req);
+      if (offer.traderUserId === auth.userId) return next();
+      await deps.authz.assert(auth, permission);
+      next();
+    });
+
+  return {
+    withPoultryOffer,
+    withEggOffer,
+    withHatcheryOffer,
+    requireOwnerOrPermission,
+    requireEggOwnerOrPermission,
+    requireHatcheryOwnerOrPermission,
+  };
 }

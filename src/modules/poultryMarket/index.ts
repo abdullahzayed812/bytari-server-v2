@@ -4,6 +4,8 @@ export * from './domain/poultry-offer.constants.js';
 export * from './domain/poultry-offer.types.js';
 export * from './domain/egg-offer.constants.js';
 export * from './domain/egg-offer.types.js';
+export * from './domain/hatchery-offer.constants.js';
+export * from './domain/hatchery-offer.types.js';
 export * from './domain/exchange-rate.constants.js';
 export * from './domain/exchange-rate.types.js';
 export { MarketPolicy } from './domain/market.policy.js';
@@ -12,6 +14,7 @@ export * from './domain/market-access.js';
 export { TraderRepository } from './infrastructure/trader.repository.js';
 export { PoultryOfferRepository } from './infrastructure/poultry-offer.repository.js';
 export { EggOfferRepository } from './infrastructure/egg-offer.repository.js';
+export { HatcheryOfferRepository } from './infrastructure/hatchery-offer.repository.js';
 export { ExchangeRateRepository } from './infrastructure/exchange-rate.repository.js';
 export { MarketAccessRepository } from './infrastructure/market-access.repository.js';
 export {
@@ -22,6 +25,7 @@ export {
 export { TraderService } from './application/trader.service.js';
 export { PoultryOfferService } from './application/poultry-offer.service.js';
 export { EggOfferService } from './application/egg-offer.service.js';
+export { HatcheryOfferService } from './application/hatchery-offer.service.js';
 export { ExchangeRateService } from './application/exchange-rate.service.js';
 export { MarketAccessService } from './application/market-access.service.js';
 export {
@@ -32,6 +36,7 @@ export {
 export { createTraderRouters } from './presentation/trader.routes.js';
 export { createPoultryOfferRouters } from './presentation/poultry-offer.routes.js';
 export { createEggOfferRouters } from './presentation/egg-offer.routes.js';
+export { createHatcheryOfferRouters } from './presentation/hatchery-offer.routes.js';
 export { createExchangeRateRouter } from './presentation/exchange-rate.routes.js';
 export { createPoultryMarketStatisticsRouter } from './presentation/poultry-market-statistics.routes.js';
 export { createMarketAccessRouter } from './presentation/market-access.routes.js';

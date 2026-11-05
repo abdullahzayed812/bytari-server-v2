@@ -63,6 +63,7 @@ function countNew(items: Array<{ createdAt: string | Date }>, seenAt: Date | und
 }
 
 import type { EggOfferService } from '../../poultryMarket/application/egg-offer.service.js';
+import type { HatcheryOfferService } from '../../poultryMarket/application/hatchery-offer.service.js';
 import type { PoultryOfferService } from '../../poultryMarket/application/poultry-offer.service.js';
 import type { TraderService } from '../../poultryMarket/application/trader.service.js';
 
@@ -92,6 +93,7 @@ export interface AdminDashboardServiceDeps {
   traders: TraderService;
   poultryOffers: PoultryOfferService;
   eggOffers: EggOfferService;
+  hatcheryOffers: HatcheryOfferService;
 }
 
 /**
@@ -208,6 +210,7 @@ export class AdminDashboardService {
       tradersPending,
       poultryOffersPending,
       eggOffersPending,
+      hatcheryOffersPending,
       tradersApproved,
       clinicRenewalsPending,
       officeRenewalsPending,
@@ -371,6 +374,7 @@ export class AdminDashboardService {
       this.deps.traders.list('PENDING', 1, CARD_WINDOW_SIZE),
       this.deps.poultryOffers.adminList({ ...WINDOW, moderationStatus: 'PENDING' }),
       this.deps.eggOffers.adminList({ ...WINDOW, moderationStatus: 'PENDING' }),
+      this.deps.hatcheryOffers.adminList({ ...WINDOW, moderationStatus: 'PENDING' }),
       this.deps.traders.list('APPROVED', 1, 1),
       // Type-scoped open renewal queues — `total` is the backend count.
       this.deps.farmSubscriptionRenewals.listAllPendingForAdmin({
@@ -558,7 +562,12 @@ export class AdminDashboardService {
         // main stat = approved traders.
         id: 'poultryMarket',
         count: countNew(
-          [...tradersPending.items, ...poultryOffersPending.items, ...eggOffersPending.items],
+          [
+            ...tradersPending.items,
+            ...poultryOffersPending.items,
+            ...eggOffersPending.items,
+            ...hatcheryOffersPending.items,
+          ],
           since('poultryMarket'),
         ),
         activeCount: tradersApproved.total,
@@ -569,6 +578,7 @@ export class AdminDashboardService {
           traders: tradersPending.total + traderRenewalRequests,
           poultryOffers: poultryOffersPending.total,
           eggOffers: eggOffersPending.total,
+          hatcheryOffers: hatcheryOffersPending.total,
         },
       },
     ];

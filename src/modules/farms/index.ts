@@ -22,3 +22,7 @@ export { FarmAppointmentService } from './application/farm-appointment.service.j
 export { PoultryCaseService } from './application/poultry-case.service.js';
 export { createFarmRouter } from './presentation/farm.routes.js';
 export { createPoultryOpsRouter } from './presentation/poultry-ops.routes.js';
+export * from './domain/poultry-supervision.types.js';
+export { PoultrySupervisionRepository } from './infrastructure/poultry-supervision.repository.js';
+export { PoultrySupervisionService } from './application/poultry-supervision.service.js';
+export { createAdminPoultrySupervisionRouter } from './presentation/admin-poultry-supervision.routes.js';

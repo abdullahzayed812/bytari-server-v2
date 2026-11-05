@@ -407,6 +407,9 @@ export class TraderService {
         egg: await tx('egg_offers')
           .where({ trader_user_id: targetUserId, status: 'ACTIVE' })
           .update({ status: 'REMOVED', updated_at: tx.fn.now() }),
+        hatchery: await tx('hatchery_offers')
+          .where({ trader_user_id: targetUserId, status: 'ACTIVE' })
+          .update({ status: 'REMOVED', updated_at: tx.fn.now() }),
       };
       await this.traders.deleteByUserId(targetUserId, tx);
       await this.users.applyTraderStatus(targetUserId, 'NOT_REGISTERED', tx);

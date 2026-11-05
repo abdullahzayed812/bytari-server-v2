@@ -108,6 +108,32 @@ function dateOnly(v: string | Date | null): string | null {
   return v instanceof Date ? v.toISOString().slice(0, 10) : v.slice(0, 10);
 }
 
+/**
+ * The admin "poultry farms" partition, over `organizations as o` joined with
+ * `farm_details as d`: POULTRY farms, legacy null-species farms, and MIXED
+ * farms that hold poultry flocks or no sheep / cattle batch yet (so no farm
+ * request is ever unreviewable). Shared by the admin Poultry Farms list and
+ * the Admin "Poultry Supervisors" management lists.
+ */
+export function wherePoultryFarmGroup(qb: Knex.QueryBuilder, conn: Knex | Knex.Transaction): void {
+  const holds = (table: string): Knex.QueryBuilder =>
+    conn(table).select(conn.raw('1')).whereRaw(`${table}.organization_id = o.id`);
+  void qb.where((b) => {
+    void b
+      .whereNull('d.farm_species')
+      .orWhere('d.farm_species', 'POULTRY')
+      .orWhere((m) => {
+        void m.where('d.farm_species', 'MIXED').whereExists(holds('poultry_flocks'));
+      })
+      .orWhere((m) => {
+        void m
+          .where('d.farm_species', 'MIXED')
+          .whereNotExists(holds('sheep_batches'))
+          .whereNotExists(holds('cattle_batches'));
+      });
+  });
+}
+
 export class FarmSubscriptionRenewalRepository {
   constructor(private readonly db: Knex) {}
 
@@ -309,20 +335,7 @@ export class FarmSubscriptionRenewalRepository {
           });
         });
       } else if (filter.speciesGroup === 'POULTRY') {
-        qb.where((b) => {
-          void b
-            .whereNull('d.farm_species')
-            .orWhere('d.farm_species', 'POULTRY')
-            .orWhere((m) => {
-              mixedHolding(m, ['poultry_flocks']);
-            })
-            .orWhere((m) => {
-              void m
-                .where('d.farm_species', 'MIXED')
-                .whereNotExists(holds('sheep_batches'))
-                .whereNotExists(holds('cattle_batches'));
-            });
-        });
+        wherePoultryFarmGroup(qb, conn);
       }
       // Farm name / id / join code / location / contact, or the owner's identity.
       whereTextSearch(qb, filter.search, {

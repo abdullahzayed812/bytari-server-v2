@@ -80,6 +80,8 @@ import { PoultryHealthEventRepository } from './modules/farms/infrastructure/pou
 import { FarmAppointmentRepository } from './modules/farms/infrastructure/farm-appointment.repository.js';
 import { PoultryCaseRepository } from './modules/farms/infrastructure/poultry-case.repository.js';
 import { FarmJoinService } from './modules/farms/application/farm-join.service.js';
+import { PoultrySupervisionRepository } from './modules/farms/infrastructure/poultry-supervision.repository.js';
+import { PoultrySupervisionService } from './modules/farms/application/poultry-supervision.service.js';
 import { PoultryFlockService } from './modules/farms/application/poultry-flock.service.js';
 import { SubscriptionInfoService } from './modules/subscriptions/index.js';
 import { FarmProfileService } from './modules/farms/application/farm-profile.service.js';
@@ -133,11 +135,13 @@ import { VeterinarianStoreAdminService } from './modules/veterinarian-store/appl
 import { TraderRepository } from './modules/poultryMarket/infrastructure/trader.repository.js';
 import { PoultryOfferRepository } from './modules/poultryMarket/infrastructure/poultry-offer.repository.js';
 import { EggOfferRepository } from './modules/poultryMarket/infrastructure/egg-offer.repository.js';
+import { HatcheryOfferRepository } from './modules/poultryMarket/infrastructure/hatchery-offer.repository.js';
 import { ExchangeRateRepository } from './modules/poultryMarket/infrastructure/exchange-rate.repository.js';
 import { PoultryMarketStatisticsRepository } from './modules/poultryMarket/infrastructure/poultry-market-statistics.repository.js';
 import { TraderService } from './modules/poultryMarket/application/trader.service.js';
 import { PoultryOfferService } from './modules/poultryMarket/application/poultry-offer.service.js';
 import { EggOfferService } from './modules/poultryMarket/application/egg-offer.service.js';
+import { HatcheryOfferService } from './modules/poultryMarket/application/hatchery-offer.service.js';
 import { ExchangeRateService } from './modules/poultryMarket/application/exchange-rate.service.js';
 import { PoultryMarketStatisticsService } from './modules/poultryMarket/application/poultry-market-statistics.service.js';
 import { MarketAccessRepository } from './modules/poultryMarket/infrastructure/market-access.repository.js';
@@ -355,6 +359,7 @@ export interface Container {
   farmAppointmentRepository: FarmAppointmentRepository;
   poultryCaseRepository: PoultryCaseRepository;
   farmJoinService: FarmJoinService;
+  poultrySupervisionService: PoultrySupervisionService;
   poultryFlockService: PoultryFlockService;
   farmProfileService: FarmProfileService;
   farmSubscriptionService: FarmSubscriptionService;
@@ -415,6 +420,8 @@ export interface Container {
   poultryOfferService: PoultryOfferService;
   eggOfferRepository: EggOfferRepository;
   eggOfferService: EggOfferService;
+  hatcheryOfferRepository: HatcheryOfferRepository;
+  hatcheryOfferService: HatcheryOfferService;
   exchangeRateRepository: ExchangeRateRepository;
   exchangeRateService: ExchangeRateService;
   poultryMarketStatisticsRepository: PoultryMarketStatisticsRepository;
@@ -915,6 +922,10 @@ export function createContainer(deps: ContainerDeps): Container {
   // --- farms & poultry (Phase 6) ----------------------------
   const farmDetailsRepository = new FarmDetailsRepository(db);
   const poultryFlockRepository = new PoultryFlockRepository(db);
+  const poultrySupervisionService = new PoultrySupervisionService(
+    new PoultrySupervisionRepository(db),
+    objectStorage,
+  );
   const farmJoinService = new FarmJoinService(
     db,
     farmDetailsRepository,
@@ -1229,6 +1240,15 @@ export function createContainer(deps: ContainerDeps): Container {
   const eggOfferService = new EggOfferService(
     db,
     eggOfferRepository,
+    objectStorage,
+    auditService,
+    eventBus,
+    logger,
+  );
+  const hatcheryOfferRepository = new HatcheryOfferRepository(db);
+  const hatcheryOfferService = new HatcheryOfferService(
+    db,
+    hatcheryOfferRepository,
     objectStorage,
     auditService,
     eventBus,
@@ -1731,6 +1751,7 @@ export function createContainer(deps: ContainerDeps): Container {
     traders: traderService,
     poultryOffers: poultryOfferService,
     eggOffers: eggOfferService,
+    hatcheryOffers: hatcheryOfferService,
   });
 
   const authenticateDeps = { tokens: tokenService, users: userService, roles: roleRepository };
@@ -1821,6 +1842,7 @@ export function createContainer(deps: ContainerDeps): Container {
     farmAppointmentRepository,
     poultryCaseRepository,
     farmJoinService,
+    poultrySupervisionService,
     poultryFlockService,
     farmProfileService,
     farmSubscriptionService,
@@ -1876,6 +1898,8 @@ export function createContainer(deps: ContainerDeps): Container {
     poultryOfferService,
     eggOfferRepository,
     eggOfferService,
+    hatcheryOfferRepository,
+    hatcheryOfferService,
     exchangeRateRepository,
     exchangeRateService,
     poultryMarketStatisticsRepository,
