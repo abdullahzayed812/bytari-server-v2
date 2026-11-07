@@ -441,3 +441,140 @@ describe('veterinarian applications — sub-type & documents', () => {
     expect(newDocs).toHaveLength(2);
   });
 });
+
+// --- Admin replacement of an identity document ---------------------
+
+describe('Admin — replace a veterinarian identity document', () => {
+  const docsUrl = (userId: string): string => `/api/v1/admin/veterinarians/${userId}/documents`;
+
+  it('ADMIN replaces the LICENSE_OR_ID document: old row soft-deleted, new one listed, audited', async () => {
+    const admin = await registerAdmin(app);
+    const vet = await registerUser(app);
+    expect((await applyAsVeterinarian(vet.accessToken)).status).toBe(201);
+    await request(app)
+      .post(`/api/v1/admin/veterinarians/${vet.id}/approve`)
+      .set(bearer(admin.accessToken));
+
+    const upload = await request(app)
+      .post(`${docsUrl(vet.id)}/upload-url`)
+      .set(bearer(admin.accessToken))
+      .send({ kind: 'LICENSE_OR_ID', filename: 'new-id.png', mimeType: 'image/png', size: 100 });
+    expect(upload.status).toBe(201);
+    const storageKey = upload.body.data.storageKey as string;
+    expect(storageKey.startsWith(`${StoragePrefix.veterinarianDocuments}/`)).toBe(true);
+    await storage.put(storageKey, Buffer.alloc(100, 2), { contentType: 'image/png' });
+
+    const replaced = await request(app)
+      .put(`${docsUrl(vet.id)}/LICENSE_OR_ID`)
+      .set(bearer(admin.accessToken))
+      .send({ storageKey, filename: 'new-id.png', mimeType: 'image/png' });
+    expect(replaced.status).toBe(200);
+    expect(replaced.body.data).toHaveLength(1);
+    expect(replaced.body.data[0]).toMatchObject({
+      kind: 'LICENSE_OR_ID',
+      filename: 'new-id.png',
+      mimeType: 'image/png',
+    });
+    expect(replaced.body.data[0].downloadUrl).toBeTypeOf('string');
+    expect(replaced.body.data[0]).not.toHaveProperty('storageKey');
+
+    const rows = await getTestDb()('veterinarian_application_documents').orderBy('created_at');
+    expect(rows).toHaveLength(2);
+    expect(rows[0].deleted_at).not.toBeNull();
+    expect(rows[1].deleted_at).toBeNull();
+    expect(rows[1].uploaded_by_user_id).toBe(admin.id);
+    const audit = await getTestDb()('audit_logs').where({
+      action: 'VETERINARIAN_DOCUMENT_REPLACED',
+    });
+    expect(audit).toHaveLength(1);
+
+    // The vet's own documents view shows the replacement; status is unchanged.
+    const mine = await request(app)
+      .get('/api/v1/veterinarians/me/documents')
+      .set(bearer(vet.accessToken));
+    expect(mine.body.data.documents.map((d: { filename: string }) => d.filename)).toEqual([
+      'new-id.png',
+    ]);
+    expect((await principalFor(vet.accessToken)).veterinarianStatus).toBe('APPROVED');
+  });
+
+  it('refuses: non-admins (incl. VETERINARIANS / USERS supervisors), wrong kind, foreign key, missing object', async () => {
+    const admin = await registerAdmin(app);
+    const vet = await registerUser(app);
+    await applyAsVeterinarian(vet.accessToken);
+    const body = {
+      kind: 'LICENSE_OR_ID',
+      filename: 'x.pdf',
+      mimeType: 'application/pdf',
+      size: 10,
+    };
+
+    const vetSup = await registerUser(app);
+    await request(app)
+      .post('/api/v1/admin/supervisors')
+      .set(bearer(admin.accessToken))
+      .send({ userId: vetSup.id, domain: 'VETERINARIANS' });
+    for (const token of [vet.accessToken, vetSup.accessToken]) {
+      expect(
+        (
+          await request(app)
+            .post(`${docsUrl(vet.id)}/upload-url`)
+            .set(bearer(token))
+            .send(body)
+        ).status,
+      ).toBe(403);
+      expect(
+        (
+          await request(app)
+            .put(`${docsUrl(vet.id)}/LICENSE_OR_ID`)
+            .set(bearer(token))
+            .send({ storageKey: 'k', filename: 'x.pdf', mimeType: 'application/pdf' })
+        ).status,
+      ).toBe(403);
+    }
+
+    // Student kinds do not belong to a VETERINARIAN application.
+    expect(
+      (
+        await request(app)
+          .post(`${docsUrl(vet.id)}/upload-url`)
+          .set(bearer(admin.accessToken))
+          .send({ ...body, kind: 'STUDENT_ID_FRONT', mimeType: 'image/png' })
+      ).status,
+    ).toBe(400);
+    // No application → 404.
+    const plain = await registerUser(app);
+    expect(
+      (
+        await request(app)
+          .post(`${docsUrl(plain.id)}/upload-url`)
+          .set(bearer(admin.accessToken))
+          .send(body)
+      ).status,
+    ).toBe(404);
+    // A key from another prefix → 409; a never-uploaded key → 400.
+    const stolen = await seedStorageObject(storage, 'avatars', Buffer.alloc(10), 'image/png');
+    expect(
+      (
+        await request(app)
+          .put(`${docsUrl(vet.id)}/LICENSE_OR_ID`)
+          .set(bearer(admin.accessToken))
+          .send({ storageKey: stolen.storageKey, filename: 'x.png', mimeType: 'image/png' })
+      ).status,
+    ).toBe(409);
+    expect(
+      (
+        await request(app)
+          .put(`${docsUrl(vet.id)}/LICENSE_OR_ID`)
+          .set(bearer(admin.accessToken))
+          .send({
+            storageKey: `${StoragePrefix.veterinarianDocuments}/2026/11/missing.pdf`,
+            filename: 'x.pdf',
+            mimeType: 'application/pdf',
+          })
+      ).status,
+    ).toBe(400);
+    const rows = await getTestDb()('veterinarian_application_documents').whereNull('deleted_at');
+    expect(rows).toHaveLength(1);
+  });
+});

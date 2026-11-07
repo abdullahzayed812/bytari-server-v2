@@ -195,6 +195,9 @@ describe('roles ↔ permissions', () => {
     expect(keys).not.toContain('syndicate.admin.pin');
     expect(keys).toContain('home_section.manage');
     expect(keys).toContain('organization.admin.delete');
-    expect(keys.length).toBe(92);
+    expect(keys).toContain('poultry_supervision.manage');
+    expect(keys).toContain('featured_organization.manage');
+    expect(keys).toContain('veterinarian.document.manage');
+    expect(keys.length).toBe(95);
   });
 });

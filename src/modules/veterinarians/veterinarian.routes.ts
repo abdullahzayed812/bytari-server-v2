@@ -6,6 +6,9 @@ import { userIdParamSchema } from '../../shared/validation/common.js';
 import type { Container } from '../../container.js';
 import { VeterinarianController } from './veterinarian.controller.js';
 import {
+  adminDocumentKindParamSchema,
+  adminDocumentUploadUrlBodySchema,
+  adminReplaceDocumentBodySchema,
   applyBodySchema,
   documentUploadUrlBodySchema,
   pendingQuerySchema,
@@ -62,6 +65,22 @@ export function createVeterinarianRouters(c: Container): { self: Router; admin: 
     authorize('veterinarian.reject'),
     validate({ params: userIdParamSchema, body: rejectBodySchema }),
     asyncHandler(ctrl.reject),
+  );
+
+  // Replace an uploaded identity / licence document (Admin user management and
+  // the veterinarian's profile). ADMIN-only key; same presigned private-R2
+  // flow and MIME / size rules as the applicant upload.
+  admin.post(
+    '/:userId/documents/upload-url',
+    authorize('veterinarian.document.manage'),
+    validate({ params: userIdParamSchema, body: adminDocumentUploadUrlBodySchema }),
+    asyncHandler(ctrl.requestAdminDocumentUploadUrl),
+  );
+  admin.put(
+    '/:userId/documents/:kind',
+    authorize('veterinarian.document.manage'),
+    validate({ params: adminDocumentKindParamSchema, body: adminReplaceDocumentBodySchema }),
+    asyncHandler(ctrl.replaceDocument),
   );
 
   return { self, admin };

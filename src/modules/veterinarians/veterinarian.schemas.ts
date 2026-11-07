@@ -99,3 +99,14 @@ export const pendingQuerySchema = paginationQuerySchema.extend({
   search: z.string().trim().min(1).max(160).optional(),
 });
 export type PendingQuery = z.infer<typeof pendingQuerySchema>;
+
+/** Admin replacement of one identity / licence document (presigned upload first). */
+export const adminDocumentUploadUrlBodySchema = documentUploadUrlBodySchema;
+export const adminDocumentKindParamSchema = z
+  .object({ userId: z.string().uuid(), kind: z.enum(VET_APPLICATION_DOCUMENT_KINDS) })
+  .strict();
+export type AdminDocumentKindParams = z.infer<typeof adminDocumentKindParamSchema>;
+export const adminReplaceDocumentBodySchema = z
+  .object({ storageKey: z.string().trim().min(1).max(1024), filename, mimeType })
+  .strict();
+export type AdminReplaceDocumentBody = z.infer<typeof adminReplaceDocumentBodySchema>;

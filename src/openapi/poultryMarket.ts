@@ -93,7 +93,7 @@ const schemas: Obj = {
       quantity: { type: 'integer' },
       pricingMethod: { type: 'string', enum: ['PER_KG', 'PER_BIRD'] },
       price: { type: 'string' },
-      ageWeeks: { type: 'integer', nullable: true },
+      ageDays: { type: 'integer', nullable: true, description: 'Bird age in days' },
       weightKg: { type: 'string', nullable: true },
       governorate: { type: 'string' },
       district: { type: 'string', nullable: true },

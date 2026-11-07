@@ -46,13 +46,14 @@ export const poultryOfferUploadUrlBodySchema = z
   .strict();
 export type PoultryOfferUploadUrlBody = z.infer<typeof poultryOfferUploadUrlBodySchema>;
 
-export const createPoultryOfferBodySchema = z.object({
+const createPoultryOfferObjectSchema = z.object({
   birdType: z.enum(BIRD_TYPES).default('BROILER'),
   breed: z.string().trim().max(160).optional(),
   quantity: z.coerce.number().int().min(1).max(100_000_000),
   pricingMethod: z.enum(PRICING_METHODS).default('PER_KG'),
   price: moneySchema,
-  ageWeeks: z.coerce.number().int().min(0).max(500).optional(),
+  /** Bird age in DAYS. */
+  ageDays: z.coerce.number().int().min(0).max(3650).optional(),
   weightKg: weightSchema.optional(),
   governorate: z.string().trim().min(1).max(120),
   district: z.string().trim().max(120).optional(),
@@ -64,6 +65,24 @@ export const createPoultryOfferBodySchema = z.object({
     .max(MAX_POULTRY_OFFER_IMAGES)
     .default([]),
 });
+
+export const createPoultryOfferBodySchema = z.preprocess(
+  // Builds before 2026-11-07 still send the age in weeks (`ageWeeks`).
+  (raw) => {
+    if (raw && typeof raw === 'object' && !('ageDays' in raw) && 'ageWeeks' in raw) {
+      const { ageWeeks, ...rest } = raw as Record<string, unknown>;
+      const weeks = Number(ageWeeks);
+      return ageWeeks === undefined ||
+        ageWeeks === null ||
+        ageWeeks === '' ||
+        !Number.isFinite(weeks)
+        ? rest
+        : { ...rest, ageDays: weeks * 7 };
+    }
+    return raw;
+  },
+  createPoultryOfferObjectSchema,
+);
 export type CreatePoultryOfferBody = z.infer<typeof createPoultryOfferBodySchema>;
 
 export const listPoultryOffersQuerySchema = paginationQuerySchema.extend({

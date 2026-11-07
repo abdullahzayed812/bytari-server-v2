@@ -14,6 +14,7 @@ import {
   featuredState,
   isFeaturableOn,
   type AdminFeaturedOrganizationDTO,
+  type FeaturedCandidateDTO,
   type FeaturedOrganization,
   type FeaturedPlacement,
 } from '../domain/featured-organization.types.js';
@@ -76,6 +77,15 @@ export class FeaturedOrganizationService {
   }): Promise<AdminFeaturedOrganizationDTO[]> {
     const today = businessToday();
     return (await this.featured.listForAdmin(filter)).map((r) => this.toAdminDTO(r, today));
+  }
+
+  /** Add-form picker: ACTIVE organizations of the placement's type, minimal fields. */
+  async listCandidates(q: {
+    placement: FeaturedPlacement;
+    search?: string;
+    limit: number;
+  }): Promise<FeaturedCandidateDTO[]> {
+    return this.featured.listCandidates(q);
   }
 
   async create(

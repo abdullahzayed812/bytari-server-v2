@@ -24,6 +24,10 @@ export const PERMISSION_KEYS = [
   'veterinarian.read',
   'veterinarian.approve',
   'veterinarian.reject',
+  // Replace a veterinarian's uploaded identity / licence document (Admin user
+  // management + profile). Granted to NO base role and NO supervisor domain —
+  // ADMIN override only.
+  'veterinarian.document.manage',
   'supervisor.read',
   'supervisor.assign',
   'supervisor.remove',
@@ -120,6 +124,15 @@ export const PERMISSION_KEYS = [
   // Veterinarian home pages). Public reads are NOT permission-gated. Granted to
   // NO base role — ADMIN (override) only.
   'home_section.manage',
+  // "العيادات والمكاتب المميزة" — the featured clinics / offices of the home
+  // carousels. Held by ADMIN (override), a FEATURED_CLINICS system-supervisor,
+  // or (legacy) `home_section.manage`. Granted to NO base role.
+  'featured_organization.manage',
+  // "إدارة مشرفي الدواجن" — Admin Poultry Supervisors Management (vet ↔
+  // poultry-farm links). Held by ADMIN (override) or a POULTRY_SUPERVISION
+  // system-supervisor. Opening the FULL vet / farm profile from that screen is
+  // NOT part of it (ADMIN-only). Granted to NO base role.
+  'poultry_supervision.manage',
   // Poultry Markets — trader registration review. Held by ADMIN (override) or
   // MODERATOR (read-only oversight, mirrors 'veterinarian.read'). Approve /
   // reject / suspend are granted to NO base role.
@@ -219,6 +232,9 @@ export const SUPERVISOR_DOMAINS = [
   'TRADERS',
   'REPORTS',
   'NOTIFICATIONS',
+  // Delegable sections added 2026-11-07.
+  'POULTRY_SUPERVISION',
+  'FEATURED_CLINICS',
 ] as const;
 export type SupervisorDomain = (typeof SUPERVISOR_DOMAINS)[number];
 
@@ -259,6 +275,8 @@ export const PERMISSION_DEFINITIONS: Record<PermissionKey, string> = {
   'veterinarian.read': 'View veterinarian applications',
   'veterinarian.approve': 'Approve veterinarian applications',
   'veterinarian.reject': 'Reject veterinarian applications',
+  'veterinarian.document.manage':
+    'Replace a veterinarian’s uploaded identity / licence documents (ADMIN only)',
   'supervisor.read': 'View system supervisor assignments',
   'supervisor.assign': 'Assign system supervisors',
   'supervisor.remove': 'Remove system supervisor assignments',
@@ -315,6 +333,10 @@ export const PERMISSION_DEFINITIONS: Record<PermissionKey, string> = {
   'advertisement.manage':
     'Create, update, activate/deactivate and delete advertisement campaigns and slides across all placements',
   'home_section.manage': 'Upload, replace and remove the images of the home-page sections',
+  'featured_organization.manage':
+    'Add, edit, enable/disable and remove the featured clinics / offices of the home pages',
+  'poultry_supervision.manage':
+    'View and manage veterinarian ↔ poultry-farm supervision links (no full-profile access)',
   'trader.admin.read': 'View trader registration profiles/applications',
   'trader.admin.approve': 'Approve a pending trader registration',
   'trader.admin.reject': 'Reject a pending trader registration',
@@ -465,6 +487,12 @@ export const SUPERVISOR_DOMAIN_PERMISSIONS: Record<SupervisorDomain, readonly Pe
   ],
   REPORTS: ['content_report.admin.manage'],
   NOTIFICATIONS: ['notification.admin.send'],
+  // Poultry Supervisors Management — list / link / change / unlink only. Never
+  // `user.read` / `organization.admin.read`: the full veterinarian / farm
+  // profiles stay out of reach unless granted by another section.
+  POULTRY_SUPERVISION: ['poultry_supervision.manage'],
+  // Featured clinics / offices of the home carousels (not the section images).
+  FEATURED_CLINICS: ['featured_organization.manage'],
 };
 
 /**

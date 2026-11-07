@@ -10,7 +10,8 @@ export interface PoultryOffer {
   pricingMethod: PricingMethod;
   /** Decimal string (PostgreSQL numeric). Never a JS float. */
   price: string;
-  ageWeeks: number | null;
+  /** Bird age in days. */
+  ageDays: number | null;
   weightKg: string | null;
   governorate: string;
   district: string | null;
@@ -40,7 +41,7 @@ export interface PoultryOfferRow {
   quantity: number;
   pricing_method: string;
   price: string;
-  age_weeks: number | null;
+  age_days: number | null;
   weight_kg: string | null;
   governorate: string;
   district: string | null;
@@ -65,7 +66,7 @@ export function rowToPoultryOffer(row: PoultryOfferRow): PoultryOffer {
     quantity: Number(row.quantity),
     pricingMethod: row.pricing_method as PricingMethod,
     price: row.price,
-    ageWeeks: row.age_weeks === null ? null : Number(row.age_weeks),
+    ageDays: row.age_days === null ? null : Number(row.age_days),
     weightKg: row.weight_kg,
     governorate: row.governorate,
     district: row.district,
@@ -93,7 +94,7 @@ export interface CreatePoultryOfferInput {
   quantity: number;
   pricingMethod: PricingMethod;
   price: string;
-  ageWeeks?: number | null;
+  ageDays?: number | null;
   weightKg?: string | null;
   governorate: string;
   district?: string | null;

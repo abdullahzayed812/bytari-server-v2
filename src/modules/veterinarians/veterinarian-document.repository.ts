@@ -77,4 +77,16 @@ export class VeterinarianDocumentRepository {
     }
     return map;
   }
+
+  /** Soft-deletes the live document(s) of `kind` on an application (replacement). */
+  async softDeleteKind(
+    applicationId: string,
+    kind: VetApplicationDocumentKind,
+    trx?: Knex.Transaction,
+  ): Promise<number> {
+    return this.conn(trx)(TABLE)
+      .where({ application_id: applicationId, kind })
+      .whereNull('deleted_at')
+      .update({ deleted_at: this.db.fn.now(), updated_at: this.db.fn.now() });
+  }
 }

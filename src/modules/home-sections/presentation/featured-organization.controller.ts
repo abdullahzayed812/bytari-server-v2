@@ -11,6 +11,7 @@ import type {
 import type {
   AdminFeaturedListQuery,
   CreateFeaturedBody,
+  FeaturedCandidatesQuery,
   FeaturedIdParams,
   FeaturedPlacementQuery,
   UpdateFeaturedBody,
@@ -32,6 +33,11 @@ export class FeaturedOrganizationController {
   adminList = async (req: Request, res: Response): Promise<void> => {
     const q = validatedQuery<AdminFeaturedListQuery>(req);
     sendSuccess(res, await this.featured.listForAdmin({ placement: q.placement }));
+  };
+
+  candidates = async (req: Request, res: Response): Promise<void> => {
+    const q = validatedQuery<FeaturedCandidatesQuery>(req);
+    sendSuccess(res, await this.featured.listCandidates(q));
   };
 
   create = async (req: Request, res: Response): Promise<void> => {

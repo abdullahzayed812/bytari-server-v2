@@ -11,6 +11,15 @@ export type FeaturedPlacementQuery = z.infer<typeof featuredPlacementQuerySchema
 export const adminFeaturedListQuerySchema = z.object({ placement: placement.optional() }).strict();
 export type AdminFeaturedListQuery = z.infer<typeof adminFeaturedListQuerySchema>;
 
+export const featuredCandidatesQuerySchema = z
+  .object({
+    placement,
+    search: z.string().trim().min(1).max(160).optional(),
+    limit: z.coerce.number().int().min(1).max(50).default(10),
+  })
+  .strict();
+export type FeaturedCandidatesQuery = z.infer<typeof featuredCandidatesQuerySchema>;
+
 export const featuredIdParamSchema = z.object({ id: z.string().uuid() }).strict();
 export type FeaturedIdParams = z.infer<typeof featuredIdParamSchema>;
 

@@ -7,6 +7,8 @@ import { auditContextFromRequest } from '../audit/audit-context.js';
 import { requireAuth } from '../auth/authenticate.middleware.js';
 import type { VeterinarianService } from './veterinarian.service.js';
 import type {
+  AdminDocumentKindParams,
+  AdminReplaceDocumentBody,
   ApplyBody,
   DocumentUploadUrlBody,
   PendingQuery,
@@ -73,5 +75,23 @@ export class VeterinarianController {
     const { reason } = validatedBody<RejectBody>(req);
     const application = await this.vets.reject(userId, reason, this.actor(req));
     sendSuccess(res, application);
+  };
+
+  /** Admin: presigned upload for a replacement identity document of `:userId`. */
+  requestAdminDocumentUploadUrl = async (req: Request, res: Response): Promise<void> => {
+    const { userId } = validatedParams<{ userId: string }>(req);
+    const body = validatedBody<DocumentUploadUrlBody>(req);
+    sendSuccess(
+      res,
+      await this.vets.requestAdminDocumentUploadUrl(userId, body),
+      StatusCodes.CREATED,
+    );
+  };
+
+  /** Admin: swap the `:kind` document for the uploaded object; returns the new list. */
+  replaceDocument = async (req: Request, res: Response): Promise<void> => {
+    const { userId, kind } = validatedParams<AdminDocumentKindParams>(req);
+    const body = validatedBody<AdminReplaceDocumentBody>(req);
+    sendSuccess(res, await this.vets.replaceDocumentAsAdmin(userId, kind, body, this.actor(req)));
   };
 }

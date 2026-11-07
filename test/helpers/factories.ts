@@ -932,7 +932,9 @@ export async function assignSystemSupervisor(
     | 'VETERINARIAN_STORE'
     | 'VET_JOBS'
     | 'VET_COURSES'
-    | 'SYNDICATE',
+    | 'SYNDICATE'
+    | 'POULTRY_SUPERVISION'
+    | 'FEATURED_CLINICS',
 ): Promise<{ id: string }> {
   const res = await request(app)
     .post('/api/v1/admin/supervisors')

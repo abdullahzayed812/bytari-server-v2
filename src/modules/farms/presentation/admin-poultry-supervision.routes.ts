@@ -2,7 +2,6 @@ import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { StatusCodes } from 'http-status-codes';
 import type { Container } from '../../../container.js';
-import { ForbiddenError } from '../../../shared/errors/app-error.js';
 import { asyncHandler } from '../../../shared/http/async-handler.js';
 import { pageMeta, paginationQuerySchema } from '../../../shared/http/pagination.js';
 import { sendSuccess } from '../../../shared/http/response.js';
@@ -15,7 +14,10 @@ import {
 import { dateOnlySchema } from '../../../shared/validation/date-only.js';
 import { auditContextFromRequest } from '../../audit/audit-context.js';
 import { requireAuth } from '../../auth/authenticate.middleware.js';
-import { SUPERVISION_TYPES } from '../domain/poultry-supervision.types.js';
+import {
+  POULTRY_SUPERVISION_PERMISSION_KEY,
+  SUPERVISION_TYPES,
+} from '../domain/poultry-supervision.types.js';
 
 const governorate = z.string().trim().min(1).max(120).optional();
 
@@ -57,22 +59,18 @@ const membershipParamSchema = z.object({ membershipId: z.string().uuid() });
  *  - PUT  `/links/:membershipId/replace`   change the farm's supervising vet
  *  - DELETE `/links/:membershipId`         unlink
  * Lists take `page`, `pageSize`, `search`, `governorate`.
- * ADMIN-ONLY: checked on the ADMIN role itself (no permission key, so no
- * supervisor domain or MODERATOR read can reach it). Mounted on its own path
+ * Guarded by `poultry_supervision.manage`: ADMIN (override) or a
+ * POULTRY_SUPERVISION system-supervisor. That domain grants nothing else —
+ * opening the FULL veterinarian / farm profile (`/admin/users/:id`,
+ * `/admin/organizations/:id`, `/admin/farms/:id`) stays behind their own keys,
+ * and the app shows those actions to the ADMIN only. Mounted on its own path
  * — never path-less (see the `/admin` mount trap).
  */
 export function createAdminPoultrySupervisionRouter(c: Container): Router {
   const service = c.poultrySupervisionService;
   const r = Router();
   r.use(c.authenticate);
-  r.use(
-    asyncHandler((req, _res, next) => {
-      if (!c.authorizationService.isAdmin(requireAuth(req))) {
-        throw new ForbiddenError('Only an administrator can manage poultry supervisors');
-      }
-      next();
-    }),
-  );
+  r.use(c.authorization.authorize(POULTRY_SUPERVISION_PERMISSION_KEY));
   const actor = (
     req: Request,
   ): { actorUserId: string; context: ReturnType<typeof auditContextFromRequest> } => ({

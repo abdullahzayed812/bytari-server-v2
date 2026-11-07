@@ -22,6 +22,9 @@ import type { FarmSubscriptionStatus } from '../../organizations/domain/organiza
  * عليه طبيب بيطري واحد"); the join-code flow predates it and may attach
  * more, so a farm row carries a list (newest assignment first).
  */
+/** Gate of `/admin/poultry-supervisors/*` (ADMIN or a POULTRY_SUPERVISION supervisor). */
+export const POULTRY_SUPERVISION_PERMISSION_KEY = 'poultry_supervision.manage';
+
 export const SUPERVISING_ROLE_KEYS = ['VETERINARIAN', 'SUPERVISOR'] as const;
 export type SupervisingRoleKey = (typeof SUPERVISING_ROLE_KEYS)[number];
 

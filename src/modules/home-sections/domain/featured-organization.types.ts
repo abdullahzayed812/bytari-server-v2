@@ -111,3 +111,10 @@ export interface AdminFeaturedOrganizationDTO extends FeaturedOrganization {
     publiclyVisible: boolean;
   };
 }
+
+/** One organization the featured add form can pick (no admin organization read needed). */
+export interface FeaturedCandidateDTO {
+  id: string;
+  name: string;
+  type: FeaturedOrganizationType;
+}

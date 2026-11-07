@@ -1,6 +1,9 @@
 import type { Knex } from 'knex';
+import { whereTextSearch } from '../../../shared/database/search.js';
 import {
   FEATURED_TYPES_BY_PLACEMENT,
+  type FeaturedCandidateDTO,
+  type FeaturedOrganizationType,
   rowToFeaturedOrganization,
   type FeaturedOrganization,
   type FeaturedOrganizationRow,
@@ -100,6 +103,23 @@ export class FeaturedOrganizationRepository {
       .limit(limit)
       .select('f.organization_id');
     return rows.map((r) => r.organization_id);
+  }
+
+  /** ACTIVE organizations of the placement's type, by name (or exact id). */
+  async listCandidates(
+    q: { placement: FeaturedPlacement; search?: string; limit: number },
+    trx?: Knex.Transaction,
+  ): Promise<FeaturedCandidateDTO[]> {
+    const qb = this.conn(trx)('organizations as o')
+      .whereIn('o.type', FEATURED_TYPES_BY_PLACEMENT[q.placement])
+      .where('o.status', 'ACTIVE');
+    whereTextSearch(qb, q.search, { columns: ['o.name'], ids: ['o.id'] });
+    const rows: Array<{
+      id: string;
+      name: string;
+      type: FeaturedOrganizationType;
+    }> = await qb.orderBy('o.name').limit(q.limit).select('o.id', 'o.name', 'o.type');
+    return rows.map((r) => ({ id: r.id, name: r.name, type: r.type }));
   }
 
   async findById(id: string, trx?: Knex.Transaction): Promise<FeaturedOrganization | null> {

@@ -255,6 +255,93 @@ export class VeterinarianService {
     );
   }
 
+  /**
+   * Admin: presigned PUT for a REPLACEMENT identity / licence document of
+   * `targetUserId`. Same prefix, MIME and size rules as the applicant upload;
+   * the server generates the key. The kind must fit the latest application.
+   */
+  async requestAdminDocumentUploadUrl(
+    targetUserId: string,
+    input: { kind: VetApplicationDocumentKind; filename: string; mimeType: string; size: number },
+  ): Promise<Awaited<ReturnType<VeterinarianService['requestDocumentUploadUrl']>>> {
+    const application = await this.applications.findLatestByUser(targetUserId);
+    if (!application) throw new NotFoundError('This user has no veterinarian application');
+    this.assertKindFitsSubType(input.kind, application.subType);
+    return this.requestDocumentUploadUrl(targetUserId, input);
+  }
+
+  /**
+   * Admin: replace the `kind` document of the user's LATEST application with
+   * an object uploaded through {@link requestAdminDocumentUploadUrl}. The old
+   * row is soft-deleted (kept for the audit trail, never shown again); the
+   * object's real type / size are re-checked before the transaction opens.
+   * Returns the refreshed admin document list (signed URLs).
+   */
+  async replaceDocumentAsAdmin(
+    targetUserId: string,
+    kind: VetApplicationDocumentKind,
+    input: { storageKey: string; filename: string; mimeType: string },
+    actor: VetActor,
+  ): Promise<AdminVeterinarianApplicationDocument[]> {
+    const application = await this.applications.findLatestByUser(targetUserId);
+    if (!application) throw new NotFoundError('This user has no veterinarian application');
+    this.assertKindFitsSubType(kind, application.subType);
+
+    VeterinarianPolicy.assertKeyBelongsToPrefix(
+      input.storageKey,
+      StoragePrefix.veterinarianDocuments,
+    );
+    const head = await this.storage.head(input.storageKey);
+    if (!head) {
+      throw new BadRequestError('no uploaded object exists at that storage key', {
+        code: ErrorCode.STORAGE_OBJECT_MISSING,
+      });
+    }
+    const realMime = head.contentType ?? input.mimeType;
+    VeterinarianPolicy.assertRegisteredDocument(kind, realMime, head.size);
+
+    await this.db.transaction(async (tx) => {
+      const replaced = await this.documents.softDeleteKind(application.id, kind, tx);
+      await this.documents.create(
+        {
+          applicationId: application.id,
+          kind,
+          storageKey: input.storageKey,
+          storageProvider: this.storage.name,
+          originalFilename: input.filename,
+          mimeType: realMime,
+          sizeBytes: head.size,
+          uploadedByUserId: actor.actorUserId,
+        },
+        tx,
+      );
+      await this.audit.record(
+        {
+          action: AuditAction.VETERINARIAN_DOCUMENT_REPLACED,
+          entityType: AuditEntityType.VETERINARIAN_APPLICATION,
+          entityId: application.id,
+          actorUserId: actor.actorUserId,
+          metadata: { targetUserId, kind, replacedCount: replaced },
+          context: actor.context,
+        },
+        tx,
+      );
+    });
+    return this.getLatestApplicationDocumentsForAdmin(targetUserId);
+  }
+
+  private assertKindFitsSubType(
+    kind: VetApplicationDocumentKind,
+    subType: VetApplicationSubType,
+  ): void {
+    const studentKind = kind === 'STUDENT_ID_FRONT' || kind === 'STUDENT_ID_BACK';
+    if (studentKind !== (subType === 'STUDENT')) {
+      throw new BadRequestError(`A ${kind} document does not belong to a ${subType} application`, {
+        code: ErrorCode.VALIDATION_ERROR,
+      });
+    }
+  }
+
   async listPending(
     page: number,
     pageSize: number,

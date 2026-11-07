@@ -4,6 +4,7 @@ import { buildTestApp } from '../helpers/app.js';
 import { closeTestDb, ensureSchema, getTestDb, resetDb } from '../helpers/db.js';
 import { businessToday } from '../../src/shared/time/business-date.js';
 import {
+  assignSystemSupervisor,
   bearer,
   createActiveOrganization,
   createFarm,
@@ -210,10 +211,17 @@ describe('featured home organizations — admin management', () => {
     expect(pendingRes.status).toBe(400);
   });
 
-  it('is ADMIN-only (home_section.manage): users get 403 on every admin route', async () => {
-    const { viewer, clinic, today } = await seed();
+  it('needs featured_organization.manage: users and other supervisors get 403 on every admin route', async () => {
+    const { admin, viewer, clinic, today } = await seed();
     const t = bearer(viewer.accessToken);
     expect((await request(app).get(ADMIN).set(t)).status).toBe(403);
+    expect(
+      (await request(app).get(`${ADMIN}/candidates`).query({ placement: 'PET_OWNER_HOME' }).set(t))
+        .status,
+    ).toBe(403);
+    const other = await registerUser(app);
+    await assignSystemSupervisor(app, admin.accessToken, other.id, 'ADVERTISEMENT');
+    expect((await request(app).get(ADMIN).set(bearer(other.accessToken))).status).toBe(403);
     expect(
       (
         await request(app).post(ADMIN).set(t).send({
@@ -229,6 +237,57 @@ describe('featured home organizations — admin management', () => {
       (await request(app).patch(`${ADMIN}/${id}`).set(t).send({ isEnabled: false })).status,
     ).toBe(403);
     expect((await request(app).delete(`${ADMIN}/${id}`).set(t)).status).toBe(403);
+  });
+});
+
+describe('featured home organizations — FEATURED_CLINICS supervisor', () => {
+  it('manages entries and picks candidates without the admin organization read', async () => {
+    const { admin, clinic, office, today } = await seed();
+    const sup = await registerUser(app);
+    await assignSystemSupervisor(app, admin.accessToken, sup.id, 'FEATURED_CLINICS');
+    const t = bearer(sup.accessToken);
+
+    // Not a CLINIC supervisor → the admin organization list stays closed …
+    expect(
+      (await request(app).get(`${API}/admin/organizations`).query({ type: 'CLINIC' }).set(t))
+        .status,
+    ).toBe(403);
+    // … the picker returns only the placement's ACTIVE type, searchable.
+    const pets = await request(app)
+      .get(`${ADMIN}/candidates`)
+      .query({ placement: 'PET_OWNER_HOME' })
+      .set(t);
+    expect(pets.status).toBe(200);
+    expect(pets.body.data.map((o: { id: string }) => o.id)).toEqual([clinic.id]);
+    const vets = await request(app)
+      .get(`${ADMIN}/candidates`)
+      .query({ placement: 'VETERINARIAN_HOME', search: 'مكتب' })
+      .set(t);
+    expect(vets.body.data.map((o: { id: string }) => o.id)).toEqual([office.id]);
+    const none = await request(app)
+      .get(`${ADMIN}/candidates`)
+      .query({ placement: 'VETERINARIAN_HOME', search: 'لا يوجد' })
+      .set(t);
+    expect(none.body.data).toEqual([]);
+
+    const created = await request(app)
+      .post(ADMIN)
+      .set(t)
+      .send({
+        organizationId: clinic.id,
+        placement: 'PET_OWNER_HOME',
+        startsOn: today,
+        endsOn: addDays(today, 3),
+      });
+    expect(created.status).toBe(201);
+    const id = created.body.data.id as string;
+    expect((await request(app).get(ADMIN).set(t)).body.data).toHaveLength(1);
+    expect(
+      (await request(app).patch(`${ADMIN}/${id}`).set(t).send({ isEnabled: false })).status,
+    ).toBe(200);
+    expect((await request(app).delete(`${ADMIN}/${id}`).set(t)).status).toBe(200);
+    // Section images are a different section — still closed.
+    expect((await request(app).get(`${API}/admin/home-sections`).set(t)).status).toBe(403);
   });
 });
 

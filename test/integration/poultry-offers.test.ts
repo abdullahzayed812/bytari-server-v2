@@ -53,7 +53,7 @@ describe('poultry market offers', () => {
     const trader = await registerApprovedTrader(app);
     const admin = await registerAdmin(app);
     const stranger = await registerApprovedTrader(app);
-    const res = await createOffer(trader.accessToken, { breed: 'محلية', ageWeeks: 5 });
+    const res = await createOffer(trader.accessToken, { breed: 'محلية', ageDays: 35 });
     expect(res.status).toBe(201);
     expect(res.body.data.status).toBe('ACTIVE');
     expect(res.body.data.moderationStatus).toBe('PENDING');

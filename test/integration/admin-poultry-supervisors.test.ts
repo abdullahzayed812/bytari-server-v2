@@ -59,7 +59,7 @@ function link(token: string, body: Record<string, unknown>): Promise<request.Res
 }
 
 describe('Admin — Poultry Supervisors Management (reads)', () => {
-  it('is ADMIN-only: moderators, system supervisors and vets get 403', async () => {
+  it('needs poultry_supervision.manage: moderators, other supervisors and vets get 403', async () => {
     const admin = await registerAdmin(app);
     const moderator = await registerModerator(app);
     const orgSup = await registerUser(app);
@@ -75,6 +75,44 @@ describe('Admin — Poultry Supervisors Management (reads)', () => {
     }
     expect((await request(app).get(api('/linked-farms'))).status).toBe(401);
     expect((await get(admin.accessToken, '/summary')).status).toBe(200);
+  });
+
+  it('a POULTRY_SUPERVISION supervisor manages links but cannot open full vet / farm profiles', async () => {
+    const admin = await registerAdmin(app);
+    const sup = await registerUser(app);
+    await assignSystemSupervisor(app, admin.accessToken, sup.id, 'POULTRY_SUPERVISION');
+    const owner = await registerUser(app);
+    const farm = await createFarm(app, owner.accessToken, admin.accessToken);
+    const vet = await registerApprovedVet(app);
+
+    for (const path of ['/summary', '/linked-farms', '/unlinked-farms', '/veterinarians']) {
+      expect((await get(sup.accessToken, path)).status).toBe(200);
+    }
+    const created = await link(sup.accessToken, {
+      organizationId: farm.id,
+      veterinarianUserId: vet.id,
+    });
+    expect(created.status).toBe(201);
+    const linked = await get<LinkedFarmRow[]>(sup.accessToken, '/linked-farms');
+    expect(linked.data.map((r) => r.farm.organizationId)).toEqual([farm.id]);
+    const membershipId = linked.data[0]!.links[0]!.membershipId;
+
+    // The full profiles stay behind their own keys — the domain grants none of them.
+    for (const path of [
+      `/api/v1/admin/users/${vet.id}`,
+      `/api/v1/admin/organizations/${farm.id}`,
+    ]) {
+      expect((await request(app).get(path).set(bearer(sup.accessToken))).status).toBe(403);
+      expect((await request(app).get(path).set(bearer(admin.accessToken))).status).toBe(200);
+    }
+
+    expect(
+      (
+        await request(app)
+          .delete(api(`/links/${membershipId}`))
+          .set(bearer(sup.accessToken))
+      ).status,
+    ).toBe(200);
   });
 
   it('partitions farms and vets, groups links per farm, filters by governorate and search', async () => {

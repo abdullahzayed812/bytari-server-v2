@@ -25,6 +25,8 @@ export function homeSectionPage(key: HomeSectionKey): HomeSectionPage {
 
 /** Route guard for every admin write — ADMIN override only (no base role holds it). */
 export const HOME_SECTION_PERMISSION_KEY = 'home_section.manage';
+/** Featured clinics / offices of the home carousels (FEATURED_CLINICS supervisor domain). */
+export const FEATURED_ORGANIZATION_PERMISSION_KEY = 'featured_organization.manage';
 
 /** Same image rules as the other admin-managed visuals (ads, store categories). */
 export const HOME_SECTION_MAX_IMAGE_BYTES = 10 * 1024 * 1024;

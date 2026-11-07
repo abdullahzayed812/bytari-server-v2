@@ -36,7 +36,7 @@ export class PoultryOfferRepository {
         quantity: input.quantity,
         pricing_method: input.pricingMethod,
         price: input.price,
-        age_weeks: input.ageWeeks ?? null,
+        age_days: input.ageDays ?? null,
         weight_kg: input.weightKg ?? null,
         governorate: input.governorate,
         district: input.district ?? null,
