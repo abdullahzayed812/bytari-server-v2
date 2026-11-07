@@ -601,8 +601,22 @@ describe('chat — conversation listing', () => {
     const clinicList = await listConversations(app, vetOwner.accessToken);
     const ids = (clinicList.body.data as Array<{ id: string }>).map((c) => c.id).sort();
     expect(ids).toEqual([c1.id, c2.id].sort());
-    // clinic-side rows: per-member unread from the member's message alerts
-    await new Promise((r) => setTimeout(r, 60));
+    // clinic-side rows: per-member unread from the member's message alerts.
+    // Those alerts are written asynchronously (event bus → notification).
+    // Wait on the alert row itself with a cheap DB query — polling through
+    // the HTTP list (~3s per round-trip on a slow CI disk) only got one or
+    // two attempts inside the old 5s window and flaked.
+    for (const deadline = Date.now() + 20_000; ;) {
+      const alert = await getTestDb()('notifications')
+        .where({
+          recipient_user_id: vetOwner.id,
+          type: 'CHAT_MESSAGE_RECEIVED',
+          entity_id: c1.id,
+        })
+        .first();
+      if (alert || Date.now() > deadline) break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
     const again = await listConversations(app, vetOwner.accessToken);
     const unreadById = new Map(
       (again.body.data as Array<{ id: string; unreadCount: number }>).map((c) => [
@@ -616,7 +630,7 @@ describe('chat — conversation listing', () => {
       .get(`/api/v1/conversations/unread-summary?organizationId=${clinic.id}`)
       .set(bearer(vetOwner.accessToken));
     expect(summary.body.data).toEqual({ unreadConversations: 1, unreadMessages: 1 });
-  });
+  }, 90_000);
 });
 
 // --- events & audit ------------------------------------------
