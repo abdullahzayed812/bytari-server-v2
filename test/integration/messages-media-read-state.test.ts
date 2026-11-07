@@ -28,6 +28,20 @@ afterAll(() => closeTestDb());
 
 const tick = (): Promise<void> => new Promise((r) => setTimeout(r, 60));
 
+/**
+ * Notifications are written by async event handlers after the request
+ * returns. A fixed sleep races on a slow CI runner, so poll the table until
+ * `min` rows exist for the user (or time out and let the assertion report).
+ */
+async function waitForNotifications(userId: string, min: number, timeoutMs = 20_000) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const rows = await container.db('notifications').where({ recipient_user_id: userId });
+    if (rows.length >= min || Date.now() > deadline) return rows;
+    await tick();
+  }
+}
+
 async function putImage(key: string): Promise<void> {
   await container.objectStorage.put(key, fixtureBytes('image/jpeg', 1024), {
     contentType: 'image/jpeg',
@@ -141,9 +155,8 @@ describe('organization broadcast — image key + link', () => {
       .set(bearer(owner.accessToken))
       .send({ title: 'عرض', body: 'خصم', imageStorageKey: key, linkUrl: 'https://x.example' });
     expect(send.status).toBe(201);
-    await tick();
 
-    const rows = await container.db('notifications').where({ recipient_user_id: follower.id });
+    const rows = await waitForNotifications(follower.id, 1);
     expect(rows).toHaveLength(1);
     expect(rows[0].data.imageKey).toBe(key);
     expect(rows[0].data).not.toHaveProperty('imageUrl');
@@ -166,7 +179,7 @@ describe('message read state clears the bell', () => {
     const conv = await startConversation(app, petOwner.accessToken, clinic.id);
     await sendChatMessage(app, vetOwner.accessToken, conv.id, 'a');
     const b = await sendChatMessage(app, vetOwner.accessToken, conv.id, 'b');
-    await tick();
+    await waitForNotifications(petOwner.id, 2);
     expect(await unreadCount(petOwner.accessToken)).toBe(2);
 
     const read = await markConversationRead(app, petOwner.accessToken, conv.id, b.body.data.id);
@@ -197,7 +210,7 @@ describe('message read state clears the bell', () => {
     const c = await createConsultation(app, owner.accessToken, 'help');
     const id = c.body.data.id as string;
     await sendThreadMessage(app, sup.accessToken, 'consultations', id, 'reply');
-    await tick();
+    await waitForNotifications(owner.id, 1);
     expect(await unreadCount(owner.accessToken)).toBeGreaterThan(0);
 
     const msgs = await request(app)
