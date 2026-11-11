@@ -1,3 +1,4 @@
+import { BUSINESS_CURRENT_DATE_SQL } from '../../../shared/time/business-date.js';
 import type { Knex } from 'knex';
 import type { FarmSubscriptionStatus } from '../domain/organization.types.js';
 
@@ -24,11 +25,11 @@ export function whereSubscriptionStatus(
     });
   } else if (status === 'ACTIVE') {
     qb.whereNotNull(`${alias}.subscription_end_date`).whereRaw(
-      `${alias}.subscription_end_date >= CURRENT_DATE`,
+      `${alias}.subscription_end_date >= ${BUSINESS_CURRENT_DATE_SQL}`,
     );
   } else {
     qb.whereNotNull(`${alias}.subscription_end_date`).whereRaw(
-      `${alias}.subscription_end_date < CURRENT_DATE`,
+      `${alias}.subscription_end_date < ${BUSINESS_CURRENT_DATE_SQL}`,
     );
   }
 }

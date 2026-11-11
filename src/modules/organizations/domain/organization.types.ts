@@ -1,3 +1,4 @@
+import { businessToday } from '../../../shared/time/business-date.js';
 export const ORGANIZATION_TYPES = [
   'CLINIC',
   'FARM',
@@ -165,7 +166,7 @@ export function computeFarmSubscriptionStatus(
   now: Date = new Date(),
 ): FarmSubscriptionStatus {
   if (!startDate || !endDate) return 'NOT_STARTED';
-  const today = now.toISOString().slice(0, 10);
+  const today = businessToday(now);
   return endDate >= today ? 'ACTIVE' : 'EXPIRED';
 }
 

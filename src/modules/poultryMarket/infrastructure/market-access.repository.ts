@@ -1,3 +1,4 @@
+import { BUSINESS_CURRENT_DATE_SQL } from '../../../shared/time/business-date.js';
 import type { Knex } from 'knex';
 
 /** A poultry farm species — `farm_species` POULTRY / MIXED, or legacy null. Never SHEEP / CATTLE. */
@@ -19,7 +20,7 @@ export function eligibleFarmOwnerIdsQuery(conn: Knex | Knex.Transaction): Knex.Q
     .andWhere('o.status', 'ACTIVE')
     .whereNotNull('d.subscription_start_date')
     .whereNotNull('d.subscription_end_date')
-    .andWhereRaw('d.subscription_end_date >= CURRENT_DATE')
+    .andWhereRaw(`d.subscription_end_date >= ${BUSINESS_CURRENT_DATE_SQL}`)
     .select('o.owner_user_id');
   wherePoultrySpecies(qb);
   return qb;
@@ -42,7 +43,7 @@ export function whereVisibleMarketSeller(
         .where((t) => {
           void t
             .whereNull('subscription_end_date')
-            .orWhereRaw('subscription_end_date >= CURRENT_DATE');
+            .orWhereRaw(`subscription_end_date >= ${BUSINESS_CURRENT_DATE_SQL}`);
         })
         .select('user_id'),
     );

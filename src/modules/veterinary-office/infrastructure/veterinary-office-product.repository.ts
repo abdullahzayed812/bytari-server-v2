@@ -1,3 +1,4 @@
+import { BUSINESS_CURRENT_DATE_SQL } from '../../../shared/time/business-date.js';
 import type { Knex } from 'knex';
 import {
   rowToVeterinaryOfficeProduct,
@@ -248,7 +249,7 @@ export class VeterinaryOfficeProductRepository {
           // An EXPIRED office is off the public market until renewed.
           void w
             .whereNull('d.subscription_end_date')
-            .orWhereRaw('d.subscription_end_date >= CURRENT_DATE');
+            .orWhereRaw(`d.subscription_end_date >= ${BUSINESS_CURRENT_DATE_SQL}`);
         })
         .where('p.status', 'ACTIVE')
         .where('p.is_hidden', false);
@@ -359,7 +360,7 @@ export class VeterinaryOfficeProductRepository {
         .where((w) => {
           void w
             .whereNull('d.subscription_end_date')
-            .orWhereRaw('d.subscription_end_date >= CURRENT_DATE');
+            .orWhereRaw(`d.subscription_end_date >= ${BUSINESS_CURRENT_DATE_SQL}`);
         })
         .where('p.status', 'ACTIVE')
         .where('p.is_hidden', false)

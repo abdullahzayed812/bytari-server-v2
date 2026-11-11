@@ -101,3 +101,11 @@ describe('FarmSubscriptionPolicy.assertPending', () => {
     }
   });
 });
+
+describe('computeFarmSubscriptionStatus — business (Baghdad) day', () => {
+  it('uses the Baghdad date, not UTC: 22:30 UTC is already the next day in Baghdad', () => {
+    const lateUtc = new Date('2026-06-15T22:30:00Z'); // 2026-06-16 01:30 in Baghdad
+    expect(computeFarmSubscriptionStatus('2026-01-01', '2026-06-15', lateUtc)).toBe('EXPIRED');
+    expect(computeFarmSubscriptionStatus('2026-01-01', '2026-06-16', lateUtc)).toBe('ACTIVE');
+  });
+});

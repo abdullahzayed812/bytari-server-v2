@@ -1,3 +1,4 @@
+import { BUSINESS_CURRENT_DATE_SQL } from '../../../shared/time/business-date.js';
 import type { Knex } from 'knex';
 import {
   computeFarmSubscriptionStatus,
@@ -323,7 +324,7 @@ export class OrganizationRepository {
       if (filter.type === 'CLINIC' || filter.type === 'VETERINARY_OFFICE') {
         qb.where((w) => {
           w.whereNull('d.subscription_end_date').orWhereRaw(
-            'd.subscription_end_date >= CURRENT_DATE',
+            `d.subscription_end_date >= ${BUSINESS_CURRENT_DATE_SQL}`,
           );
         });
       }

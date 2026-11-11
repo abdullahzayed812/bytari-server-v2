@@ -7,6 +7,13 @@ export const BUSINESS_TIME_ZONE = 'Asia/Baghdad';
 /** UTC offset of {@link BUSINESS_TIME_ZONE} — fixed: Iraq has had no DST since 2008. */
 export const BUSINESS_UTC_OFFSET = '+03:00';
 
+/**
+ * SQL counterpart of {@link businessToday}: today's date in the business time
+ * zone. Use instead of `CURRENT_DATE`, which follows the database session's
+ * zone (UTC in production) and lags Baghdad by a day from 00:00 to 03:00.
+ */
+export const BUSINESS_CURRENT_DATE_SQL = `(now() AT TIME ZONE '${BUSINESS_TIME_ZONE}')::date`;
+
 /** `YYYY-MM-DD` of `now` in {@link BUSINESS_TIME_ZONE}. */
 export function businessToday(now: Date = new Date()): string {
   // en-CA formats dates as YYYY-MM-DD.
