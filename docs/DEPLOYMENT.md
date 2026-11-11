@@ -311,7 +311,7 @@ Ship them off-host if you need retention [Future].
   15 3 * * * cd /opt/bytari && deploy/scripts/backup.sh nightly >> backups/backup.log 2>&1
   ```
 
-  **[Implemented]** Off-site: daily 14:00 (Cairo) dump → Google Drive with
+  **[Implemented]** Off-site: daily 02:00 (Cairo) dump → Google Drive with
   30-day retention — `deploy/scripts/backup-offsite.sh` + systemd timer, see `BACKUPS.md`.
 
 Restore (the dump format was rehearsed locally by restoring into a scratch database — 115 tables; the in-place `--clean` restore below has not been run against live data):

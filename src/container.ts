@@ -1353,6 +1353,7 @@ export function createContainer(deps: ContainerDeps): Container {
     organizationRepository,
     auditService,
     logger,
+    db,
   );
 
   // --- consultations & inquiries (Phase 13) ------------------
@@ -1758,6 +1759,7 @@ export function createContainer(deps: ContainerDeps): Container {
     poultryOffers: poultryOfferService,
     eggOffers: eggOfferService,
     hatcheryOffers: hatcheryOfferService,
+    reports: reportService,
   });
 
   const authenticateDeps = { tokens: tokenService, users: userService, roles: roleRepository };

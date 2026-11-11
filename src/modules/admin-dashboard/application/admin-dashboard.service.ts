@@ -62,6 +62,7 @@ function countNew(items: Array<{ createdAt: string | Date }>, seenAt: Date | und
   return items.filter((i) => new Date(i.createdAt) > seenAt).length;
 }
 
+import type { ReportService } from '../../reports/application/report.service.js';
 import type { EggOfferService } from '../../poultryMarket/application/egg-offer.service.js';
 import type { HatcheryOfferService } from '../../poultryMarket/application/hatchery-offer.service.js';
 import type { PoultryOfferService } from '../../poultryMarket/application/poultry-offer.service.js';
@@ -94,6 +95,8 @@ export interface AdminDashboardServiceDeps {
   poultryOffers: PoultryOfferService;
   eggOffers: EggOfferService;
   hatcheryOffers: HatcheryOfferService;
+  /** Content-report queue; optional only for narrow harnesses. */
+  reports?: ReportService;
 }
 
 /**
@@ -582,6 +585,20 @@ export class AdminDashboardService {
         },
       },
     ];
+
+    if (this.deps.reports) {
+      // Badge = reports filed since last opened; main stat = open (PENDING) queue.
+      const reportsPending = await this.deps.reports.listForAdmin({
+        page: 1,
+        pageSize: CARD_WINDOW_SIZE,
+        status: 'PENDING',
+      });
+      cards.push({
+        id: 'reports',
+        count: countNew(reportsPending.items, since('reports')),
+        activeCount: reportsPending.total,
+      });
+    }
 
     const recentActivity: AdminActivityItem[] = recentActivityPage.items.map((entry) => ({
       id: entry.id,

@@ -225,6 +225,8 @@ export const ErrorCode = {
   VET_SERVICE_IMAGE_INVALID: 'VET_SERVICE_IMAGE_INVALID',
   /** A message was sent to a CLOSED marketplace deal conversation. */
   CONVERSATION_CLOSED: 'CONVERSATION_CLOSED',
+  /** 403 — a direct message between users where one has blocked the other. */
+  USER_BLOCKED: 'USER_BLOCKED',
 
   // --- Veterinarian Jobs / Careers ---
   /** Moderation transition attempted on a job offer / seeker profile that is not PENDING. */

@@ -39,6 +39,8 @@ export const ADMIN_DASHBOARD_CARD_IDS = [
   'lostAnimals',
   // Poultry market ("سوق الدواجن"): trader applications + ad moderation.
   'poultryMarket',
+  // Content reports ("البلاغات") — users / messages / listings / AI answers.
+  'reports',
 ] as const;
 export type AdminDashboardCardId = (typeof ADMIN_DASHBOARD_CARD_IDS)[number];
 

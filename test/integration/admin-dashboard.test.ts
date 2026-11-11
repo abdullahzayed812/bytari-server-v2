@@ -45,6 +45,7 @@ const EXPECTED_CARD_IDS = [
   'mating',
   'lostAnimals',
   'poultryMarket',
+  'reports',
 ];
 
 beforeAll(() => ensureSchema());

@@ -66,3 +66,15 @@ export const updateMyProfileBodySchema = z
   // An emptied "نبذة عني" is stored as NULL, never as ''.
   .transform((v) => (v.bio === '' ? { ...v, bio: null } : v));
 export type UpdateMyProfileBody = z.infer<typeof updateMyProfileBodySchema>;
+
+/**
+ * `DELETE /users/me` — permanent self-service account deletion (Google Play
+ * account-deletion requirement). The current password is re-checked so a
+ * stolen/unlocked session alone cannot erase the account.
+ */
+export const deleteMyAccountBodySchema = z
+  .object({
+    password: z.string().min(1).max(128),
+  })
+  .strict();
+export type DeleteMyAccountBody = z.infer<typeof deleteMyAccountBodySchema>;

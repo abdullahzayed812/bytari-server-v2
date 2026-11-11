@@ -12,7 +12,7 @@ import { DELETED_USER_ID } from './user.types.js';
 
 export { DELETED_USER_ID };
 
-/** Why `DELETE /admin/users/:id` refused — `details[0].rule` of a 409 `USER_DELETE_BLOCKED`. */
+/** Why `DELETE /admin/users/:id` (or `DELETE /users/me`) refused — `details[0].rule` of a 409 `USER_DELETE_BLOCKED`. */
 export type UserDeleteBlockRule = 'PROTECTED_ACCOUNT' | 'ADMIN_ACCOUNT' | 'OWNS_ORGANIZATIONS';
 
 export interface UserDeletionResult {
@@ -76,8 +76,17 @@ export class UserDeletionService {
     this.log = logger.child({ component: 'user-deletion' });
   }
 
-  async deleteUser(id: string, actor: ActorContext): Promise<UserDeletionResult> {
-    if (actor.actorUserId && actor.actorUserId === id) {
+  /**
+   * `options.selfService` — the account holder deleting their own account
+   * (`DELETE /users/me`, password re-checked by the caller). Every other block
+   * rule (ADMIN, organization owner, placeholder) still applies.
+   */
+  async deleteUser(
+    id: string,
+    actor: ActorContext,
+    options: { selfService?: boolean } = {},
+  ): Promise<UserDeletionResult> {
+    if (!options.selfService && actor.actorUserId && actor.actorUserId === id) {
       throw new ForbiddenError('You cannot delete your own account');
     }
     if (id === DELETED_USER_ID)
@@ -216,8 +225,16 @@ export class UserDeletionService {
           action: AuditAction.USER_DELETED,
           entityType: AuditEntityType.USER,
           entityId: id,
-          actorUserId: actor.actorUserId,
-          metadata: { roles, retained, removed, mediaObjects: mediaKeys.length },
+          // Self-service: the actor row no longer exists (FK) — the entry
+          // says `selfService: true` instead.
+          actorUserId: options.selfService ? null : actor.actorUserId,
+          metadata: {
+            roles,
+            retained,
+            removed,
+            mediaObjects: mediaKeys.length,
+            selfService: options.selfService === true,
+          },
           context: actor.context,
         },
         tx,

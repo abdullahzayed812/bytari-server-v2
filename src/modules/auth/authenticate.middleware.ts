@@ -25,7 +25,9 @@ export interface CreateAuthenticateOptions {
    * user needs: `GET /auth/me` (so the client can detect the state and route
    * to the verify / pending-approval screen); `POST /auth/logout` +
    * `POST /auth/logout-all`; `POST /users/me/avatar/upload-url` +
-   * `POST /users/me/avatar` (the avatar picked during registration); and, for
+   * `POST /users/me/avatar` (the avatar picked during registration);
+   * `DELETE /users/me` (an unverified / unapproved account can still erase
+   * itself — Play account-deletion policy); and, for
    * a veterinarian applicant, `POST /veterinarians/documents/upload-url`,
    * `POST /veterinarians/apply` (also a rejected applicant re-applying) and
    * `GET /veterinarians/me/status`. Every other route must keep using the

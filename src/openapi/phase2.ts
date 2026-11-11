@@ -318,7 +318,67 @@ const schemas: Obj = {
 // --- paths -------------------------------------------------------------
 
 const paths: Obj = {
+  '/users/me/blocks': {
+    get: {
+      tags: ['Users'],
+      summary: 'List the users you blocked ("المستخدمون المحظورون")',
+      security: bearer,
+      responses: { 200: { description: '[{ userId, firstName, lastName, blockedAt }]' } },
+    },
+  },
+  '/users/me/blocks/{userId}': {
+    put: {
+      tags: ['Users'],
+      summary: 'Block a user — no direct messages either way (403 USER_BLOCKED)',
+      security: bearer,
+      parameters: [
+        { name: 'userId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      ],
+      responses: {
+        200: { description: '{ userId, blocked: true }' },
+        400: { description: 'Self' },
+        404: { description: 'Unknown user' },
+      },
+    },
+    delete: {
+      tags: ['Users'],
+      summary: 'Unblock a user',
+      security: bearer,
+      parameters: [
+        { name: 'userId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      ],
+      responses: { 200: { description: '{ userId, blocked: false }' } },
+    },
+  },
   '/users/me': {
+    delete: {
+      tags: ['Users'],
+      summary: 'Permanently delete your own account ("حذف الحساب")',
+      description:
+        'Google Play account-deletion requirement. Body `{ password }` (re-checked; 400 ' +
+        '`INVALID_CURRENT_PASSWORD`). Same engine as `DELETE /admin/users/:id`: personal data and ' +
+        'content removed, clinic/store/appointment records re-attributed to the "deleted user" ' +
+        'placeholder. 409 `USER_DELETE_BLOCKED` (`details[0].rule` = `OWNS_ORGANIZATIONS` | ' +
+        '`ADMIN_ACCOUNT`). Allowed for PENDING_VERIFICATION accounts too.',
+      security: bearer,
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['password'],
+              properties: { password: { type: 'string', minLength: 1, maxLength: 128 } },
+            },
+          },
+        },
+      },
+      responses: {
+        200: { description: '{ id, deleted: true }' },
+        400: { description: 'Wrong password' },
+        409: { description: 'USER_DELETE_BLOCKED' },
+      },
+    },
     patch: {
       tags: ['Users'],
       summary: 'Edit your own profile ("تعديل الملف الشخصي")',

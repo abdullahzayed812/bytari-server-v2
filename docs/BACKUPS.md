@@ -1,6 +1,6 @@
 # Daily database backup → Google Drive
 
-Every day at **14:00 Egypt time** (`Africa/Cairo`, DST handled by systemd) the
+Every day at **02:00 Egypt time** (`Africa/Cairo`, DST handled by systemd) the
 VPS dumps PostgreSQL, uploads the dump to Google Drive with rclone and deletes
 Drive dumps older than **30 days**. Files:
 

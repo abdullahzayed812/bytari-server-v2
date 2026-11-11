@@ -6,11 +6,7 @@ import { validatedBody, validatedParams, validatedQuery } from '../../../shared/
 import { auditContextFromRequest } from '../../audit/audit-context.js';
 import { requireAuth } from '../../auth/authenticate.middleware.js';
 import type { ReportService } from '../application/report.service.js';
-import type {
-  ListReportsQuery,
-  ReviewReportBody,
-  SubmitReportBody,
-} from './report.schemas.js';
+import type { ListReportsQuery, ReviewReportBody, SubmitReportBody } from './report.schemas.js';
 
 /** `POST /reports` — any authenticated user reports a message or a room. */
 export class ReportController {

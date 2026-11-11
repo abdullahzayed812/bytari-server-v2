@@ -3,6 +3,17 @@ import { pinoHttp, type Options } from 'pino-http';
 import type { RequestHandler } from 'express';
 import type { Logger } from 'pino';
 
+/** Query params that carry the caller's location (clinic "nearest" sort). */
+const LOCATION_PARAMS = /([?&](?:lat|lng|latitude|longitude)=)[^&#]*/gi;
+
+/**
+ * The request URL as it may be logged: the user's coordinates are never
+ * written to logs (privacy policy: location is used for the distance only).
+ */
+export function loggableUrl(url: string | undefined): string {
+  return (url ?? '').replace(LOCATION_PARAMS, '$1[REDACTED]');
+}
+
 /**
  * HTTP request logging + per-request correlation id.
  *
@@ -23,8 +34,15 @@ export function requestLogger(logger: Logger): RequestHandler {
       if (res.statusCode >= 400) return 'warn';
       return 'info';
     },
-    customSuccessMessage: (req, res) => `${req.method} ${req.url} ${res.statusCode}`,
-    customErrorMessage: (req, _res, err) => `${req.method} ${req.url} failed: ${err.message}`,
+    serializers: {
+      req: (req: { url?: string } & Record<string, unknown>) => ({
+        ...req,
+        url: loggableUrl(req.url),
+      }),
+    },
+    customSuccessMessage: (req, res) => `${req.method} ${loggableUrl(req.url)} ${res.statusCode}`,
+    customErrorMessage: (req, _res, err) =>
+      `${req.method} ${loggableUrl(req.url)} failed: ${err.message}`,
   };
 
   return pinoHttp(options);

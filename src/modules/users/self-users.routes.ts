@@ -3,9 +3,12 @@ import { asyncHandler } from '../../shared/http/async-handler.js';
 import { validate } from '../../shared/http/validate.js';
 import { userRateLimiter } from '../../shared/http/user-rate-limit.js';
 import type { Container } from '../../container.js';
+import { z } from 'zod';
 import { SelfUsersController } from './self-users.controller.js';
+import { UserBlockService } from './user-block.service.js';
 import {
   avatarUploadUrlBodySchema,
+  deleteMyAccountBodySchema,
   finalizeAvatarBodySchema,
   updateMyProfileBodySchema,
 } from './user.schemas.js';
@@ -24,7 +27,12 @@ const UPLOAD_RATE_LIMIT = { windowMs: 15 * 60 * 1000, max: 20 };
  * the full, deliberately short, allowlist this belongs to.
  */
 export function createSelfUsersRouter(c: Container): Router {
-  const ctrl = new SelfUsersController(c.userService);
+  const ctrl = new SelfUsersController(
+    c.userService,
+    c.userDeletionService,
+    c.passwordService,
+    new UserBlockService(c.db),
+  );
   const limiter = userRateLimiter(c.config, UPLOAD_RATE_LIMIT);
   const r = Router();
 
@@ -51,6 +59,32 @@ export function createSelfUsersRouter(c: Container): Router {
     limiter,
     validate({ body: updateMyProfileBodySchema }),
     asyncHandler(ctrl.updateMe),
+  );
+
+  // User blocking (Play UGC policy) — fully authenticated accounts only.
+  const blockParams = z.object({ userId: z.string().uuid() });
+  r.get('/me/blocks', c.authenticate, asyncHandler(ctrl.listBlocks));
+  r.put(
+    '/me/blocks/:userId',
+    c.authenticate,
+    validate({ params: blockParams }),
+    asyncHandler(ctrl.block),
+  );
+  r.delete(
+    '/me/blocks/:userId',
+    c.authenticate,
+    validate({ params: blockParams }),
+    asyncHandler(ctrl.unblock),
+  );
+
+  // Permanent self-service account deletion (Play policy). Allowed for a
+  // PENDING_VERIFICATION account too (router-level guard) — someone who
+  // registered but never verified must still be able to erase the account.
+  r.delete(
+    '/me',
+    userRateLimiter(c.config, { windowMs: 15 * 60 * 1000, max: 5 }),
+    validate({ body: deleteMyAccountBodySchema }),
+    asyncHandler(ctrl.deleteMe),
   );
 
   return r;

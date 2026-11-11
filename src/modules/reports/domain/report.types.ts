@@ -1,4 +1,14 @@
-export const REPORT_TARGET_TYPES = ['MESSAGE', 'ROOM'] as const;
+export const REPORT_TARGET_TYPES = [
+  'MESSAGE',
+  'ROOM',
+  'USER',
+  'ANIMAL_PUBLICATION',
+  'ORGANIZATION',
+  'ORGANIZATION_REVIEW',
+  'CONTENT_COMMENT',
+  /** An AI assistant answer (consultation / inquiry / support thread message, `source = 'AI'`). */
+  'AI_MESSAGE',
+] as const;
 export type ReportTargetType = (typeof REPORT_TARGET_TYPES)[number];
 
 export const REPORT_REASONS = [
@@ -26,6 +36,18 @@ export interface ContentReport {
   reviewedAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/** Admin queue row: the report + a short snapshot of what was reported. */
+export interface AdminContentReport extends ContentReport {
+  target: {
+    /** Short text of the reported item (message / listing note / name…); null when gone. */
+    preview: string | null;
+    /** Author / owner of the reported item, when it has one. */
+    authorUserId: string | null;
+    /** False when the reported item no longer exists (deleted since). */
+    exists: boolean;
+  };
 }
 
 export interface ContentReportRow {

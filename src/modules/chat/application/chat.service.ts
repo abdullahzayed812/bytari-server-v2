@@ -1,4 +1,5 @@
 import type { Knex } from 'knex';
+import { isBlockedWithAny } from '../../users/user-block.service.js';
 import type { Logger } from 'pino';
 import {
   BadRequestError,
@@ -116,6 +117,29 @@ export class ChatService {
   }
 
   /** Conversation-level "may new messages be posted here" rule (shared by send + attachment upload). */
+  /**
+   * Direct (non-room) conversations: refuse when the sender and any other
+   * person in it — explicit participants plus anyone who has written in it
+   * (the clinic / office side has no participant rows) — blocked each other.
+   */
+  private async assertNotBlocked(userId: string, conversation: Conversation): Promise<void> {
+    if (conversation.type === 'CHAT_ROOM') return;
+    const participantIds = await this.conversations.listActiveParticipantUserIds(conversation.id, {
+      excludeUserId: userId,
+      limit: 50,
+    });
+    const senderIds = (await this.db('messages')
+      .where({ conversation_id: conversation.id })
+      .distinct('sender_user_id')
+      .pluck('sender_user_id')) as string[];
+    const others = [...new Set([...participantIds, ...senderIds])].filter((id) => id !== userId);
+    if (await isBlockedWithAny(this.db, userId, others)) {
+      throw new ForbiddenError('Messaging is blocked between you and this user', {
+        code: ErrorCode.USER_BLOCKED,
+      });
+    }
+  }
+
   private async assertWritable(conversation: Conversation): Promise<void> {
     // A clinic may pause its chat with a pet owner (legacy "إيقاف المحادثة").
     if (conversation.type === 'PET_OWNER_CLINIC' && conversation.status === 'CLOSED') {
@@ -1282,6 +1306,7 @@ export class ChatService {
     const conversation = await this.load(conversationId);
     const side = await this.assertAccess(actor.actorUserId, conversation);
     await this.assertWritable(conversation);
+    await this.assertNotBlocked(actor.actorUserId, conversation);
 
     if (!body.trim() && !attachmentInput) {
       throw new BadRequestError('A message needs text or an attachment');
