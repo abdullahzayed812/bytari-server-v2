@@ -166,14 +166,16 @@ describe('forgot password → reset password (end to end)', () => {
     expect(res.body.error.code).toBe('VALIDATION_ERROR');
   });
 
-  it('existing stateless access tokens live out their short TTL, but can no longer be renewed', async () => {
+  it('a reset cuts off existing access tokens and their refresh sessions', async () => {
     const user = await registerUser(app);
+    // The cutoff has second precision (JWT `iat` vs `password_changed_at`, see
+    // tokenPredatesPasswordChange) — a token minted in the same second as the
+    // change stays valid. Cross a second boundary so the outcome is deterministic.
+    await new Promise((resolve) => setTimeout(resolve, 1100));
     await requestReset(user.email);
     await reset(user.email, extractVerificationCode(app, user.email));
-    // Access tokens are stateless JWTs (15 min, ARCHITECTURE §8.2) — same as
-    // logout-all, revocation cuts off the refresh path, not the live token.
     const me = await request(app).get('/api/v1/auth/me').set(bearer(user.accessToken));
-    expect(me.status).toBe(200);
+    expect(me.status).toBe(401);
     const refresh = await request(app)
       .post('/api/v1/auth/refresh')
       .send({ refreshToken: user.refreshToken });
